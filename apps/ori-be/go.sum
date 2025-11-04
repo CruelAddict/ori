@@ -1,0 +1,10 @@
+golang.org/x/exp/event v0.0.0-20251002181428-27f1f14c8bb9 h1:hKV5V8vl7XoHscYxkN/EsUPINoGd/1zlcdHdFUsLEM4=
+golang.org/x/exp/event v0.0.0-20251002181428-27f1f14c8bb9/go.mod h1:eyy3Yar83hHaVrAPacajZo3VTNwkBZtfqzEdIsFYx/A=
+golang.org/x/exp/jsonrpc2 v0.0.0-20251023183803-a4bb9ffd2546 h1:AAssLKhLVEw8qZtIsynvydfPyacfHqxS9t9oWoZYFFk=
+golang.org/x/exp/jsonrpc2 v0.0.0-20251023183803-a4bb9ffd2546/go.mod h1:UsQSnEjuZuEwMA9XtFqCZ80S6QkIIiGvoRV/sr4yIfU=
+golang.org/x/xerrors v0.0.0-20240903120638-7835f813f4da h1:noIWHXmPHxILtqtCOPIhSt0ABwskkZKjD3bXGnZGpNY=
+golang.org/x/xerrors v0.0.0-20240903120638-7835f813f4da/go.mod h1:NDW/Ps6MPRej6fsCIbMTohpP40sJ/P/vI1MoTEGwX90=
+gopkg.in/check.v1 v0.0.0-20161208181325-20d25e280405 h1:yhCVgyC4o1eVCa2tZl7eS0r+SDo693bJlVdllGtEeKM=
+gopkg.in/check.v1 v0.0.0-20161208181325-20d25e280405/go.mod h1:Co6ibVJAznAaIkqp8huTwlJQCZ016jof/cbN4VW5Yz0=
+gopkg.in/yaml.v3 v3.0.1 h1:fxVm/GzAzEWqLHuvctI91KS9hhNmmWOoWu0XTYJS7CA=
+gopkg.in/yaml.v3 v3.0.1/go.mod h1:K4uyk7z7BCEPqu6E+C64Yfv1cQ7kz7rIZviUmN+EgEM=

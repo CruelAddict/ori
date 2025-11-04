@@ -1,0 +1,22 @@
+{
+  "name": "ori-tui",
+  "module": "src/index.tsx",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "bun run --watch src/index.tsx",
+    "build": "./build.ts"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "dependencies": {
+    "@opentui/core": "^0.1.32",
+    "@opentui/solid": "^0.1.32",
+    "solid-js": "^1.9.9",
+    "ori-sdk": "file:../../libs/sdk/typescript"
+  }
+}

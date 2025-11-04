@@ -1,0 +1,19 @@
+connections:
+  - name: "test-mysql"
+    type: "mysql"
+    host: "localhost"
+    port: 3306
+    database: "testdb"
+    username: "testuser"
+    password:
+      type: "plain_text"
+      key: "testpassword123"
+  - name: "production-postgres"
+    type: "postgresql"
+    host: "db.example.com"
+    port: 5432
+    database: "proddb"
+    username: "produser"
+    password:
+      type: "plain_text"
+      key: "prodpassword456"

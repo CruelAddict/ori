@@ -1,0 +1,105 @@
+{
+  "openrpc": "1.3.2",
+  "info": {
+    "title": "Ori Database Explorer API",
+    "description": "JSON-RPC API for exploring database configurations and metadata",
+    "version": "1.0.0"
+  },
+  "methods": [
+    {
+      "name": "listConfigurations",
+      "summary": "List all database configurations",
+      "description": "Returns a list of all configured database connections from the server configuration file",
+      "params": [],
+      "result": {
+        "name": "ConfigurationsResult",
+        "description": "List of database connection configurations",
+        "schema": {
+          "$ref": "#/components/schemas/ConfigurationsResult"
+        }
+      }
+    }
+  ],
+  "components": {
+    "schemas": {
+      "ConfigurationsResult": {
+        "type": "object",
+        "properties": {
+          "connections": {
+            "type": "array",
+            "description": "Array of database connection configurations",
+            "items": {
+              "$ref": "#/components/schemas/ConnectionConfig"
+            }
+          }
+        },
+        "required": [
+          "connections"
+        ]
+      },
+      "ConnectionConfig": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Human-readable connection name"
+          },
+          "type": {
+            "type": "string",
+            "description": "Database type (mysql, postgresql, etc.)"
+          },
+          "host": {
+            "type": "string",
+            "description": "Database host address"
+          },
+          "port": {
+            "type": "integer",
+            "description": "Database port number"
+          },
+          "database": {
+            "type": "string",
+            "description": "Database name"
+          },
+          "username": {
+            "type": "string",
+            "description": "Database username"
+          },
+          "password": {
+            "$ref": "#/components/schemas/PasswordConfig"
+          }
+        },
+        "required": [
+          "name",
+          "type",
+          "host",
+          "port",
+          "database",
+          "username",
+          "password"
+        ]
+      },
+      "PasswordConfig": {
+        "type": "object",
+        "description": "Password retrieval configuration",
+        "properties": {
+          "type": {
+            "type": "string",
+            "description": "Password provider type",
+            "enum": [
+              "plain_text",
+              "macos-keychain"
+            ]
+          },
+          "key": {
+            "type": "string",
+            "description": "The key/value for password retrieval"
+          }
+        },
+        "required": [
+          "type",
+          "key"
+        ]
+      }
+    }
+  }
+}

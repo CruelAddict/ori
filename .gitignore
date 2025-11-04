@@ -1,0 +1,30 @@
+# Binaries
+/apps/*/bin/
+/apps/*/dist/
+
+# Dependencies
+node_modules/
+bun.lock
+
+# Build artifacts
+*.o
+*.a
+*.so
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test
+coverage/
+*.test
+
+# Config
+config.yaml
+!testdata/config.yaml

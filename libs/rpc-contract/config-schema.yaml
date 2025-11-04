@@ -1,0 +1,25 @@
+# Configuration Schema for Database Connections
+# Version: 1.0.0
+
+connections:
+  - name: string              # Human-readable connection name
+    type: string              # Database type (mysql, postgresql, etc.)
+    host: string              # Database host address
+    port: integer             # Database port number
+    database: string          # Database name
+    username: string          # Database username
+    password:                 # Password retrieval configuration
+      type: string            # Password provider type (plain_text, macos-keychain, etc.)
+      key: string             # The key/value for password retrieval
+
+# Example:
+# connections:
+#   - name: "production-mysql"
+#     type: "mysql"
+#     host: "localhost"
+#     port: 3306
+#     database: "mydb"
+#     username: "root"
+#     password:
+#       type: "plain_text"
+#       key: "secretpassword"
