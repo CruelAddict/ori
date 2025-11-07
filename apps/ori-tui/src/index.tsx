@@ -1,131 +1,105 @@
-import { TextAttributes } from "@opentui/core";
 import { render } from "@opentui/solid";
-import { createSignal, onMount, For } from "solid-js";
-import OriDatabaseExplorerAPI from "ori-sdk";
+import { ConnectionView } from "@src/components/ConnectionView";
+import { ConfigurationSelector } from "@src/components/ConfigurationSelector";
+import type { Configuration } from "@src/lib/configuration";
+import {
+    createConfigurationsClient,
+    type ClientMode,
+    type ConfigurationsClient,
+} from "@src/lib/configurationsClient";
+import { Show, createSignal } from "solid-js";
 
-interface Connection {
-    name: string;
-    type: string;
+interface AppProps {
     host: string;
     port: number;
-    database: string;
-    username: string;
+    mode: ClientMode;
+    client: ConfigurationsClient;
 }
 
-function App(props: { host: string; port: number }) {
-    const [connections, setConnections] = createSignal<Connection[]>([]);
-    const [selectedIndex, setSelectedIndex] = createSignal(0);
-    const [loading, setLoading] = createSignal(true);
-    const [error, setError] = createSignal<string | null>(null);
+function App(props: AppProps) {
+    const [selectedConfiguration, setSelectedConfiguration] =
+        createSignal<Configuration | null>(null);
 
-    let client: OriDatabaseExplorerAPI | null = null;
+    const handleSelect = (configuration: Configuration) => {
+        setSelectedConfiguration(configuration);
+    };
 
-    onMount(async () => {
-        try {
-            client = new OriDatabaseExplorerAPI({
-                transport: {
-                    type: "http",
-                    host: props.host,
-                    port: props.port,
-                    path: "/rpc",
-                },
-            });
-
-            const result = await client.listConfigurations();
-            setConnections(result.connections || []);
-            setLoading(false);
-        } catch (err) {
-            setError(`Failed to connect to server: ${err}`);
-            setLoading(false);
-        }
-
-        // Handle keyboard input
-        process.stdin.setRawMode(true);
-        process.stdin.on("data", (key) => {
-            const keyStr = key.toString();
-
-            // Ctrl+C to exit
-            if (keyStr === "\u0003") {
-                process.exit(0);
-            }
-
-            // Arrow up
-            if (keyStr === "\u001b[A") {
-                setSelectedIndex((prev) => Math.max(0, prev - 1));
-            }
-
-            // Arrow down
-            if (keyStr === "\u001b[B") {
-                setSelectedIndex((prev) => Math.min(connections().length - 1, prev + 1));
-            }
-        });
-    });
+    const handleBack = () => {
+        setSelectedConfiguration(null);
+    };
 
     return (
-        <box flexDirection="column" flexGrow={1} padding={1}>
-            <text attributes={TextAttributes.BOLD}>Ori Database Explorer</text>
-            <text attributes={TextAttributes.DIM}>
-                Server: {props.host}:{props.port}
-            </text>
-            <box height={1} />
-
-            {loading() ? (
-                <text>Loading configurations...</text>
-            ) : error() ? (
-                <text fg="red">{error()}</text>
-            ) : (
-                <box flexDirection="column">
-                    <text attributes={TextAttributes.BOLD}>Connections:</text>
-                    <box height={1} />
-                    <For each={connections()}>
-                        {(conn, index) => (
-                            <box flexDirection="row">
-                                <text
-                                    fg={index() === selectedIndex() ? "cyan" : undefined}
-                                    attributes={
-                                        index() === selectedIndex()
-                                            ? TextAttributes.BOLD
-                                            : TextAttributes.NONE
-                                    }
-                                >
-                                    {index() === selectedIndex() ? "> " : "  "}
-                                    {conn.name} ({conn.type}) - {conn.host}:{conn.port}/{conn.database}
-                                </text>
-                            </box>
-                        )}
-                    </For>
-                    <box height={1} />
-                    <text attributes={TextAttributes.DIM}>
-                        Use ↑/↓ arrows to navigate, Ctrl+C to exit
-                    </text>
-                </box>
+        <Show
+            when={selectedConfiguration()}
+            keyed
+            fallback={
+                <ConfigurationSelector
+                    host={props.host}
+                    port={props.port}
+                    mode={props.mode}
+                    client={props.client}
+                    onSelect={handleSelect}
+                />
+            }
+        >
+            {(configuration: Configuration) => (
+                <ConnectionView configuration={configuration} onBack={handleBack} />
             )}
-        </box>
+        </Show>
     );
 }
 
-export function main() {
-    // Parse command line arguments
-    const args = process.argv.slice(2);
+interface ParsedArgs {
+    serverAddress: string;
+    mode: ClientMode;
+}
+
+function parseArgs(args: string[]): ParsedArgs {
     let serverAddress = "localhost:8080";
+    let mode: ClientMode = "sdk";
 
     for (let i = 0; i < args.length; i++) {
-        if (args[i] === "--server" && i + 1 < args.length) {
+        const arg = args[i];
+
+        if (arg === "--server" && i + 1 < args.length) {
             serverAddress = args[i + 1];
-            break;
+            i++;
+            continue;
+        }
+
+        if (arg === "--mode" && i + 1 < args.length) {
+            const value = args[i + 1];
+            mode = value === "stub" ? "stub" : "sdk";
+            i++;
+            continue;
+        }
+
+        if (arg === "--stub") {
+            mode = "stub";
+            continue;
+        }
+
+        if (arg === "--sdk") {
+            mode = "sdk";
+            continue;
         }
     }
 
-    const [host, portStr] = serverAddress.split(":");
-    const port = parseInt(portStr) || 8080;
-
-    // Return promise to prevent immediate exit
-    return new Promise<void>((resolve) => {
-        render(() => <App host={host} port={port} />);
-    });
+    return { serverAddress, mode };
 }
 
-// Run main if this is the entry point
+export function main() {
+    const args = process.argv.slice(2);
+    const { serverAddress, mode } = parseArgs(args);
+
+    const [host, portStr] = serverAddress.split(":");
+    const port = parseInt(portStr ?? "", 10) || 8080;
+
+    const client = createConfigurationsClient({ host, port, mode });
+
+    return render(() => <App host={host} port={port} mode={mode} client={client} />);
+}
+
 if (import.meta.main) {
     main();
 }
