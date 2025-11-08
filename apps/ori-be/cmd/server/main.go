@@ -3,9 +3,12 @@ package main
 import (
 	"context"
 	"flag"
-	"log"
+	"fmt"
+	"log/slog"
 	"os"
 	"os/signal"
+	"path/filepath"
+	"runtime"
 	"syscall"
 
 	"github.com/crueladdict/ori/apps/ori-server/internal/rpc"
@@ -17,34 +20,55 @@ const (
 	DefaultPort       = 8080
 )
 
+var (
+	currentLogFile  *os.File
+	currentLogPath  string
+	currentLogLevel slog.Leveler
+	currentApp      string
+)
+
 func main() {
 	// Parse command-line flags
 	configPath := flag.String("config", DefaultConfigPath, "Path to configuration file")
 	port := flag.Int("port", DefaultPort, "Port to listen on (TCP, optional)")
 	socketPath := flag.String("socket", "", "Unix domain socket path (preferred)")
+	logLevelFlag := flag.String("log-level", "info", "Log level: debug|info|warn|error")
 	flag.Parse()
+
+	level := parseLevel(*logLevelFlag, slog.LevelInfo)
+	logger := newFileLogger("ori-be", level)
+	slog.SetDefault(logger)
+
+	// Handle SIGHUP to reopen log file after external rotation
+	hup := make(chan os.Signal, 1)
+	signal.Notify(hup, syscall.SIGHUP)
+	go func() {
+		for range hup {
+			if currentLogFile != nil {
+				_ = currentLogFile.Close()
+			}
+			newLogger := newFileLogger(currentApp, currentLogLevel)
+			slog.SetDefault(newLogger)
+			slog.Info("log file reopened", slog.String("path", currentLogPath))
+		}
+	}()
 
 	// Set up parent death monitoring via pipe (file descriptor 3)
 	// If parent process dies, the pipe will close and we exit
 	go monitorParentAlive()
 
-	// Create context for server lifecycle
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// Initialize service
 	configService := service.NewConfigService(*configPath)
 
-	// Load configuration at startup
-	log.Printf("Loading configuration from: %s", *configPath)
+	slog.Info("loading configuration", slog.String("path", *configPath))
 	if err := configService.LoadConfig(); err != nil {
-		log.Printf("Warning: Failed to load configuration: %v", err)
-		log.Println("Starting with empty configuration")
+		slog.Warn("failed to load configuration; starting with empty", slog.Any("err", err))
 	} else {
-		log.Println("Configuration loaded successfully")
+		slog.Info("configuration loaded")
 	}
 
-	// Initialize RPC handler and server
 	handler := rpc.NewHandler(configService)
 
 	var (
@@ -54,38 +78,36 @@ func main() {
 	if *socketPath != "" {
 		server, err = rpc.NewUnixServer(ctx, handler, *socketPath)
 		if err != nil {
-			log.Fatalf("Failed to create unix socket server: %v", err)
+			slog.Error("failed to create unix socket server", slog.Any("err", err))
+			os.Exit(1)
 		}
-		log.Printf("JSON-RPC server started on unix socket %s", *socketPath)
+		slog.Info("server started", slog.String("transport", "unix"), slog.String("socket", *socketPath))
 	} else {
 		server, err = rpc.NewServer(ctx, handler, *port)
 		if err != nil {
-			log.Fatalf("Failed to create TCP server: %v", err)
+			slog.Error("failed to create TCP server", slog.Any("err", err))
+			os.Exit(1)
 		}
-		log.Printf("JSON-RPC server started on port %d", *port)
+		slog.Info("server started", slog.String("transport", "tcp"), slog.Int("port", *port))
 	}
 
-	// Wait for interrupt signal
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 
-	log.Println("Shutting down server...")
+	slog.Info("shutting down")
 
-	// Graceful shutdown
 	if err := server.Shutdown(); err != nil {
-		log.Fatalf("Server forced to shutdown: %v", err)
+		slog.Error("server forced to shutdown", slog.Any("err", err))
+		os.Exit(1)
 	}
 
-	// Cancel context to stop server
 	cancel()
-
-	// Wait for server to finish
 	if err := server.Wait(); err != nil {
-		log.Printf("Server wait error: %v", err)
+		slog.Warn("server wait error", slog.Any("err", err))
 	}
 
-	log.Println("Server stopped")
+	slog.Info("server stopped")
 }
 
 // monitorParentAlive monitors if the parent process is still alive
@@ -107,7 +129,61 @@ func monitorParentAlive() {
 
 	if err != nil {
 		// Parent died (pipe closed), exit immediately
-		log.Println("Parent process died, exiting...")
+		slog.Warn("parent process died, exiting")
 		os.Exit(0)
 	}
+}
+
+func newFileLogger(app string, level slog.Leveler) *slog.Logger {
+	logDir := defaultLogDir()
+	if err := os.MkdirAll(logDir, 0o755); err != nil {
+		// If we cannot create the directory, fallback to stderr so we don't lose logs
+		h := slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: level})
+		return slog.New(h).With(slog.String("app", app))
+	}
+	filePath := filepath.Join(logDir, fmt.Sprintf("%s.log", app))
+	f, err := os.OpenFile(filePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+	if err != nil {
+		// Fallback to stderr if file cannot be opened
+		h := slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: level})
+		return slog.New(h).With(slog.String("app", app))
+	}
+	currentLogFile = f
+	currentLogPath = filePath
+	currentLogLevel = level
+	currentApp = app
+
+	h := slog.NewJSONHandler(f, &slog.HandlerOptions{Level: level})
+	return slog.New(h).With(slog.String("app", app))
+}
+
+func parseLevel(s string, def slog.Level) slog.Leveler {
+	switch s {
+	case "debug":
+		return slog.LevelDebug
+	case "info":
+		return slog.LevelInfo
+	case "warn", "warning":
+		return slog.LevelWarn
+	case "error", "err":
+		return slog.LevelError
+	default:
+		return def
+	}
+}
+
+func defaultLogDir() string {
+	if x := os.Getenv("XDG_STATE_HOME"); x != "" {
+		return filepath.Join(x, "ori")
+	}
+	home, _ := os.UserHomeDir()
+	if runtime.GOOS == "darwin" {
+		if home != "" {
+			return filepath.Join(home, "Library", "Logs", "ori")
+		}
+	}
+	if home != "" {
+		return filepath.Join(home, ".local", "state", "ori")
+	}
+	return filepath.Join(os.TempDir(), "ori")
 }

@@ -8,6 +8,7 @@ import {
     type ConfigurationsClient,
 } from "@src/lib/configurationsClient";
 import { Show, createSignal } from "solid-js";
+import { createLogger, type LogLevel } from "@src/lib/logger";
 
 interface AppProps {
     host: string;
@@ -55,12 +56,14 @@ interface ParsedArgs {
     serverAddress: string;
     socketPath?: string;
     mode: ClientMode;
+    logLevel: LogLevel;
 }
 
 function parseArgs(args: string[]): ParsedArgs {
     let serverAddress = "localhost:8080";
     let socketPath: string | undefined;
     let mode: ClientMode = "sdk";
+    let logLevel: LogLevel = "warn";
 
     for (let i = 0; i < args.length; i++) {
         const arg = args[i];
@@ -84,6 +87,15 @@ function parseArgs(args: string[]): ParsedArgs {
             continue;
         }
 
+        if (arg === "--log-level" && i + 1 < args.length) {
+            const val = args[i + 1]?.toLowerCase();
+            if (val === "debug" || val === "info" || val === "warn" || val === "error") {
+                logLevel = val as LogLevel;
+            }
+            i++;
+            continue;
+        }
+
         if (arg === "--stub") {
             mode = "stub";
             continue;
@@ -95,15 +107,18 @@ function parseArgs(args: string[]): ParsedArgs {
         }
     }
 
-    return { serverAddress, socketPath, mode };
+    return { serverAddress, socketPath, mode, logLevel };
 }
 
 export function main() {
     const args = process.argv.slice(2);
-    const { serverAddress, socketPath, mode } = parseArgs(args);
+    const { serverAddress, socketPath, mode, logLevel } = parseArgs(args);
 
     const [host, portStr] = serverAddress.split(":");
     const port = parseInt(portStr ?? "", 10) || 8080;
+
+    const logger = createLogger("ori-tui", logLevel);
+    logger.info({ host, port, mode, socketPath }, "tui started");
 
     const client = createConfigurationsClient({
         mode,

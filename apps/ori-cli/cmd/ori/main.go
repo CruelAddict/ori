@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"hash/fnv"
 	"io"
-	"log"
+	"log/slog"
 	"net"
 	"net/http"
 	"os"
@@ -18,38 +18,64 @@ import (
 	"time"
 )
 
+type levelFlag struct {
+	val slog.Level
+	set bool
+}
+
+func (f *levelFlag) String() string { return levelString(f.val) }
+
+func (f *levelFlag) Set(s string) error {
+	f.val = parseLevel(s, slog.LevelWarn)
+	f.set = true
+	return nil
+}
+
 func main() {
 	configPath := flag.String("config", "", "Path to configuration file (optional)")
+	var lf levelFlag
+	lf.val = slog.LevelWarn
+	flag.Var(&lf, "log-level", "Log level: debug|info|warn|error (propagated to backend and TUI)")
 	flag.Parse()
+
+	// Configure CLI logging: only emits to stdout in debug; otherwise silent
+	level := lf.val
+	if level == slog.LevelDebug {
+		h := slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: level})
+		slog.SetDefault(slog.New(h).With(slog.String("app", "ori-cli")))
+	} else {
+		h := slog.NewJSONHandler(io.Discard, &slog.HandlerOptions{Level: level})
+		slog.SetDefault(slog.New(h).With(slog.String("app", "ori-cli")))
+	}
 
 	var absConfigPath string
 	if *configPath == "" {
 		foundPath, err := findOrCreateConfigFile()
 		if err != nil {
-			log.Fatalf("Failed to find or create config: %v", err)
+			dief("Failed to find or create config: %v", err)
 		}
 		absConfigPath = foundPath
 	} else {
 		var err error
 		absConfigPath, err = filepath.Abs(*configPath)
 		if err != nil {
-			log.Fatalf("Failed to resolve config path: %v", err)
+			dief("Failed to resolve config path: %v", err)
 		}
 	}
 
 	bePath, err := findBinary("ori-be")
 	if err != nil {
-		log.Fatalf("Failed to find ori-be: %v", err)
+		dief("Failed to find ori-be: %v", err)
 	}
 
 	tuiPath, err := findBinary("ori-tui")
 	if err != nil {
-		log.Fatalf("Failed to find ori-tui: %v", err)
+		dief("Failed to find ori-tui: %v", err)
 	}
 
 	runDir := runtimeTmpFilesDir()
-	if err := os.MkdirAll(runDir, 0700); err != nil {
-		log.Fatalf("Failed to create runtime dir: %v", err)
+	if err := os.MkdirAll(runDir, 0o700); err != nil {
+		dief("Failed to create runtime dir: %v", err)
 	}
 	cleanupStaleSockets(runDir)
 
@@ -61,21 +87,28 @@ func main() {
 	// Create a pipe for parent death monitoring (for ori-be if we start it)
 	pipeReader, pipeWriter, err := os.Pipe()
 	if err != nil {
-		log.Fatalf("Failed to create pipe: %v", err)
+		dief("Failed to create pipe: %v", err)
 	}
 	defer pipeWriter.Close()
+
+	// String log level to pass to children (only if explicitly set)
+	effectiveLevel := levelString(level)
 
 	var beCmd *exec.Cmd
 	if !existsAndHealthy {
 		// Start the backend bound to the computed unix socket
-		beCmd = exec.Command(bePath, "-config", absConfigPath, "-socket", socketPath)
+		beArgs := []string{"-config", absConfigPath, "-socket", socketPath}
+		if lf.set {
+			beArgs = append(beArgs, "-log-level", effectiveLevel)
+		}
+		beCmd = exec.Command(bePath, beArgs...)
 		beCmd.Stdout = os.Stdout
 		beCmd.Stderr = os.Stderr
 		// Pass the read end of the pipe as fd 3
 		beCmd.ExtraFiles = []*os.File{pipeReader}
 
 		if err := beCmd.Start(); err != nil {
-			log.Fatalf("Failed to start backend: %v", err)
+			dief("Failed to start backend: %v", err)
 		}
 	} else {
 		// Not starting backend; close child end of the pipe
@@ -87,7 +120,11 @@ func main() {
 		pipeReader.Close()
 	}
 
-	tuiCmd := exec.Command(tuiPath, "--socket", socketPath)
+	tuiArgs := []string{"--socket", socketPath}
+	if lf.set {
+		tuiArgs = append(tuiArgs, "--log-level", effectiveLevel)
+	}
+	tuiCmd := exec.Command(tuiPath, tuiArgs...)
 	tuiCmd.Stdout = os.Stdout
 	tuiCmd.Stderr = os.Stderr
 	tuiCmd.Stdin = os.Stdin
@@ -96,7 +133,7 @@ func main() {
 		if beCmd != nil && beCmd.Process != nil {
 			_ = beCmd.Process.Kill()
 		}
-		log.Fatalf("Failed to start TUI: %v", err)
+		dief("Failed to start TUI: %v", err)
 	}
 
 	// Setup graceful shutdown
@@ -118,6 +155,11 @@ func main() {
 	if beCmd != nil {
 		_ = beCmd.Process.Kill()
 	}
+}
+
+func dief(format string, args ...any) {
+	fmt.Fprintf(os.Stderr, format+"\n", args...)
+	os.Exit(1)
 }
 
 // healthcheckUnix performs a simple GET /healthcheck over a unix domain socket
@@ -184,6 +226,7 @@ func hashPath(s string) string {
 // 2. Same directory as ori binary - for portable installs
 // 3. /usr/local/bin/<name> - for system installs (ori-tui)
 // 4. /usr/local/lib/ori/<name> - for system installs (ori-be)
+// I know it's a shitshow
 func findBinary(name string) (string, error) {
 	// Get directory of current executable
 	exePath, err := os.Executable()
@@ -258,14 +301,44 @@ func findOrCreateConfigFile() (string, error) {
 
 	// No config found, create default one
 	configDir := filepath.Join(homeDir, ".config", "ori")
-	if err := os.MkdirAll(configDir, 0755); err != nil {
+	if err := os.MkdirAll(configDir, 0o755); err != nil {
 		return "", fmt.Errorf("failed to create config directory: %v", err)
 	}
 
 	defaultConfig := "connections: []\n"
-	if err := os.WriteFile(userConfig, []byte(defaultConfig), 0644); err != nil {
+	if err := os.WriteFile(userConfig, []byte(defaultConfig), 0o644); err != nil {
 		return "", fmt.Errorf("failed to create config file: %v", err)
 	}
 
 	return userConfig, nil
+}
+
+func parseLevel(s string, def slog.Level) slog.Level {
+	switch s {
+	case "debug":
+		return slog.LevelDebug
+	case "info":
+		return slog.LevelInfo
+	case "warn", "warning":
+		return slog.LevelWarn
+	case "error", "err":
+		return slog.LevelError
+	default:
+		return def
+	}
+}
+
+func levelString(l slog.Level) string {
+	switch l {
+	case slog.LevelDebug:
+		return "debug"
+	case slog.LevelInfo:
+		return "info"
+	case slog.LevelWarn:
+		return "warn"
+	case slog.LevelError:
+		return "error"
+	default:
+		return "info"
+	}
 }

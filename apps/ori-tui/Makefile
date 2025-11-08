@@ -6,6 +6,7 @@ BIN_DIR=bin
 build:
 	@echo "Building $(BINARY_NAME)..."
 	@mkdir -p $(BIN_DIR)
+	@bun install
 	@bun run build.ts
 	@strip $(BIN_DIR)/$(BINARY_NAME) 2>/dev/null || true
 	@echo "✓ Build complete: $(BIN_DIR)/$(BINARY_NAME)"
