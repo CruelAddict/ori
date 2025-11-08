@@ -1,22 +1,27 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
+	"hash/fnv"
+	"io"
 	"log"
+	"net"
+	"net/http"
 	"os"
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
+	"time"
 )
 
 func main() {
-	// Parse command-line flags
 	configPath := flag.String("config", "", "Path to configuration file (optional)")
 	flag.Parse()
 
-	// Auto-discover or create config if not provided
 	var absConfigPath string
 	if *configPath == "" {
 		foundPath, err := findOrCreateConfigFile()
@@ -25,7 +30,6 @@ func main() {
 		}
 		absConfigPath = foundPath
 	} else {
-		// Use provided config path
 		var err error
 		absConfigPath, err = filepath.Abs(*configPath)
 		if err != nil {
@@ -33,7 +37,6 @@ func main() {
 		}
 	}
 
-	// Discover binaries
 	bePath, err := findBinary("ori-be")
 	if err != nil {
 		log.Fatalf("Failed to find ori-be: %v", err)
@@ -44,40 +47,59 @@ func main() {
 		log.Fatalf("Failed to find ori-tui: %v", err)
 	}
 
-	// Create a pipe for parent death monitoring
-	// When this process dies, the pipe will close and ori-be will exit
+	runDir := runtimeTmpFilesDir()
+	if err := os.MkdirAll(runDir, 0700); err != nil {
+		log.Fatalf("Failed to create runtime dir: %v", err)
+	}
+	cleanupStaleSockets(runDir)
+
+	// Backend per config file
+	backendID := hashPath(absConfigPath)
+	socketPath := filepath.Join(runDir, fmt.Sprintf("ori-%s.sock", backendID))
+	existsAndHealthy := healthcheckUnix(socketPath, 400*time.Millisecond)
+
+	// Create a pipe for parent death monitoring (for ori-be if we start it)
 	pipeReader, pipeWriter, err := os.Pipe()
 	if err != nil {
 		log.Fatalf("Failed to create pipe: %v", err)
 	}
 	defer pipeWriter.Close()
 
-	// Start the backend
-	beCmd := exec.Command(bePath, "-config", absConfigPath)
-	beCmd.Stdout = os.Stdout
-	beCmd.Stderr = os.Stderr
-	// Pass the read end of the pipe as fd 3
-	beCmd.ExtraFiles = []*os.File{pipeReader}
+	var beCmd *exec.Cmd
+	if !existsAndHealthy {
+		// Start the backend bound to the computed unix socket
+		beCmd = exec.Command(bePath, "-config", absConfigPath, "-socket", socketPath)
+		beCmd.Stdout = os.Stdout
+		beCmd.Stderr = os.Stderr
+		// Pass the read end of the pipe as fd 3
+		beCmd.ExtraFiles = []*os.File{pipeReader}
 
-	if err := beCmd.Start(); err != nil {
-		log.Fatalf("Failed to start backend: %v", err)
+		if err := beCmd.Start(); err != nil {
+			log.Fatalf("Failed to start backend: %v", err)
+		}
+	} else {
+		// Not starting backend; close child end of the pipe
+		pipeReader.Close()
 	}
 
-	// Close our reference to the read end (child has it now)
-	pipeReader.Close()
+	// Close our reference to the read end if we started the backend
+	if beCmd != nil {
+		pipeReader.Close()
+	}
 
-	// Start the TUI
-	tuiCmd := exec.Command(tuiPath, "--server", "localhost:8080")
+	tuiCmd := exec.Command(tuiPath, "--socket", socketPath)
 	tuiCmd.Stdout = os.Stdout
 	tuiCmd.Stderr = os.Stderr
 	tuiCmd.Stdin = os.Stdin
 
 	if err := tuiCmd.Start(); err != nil {
-		beCmd.Process.Kill()
+		if beCmd != nil && beCmd.Process != nil {
+			_ = beCmd.Process.Kill()
+		}
 		log.Fatalf("Failed to start TUI: %v", err)
 	}
 
-	// Setup signal handling
+	// Setup graceful shutdown
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
 
@@ -85,16 +107,76 @@ func main() {
 	go func() {
 		<-sigChan
 		fmt.Println("\nShutting down...")
-		tuiCmd.Process.Kill()
-		beCmd.Process.Kill()
+		_ = tuiCmd.Process.Kill()
+		if beCmd != nil {
+			_ = beCmd.Process.Kill()
+		}
 		os.Exit(0)
 	}()
 
-	// Wait for TUI to exit (user closes it)
-	tuiCmd.Wait()
+	_ = tuiCmd.Wait()
+	if beCmd != nil {
+		_ = beCmd.Process.Kill()
+	}
+}
 
-	// Clean up backend
-	beCmd.Process.Kill()
+// healthcheckUnix performs a simple GET /healthcheck over a unix domain socket
+func healthcheckUnix(socketPath string, timeout time.Duration) bool {
+	tr := &http.Transport{
+		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+			return net.Dial("unix", socketPath)
+		},
+	}
+	client := &http.Client{Transport: tr, Timeout: timeout}
+	resp, err := client.Get("http://unix/healthcheck")
+	if err != nil {
+		return false
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return false
+	}
+	b, _ := io.ReadAll(resp.Body)
+	return strings.HasPrefix(string(b), "ok")
+}
+
+// cleanupStaleSockets scans the runtime dir for ori-*.sock and removes those that fail healthcheck
+func cleanupStaleSockets(runDir string) {
+	entries, err := os.ReadDir(runDir)
+	if err != nil {
+		return
+	}
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		name := e.Name()
+		if !strings.HasPrefix(name, "ori-") || !strings.HasSuffix(name, ".sock") {
+			continue
+		}
+		path := filepath.Join(runDir, name)
+		if !healthcheckUnix(path, 200*time.Millisecond) {
+			_ = os.Remove(path)
+		}
+	}
+}
+
+// runtimeTmpFilesDir returns XDG_RUNTIME_DIR/ori or ~/.cache/ori as fallback
+func runtimeTmpFilesDir() string {
+	if x := os.Getenv("XDG_RUNTIME_DIR"); x != "" {
+		return filepath.Join(x, "ori")
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return filepath.Join(os.TempDir(), "ori")
+	}
+	return filepath.Join(home, ".cache", "ori")
+}
+
+func hashPath(s string) string {
+	h := fnv.New32a()
+	_, _ = h.Write([]byte(s))
+	return fmt.Sprintf("%08x", h.Sum32())
 }
 
 // findBinary looks for a binary in the following order:

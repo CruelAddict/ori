@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
+	"os"
 	"time"
 
 	"golang.org/x/exp/jsonrpc2"
@@ -14,6 +16,8 @@ import (
 type Server struct {
 	handler    *Handler
 	httpServer *http.Server
+	listener   net.Listener
+	socketPath string
 }
 
 // JSONRPCRequest represents a JSON-RPC 2.0 request (for HTTP compatibility)
@@ -39,7 +43,7 @@ type RPCError struct {
 	Data    interface{} `json:"data,omitempty"`
 }
 
-// NewServer creates a new RPC server that handles HTTP requests
+// NewServer creates a new RPC server that handles HTTP requests over TCP
 func NewServer(ctx context.Context, handler *Handler, port int) (*Server, error) {
 	s := &Server{
 		handler: handler,
@@ -47,6 +51,7 @@ func NewServer(ctx context.Context, handler *Handler, port int) (*Server, error)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/rpc", s.handleHTTPRequest)
+	mux.HandleFunc("/healthcheck", s.handleHealthRequest)
 
 	s.httpServer = &http.Server{
 		Addr:         fmt.Sprintf(":%d", port),
@@ -72,6 +77,49 @@ func NewServer(ctx context.Context, handler *Handler, port int) (*Server, error)
 		return nil, fmt.Errorf("failed to start server: %w", err)
 	case <-time.After(100 * time.Millisecond):
 		// Server started successfully
+		return s, nil
+	}
+}
+
+// NewUnixServer creates a new RPC server that handles HTTP requests over a Unix domain socket
+func NewUnixServer(ctx context.Context, handler *Handler, socketPath string) (*Server, error) {
+	s := &Server{
+		handler:    handler,
+		socketPath: socketPath,
+	}
+
+	// Remove stale socket if exists
+	_ = os.Remove(socketPath)
+
+	ln, err := net.Listen("unix", socketPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to listen on unix socket %s: %w", socketPath, err)
+	}
+	// Keep reference for shutdown cleanup
+	s.listener = ln
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/rpc", s.handleHTTPRequest)
+	mux.HandleFunc("/healthcheck", s.handleHealthRequest)
+
+	s.httpServer = &http.Server{
+		Handler:      mux,
+		ReadTimeout:  15 * time.Second,
+		WriteTimeout: 15 * time.Second,
+		IdleTimeout:  60 * time.Second,
+	}
+
+	errChan := make(chan error, 1)
+	go func() {
+		if err := s.httpServer.Serve(ln); err != nil && err != http.ErrServerClosed {
+			errChan <- err
+		}
+	}()
+
+	select {
+	case err := <-errChan:
+		return nil, fmt.Errorf("failed to start unix server: %w", err)
+	case <-time.After(100 * time.Millisecond):
 		return s, nil
 	}
 }
@@ -125,6 +173,13 @@ func (s *Server) handleHTTPRequest(w http.ResponseWriter, r *http.Request) {
 	s.sendResult(w, req.ID, result)
 }
 
+// handleHealthRequest is a simple health endpoint used by the CLI to detect live daemons
+func (s *Server) handleHealthRequest(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write([]byte("ok"))
+}
+
 // sendResult sends a successful JSON-RPC response
 func (s *Server) sendResult(w http.ResponseWriter, id interface{}, result interface{}) {
 	resp := JSONRPCResponse{
@@ -156,14 +211,24 @@ func (s *Server) Wait() error {
 	return nil
 }
 
-// Shutdown gracefully shuts down the server
+// Shutdown gracefully shuts down the server and removes the unix socket if used
 func (s *Server) Shutdown() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	return s.httpServer.Shutdown(ctx)
+	err := s.httpServer.Shutdown(ctx)
+	if s.listener != nil {
+		_ = s.listener.Close()
+	}
+	if s.socketPath != "" {
+		_ = os.Remove(s.socketPath)
+	}
+	return err
 }
 
 // Addr returns the server address
 func (s *Server) Addr() string {
+	if s.socketPath != "" {
+		return s.socketPath
+	}
 	return s.httpServer.Addr
 }

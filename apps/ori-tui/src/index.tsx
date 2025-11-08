@@ -14,6 +14,7 @@ interface AppProps {
     port: number;
     mode: ClientMode;
     client: ConfigurationsClient;
+    socketPath?: string;
 }
 
 function App(props: AppProps) {
@@ -38,6 +39,7 @@ function App(props: AppProps) {
                     port={props.port}
                     mode={props.mode}
                     client={props.client}
+                    socketPath={props.socketPath}
                     onSelect={handleSelect}
                 />
             }
@@ -51,11 +53,13 @@ function App(props: AppProps) {
 
 interface ParsedArgs {
     serverAddress: string;
+    socketPath?: string;
     mode: ClientMode;
 }
 
 function parseArgs(args: string[]): ParsedArgs {
     let serverAddress = "localhost:8080";
+    let socketPath: string | undefined;
     let mode: ClientMode = "sdk";
 
     for (let i = 0; i < args.length; i++) {
@@ -63,6 +67,12 @@ function parseArgs(args: string[]): ParsedArgs {
 
         if (arg === "--server" && i + 1 < args.length) {
             serverAddress = args[i + 1];
+            i++;
+            continue;
+        }
+
+        if (arg === "--socket" && i + 1 < args.length) {
+            socketPath = args[i + 1];
             i++;
             continue;
         }
@@ -85,19 +95,26 @@ function parseArgs(args: string[]): ParsedArgs {
         }
     }
 
-    return { serverAddress, mode };
+    return { serverAddress, socketPath, mode };
 }
 
 export function main() {
     const args = process.argv.slice(2);
-    const { serverAddress, mode } = parseArgs(args);
+    const { serverAddress, socketPath, mode } = parseArgs(args);
 
     const [host, portStr] = serverAddress.split(":");
     const port = parseInt(portStr ?? "", 10) || 8080;
 
-    const client = createConfigurationsClient({ host, port, mode });
+    const client = createConfigurationsClient({
+        mode,
+        host,
+        port,
+        socketPath,
+    });
 
-    return render(() => <App host={host} port={port} mode={mode} client={client} />);
+    return render(() => (
+        <App host={host} port={port} mode={mode} client={client} socketPath={socketPath} />
+    ));
 }
 
 if (import.meta.main) {

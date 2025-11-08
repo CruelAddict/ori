@@ -18,6 +18,7 @@ export interface ConfigurationSelectorProps {
     port: number;
     mode: ClientMode;
     client: ConfigurationsClient;
+    socketPath?: string;
     onSelect?: (configuration: Configuration) => void;
     keybind?: KeybindAction[];
 }
@@ -126,6 +127,8 @@ export function ConfigurationSelector(props: ConfigurationSelectorProps) {
     const serverLabel = () =>
         props.mode === "stub"
             ? "Stubbed backend (local fixtures)"
+            : props.socketPath
+            ? `Socket: ${props.socketPath}`
             : `Server: ${props.host}:${props.port}`;
 
     return (

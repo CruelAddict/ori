@@ -20,7 +20,8 @@ const (
 func main() {
 	// Parse command-line flags
 	configPath := flag.String("config", DefaultConfigPath, "Path to configuration file")
-	port := flag.Int("port", DefaultPort, "Port to listen on")
+	port := flag.Int("port", DefaultPort, "Port to listen on (TCP, optional)")
+	socketPath := flag.String("socket", "", "Unix domain socket path (preferred)")
 	flag.Parse()
 
 	// Set up parent death monitoring via pipe (file descriptor 3)
@@ -45,12 +46,24 @@ func main() {
 
 	// Initialize RPC handler and server
 	handler := rpc.NewHandler(configService)
-	server, err := rpc.NewServer(ctx, handler, *port)
-	if err != nil {
-		log.Fatalf("Failed to create server: %v", err)
-	}
 
-	log.Printf("JSON-RPC server started on port %d", *port)
+	var (
+		server *rpc.Server
+		err    error
+	)
+	if *socketPath != "" {
+		server, err = rpc.NewUnixServer(ctx, handler, *socketPath)
+		if err != nil {
+			log.Fatalf("Failed to create unix socket server: %v", err)
+		}
+		log.Printf("JSON-RPC server started on unix socket %s", *socketPath)
+	} else {
+		server, err = rpc.NewServer(ctx, handler, *port)
+		if err != nil {
+			log.Fatalf("Failed to create TCP server: %v", err)
+		}
+		log.Printf("JSON-RPC server started on port %d", *port)
+	}
 
 	// Wait for interrupt signal
 	quit := make(chan os.Signal, 1)
