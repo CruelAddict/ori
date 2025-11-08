@@ -33,6 +33,7 @@ func main() {
 	port := flag.Int("port", DefaultPort, "Port to listen on (TCP, optional)")
 	socketPath := flag.String("socket", "", "Unix domain socket path (preferred)")
 	logLevelFlag := flag.String("log-level", "info", "Log level: debug|info|warn|error")
+	standalone := flag.Bool("standalone", false, "Run without parent-process monitoring (foreground mode)")
 	flag.Parse()
 
 	level := parseLevel(*logLevelFlag, slog.LevelInfo)
@@ -55,7 +56,11 @@ func main() {
 
 	// Set up parent death monitoring via pipe (file descriptor 3)
 	// If parent process dies, the pipe will close and we exit
-	go monitorParentAlive()
+	if !*standalone {
+		go monitorParentAlive()
+	} else {
+		slog.Info("standalone mode: parent monitor disabled")
+	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -64,12 +69,15 @@ func main() {
 
 	slog.Info("loading configuration", slog.String("path", *configPath))
 	if err := configService.LoadConfig(); err != nil {
-		slog.Warn("failed to load configuration; starting with empty", slog.Any("err", err))
+		slog.Error("failed to load configuration", slog.Any("err", err))
+		os.Exit(1)
 	} else {
 		slog.Info("configuration loaded")
 	}
 
-	handler := rpc.NewHandler(configService)
+	connectionService := service.NewConnectionService(configService)
+
+	handler := rpc.NewHandler(configService, connectionService)
 
 	var (
 		server *rpc.Server

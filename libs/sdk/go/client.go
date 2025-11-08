@@ -2,8 +2,10 @@ package orisdk
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 )
 
@@ -19,6 +21,25 @@ func NewClient(url string) *Client {
 	return &Client{
 		url:        url,
 		httpClient: &http.Client{},
+		nextID:     1,
+	}
+}
+
+// NewClientUnix creates a client that talks HTTP over a Unix domain socket
+// socketPath: path to the unix domain socket; requests use URL http://unix/rpc
+func NewClientUnix(socketPath string) *Client {
+	dial := func(ctx context.Context, network, addr string) (net.Conn, error) {
+		return net.Dial("unix", socketPath)
+	}
+	transport := &http.Transport{
+		DialContext:           dial,
+		DisableCompression:    true,
+		MaxIdleConnsPerHost:   2,
+		ResponseHeaderTimeout: 0,
+	}
+	return &Client{
+		url:        "http://unix/rpc",
+		httpClient: &http.Client{Transport: transport},
 		nextID:     1,
 	}
 }
@@ -95,6 +116,19 @@ func (c *Client) call(method string, params any, result any) error {
 func (c *Client) ListConfigurations() (*ConfigurationsResult, error) {
 	var result ConfigurationsResult
 	if err := c.call("listConfigurations", struct{}{}, &result); err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
+// Connect calls the connect RPC method with a configuration name
+func (c *Client) Connect(configurationName string) (*ConnectResult, error) {
+	type params struct {
+		ConfigurationName string `json:"configurationName"`
+	}
+	p := params{ConfigurationName: configurationName}
+	var result ConnectResult
+	if err := c.call("connect", p, &result); err != nil {
 		return nil, err
 	}
 	return &result, nil

@@ -22,6 +22,12 @@ import {
 
 /**
  *
+ * Connection name from configuration
+ *
+ */
+export type StringMt4FlmeX = string;
+/**
+ *
  * Human-readable connection name
  *
  */
@@ -94,8 +100,24 @@ export interface ObjectOfString1Ac98OeCStringVc4ApXEDIntegerLz1UwwG4ObjectOfStri
  *
  */
 export type UnorderedSetOfObjectOfString1Ac98OeCStringVc4ApXEDIntegerLz1UwwG4ObjectOfStringCsUvb1ADStringXRxQBYhTWrpyYBUSStringSZpdTXHEStringOlqPwczyStringErJ2QyX2WrpyYBUSwrpyYBUS = ObjectOfString1Ac98OeCStringVc4ApXEDIntegerLz1UwwG4ObjectOfStringCsUvb1ADStringXRxQBYhTWrpyYBUSStringSZpdTXHEStringOlqPwczyStringErJ2QyX2WrpyYBUS[];
+export type StringBFCLQyc2 = "success" | "fail" | "connecting";
+/**
+ *
+ * Optional message for the user
+ *
+ */
+export type StringQHG7IjOg = string;
+export interface ObjectOfStringMt4FlmeX55Q21Zjl {
+  configurationName: StringMt4FlmeX;
+  [k: string]: any;
+}
 export interface ObjectOfUnorderedSetOfObjectOfString1Ac98OeCStringVc4ApXEDIntegerLz1UwwG4ObjectOfStringCsUvb1ADStringXRxQBYhTWrpyYBUSStringSZpdTXHEStringOlqPwczyStringErJ2QyX2WrpyYBUSwrpyYBUSWrpyYBUS {
   connections: UnorderedSetOfObjectOfString1Ac98OeCStringVc4ApXEDIntegerLz1UwwG4ObjectOfStringCsUvb1ADStringXRxQBYhTWrpyYBUSStringSZpdTXHEStringOlqPwczyStringErJ2QyX2WrpyYBUSwrpyYBUS;
+  [k: string]: any;
+}
+export interface ObjectOfStringQHG7IjOgStringBFCLQyc2IHaGdl5F {
+  result: StringBFCLQyc2;
+  userMessage?: StringQHG7IjOg;
   [k: string]: any;
 }
 /**
@@ -103,8 +125,9 @@ export interface ObjectOfUnorderedSetOfObjectOfString1Ac98OeCStringVc4ApXEDInteg
  * Generated! Represents an alias to any of the provided schemas
  *
  */
-export type AnyOfObjectOfUnorderedSetOfObjectOfString1Ac98OeCStringVc4ApXEDIntegerLz1UwwG4ObjectOfStringCsUvb1ADStringXRxQBYhTWrpyYBUSStringSZpdTXHEStringOlqPwczyStringErJ2QyX2WrpyYBUSwrpyYBUSWrpyYBUS = ObjectOfUnorderedSetOfObjectOfString1Ac98OeCStringVc4ApXEDIntegerLz1UwwG4ObjectOfStringCsUvb1ADStringXRxQBYhTWrpyYBUSStringSZpdTXHEStringOlqPwczyStringErJ2QyX2WrpyYBUSwrpyYBUSWrpyYBUS;
+export type AnyOfObjectOfStringMt4FlmeX55Q21ZjlObjectOfUnorderedSetOfObjectOfString1Ac98OeCStringVc4ApXEDIntegerLz1UwwG4ObjectOfStringCsUvb1ADStringXRxQBYhTWrpyYBUSStringSZpdTXHEStringOlqPwczyStringErJ2QyX2WrpyYBUSwrpyYBUSWrpyYBUSObjectOfStringQHG7IjOgStringBFCLQyc2IHaGdl5F = ObjectOfStringMt4FlmeX55Q21Zjl | ObjectOfUnorderedSetOfObjectOfString1Ac98OeCStringVc4ApXEDIntegerLz1UwwG4ObjectOfStringCsUvb1ADStringXRxQBYhTWrpyYBUSStringSZpdTXHEStringOlqPwczyStringErJ2QyX2WrpyYBUSwrpyYBUSWrpyYBUS | ObjectOfStringQHG7IjOgStringBFCLQyc2IHaGdl5F;
 export type ListConfigurations = () => Promise<ObjectOfUnorderedSetOfObjectOfString1Ac98OeCStringVc4ApXEDIntegerLz1UwwG4ObjectOfStringCsUvb1ADStringXRxQBYhTWrpyYBUSStringSZpdTXHEStringOlqPwczyStringErJ2QyX2WrpyYBUSwrpyYBUSWrpyYBUS>;
+export type Connect = (connection: ObjectOfStringMt4FlmeX55Q21Zjl) => Promise<ObjectOfStringQHG7IjOgStringBFCLQyc2IHaGdl5F>;
 
 export interface Options {
   transport: {
@@ -118,7 +141,7 @@ export interface Options {
 
 export class OriDatabaseExplorerAPI {
   public rpc: Client;
-  public static openrpcDocument: OpenRPC = {"openrpc":"1.3.2","info":{"title":"Ori Database Explorer API","description":"JSON-RPC API for exploring database configurations and metadata","version":"1.0.0"},"methods":[{"name":"listConfigurations","summary":"List all database configurations","description":"Returns a list of all configured database connections from the server configuration file","params":[],"result":{"name":"ConfigurationsResult","description":"List of database connection configurations","schema":{"$ref":"#/components/schemas/ConfigurationsResult"}}}],"components":{"schemas":{"ConfigurationsResult":{"type":"object","properties":{"connections":{"type":"array","description":"Array of database connection configurations","items":{"$ref":"#/components/schemas/ConnectionConfig"}}},"required":["connections"]},"ConnectionConfig":{"type":"object","properties":{"name":{"type":"string","description":"Human-readable connection name"},"type":{"type":"string","description":"Database type (mysql, postgresql, etc.)"},"host":{"type":"string","description":"Database host address"},"port":{"type":"integer","description":"Database port number"},"database":{"type":"string","description":"Database name"},"username":{"type":"string","description":"Database username"},"password":{"$ref":"#/components/schemas/PasswordConfig"}},"required":["name","type","host","port","database","username","password"]},"PasswordConfig":{"type":"object","description":"Password retrieval configuration","properties":{"type":{"type":"string","description":"Password provider type","enum":["plain_text","macos-keychain"]},"key":{"type":"string","description":"The key/value for password retrieval"}},"required":["type","key"]}}}};
+  public static openrpcDocument: OpenRPC = {"openrpc":"1.3.2","info":{"title":"Ori Database Explorer API","description":"JSON-RPC API for exploring database configurations and metadata","version":"1.0.0"},"methods":[{"name":"listConfigurations","summary":"List all database configurations","description":"Returns a list of all configured database connections from the server configuration file","params":[],"result":{"name":"ConfigurationsResult","description":"List of database connection configurations","schema":{"$ref":"#/components/schemas/ConfigurationsResult"}}},{"name":"connect","summary":"Open a database connection by configuration name","description":"If the connection already exists, returns success. Otherwise starts connecting asynchronously and returns connecting.","params":[{"name":"connection","schema":{"$ref":"#/components/schemas/ConnectParams"}}],"result":{"name":"ConnectResult","schema":{"$ref":"#/components/schemas/ConnectResult"}}}],"components":{"schemas":{"ConfigurationsResult":{"type":"object","properties":{"connections":{"type":"array","description":"Array of database connection configurations","items":{"$ref":"#/components/schemas/ConnectionConfig"}}},"required":["connections"]},"ConnectionConfig":{"type":"object","properties":{"name":{"type":"string","description":"Human-readable connection name"},"type":{"type":"string","description":"Database type (mysql, postgresql, etc.)"},"host":{"type":"string","description":"Database host address"},"port":{"type":"integer","description":"Database port number"},"database":{"type":"string","description":"Database name"},"username":{"type":"string","description":"Database username"},"password":{"$ref":"#/components/schemas/PasswordConfig"}},"required":["name","type","host","port","database","username","password"]},"PasswordConfig":{"type":"object","description":"Password retrieval configuration","properties":{"type":{"type":"string","description":"Password provider type","enum":["plain_text","macos-keychain"]},"key":{"type":"string","description":"The key/value for password retrieval"}},"required":["type","key"]},"ConnectParams":{"type":"object","properties":{"configurationName":{"type":"string","description":"Connection name from configuration"}},"required":["configurationName"]},"ConnectResult":{"type":"object","properties":{"result":{"type":"string","enum":["success","fail","connecting"]},"userMessage":{"type":"string","description":"Optional message for the user"}},"required":["result"]}}}};
   public dereffedDocument: OpenRPC | undefined;
   public transport:
     | HTTPTransport
@@ -290,6 +313,14 @@ export class OriDatabaseExplorerAPI {
   // tslint:disable-next-line:max-line-length
   public listConfigurations: ListConfigurations = (...params) => {
     return this.request("listConfigurations", params);
+  }
+  
+  /**
+   * Open a database connection by configuration name
+   */
+  // tslint:disable-next-line:max-line-length
+  public connect: Connect = (...params) => {
+    return this.request("connect", params);
   }
   
 }

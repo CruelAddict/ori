@@ -4,22 +4,23 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/crueladdict/ori/apps/ori-server/internal/model"
-
 	"gopkg.in/yaml.v3"
+
+	"github.com/crueladdict/ori/apps/ori-server/internal/model"
 )
 
-// ConfigLoader handles loading configuration from YAML files
 type ConfigLoader struct {
 	configPath string
 }
 
-// NewConfigLoader creates a new ConfigLoader
 func NewConfigLoader(configPath string) *ConfigLoader {
 	return &ConfigLoader{
 		configPath: configPath,
 	}
 }
+
+// Path returns the configuration file path
+func (cl *ConfigLoader) Path() string { return cl.configPath }
 
 // Load reads and parses the YAML configuration file
 func (cl *ConfigLoader) Load() (*model.Config, error) {
@@ -44,34 +45,42 @@ func (cl *ConfigLoader) Load() (*model.Config, error) {
 // validate checks the configuration for required fields
 func (cl *ConfigLoader) validate(config *model.Config) error {
 	// Empty connections list is valid
-	if len(config.Connections) == 0 {
+	if len(config.Configurations) == 0 {
 		return nil
 	}
 
-	for i, conn := range config.Connections {
+	for i, conn := range config.Configurations {
 		if conn.Name == "" {
 			return fmt.Errorf("connection at index %d: name is required", i)
 		}
 		if conn.Type == "" {
 			return fmt.Errorf("connection '%s': type is required", conn.Name)
 		}
-		if conn.Host == "" {
-			return fmt.Errorf("connection '%s': host is required", conn.Name)
-		}
-		if conn.Port <= 0 {
-			return fmt.Errorf("connection '%s': port must be positive", conn.Name)
-		}
 		if conn.Database == "" {
 			return fmt.Errorf("connection '%s': database is required", conn.Name)
 		}
-		if conn.Username == "" {
-			return fmt.Errorf("connection '%s': username is required", conn.Name)
-		}
-		if conn.Password.Type == "" {
-			return fmt.Errorf("connection '%s': password.type is required", conn.Name)
-		}
-		if conn.Password.Key == "" {
-			return fmt.Errorf("connection '%s': password.key is required", conn.Name)
+
+		// Driver-specific validation
+		switch conn.Type {
+		case "sqlite":
+			// For sqlite, database is a file path; other fields optional
+			// no-op
+		default:
+			if conn.Host == nil || *conn.Host == "" {
+				return fmt.Errorf("connection '%s': host is required", conn.Name)
+			}
+			if conn.Port == nil || *conn.Port <= 0 {
+				return fmt.Errorf("connection '%s': port must be positive", conn.Name)
+			}
+			if conn.Username == nil || *conn.Username == "" {
+				return fmt.Errorf("connection '%s': username is required", conn.Name)
+			}
+			if conn.Password == nil || conn.Password.Type == "" {
+				return fmt.Errorf("connection '%s': password.type is required", conn.Name)
+			}
+			if conn.Password.Key == "" {
+				return fmt.Errorf("connection '%s': password.key is required", conn.Name)
+			}
 		}
 	}
 

@@ -13,13 +13,15 @@ import (
 
 // Handler handles JSON-RPC requests using the jsonrpc2 library
 type Handler struct {
-	configService *service.ConfigService
+	configService     *service.ConfigService
+	connectionService *service.ConnectionService
 }
 
 // NewHandler creates a new RPC handler
-func NewHandler(configService *service.ConfigService) *Handler {
+func NewHandler(configService *service.ConfigService, connectionService *service.ConnectionService) *Handler {
 	return &Handler{
-		configService: configService,
+		configService:     configService,
+		connectionService: connectionService,
 	}
 }
 
@@ -30,6 +32,8 @@ func (h *Handler) Handle(ctx context.Context, req *jsonrpc2.Request) (interface{
 	switch req.Method {
 	case "listConfigurations":
 		return handlers.ListConfigurations(h.configService, req.Params)
+	case "connect":
+		return handlers.Connect(ctx, h.connectionService, req.Params)
 	default:
 		slog.Error("rpc method not found", slog.String("method", req.Method))
 		return nil, fmt.Errorf("%w: %s", jsonrpc2.ErrMethodNotFound, req.Method)

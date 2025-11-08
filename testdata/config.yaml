@@ -17,3 +17,6 @@ connections:
     password:
       type: "plain_text"
       key: "prodpassword456"
+  - name: "local-sqlite"
+    type: "sqlite"
+    database: "./sqlite/simple.db"

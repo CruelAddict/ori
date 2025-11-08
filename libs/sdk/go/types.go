@@ -21,3 +21,11 @@ type ConnectionConfig struct {
 type ConfigurationsResult struct {
 	Connections []ConnectionConfig `json:"connections"`
 }
+
+// ConnectResult mirrors the RPC ConnectResult schema
+// Result: success | fail | connecting
+// UserMessage: optional text for the user
+type ConnectResult struct {
+	Result      string  `json:"result"`
+	UserMessage *string `json:"userMessage,omitempty"`
+}

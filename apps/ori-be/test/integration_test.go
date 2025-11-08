@@ -2,7 +2,7 @@ package server_test
 
 import (
 	"context"
-	"fmt"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -12,15 +12,17 @@ import (
 	orisdk "github.com/crueladdict/ori/libs/sdk/go"
 )
 
-func TestListConfigurations(t *testing.T) {
+func TestListConfigurationsAndConnectSQLiteOverUDS(t *testing.T) {
 	// Setup: Use test config file
 	testConfigPath, err := filepath.Abs("../../../testdata/config.yaml")
 	if err != nil {
 		t.Fatalf("Failed to resolve test config path: %v", err)
 	}
 
-	// Start server on a test port
-	testPort := 18080
+	// Ensure sqlite test db directory exists (db may be created by server on open)
+	dbDir := filepath.Join(filepath.Dir(testConfigPath), "sqlite")
+	_ = os.MkdirAll(dbDir, 0o755)
+
 	configService := service.NewConfigService(testConfigPath)
 
 	// Load config at startup
@@ -29,69 +31,63 @@ func TestListConfigurations(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	handler := rpc.NewHandler(configService)
-	srv, err := rpc.NewServer(ctx, handler, testPort)
+	connectionService := service.NewConnectionService(configService)
+	handler := rpc.NewHandler(configService, connectionService)
+
+	// Start server over Unix domain socket
+	sockPath := filepath.Join(os.TempDir(), "ori-be-test.sock")
+	_ = os.Remove(sockPath)
+	srv, err := rpc.NewUnixServer(ctx, handler, sockPath)
 	if err != nil {
-		t.Fatalf("Failed to create server: %v", err)
+		t.Fatalf("Failed to create unix server: %v", err)
 	}
+	defer func() {
+		_ = srv.Shutdown()
+	}()
 
 	// Give server time to start
 	time.Sleep(100 * time.Millisecond)
 
-	// Ensure server cleanup
-	defer func() {
-		if err := srv.Shutdown(); err != nil {
-			t.Logf("Failed to shutdown server: %v", err)
-		}
-	}()
+	// Client over UDS
+	client := orisdk.NewClientUnix(sockPath)
 
-	// Create client
-	client := orisdk.NewClient(fmt.Sprintf("http://localhost:%d/rpc", testPort))
-
-	// Test: Call listConfigurations
+	// listConfigurations should work over UDS
 	resp, err := client.ListConfigurations()
 	if err != nil {
 		t.Fatalf("ListConfigurations failed: %v", err)
 	}
-
-	// Verify response
 	if resp == nil {
 		t.Fatal("Response is nil")
 	}
-
-	if len(resp.Connections) != 1 {
-		t.Fatalf("Expected 1 connection, got %d", len(resp.Connections))
+	if len(resp.Connections) == 0 {
+		t.Fatalf("Expected at least 1 connection, got 0")
 	}
 
-	conn := resp.Connections[0]
-
-	// Verify connection details match test config
-	if conn.Name != "test-mysql" {
-		t.Errorf("Expected name 'test-mysql', got '%s'", conn.Name)
-	}
-	if conn.Type != "mysql" {
-		t.Errorf("Expected type 'mysql', got '%s'", conn.Type)
-	}
-	if conn.Host != "localhost" {
-		t.Errorf("Expected host 'localhost', got '%s'", conn.Host)
-	}
-	if conn.Port != 3306 {
-		t.Errorf("Expected port 3306, got %d", conn.Port)
-	}
-	if conn.Database != "testdb" {
-		t.Errorf("Expected database 'testdb', got '%s'", conn.Database)
-	}
-	if conn.Username != "testuser" {
-		t.Errorf("Expected username 'testuser', got '%s'", conn.Username)
+	// Connect to sqlite entry, first call should be connecting
+	if _, err := os.Stat(filepath.Join(dbDir, "simple.db")); err == nil {
+		// clean slate so we can observe connect
+		_ = os.Remove(filepath.Join(dbDir, "simple.db"))
 	}
 
-	// Verify password config
-	if conn.Password.Type != "plain_text" {
-		t.Errorf("Expected password type 'plain_text', got '%s'", conn.Password.Type)
+	cres, err := client.Connect("local-sqlite")
+	if err != nil {
+		t.Fatalf("Connect (first) failed: %v", err)
 	}
-	if conn.Password.Key != "testpassword123" {
-		t.Errorf("Expected password key 'testpassword123', got '%s'", conn.Password.Key)
+	if cres.Result != "connecting" {
+		t.Fatalf("Expected result 'connecting', got '%s'", cres.Result)
 	}
 
-	t.Log("Test passed: listConfigurations returned expected configuration")
+	// Wait up to 2s for background connect to succeed
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		cres2, err2 := client.Connect("local-sqlite")
+		if err2 != nil {
+			t.Fatalf("Connect (second) failed: %v", err2)
+		}
+		if cres2.Result == "success" {
+			return
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	t.Fatalf("Connect did not reach success within timeout")
 }

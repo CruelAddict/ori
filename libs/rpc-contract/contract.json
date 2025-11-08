@@ -18,6 +18,25 @@
           "$ref": "#/components/schemas/ConfigurationsResult"
         }
       }
+    },
+    {
+      "name": "connect",
+      "summary": "Open a database connection by configuration name",
+      "description": "If the connection already exists, returns success. Otherwise starts connecting asynchronously and returns connecting.",
+      "params": [
+        {
+          "name": "connection",
+          "schema": {
+            "$ref": "#/components/schemas/ConnectParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "ConnectResult",
+        "schema": {
+          "$ref": "#/components/schemas/ConnectResult"
+        }
+      }
     }
   ],
   "components": {
@@ -83,6 +102,30 @@
           }
         },
         "required": ["type", "key"]
+      },
+      "ConnectParams": {
+        "type": "object",
+        "properties": {
+          "configurationName": {
+            "type": "string",
+            "description": "Connection name from configuration"
+          }
+        },
+        "required": ["configurationName"]
+      },
+      "ConnectResult": {
+        "type": "object",
+        "properties": {
+          "result": {
+            "type": "string",
+            "enum": ["success", "fail", "connecting"]
+          },
+          "userMessage": {
+            "type": "string",
+            "description": "Optional message for the user"
+          }
+        },
+        "required": ["result"]
       }
     }
   }
