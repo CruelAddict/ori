@@ -11,6 +11,7 @@ import (
 	"runtime"
 	"syscall"
 
+	"github.com/crueladdict/ori/apps/ori-server/internal/events"
 	"github.com/crueladdict/ori/apps/ori-server/internal/rpc"
 	"github.com/crueladdict/ori/apps/ori-server/internal/service"
 	sqliteadapter "github.com/crueladdict/ori/apps/ori-server/internal/service/adapters/sqlite"
@@ -76,7 +77,8 @@ func main() {
 		slog.Info("configuration loaded")
 	}
 
-	connectionService := service.NewConnectionService(configService)
+	eventHub := events.NewHub()
+	connectionService := service.NewConnectionService(configService, eventHub)
 
 	nodeService := service.NewNodeService(configService, connectionService)
 	nodeService.RegisterAdapter("sqlite", sqliteadapter.NewAdapter())
@@ -88,14 +90,14 @@ func main() {
 		err    error
 	)
 	if *socketPath != "" {
-		server, err = rpc.NewUnixServer(ctx, handler, *socketPath)
+		server, err = rpc.NewUnixServer(ctx, handler, eventHub, *socketPath)
 		if err != nil {
 			slog.Error("failed to create unix socket server", slog.Any("err", err))
 			os.Exit(1)
 		}
 		slog.Info("server started", slog.String("transport", "unix"), slog.String("socket", *socketPath))
 	} else {
-		server, err = rpc.NewServer(ctx, handler, *port)
+		server, err = rpc.NewServer(ctx, handler, eventHub, *port)
 		if err != nil {
 			slog.Error("failed to create TCP server", slog.Any("err", err))
 			os.Exit(1)

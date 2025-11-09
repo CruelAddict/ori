@@ -4,17 +4,21 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net"
 	"net/http"
 	"os"
 	"time"
 
 	"golang.org/x/exp/jsonrpc2"
+
+	"github.com/crueladdict/ori/apps/ori-server/internal/events"
 )
 
 // Server represents the JSON-RPC HTTP server
 type Server struct {
 	handler    *Handler
+	events     *events.Hub
 	httpServer *http.Server
 	listener   net.Listener
 	socketPath string
@@ -44,14 +48,16 @@ type RPCError struct {
 }
 
 // NewServer creates a new RPC server that handles HTTP requests over TCP
-func NewServer(ctx context.Context, handler *Handler, port int) (*Server, error) {
+func NewServer(ctx context.Context, handler *Handler, eventsHub *events.Hub, port int) (*Server, error) {
 	s := &Server{
 		handler: handler,
+		events:  eventsHub,
 	}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/rpc", s.handleHTTPRequest)
 	mux.HandleFunc("/healthcheck", s.handleHealthRequest)
+	mux.HandleFunc("/events", s.handleEventsRequest)
 
 	s.httpServer = &http.Server{
 		Addr:         fmt.Sprintf(":%d", port),
@@ -82,9 +88,10 @@ func NewServer(ctx context.Context, handler *Handler, port int) (*Server, error)
 }
 
 // NewUnixServer creates a new RPC server that handles HTTP requests over a Unix domain socket
-func NewUnixServer(ctx context.Context, handler *Handler, socketPath string) (*Server, error) {
+func NewUnixServer(ctx context.Context, handler *Handler, eventsHub *events.Hub, socketPath string) (*Server, error) {
 	s := &Server{
 		handler:    handler,
+		events:     eventsHub,
 		socketPath: socketPath,
 	}
 
@@ -101,6 +108,7 @@ func NewUnixServer(ctx context.Context, handler *Handler, socketPath string) (*S
 	mux := http.NewServeMux()
 	mux.HandleFunc("/rpc", s.handleHTTPRequest)
 	mux.HandleFunc("/healthcheck", s.handleHealthRequest)
+	mux.HandleFunc("/events", s.handleEventsRequest)
 
 	s.httpServer = &http.Server{
 		Handler:      mux,
@@ -178,6 +186,78 @@ func (s *Server) handleHealthRequest(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write([]byte("ok"))
+}
+
+func (s *Server) handleEventsRequest(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if s.events == nil {
+		http.Error(w, "Event stream unavailable", http.StatusServiceUnavailable)
+		return
+	}
+
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "Streaming unsupported", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("X-Accel-Buffering", "no")
+
+	eventCh, unsubscribe := s.events.Subscribe()
+	defer unsubscribe()
+
+	ctx := r.Context()
+	heartbeat := time.NewTicker(15 * time.Second)
+	defer heartbeat.Stop()
+
+	if _, err := w.Write([]byte(": connected\n\n")); err == nil {
+		flusher.Flush()
+	}
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-heartbeat.C:
+			if _, err := w.Write([]byte(": ping\n\n")); err != nil {
+				slog.Debug("sse heartbeat write failed", slog.Any("err", err))
+				return
+			}
+			flusher.Flush()
+		case evt, ok := <-eventCh:
+			if !ok {
+				return
+			}
+			payload, err := json.Marshal(evt.Payload)
+			if err != nil {
+				slog.Error("failed to marshal sse payload", slog.Any("err", err))
+				continue
+			}
+			if !evt.Timestamp.IsZero() {
+				if _, err := fmt.Fprintf(w, "id: %d\n", evt.Timestamp.UnixNano()); err != nil {
+					slog.Debug("failed to write sse id", slog.Any("err", err))
+					return
+				}
+			}
+			if evt.Name != "" {
+				if _, err := fmt.Fprintf(w, "event: %s\n", evt.Name); err != nil {
+					slog.Debug("failed to write sse event", slog.Any("err", err))
+					return
+				}
+			}
+			if _, err := fmt.Fprintf(w, "data: %s\n\n", payload); err != nil {
+				slog.Debug("failed to write sse data", slog.Any("err", err))
+				return
+			}
+			flusher.Flush()
+		}
+	}
 }
 
 // sendResult sends a successful JSON-RPC response

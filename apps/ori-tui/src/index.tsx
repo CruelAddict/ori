@@ -1,33 +1,125 @@
 import { render } from "@opentui/solid";
 import { ConnectionView } from "@src/components/ConnectionView";
-import { ConfigurationSelector } from "@src/components/ConfigurationSelector";
+import {
+    ConfigurationSelector,
+    type ConnectStatusIndicator,
+} from "@src/components/ConfigurationSelector";
 import type { Configuration } from "@src/lib/configuration";
 import {
-    createConfigurationsClient,
+    createOriClient,
     type ClientMode,
-    type ConfigurationsClient,
+    type OriClient,
 } from "@src/lib/configurationsClient";
-import { Show, createSignal } from "solid-js";
+import { CONNECTION_STATE_EVENT, type ServerEvent } from "@src/lib/events";
 import { createLogger, type LogLevel } from "@src/lib/logger";
+import type { Logger } from "pino";
+import { Show, createEffect, createSignal, onCleanup } from "solid-js";
 
 interface AppProps {
     host: string;
     port: number;
     mode: ClientMode;
-    client: ConfigurationsClient;
+    client: OriClient;
+    logger: Logger;
     socketPath?: string;
 }
 
 function App(props: AppProps) {
     const [selectedConfiguration, setSelectedConfiguration] =
         createSignal<Configuration | null>(null);
+    const [pendingConfiguration, setPendingConfiguration] =
+        createSignal<Configuration | null>(null);
+    const [connectState, setConnectState] =
+        createSignal<ConnectStatusIndicator>({ status: "idle" });
 
-    const handleSelect = (configuration: Configuration) => {
-        setSelectedConfiguration(configuration);
+    const resetConnectState = () => {
+        setConnectState({ status: "idle" });
+    };
+
+    const handleServerEvent = (event: ServerEvent) => {
+        if (event.type !== CONNECTION_STATE_EVENT) {
+            return;
+        }
+        const payload = event.payload;
+        props.logger.debug({ payload }, "tui received server event");
+
+        if (payload.state === "connected") {
+            const pending = pendingConfiguration();
+            if (pending && pending.name === payload.configurationName) {
+                setPendingConfiguration(null);
+                resetConnectState();
+                setSelectedConfiguration(pending);
+            }
+            return;
+        }
+
+        if (payload.state === "failed") {
+            props.logger.error({ payload }, "connection failed via SSE");
+            if (pendingConfiguration()?.name === payload.configurationName) {
+                setPendingConfiguration(null);
+                resetConnectState();
+            }
+            return;
+        }
+
+        if (
+            payload.state === "connecting" &&
+            pendingConfiguration()?.name === payload.configurationName
+        ) {
+            setConnectState({
+                status: "waiting",
+                configurationName: payload.configurationName,
+                message: payload.message ?? "Waiting for backend...",
+            });
+        }
+    };
+
+    createEffect(() => {
+        const dispose = props.client.openEventStream(handleServerEvent);
+        onCleanup(() => dispose());
+    });
+
+    const handleConnect = async (configuration: Configuration) => {
+        setPendingConfiguration(configuration);
+        setConnectState({
+            status: "requesting",
+            configurationName: configuration.name,
+            message: "Requesting connection...",
+        });
+
+        try {
+            const result = await props.client.connect(configuration.name);
+            if (result.result === "success") {
+                setPendingConfiguration(null);
+                resetConnectState();
+                setSelectedConfiguration(configuration);
+                return;
+            }
+            if (result.result === "fail") {
+                props.logger.error(
+                    { configuration: configuration.name, userMessage: result.userMessage },
+                    "connect RPC returned fail"
+                );
+                setPendingConfiguration(null);
+                resetConnectState();
+                return;
+            }
+            setConnectState({
+                status: "waiting",
+                configurationName: configuration.name,
+                message: result.userMessage ?? "Waiting for backend...",
+            });
+        } catch (err) {
+            props.logger.error({ err, configuration: configuration.name }, "connect RPC error");
+            setPendingConfiguration(null);
+            resetConnectState();
+        }
     };
 
     const handleBack = () => {
         setSelectedConfiguration(null);
+        setPendingConfiguration(null);
+        resetConnectState();
     };
 
     return (
@@ -41,12 +133,18 @@ function App(props: AppProps) {
                     mode={props.mode}
                     client={props.client}
                     socketPath={props.socketPath}
-                    onSelect={handleSelect}
+                    onConnect={handleConnect}
+                    connectState={connectState()}
                 />
             }
         >
             {(configuration: Configuration) => (
-                <ConnectionView configuration={configuration} onBack={handleBack} />
+                <ConnectionView
+                    configuration={configuration}
+                    client={props.client}
+                    logger={props.logger}
+                    onBack={handleBack}
+                />
             )}
         </Show>
     );
@@ -120,15 +218,23 @@ export function main() {
     const logger = createLogger("ori-tui", logLevel);
     logger.info({ host, port, mode, socketPath }, "tui started");
 
-    const client = createConfigurationsClient({
+    const client = createOriClient({
         mode,
         host,
         port,
         socketPath,
+        logger,
     });
 
     return render(() => (
-        <App host={host} port={port} mode={mode} client={client} socketPath={socketPath} />
+        <App
+            host={host}
+            port={port}
+            mode={mode}
+            client={client}
+            logger={logger}
+            socketPath={socketPath}
+        />
     ));
 }
 

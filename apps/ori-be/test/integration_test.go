@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/crueladdict/ori/apps/ori-server/internal/events"
 	"github.com/crueladdict/ori/apps/ori-server/internal/rpc"
 	"github.com/crueladdict/ori/apps/ori-server/internal/service"
 	sqliteadapter "github.com/crueladdict/ori/apps/ori-server/internal/service/adapters/sqlite"
@@ -47,7 +48,8 @@ func TestListConfigurationsAndConnectSQLiteOverUDS(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	connectionService := service.NewConnectionService(configService)
+	eventHub := events.NewHub()
+	connectionService := service.NewConnectionService(configService, eventHub)
 	nodeService := service.NewNodeService(configService, connectionService)
 	nodeService.RegisterAdapter("sqlite", sqliteadapter.NewAdapter())
 	handler := rpc.NewHandler(configService, connectionService, nodeService)
@@ -55,7 +57,7 @@ func TestListConfigurationsAndConnectSQLiteOverUDS(t *testing.T) {
 	// Start server over Unix domain socket
 	sockPath := filepath.Join(os.TempDir(), "ori-be-test.sock")
 	_ = os.Remove(sockPath)
-	srv, err := rpc.NewUnixServer(ctx, handler, sockPath)
+	srv, err := rpc.NewUnixServer(ctx, handler, eventHub, sockPath)
 	if err != nil {
 		t.Fatalf("Failed to create unix server: %v", err)
 	}

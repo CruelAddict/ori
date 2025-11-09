@@ -2,10 +2,7 @@ import { TextAttributes } from "@opentui/core";
 import { useKeyboard } from "@opentui/solid";
 import { Keybind, useKeybind } from "@src/lib/keybind";
 import type { Configuration } from "@src/lib/configuration";
-import type {
-    ClientMode,
-    ConfigurationsClient,
-} from "@src/lib/configurationsClient";
+import type { ClientMode, OriClient } from "@src/lib/configurationsClient";
 import { For, createEffect, createMemo, createSignal, onCleanup } from "solid-js";
 
 export interface KeybindAction {
@@ -13,13 +10,20 @@ export interface KeybindAction {
     onTrigger: (configuration: Configuration) => void;
 }
 
+export interface ConnectStatusIndicator {
+    configurationName?: string;
+    status: "idle" | "requesting" | "waiting";
+    message?: string;
+}
+
 export interface ConfigurationSelectorProps {
     host: string;
     port: number;
     mode: ClientMode;
-    client: ConfigurationsClient;
+    client: OriClient;
     socketPath?: string;
-    onSelect?: (configuration: Configuration) => void;
+    onConnect?: (configuration: Configuration) => void;
+    connectState?: ConnectStatusIndicator;
     keybind?: KeybindAction[];
 }
 
@@ -31,6 +35,36 @@ export function ConfigurationSelector(props: ConfigurationSelectorProps) {
 
     const selected = createMemo(() => configurations()[selectedIndex()] ?? null);
     const keybind = useKeybind();
+
+    const isSameConfigurationBusy = (configuration: Configuration) => {
+        const state = props.connectState;
+        if (!state || state.status === "idle") {
+            return false;
+        }
+        return state.configurationName === configuration.name;
+    };
+
+    const connectBanner = createMemo(() => {
+        const state = props.connectState;
+        if (!state || state.status === "idle") {
+            return null;
+        }
+        if (state.message && state.message.length > 0) {
+            return state.message;
+        }
+        if (state.status === "requesting") {
+            return "Contacting backend...";
+        }
+        return "Waiting for server event...";
+    });
+
+    const rowStatus = (configuration: Configuration) => {
+        const state = props.connectState;
+        if (!state || state.configurationName !== configuration.name || state.status === "idle") {
+            return "";
+        }
+        return state.status === "waiting" ? " [waiting]" : " [connecting]";
+    };
 
     const move = (delta: number) => {
         const list = configurations();
@@ -66,8 +100,8 @@ export function ConfigurationSelector(props: ConfigurationSelectorProps) {
 
         if (name === "return") {
             const option = selected();
-            if (option) {
-                props.onSelect?.(option);
+            if (option && !isSameConfigurationBusy(option)) {
+                props.onConnect?.(option);
             }
         }
 
@@ -90,7 +124,7 @@ export function ConfigurationSelector(props: ConfigurationSelectorProps) {
             setError(null);
 
             try {
-                const nextConfigurations = await props.client.list();
+                const nextConfigurations = await props.client.listConfigurations();
                 if (cancelled) return;
                 setConfigurations(nextConfigurations);
                 if (nextConfigurations.length > 0) {
@@ -158,10 +192,20 @@ export function ConfigurationSelector(props: ConfigurationSelectorProps) {
                                 >
                                     {index() === selectedIndex() ? "> " : "  "}
                                     {configuration.name} ({configuration.type}) - {configuration.host}:{configuration.port}/{configuration.database}
+                                    {rowStatus(configuration)}
                                 </text>
                             </box>
                         )}
                     </For>
+                    {(() => {
+                        const message = connectBanner();
+                        return message ? (
+                            <>
+                                <box height={1} />
+                                <text fg="yellow">{message}</text>
+                            </>
+                        ) : null;
+                    })()}
                     <box height={1} />
                     <text attributes={TextAttributes.DIM}>
                         Use ↑/↓ arrows, j/k, Ctrl+N/P, PgUp/PgDn to navigate. Enter to select.

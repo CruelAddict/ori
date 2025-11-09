@@ -1,0 +1,61 @@
+asyncapi: 3.0.0
+info:
+  title: Ori Event Stream
+  version: 1.0.0
+  description: |
+    Server-Sent Events (SSE) channel used by ori-tui to receive backend lifecycle
+    notifications (connection state changes, errors, etc.).
+servers:
+  tcp:
+    host: localhost:8080
+    protocol: http
+    security: []
+    description: JSON-RPC HTTP server that also exposes the /events SSE endpoint.
+  unix:
+    host: /var/run/ori.sock
+    protocol: http+unix
+    bindings:
+      http:
+        bindingVersion: 0.2.0
+    description: Unix domain socket served by ori-be when started with --socket.
+channels:
+  connectionState:
+    address: /events
+    messages:
+      connectionState:
+        $ref: '#/components/messages/ConnectionState'
+    description: |
+      Continuous SSE stream. Each dispatch uses the `connection.state` event name
+      and a JSON payload compliant with `ConnectionStateEvent`.
+components:
+  messages:
+    ConnectionState:
+      name: connection.state
+      title: ConnectionState
+      summary: Notifies subscribers about configuration connection lifecycle changes.
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/ConnectionStateEvent'
+  schemas:
+    ConnectionStateEvent:
+      type: object
+      required:
+        - configurationName
+        - state
+      properties:
+        configurationName:
+          type: string
+          description: Name of the configuration as defined in the ori config file.
+        state:
+          type: string
+          description: Current connection state.
+          enum:
+            - connecting
+            - connected
+            - failed
+        message:
+          type: string
+          description: Optional status message shown to the user while waiting.
+        error:
+          type: string
+          description: Error text when `state` is `failed`.
