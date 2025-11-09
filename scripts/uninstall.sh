@@ -6,8 +6,8 @@ echo "Uninstalling ori..."
 
 # Remove binaries
 sudo rm -f /usr/local/bin/ori
-sudo rm -f /usr/local/bin/ori-tui
-sudo rm -rf /usr/local/lib/ori
+sudo rm -r /usr/local/libexec/ori-be
+sudo rm -r /usr/local/libexec/ori-tui
 
 echo ""
 echo "✓ Uninstall complete!"

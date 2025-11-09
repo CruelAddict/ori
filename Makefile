@@ -28,4 +28,4 @@ test:
 # Build everything and run the CLI with the test config
 demo: build
 	@echo "Starting demo with test config..."
-	@./apps/ori-cli/bin/ori -config testdata/config.yaml
+	@./apps/ori-cli/bin/ori -config testdata/config.yaml --ori-be-path ./apps/ori-be/bin/ori-be --ori-tui-path ./apps/ori-tui/bin/ori-tui

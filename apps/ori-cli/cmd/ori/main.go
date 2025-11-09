@@ -36,6 +36,8 @@ func main() {
 	var lf levelFlag
 	lf.val = slog.LevelWarn
 	flag.Var(&lf, "log-level", "Log level: debug|info|warn|error (propagated to backend and TUI)")
+	oriBePath := flag.String("ori-be-path", "", "Path to ori-be binary (optional)")
+	oriTuiPath := flag.String("ori-tui-path", "", "Path to ori-tui binary (optional)")
 	flag.Parse()
 
 	// Configure CLI logging: only emits to stdout in debug; otherwise silent
@@ -66,13 +68,13 @@ func main() {
 	}
 
 	slog.Debug("Finding ori-be binary")
-	bePath, err := findBinary("ori-be")
+	bePath, err := findBinary("ori-be", *oriBePath)
 	if err != nil {
 		dief("Failed to find ori-be: %v", err)
 	}
 
 	slog.Debug("Finding ori-tui binary")
-	tuiPath, err := findBinary("ori-tui")
+	tuiPath, err := findBinary("ori-tui", *oriTuiPath)
 	if err != nil {
 		dief("Failed to find ori-tui: %v", err)
 	}
@@ -238,14 +240,17 @@ func hashPath(s string) string {
 	return fmt.Sprintf("%08x", h.Sum32())
 }
 
-// findBinary looks for a binary in the following order:
-// 1. Development build directory (../../<app>/bin/<name>) - for local dev
-// 2. Same directory as ori binary - for portable installs
-// 3. /usr/local/bin/<name> - for system installs (ori-tui)
-// 4. /usr/local/lib/ori/<name> - for system installs (ori-be)
-// I know it's a shitshow
-func findBinary(name string) (string, error) {
-	slog.Debug("Finding binary", "name", name)
+func findBinary(name string, overridePath string) (string, error) {
+	slog.Debug("Finding binary", "name", name, "override", overridePath)
+
+	// If override path is provided, use it
+	if overridePath != "" {
+		if _, err := os.Stat(overridePath); err == nil {
+			return overridePath, nil
+		}
+		return "", fmt.Errorf("override path %s not found", overridePath)
+	}
+
 	// Get directory of current executable
 	exePath, err := os.Executable()
 	if err != nil {
@@ -253,40 +258,12 @@ func findBinary(name string) (string, error) {
 	}
 	exeDir := filepath.Dir(exePath)
 
-	// Determine the app directory name from the binary name
-	appDir := name
-	if name == "ori-be" {
-		appDir = "ori-be"
-	} else if name == "ori-tui" {
-		appDir = "ori-tui"
-	}
-
-	// Check development build directory FIRST
-	devPath := filepath.Join(exeDir, "..", "..", appDir, "bin", name)
-	if absPath, err := filepath.Abs(devPath); err == nil {
+	// Check ../libexec/<name> relative to CLI binary
+	libexecPath := filepath.Join(exeDir, "..", "libexec", name)
+	if absPath, err := filepath.Abs(libexecPath); err == nil {
 		if _, err := os.Stat(absPath); err == nil {
 			return absPath, nil
 		}
-	}
-
-	// Check same directory
-	path := filepath.Join(exeDir, name)
-	if _, err := os.Stat(path); err == nil {
-		return path, nil
-	}
-
-	// Check /usr/local/bin for ori-tui
-	if name == "ori-tui" {
-		binPath := filepath.Join("/usr/local/bin", name)
-		if _, err := os.Stat(binPath); err == nil {
-			return binPath, nil
-		}
-	}
-
-	// Check standard installation path in /usr/local/lib/ori
-	installPath := filepath.Join("/usr/local/lib/ori", name)
-	if _, err := os.Stat(installPath); err == nil {
-		return installPath, nil
 	}
 
 	return "", fmt.Errorf("binary %s not found", name)
