@@ -13,6 +13,7 @@ import (
 
 	"github.com/crueladdict/ori/apps/ori-server/internal/rpc"
 	"github.com/crueladdict/ori/apps/ori-server/internal/service"
+	sqliteadapter "github.com/crueladdict/ori/apps/ori-server/internal/service/adapters/sqlite"
 )
 
 const (
@@ -77,7 +78,10 @@ func main() {
 
 	connectionService := service.NewConnectionService(configService)
 
-	handler := rpc.NewHandler(configService, connectionService)
+	nodeService := service.NewNodeService(configService, connectionService)
+	nodeService.RegisterAdapter("sqlite", sqliteadapter.NewAdapter())
+
+	handler := rpc.NewHandler(configService, connectionService, nodeService)
 
 	var (
 		server *rpc.Server

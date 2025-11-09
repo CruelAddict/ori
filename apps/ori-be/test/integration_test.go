@@ -2,6 +2,8 @@ package server_test
 
 import (
 	"context"
+	"database/sql"
+	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -9,21 +11,35 @@ import (
 
 	"github.com/crueladdict/ori/apps/ori-server/internal/rpc"
 	"github.com/crueladdict/ori/apps/ori-server/internal/service"
+	sqliteadapter "github.com/crueladdict/ori/apps/ori-server/internal/service/adapters/sqlite"
 	orisdk "github.com/crueladdict/ori/libs/sdk/go"
 )
 
 func TestListConfigurationsAndConnectSQLiteOverUDS(t *testing.T) {
-	// Setup: Use test config file
-	testConfigPath, err := filepath.Abs("../../../testdata/config.yaml")
+	// Setup: Use a temp copy of the fixtures so tests don't mutate the repo files
+	fixtureConfigPath, err := filepath.Abs("../../../testdata/config.yaml")
 	if err != nil {
 		t.Fatalf("Failed to resolve test config path: %v", err)
 	}
+	fixtureRoot := filepath.Dir(fixtureConfigPath)
+	tempRoot := t.TempDir()
 
-	// Ensure sqlite test db directory exists (db may be created by server on open)
-	dbDir := filepath.Join(filepath.Dir(testConfigPath), "sqlite")
-	_ = os.MkdirAll(dbDir, 0o755)
+	tempConfigPath := filepath.Join(tempRoot, "config.yaml")
+	if err := copyFile(fixtureConfigPath, tempConfigPath); err != nil {
+		t.Fatalf("failed to copy config: %v", err)
+	}
+	tempSQLiteDir := filepath.Join(tempRoot, "sqlite")
+	if err := os.MkdirAll(tempSQLiteDir, 0o755); err != nil {
+		t.Fatalf("failed to create sqlite dir: %v", err)
+	}
+	tempDBPath := filepath.Join(tempSQLiteDir, "simple.db")
+	srcDBPath := filepath.Join(fixtureRoot, "sqlite", "simple.db")
+	if err := copyFile(srcDBPath, tempDBPath); err != nil {
+		t.Fatalf("failed to copy sqlite db: %v", err)
+	}
+	ensureSampleData(t, tempDBPath)
 
-	configService := service.NewConfigService(testConfigPath)
+	configService := service.NewConfigService(tempConfigPath)
 
 	// Load config at startup
 	if err := configService.LoadConfig(); err != nil {
@@ -32,7 +48,9 @@ func TestListConfigurationsAndConnectSQLiteOverUDS(t *testing.T) {
 
 	ctx := context.Background()
 	connectionService := service.NewConnectionService(configService)
-	handler := rpc.NewHandler(configService, connectionService)
+	nodeService := service.NewNodeService(configService, connectionService)
+	nodeService.RegisterAdapter("sqlite", sqliteadapter.NewAdapter())
+	handler := rpc.NewHandler(configService, connectionService, nodeService)
 
 	// Start server over Unix domain socket
 	sockPath := filepath.Join(os.TempDir(), "ori-be-test.sock")
@@ -64,11 +82,6 @@ func TestListConfigurationsAndConnectSQLiteOverUDS(t *testing.T) {
 	}
 
 	// Connect to sqlite entry, first call should be connecting
-	if _, err := os.Stat(filepath.Join(dbDir, "simple.db")); err == nil {
-		// clean slate so we can observe connect
-		_ = os.Remove(filepath.Join(dbDir, "simple.db"))
-	}
-
 	cres, err := client.Connect("local-sqlite")
 	if err != nil {
 		t.Fatalf("Connect (first) failed: %v", err)
@@ -79,15 +92,116 @@ func TestListConfigurationsAndConnectSQLiteOverUDS(t *testing.T) {
 
 	// Wait up to 2s for background connect to succeed
 	deadline := time.Now().Add(2 * time.Second)
+	connected := false
 	for time.Now().Before(deadline) {
 		cres2, err2 := client.Connect("local-sqlite")
 		if err2 != nil {
 			t.Fatalf("Connect (second) failed: %v", err2)
 		}
 		if cres2.Result == "success" {
-			return
+			connected = true
+			break
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
-	t.Fatalf("Connect did not reach success within timeout")
+	if !connected {
+		t.Fatalf("Connect did not reach success within timeout")
+	}
+
+	nodesResp, err := client.GetNodes("local-sqlite")
+	if err != nil {
+		t.Fatalf("getNodes (root) failed: %v", err)
+	}
+	if len(nodesResp.Nodes) == 0 {
+		t.Fatalf("expected at least one root node")
+	}
+	rootNode := nodesResp.Nodes[0]
+	if rootNode.Type != "database" {
+		t.Fatalf("expected database node, got %s", rootNode.Type)
+	}
+	tablesAtRoot, ok := rootNode.Edges["tables"]
+	if !ok || len(tablesAtRoot.Items) == 0 {
+		t.Fatalf("expected hydrated root node with tables edge")
+	}
+
+	dbResp, err := client.GetNodes("local-sqlite", rootNode.ID)
+	if err != nil {
+		t.Fatalf("getNodes (database) failed: %v", err)
+	}
+	if len(dbResp.Nodes) != 1 {
+		t.Fatalf("expected 1 node, got %d", len(dbResp.Nodes))
+	}
+	dbNode := dbResp.Nodes[0]
+	tablesEdge, ok := dbNode.Edges["tables"]
+	if !ok || len(tablesEdge.Items) == 0 {
+		t.Fatalf("expected tables edge with entries")
+	}
+	tableID := tablesEdge.Items[0]
+
+	tableResp, err := client.GetNodes("local-sqlite", tableID)
+	if err != nil {
+		t.Fatalf("getNodes (table) failed: %v", err)
+	}
+	if len(tableResp.Nodes) != 1 {
+		t.Fatalf("expected 1 table node, got %d", len(tableResp.Nodes))
+	}
+	tableNode := tableResp.Nodes[0]
+	columnsEdge, ok := tableNode.Edges["columns"]
+	if !ok || len(columnsEdge.Items) == 0 {
+		t.Fatalf("expected at least one column edge")
+	}
+	constraintsEdge, ok := tableNode.Edges["constraints"]
+	if !ok || len(constraintsEdge.Items) == 0 {
+		t.Fatalf("expected at least one constraint edge")
+	}
+}
+
+func ensureSampleData(t *testing.T, dbPath string) {
+	t.Helper()
+	db, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		t.Fatalf("failed to open sqlite db: %v", err)
+	}
+	defer db.Close()
+
+	statements := []string{
+		`CREATE TABLE IF NOT EXISTS authors (
+			id INTEGER PRIMARY KEY,
+			name TEXT NOT NULL,
+			email TEXT UNIQUE
+		)`,
+		`CREATE TABLE IF NOT EXISTS books (
+			id INTEGER PRIMARY KEY,
+			author_id INTEGER NOT NULL,
+			title TEXT NOT NULL,
+			isbn TEXT UNIQUE,
+			FOREIGN KEY(author_id) REFERENCES authors(id)
+		)`,
+		`INSERT OR IGNORE INTO authors (id, name, email) VALUES (1, 'Ada Lovelace', 'ada@example.com')`,
+		`INSERT OR IGNORE INTO books (id, author_id, title, isbn) VALUES (1, 1, 'Analytical Sketches', 'ISBN-1')`,
+	}
+	for _, stmt := range statements {
+		if _, err := db.Exec(stmt); err != nil {
+			t.Fatalf("failed to prime sqlite db: %v", err)
+		}
+	}
+}
+
+func copyFile(src, dst string) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+
+	out, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+
+	if _, err := io.Copy(out, in); err != nil {
+		return err
+	}
+	return out.Close()
 }

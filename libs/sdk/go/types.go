@@ -29,3 +29,29 @@ type ConnectResult struct {
 	Result      string  `json:"result"`
 	UserMessage *string `json:"userMessage,omitempty"`
 }
+
+// NodeEdge lists related node IDs for a specific edge kind.
+type NodeEdge struct {
+	Items     []string `json:"items"`
+	Truncated bool     `json:"truncated"`
+}
+
+// Node mirrors the server-side graph node DTO.
+type Node struct {
+	ID         string              `json:"id"`
+	Type       string              `json:"type"`
+	Name       string              `json:"name"`
+	Attributes map[string]any      `json:"attributes"`
+	Edges      map[string]NodeEdge `json:"edges"`
+}
+
+// GetNodesParams describes the getNodes request payload.
+type GetNodesParams struct {
+	ConfigurationName string   `json:"configurationName"`
+	NodeIDs           []string `json:"nodeIDs,omitempty"`
+}
+
+// GetNodesResult wraps the list of returned nodes.
+type GetNodesResult struct {
+	Nodes []Node `json:"nodes"`
+}

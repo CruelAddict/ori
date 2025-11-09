@@ -133,3 +133,16 @@ func (c *Client) Connect(configurationName string) (*ConnectResult, error) {
 	}
 	return &result, nil
 }
+
+// GetNodes fetches graph nodes for the given configuration and optional node IDs.
+func (c *Client) GetNodes(configurationName string, nodeIDs ...string) (*GetNodesResult, error) {
+	params := GetNodesParams{ConfigurationName: configurationName}
+	if len(nodeIDs) > 0 {
+		params.NodeIDs = append([]string{}, nodeIDs...)
+	}
+	var result GetNodesResult
+	if err := c.call("getNodes", params, &result); err != nil {
+		return nil, err
+	}
+	return &result, nil
+}

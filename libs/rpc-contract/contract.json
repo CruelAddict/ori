@@ -37,6 +37,25 @@
           "$ref": "#/components/schemas/ConnectResult"
         }
       }
+    },
+    {
+      "name": "getNodes",
+      "summary": "Retrieve graph nodes for a configuration",
+      "description": "Returns either top-level nodes (when nodeIDs is omitted) or fully hydrated nodes for the provided IDs. When edges exceed the limit the truncated flag is set.",
+      "params": [
+        {
+          "name": "request",
+          "schema": {
+            "$ref": "#/components/schemas/GetNodesParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "GetNodesResult",
+        "schema": {
+          "$ref": "#/components/schemas/GetNodesResult"
+        }
+      }
     }
   ],
   "components": {
@@ -126,6 +145,66 @@
           }
         },
         "required": ["result"]
+      },
+      "NodeEdge": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "List of related node IDs"
+          },
+          "truncated": {
+            "type": "boolean",
+            "description": "True when more related nodes exist beyond the returned slice"
+          }
+        },
+        "required": ["items", "truncated"]
+      },
+      "Node": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "type": { "type": "string" },
+          "name": { "type": "string" },
+          "attributes": {
+            "type": "object",
+            "additionalProperties": {}
+          },
+          "edges": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/NodeEdge"
+            }
+          }
+        },
+        "required": ["id", "type", "name", "attributes", "edges"]
+      },
+      "GetNodesParams": {
+        "type": "object",
+        "properties": {
+          "configurationName": {
+            "type": "string",
+            "description": "Connection name from configuration"
+          },
+          "nodeIDs": {
+            "type": "array",
+            "items": { "type": "string" },
+            "maxItems": 1000,
+            "description": "Optional node IDs to hydrate"
+          }
+        },
+        "required": ["configurationName"]
+      },
+      "GetNodesResult": {
+        "type": "object",
+        "properties": {
+          "nodes": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/Node" }
+          }
+        },
+        "required": ["nodes"]
       }
     }
   }

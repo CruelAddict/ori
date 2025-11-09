@@ -65,7 +65,6 @@ func (cs *ConfigService) ByName(name string) (*model.Configuration, error) {
 	return nil, fmt.Errorf("connection '%s' not found", name)
 }
 
-// ConfigBaseDir returns the directory of the loaded config file
 func (cs *ConfigService) ConfigBaseDir() string {
 	return filepath.Dir(cs.loader.Path())
 }
