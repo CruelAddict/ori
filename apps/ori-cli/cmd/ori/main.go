@@ -50,12 +50,14 @@ func main() {
 
 	var absConfigPath string
 	if *configPath == "" {
+		slog.Debug("Finding or creating config file")
 		foundPath, err := findOrCreateConfigFile()
 		if err != nil {
 			dief("Failed to find or create config: %v", err)
 		}
 		absConfigPath = foundPath
 	} else {
+		slog.Debug("Resolving config path", "path", *configPath)
 		var err error
 		absConfigPath, err = filepath.Abs(*configPath)
 		if err != nil {
@@ -63,25 +65,31 @@ func main() {
 		}
 	}
 
+	slog.Debug("Finding ori-be binary")
 	bePath, err := findBinary("ori-be")
 	if err != nil {
 		dief("Failed to find ori-be: %v", err)
 	}
 
+	slog.Debug("Finding ori-tui binary")
 	tuiPath, err := findBinary("ori-tui")
 	if err != nil {
 		dief("Failed to find ori-tui: %v", err)
 	}
 
+	slog.Debug("Getting runtime directory")
 	runDir := runtimeTmpFilesDir()
+	slog.Debug("Creating runtime directory", "path", runDir)
 	if err := os.MkdirAll(runDir, 0o700); err != nil {
 		dief("Failed to create runtime dir: %v", err)
 	}
+	slog.Debug("Cleaning up stale sockets")
 	cleanupStaleSockets(runDir)
 
 	// Backend per config file
 	backendID := hashPath(absConfigPath)
 	socketPath := filepath.Join(runDir, fmt.Sprintf("ori-%s.sock", backendID))
+	slog.Debug("Checking socket health", "socket", socketPath)
 	existsAndHealthy := healthcheckUnix(socketPath, 400*time.Millisecond)
 
 	// Create a pipe for parent death monitoring (for ori-be if we start it)
@@ -107,6 +115,7 @@ func main() {
 		// Pass the read end of the pipe as fd 3
 		beCmd.ExtraFiles = []*os.File{pipeReader}
 
+		slog.Debug("Starting backend process", "path", bePath, "args", beArgs)
 		if err := beCmd.Start(); err != nil {
 			dief("Failed to start backend: %v", err)
 		}
@@ -129,6 +138,7 @@ func main() {
 	tuiCmd.Stderr = os.Stderr
 	tuiCmd.Stdin = os.Stdin
 
+	slog.Debug("Starting TUI process", "path", tuiPath, "args", tuiArgs)
 	if err := tuiCmd.Start(); err != nil {
 		if beCmd != nil && beCmd.Process != nil {
 			_ = beCmd.Process.Kill()
@@ -164,6 +174,7 @@ func dief(format string, args ...any) {
 
 // healthcheckUnix performs a simple GET /healthcheck over a unix domain socket
 func healthcheckUnix(socketPath string, timeout time.Duration) bool {
+	slog.Debug("Performing healthcheck", "socket", socketPath, "timeout", timeout)
 	tr := &http.Transport{
 		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
 			return net.Dial("unix", socketPath)
@@ -184,6 +195,7 @@ func healthcheckUnix(socketPath string, timeout time.Duration) bool {
 
 // cleanupStaleSockets scans the runtime dir for ori-*.sock and removes those that fail healthcheck
 func cleanupStaleSockets(runDir string) {
+	slog.Debug("Reading runtime directory for cleanup", "path", runDir)
 	entries, err := os.ReadDir(runDir)
 	if err != nil {
 		return
@@ -197,7 +209,9 @@ func cleanupStaleSockets(runDir string) {
 			continue
 		}
 		path := filepath.Join(runDir, name)
+		slog.Debug("Health checking socket", "path", path)
 		if !healthcheckUnix(path, 200*time.Millisecond) {
+			slog.Debug("Removing stale socket", "path", path)
 			_ = os.Remove(path)
 		}
 	}
@@ -206,10 +220,13 @@ func cleanupStaleSockets(runDir string) {
 // runtimeTmpFilesDir returns XDG_RUNTIME_DIR/ori or ~/.cache/ori as fallback
 func runtimeTmpFilesDir() string {
 	if x := os.Getenv("XDG_RUNTIME_DIR"); x != "" {
+		slog.Debug("Using XDG_RUNTIME_DIR", "path", x)
 		return filepath.Join(x, "ori")
 	}
+	slog.Debug("Getting home directory for runtime dir")
 	home, err := os.UserHomeDir()
 	if err != nil {
+		slog.Debug("Failed to get home dir, using temp dir")
 		return filepath.Join(os.TempDir(), "ori")
 	}
 	return filepath.Join(home, ".cache", "ori")
@@ -228,6 +245,7 @@ func hashPath(s string) string {
 // 4. /usr/local/lib/ori/<name> - for system installs (ori-be)
 // I know it's a shitshow
 func findBinary(name string) (string, error) {
+	slog.Debug("Finding binary", "name", name)
 	// Get directory of current executable
 	exePath, err := os.Executable()
 	if err != nil {
@@ -283,6 +301,7 @@ func findOrCreateConfigFile() (string, error) {
 	cwd, err := os.Getwd()
 	if err == nil {
 		localConfig := filepath.Join(cwd, ".ori-config.yaml")
+		slog.Debug("Checking for local config", "path", localConfig)
 		if _, err := os.Stat(localConfig); err == nil {
 			return localConfig, nil
 		}
@@ -295,17 +314,20 @@ func findOrCreateConfigFile() (string, error) {
 	}
 
 	userConfig := filepath.Join(homeDir, ".config", "ori", "config.yaml")
+	slog.Debug("Checking for user config", "path", userConfig)
 	if _, err := os.Stat(userConfig); err == nil {
 		return userConfig, nil
 	}
 
 	// No config found, create default one
 	configDir := filepath.Join(homeDir, ".config", "ori")
+	slog.Debug("Creating config directory", "path", configDir)
 	if err := os.MkdirAll(configDir, 0o755); err != nil {
 		return "", fmt.Errorf("failed to create config directory: %v", err)
 	}
 
 	defaultConfig := "connections: []\n"
+	slog.Debug("Creating default config file", "path", userConfig)
 	if err := os.WriteFile(userConfig, []byte(defaultConfig), 0o644); err != nil {
 		return "", fmt.Errorf("failed to create config file: %v", err)
 	}
