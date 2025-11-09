@@ -1,9 +1,10 @@
 import { render } from "@opentui/solid";
-import { Match, Switch, createEffect, createMemo } from "solid-js";
+import { Match, Switch, createMemo } from "solid-js";
 import { ConfigurationSelector } from "@src/components/ConfigurationSelector";
 import { ConnectionView } from "@src/components/ConnectionView";
 import { createLogger } from "@src/lib/logger";
 import { parseArgs } from "@src/utils/args";
+import { useFocusNavigation } from "@src/hooks/useFocusNavigation";
 import { LoggerProvider } from "@src/providers/logger";
 import { ClientProvider } from "@src/providers/client";
 import { ConfigurationsProvider } from "@src/providers/configurations";
@@ -12,6 +13,8 @@ import { NavigationProvider, OverlayHost, useNavigation, type ConnectionPage } f
 import { KeymapProvider, useScopedKeymap } from "@src/providers/keymap";
 
 function App() {
+    useFocusNavigation();
+    
     const connectionState = useConnectionState();
     const navigation = useNavigation();
 
@@ -19,34 +22,6 @@ function App() {
     const connectionPage = createMemo(() => {
         const page = currentPage();
         return page.type === "connection" ? page : null;
-    });
-
-    createEffect(() => {
-        const focusName = connectionState.focusedConfigurationName();
-        const pages = navigation.stack();
-        const depth = pages.length;
-        const top = pages[depth - 1];
-
-        if (focusName) {
-            if (depth === 1) {
-                navigation.push({ type: "connection", configurationName: focusName });
-                return;
-            }
-            if (depth === 2) {
-                if (top?.type === "connection") {
-                    if (top.configurationName !== focusName) {
-                        navigation.replace({ type: "connection", configurationName: focusName });
-                    }
-                } else {
-                    navigation.push({ type: "connection", configurationName: focusName });
-                }
-            }
-            return;
-        }
-
-        if (depth === 2 && top?.type === "connection") {
-            navigation.pop();
-        }
     });
 
     const handleConnectionBack = () => {
