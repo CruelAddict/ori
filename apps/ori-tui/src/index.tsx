@@ -1,4 +1,4 @@
-import { render } from "@opentui/solid";
+import { render, useKeyboard } from "@opentui/solid";
 import { ConnectionView } from "@src/components/ConnectionView";
 import {
     ConfigurationSelector,
@@ -31,6 +31,14 @@ function App(props: AppProps) {
         createSignal<Configuration | null>(null);
     const [connectState, setConnectState] =
         createSignal<ConnectStatusIndicator>({ status: "idle" });
+
+    useKeyboard((evt) => {
+        const name = evt.name?.toLowerCase();
+        if (evt.ctrl && name === "c") {
+            evt.preventDefault?.();
+            process.exit(0);
+        }
+    });
 
     const resetConnectState = () => {
         setConnectState({ status: "idle" });
@@ -226,16 +234,19 @@ export function main() {
         logger,
     });
 
-    return render(() => (
-        <App
-            host={host}
-            port={port}
-            mode={mode}
-            client={client}
-            logger={logger}
-            socketPath={socketPath}
-        />
-    ));
+    return render(
+        () => (
+            <App
+                host={host}
+                port={port}
+                mode={mode}
+                client={client}
+                logger={logger}
+                socketPath={socketPath}
+            />
+        ),
+        { exitOnCtrlC: false }
+    );
 }
 
 if (import.meta.main) {

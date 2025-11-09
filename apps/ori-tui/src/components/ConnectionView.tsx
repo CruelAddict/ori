@@ -3,8 +3,9 @@ import { useKeyboard } from "@opentui/solid";
 import { For, createEffect, createMemo, createSignal, onCleanup } from "solid-js";
 import type { Logger } from "pino";
 import type { Configuration } from "@src/lib/configuration";
-import type { Node, OriClient } from "@src/lib/configurationsClient";
+import type { OriClient } from "@src/lib/configurationsClient";
 import { loadFullGraph, type GraphSnapshot } from "@src/lib/graph";
+import { buildNodeEntityMap, type NodeEntity } from "@src/components/nodes/entity";
 
 export interface ConnectionViewProps {
     configuration: Configuration;
@@ -14,50 +15,206 @@ export interface ConnectionViewProps {
 }
 
 interface TreeRow {
-    node: Node;
+    id: string;
     depth: number;
+    entity: NodeEntity;
+    isExpanded: boolean;
+    parentId?: string;
 }
 
 export function ConnectionView(props: ConnectionViewProps) {
     const [graph, setGraph] = createSignal<GraphSnapshot | null>(null);
     const [loading, setLoading] = createSignal(true);
     const [error, setError] = createSignal<string | null>(null);
+    const [expandedNodes, setExpandedNodes] = createSignal<Set<string>>(new Set<string>());
+    const [selectedId, setSelectedId] = createSignal<string | null>(null);
+
+    const entityMap = createMemo(() => {
+        const snapshot = graph();
+        if (!snapshot) {
+            return new Map<string, NodeEntity>();
+        }
+        return buildNodeEntityMap(snapshot.nodes);
+    });
 
     const rows = createMemo<TreeRow[]>(() => {
         const snapshot = graph();
         if (!snapshot) {
             return [];
         }
+        const expanded = expandedNodes();
+        const map = entityMap();
         const ordered: TreeRow[] = [];
         const visited = new Set<string>();
-        const visit = (nodeId: string, depth: number) => {
+        const visit = (nodeId: string, depth: number, parentId?: string) => {
             if (visited.has(nodeId)) {
                 return;
             }
-            visited.add(nodeId);
-            const node = snapshot.nodes.get(nodeId);
-            if (!node) {
+            const entity = map.get(nodeId);
+            if (!entity) {
                 return;
             }
-            ordered.push({ node, depth });
-            for (const childId of gatherChildIds(node)) {
-                visit(childId, depth + 1);
+            visited.add(nodeId);
+            const isExpanded = entity.hasChildren && expanded.has(nodeId);
+            ordered.push({ id: entity.id, depth, entity, isExpanded, parentId });
+            if (!entity.hasChildren || !isExpanded) {
+                return;
+            }
+            for (const childId of entity.childIds) {
+                visit(childId, depth + 1, entity.id);
             }
         };
         for (const rootId of snapshot.rootIds) {
-            visit(rootId, 0);
+            visit(rootId, 0, undefined);
         }
         return ordered;
     });
 
+    const selectedIndex = createMemo(() => {
+        const id = selectedId();
+        if (!id) {
+            return -1;
+        }
+        return rows().findIndex((row) => row.id === id);
+    });
+
+    const selectedRow = createMemo(() => {
+        const index = selectedIndex();
+        const list = rows();
+        if (index < 0 || index >= list.length) {
+            return null;
+        }
+        return list[index];
+    });
+
+    const expandNode = (nodeId: string | null) => {
+        if (!nodeId) return;
+        setExpandedNodes((prev) => {
+            if (prev.has(nodeId)) {
+                return prev;
+            }
+            const next = new Set(prev);
+            next.add(nodeId);
+            return next;
+        });
+    };
+
+    const collapseNode = (nodeId: string | null) => {
+        if (!nodeId) return;
+        setExpandedNodes((prev) => {
+            if (!prev.has(nodeId)) {
+                return prev;
+            }
+            const next = new Set(prev);
+            next.delete(nodeId);
+            return next;
+        });
+    };
+
+    const selectNode = (nodeId: string | null) => {
+        setSelectedId(nodeId);
+    };
+
+    const moveSelection = (delta: number) => {
+        const list = rows();
+        if (!list.length) {
+            return;
+        }
+        const currentIndex = selectedIndex();
+        const baseIndex = currentIndex === -1 ? 0 : currentIndex;
+        const nextIndex = Math.max(0, Math.min(list.length - 1, baseIndex + delta));
+        selectNode(list[nextIndex].id);
+    };
+
+    const focusFirstChild = () => {
+        const row = selectedRow();
+        if (!row) {
+            return;
+        }
+        const firstChildId = row.entity.childIds[0];
+        if (!firstChildId) {
+            return;
+        }
+        expandNode(row.id);
+        selectNode(firstChildId);
+    };
+
+    const collapseCurrentOrParent = () => {
+        const row = selectedRow();
+        if (!row) {
+            return;
+        }
+        const currentIsExpanded = row.entity.hasChildren && expandedNodes().has(row.id);
+        if (currentIsExpanded) {
+            collapseNode(row.id);
+            return;
+        }
+        if (row.parentId) {
+            collapseNode(row.parentId);
+            selectNode(row.parentId);
+        }
+    };
+
     useKeyboard((evt) => {
+        const name = evt.name?.toLowerCase();
+        if (!name) {
+            return;
+        }
+
         if (
-            evt.name === "escape" ||
-            evt.name === "backspace" ||
-            (evt.ctrl && evt.name === "[")
+            name === "escape" ||
+            name === "backspace" ||
+            (evt.ctrl && name === "[")
         ) {
             evt.preventDefault?.();
             props.onBack?.();
+            return;
+        }
+
+        if (name === "down" || name === "j") {
+            evt.preventDefault?.();
+            moveSelection(1);
+            return;
+        }
+
+        if (name === "up" || name === "k") {
+            evt.preventDefault?.();
+            moveSelection(-1);
+            return;
+        }
+
+        if (name === "right" || name === "l") {
+            evt.preventDefault?.();
+            focusFirstChild();
+            return;
+        }
+
+        if (name === "left" || name === "h") {
+            evt.preventDefault?.();
+            collapseCurrentOrParent();
+        }
+    });
+
+    createEffect(() => {
+        const snapshot = graph();
+        if (!snapshot) {
+            setExpandedNodes(new Set<string>());
+            selectNode(null);
+            return;
+        }
+        setExpandedNodes(new Set<string>());
+        selectNode(snapshot.rootIds[0] ?? null);
+    });
+
+    createEffect(() => {
+        const list = rows();
+        if (!list.length) {
+            selectNode(null);
+            return;
+        }
+        const id = selectedId();
+        if (!id || !list.some((row) => row.id === id)) {
+            selectNode(list[0].id);
         }
     });
 
@@ -105,22 +262,31 @@ export function ConnectionView(props: ConnectionViewProps) {
                 <box flexDirection="column">
                     <For each={rows()}>
                         {(row) => {
-                            const description = describeNode(row.node);
-                            const badges = nodeBadges(row.node);
+                            const isSelected = () => selectedId() === row.id;
+                            const toggleGlyph = row.entity.hasChildren
+                                ? row.isExpanded
+                                    ? "[-]"
+                                    : "[+]"
+                                : "   ";
+                            const fg = () => (isSelected() ? "cyan" : undefined);
+                            const attrs = () =>
+                                isSelected() ? TextAttributes.BOLD : TextAttributes.NONE;
                             return (
                                 <box flexDirection="row" paddingLeft={row.depth * 2}>
-                                    <text>{iconForNode(row.node)} </text>
-                                    <text attributes={TextAttributes.BOLD}>{row.node.name}</text>
-                                    {description && (
+                                    <text fg={fg()} attributes={attrs()}>
+                                        {isSelected() ? "> " : "  "}
+                                        {toggleGlyph} {row.entity.icon} {row.entity.label}
+                                    </text>
+                                    {row.entity.description && (
                                         <text attributes={TextAttributes.DIM}>
                                             {" "}
-                                            {description}
+                                            {row.entity.description}
                                         </text>
                                     )}
-                                    {badges && (
+                                    {row.entity.badges && (
                                         <text fg="cyan">
                                             {" "}
-                                            {badges}
+                                            {row.entity.badges}
                                         </text>
                                     )}
                                 </box>
@@ -136,68 +302,9 @@ export function ConnectionView(props: ConnectionViewProps) {
             )}
 
             <box height={1} />
-            <text attributes={TextAttributes.DIM}>Press Esc to go back</text>
+            <text attributes={TextAttributes.DIM}>
+                Navigate with ↑/↓ or j/k. Use ←/h to collapse, →/l to dive in. Esc returns.
+            </text>
         </box>
     );
-}
-
-function gatherChildIds(node: Node): string[] {
-    const children: string[] = [];
-    for (const edge of Object.values(node.edges ?? {})) {
-        children.push(...edge.items);
-    }
-    return children;
-}
-
-function iconForNode(node: Node): string {
-    switch (node.type) {
-        case "database":
-            return "[DB]";
-        case "table":
-            return "[TB]";
-        case "view":
-            return "[VW]";
-        case "column":
-            return "[CL]";
-        case "constraint":
-            return "[CT]";
-        default:
-            return "[ND]";
-    }
-}
-
-function describeNode(node: Node): string | undefined {
-    switch (node.type) {
-        case "database":
-            return node.attributes?.database ?? undefined;
-        case "table":
-        case "view":
-            return node.attributes?.table ?? undefined;
-        case "column":
-            return node.attributes?.dataType ?? undefined;
-        case "constraint":
-            return node.attributes?.constraintType ?? undefined;
-        default:
-            return undefined;
-    }
-}
-
-function nodeBadges(node: Node): string | undefined {
-    if (node.type === "column") {
-        const badges: string[] = [];
-        if (node.attributes?.primaryKeyPosition && node.attributes.primaryKeyPosition > 0) {
-            badges.push("PK");
-        }
-        if (node.attributes?.notNull) {
-            badges.push("NOT NULL");
-        }
-        if (node.attributes?.dataType) {
-            badges.push(String(node.attributes.dataType));
-        }
-        return badges.length > 0 ? badges.join(" • ") : undefined;
-    }
-    if (node.type === "constraint") {
-        return node.attributes?.constraintType ?? undefined;
-    }
-    return undefined;
 }
