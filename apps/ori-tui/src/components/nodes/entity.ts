@@ -1,6 +1,6 @@
 import type { Node, NodeEdge } from "@src/lib/configurationsClient";
 
-export type NodeEntity = SchemaNodeEntity | EdgeNodeEntity;
+export type NodeEntity = SnapshotNodeEntity | EdgeNodeEntity;
 
 interface BaseNodeEntity {
     id: string;
@@ -13,11 +13,15 @@ interface BaseNodeEntity {
     hasChildren: boolean;
 }
 
-export interface SchemaNodeEntity extends BaseNodeEntity {
+// SnapshotNodeEntity represents a node that represents an actual node
+// from a snapshot that we retrieved from backend
+export interface SnapshotNodeEntity extends BaseNodeEntity {
     kind: "node";
     node: Node;
 }
 
+// EdgeNodeEntity represents a node that doesn't exist in the snapshot
+// and that we introduced for display purposes
 export interface EdgeNodeEntity extends BaseNodeEntity {
     kind: "edge";
     sourceNodeId: string;
@@ -29,7 +33,7 @@ export function buildNodeEntityMap(nodes: Map<string, Node>): Map<string, NodeEn
     const map = new Map<string, NodeEntity>();
 
     for (const node of nodes.values()) {
-        map.set(node.id, createSchemaNodeEntity(node));
+        map.set(node.id, createSnapshotNodeEntity(node));
     }
 
     for (const node of nodes.values()) {
@@ -51,7 +55,7 @@ export function buildNodeEntityMap(nodes: Map<string, Node>): Map<string, NodeEn
     return map;
 }
 
-function createSchemaNodeEntity(node: Node): SchemaNodeEntity {
+function createSnapshotNodeEntity(node: Node): SnapshotNodeEntity {
     return {
         id: node.id,
         kind: "node",

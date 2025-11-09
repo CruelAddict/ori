@@ -1,169 +1,102 @@
 import { TextAttributes } from "@opentui/core";
-import { useKeyboard } from "@opentui/solid";
-import { Keybind, useKeybind } from "@src/lib/keybind";
+import { For, Show, createMemo, createSignal } from "solid-js";
 import type { Configuration } from "@src/lib/configuration";
-import type { ClientMode, OriClient } from "@src/lib/configurationsClient";
-import { For, createEffect, createMemo, createSignal, onCleanup } from "solid-js";
+import { useClientInfo } from "@src/providers/client";
+import { useConfigurations } from "@src/providers/configurations";
+import {
+    type ConnectionRecord,
+    useConnectionState,
+} from "@src/providers/connectionState";
+import { useScopedKeymap } from "@src/providers/keymap";
 
-export interface KeybindAction {
-    keybind: string;
-    onTrigger: (configuration: Configuration) => void;
-}
+export function ConfigurationSelector() {
+    const clientInfo = useClientInfo();
+    const { configurations, loading, error, refresh } = useConfigurations();
+    const connectionState = useConnectionState();
+    const records = connectionState.records;
 
-export interface ConnectStatusIndicator {
-    configurationName?: string;
-    status: "idle" | "requesting" | "waiting";
-    message?: string;
-}
-
-export interface ConfigurationSelectorProps {
-    host: string;
-    port: number;
-    mode: ClientMode;
-    client: OriClient;
-    socketPath?: string;
-    onConnect?: (configuration: Configuration) => void;
-    connectState?: ConnectStatusIndicator;
-    keybind?: KeybindAction[];
-}
-
-export function ConfigurationSelector(props: ConfigurationSelectorProps) {
-    const [configurations, setConfigurations] = createSignal<Configuration[]>([]);
     const [selectedIndex, setSelectedIndex] = createSignal(0);
-    const [loading, setLoading] = createSignal(true);
-    const [error, setError] = createSignal<string | null>(null);
 
     const selected = createMemo(() => configurations()[selectedIndex()] ?? null);
-    const keybind = useKeybind();
-
-    const isSameConfigurationBusy = (configuration: Configuration) => {
-        const state = props.connectState;
-        if (!state || state.status === "idle") {
-            return false;
-        }
-        return state.configurationName === configuration.name;
-    };
-
-    const connectBanner = createMemo(() => {
-        const state = props.connectState;
-        if (!state || state.status === "idle") {
-            return null;
-        }
-        if (state.message && state.message.length > 0) {
-            return state.message;
-        }
-        if (state.status === "requesting") {
-            return "Contacting backend...";
-        }
-        return "Waiting for server event...";
+    const selectedRecord = createMemo<ConnectionRecord | undefined>(() => {
+        const configuration = selected();
+        if (!configuration) return undefined;
+        return records()[configuration.name];
     });
 
-    const rowStatus = (configuration: Configuration) => {
-        const state = props.connectState;
-        if (!state || state.configurationName !== configuration.name || state.status === "idle") {
-            return "";
-        }
-        return state.status === "waiting" ? " [waiting]" : " [connecting]";
-    };
+    const serverLabel = () =>
+        clientInfo.mode === "stub"
+            ? "Stubbed backend (local fixtures)"
+            : clientInfo.socketPath
+            ? `Socket: ${clientInfo.socketPath}`
+            : `Server: ${clientInfo.host ?? "localhost"}:${clientInfo.port ?? 8080}`;
 
     const move = (delta: number) => {
         const list = configurations();
         if (!list.length) return;
-
         setSelectedIndex((prev) => {
             const next = Math.max(0, Math.min(list.length - 1, prev + delta));
             return next;
         });
     };
 
-    useKeyboard((evt) => {
-        const name = evt.name?.toLowerCase();
+    const isBusy = (configuration: Configuration) => {
+        const record = records()[configuration.name];
+        if (!record) return false;
+        return record.status === "requesting" || record.status === "waiting";
+    };
 
-        if (
-            name === "up" ||
-            name === "k" ||
-            (evt.ctrl && name === "p")
-        ) {
-            move(-1);
+    const rowStatus = (configuration: Configuration) => {
+        const record = records()[configuration.name];
+        if (!record) return "";
+        if (record.status === "waiting") return " [waiting]";
+        if (record.status === "requesting") return " [connecting]";
+        if (record.status === "failed") return " [failed]";
+        if (record.status === "connected") return " [connected]";
+        return "";
+    };
+
+    const connectBanner = createMemo(() => {
+        const record = selectedRecord();
+        if (!record) return null;
+        if (record.status === "requesting") {
+            return record.message ?? "Contacting backend...";
         }
-
-        if (
-            name === "down" ||
-            name === "j" ||
-            (evt.ctrl && name === "n")
-        ) {
-            move(1);
+        if (record.status === "waiting") {
+            return record.message ?? "Waiting for server event...";
         }
-
-        if (name === "pageup") move(-10);
-        if (name === "pagedown") move(10);
-
-        if (name === "return") {
-            const option = selected();
-            if (option && !isSameConfigurationBusy(option)) {
-                props.onConnect?.(option);
-            }
+        if (record.status === "failed") {
+            return record.message ?? record.error ?? "Connection failed";
         }
-
-        for (const item of props.keybind ?? []) {
-            if (Keybind.match(item.keybind, keybind.parse(evt))) {
-                const current = selected();
-                if (current) {
-                    evt.preventDefault?.();
-                    item.onTrigger(current);
-                }
-            }
-        }
+        return null;
     });
 
-    createEffect(() => {
-        let cancelled = false;
-
-        const load = async () => {
-            setLoading(true);
-            setError(null);
-
-            try {
-                const nextConfigurations = await props.client.listConfigurations();
-                if (cancelled) return;
-                setConfigurations(nextConfigurations);
-                if (nextConfigurations.length > 0) {
-                    setSelectedIndex(0);
-                } else {
-                    setSelectedIndex(0);
-                }
-            } catch (err) {
-                if (cancelled) return;
-                const message = err instanceof Error ? err.message : String(err);
-                setError(`Failed to load configurations: ${message}`);
-            } finally {
-                if (cancelled) return;
-                setLoading(false);
-            }
-        };
-
-        load();
-
-        onCleanup(() => {
-            cancelled = true;
-        });
-    });
-
-    createEffect(() => {
-        const listLength = configurations().length;
-        if (listLength === 0) {
-            setSelectedIndex(0);
-        } else if (selectedIndex() >= listLength) {
-            setSelectedIndex(listLength - 1);
+    const handleSelect = () => {
+        const configuration = selected();
+        if (!configuration) return;
+        const record = records()[configuration.name];
+        if (record?.status === "connected") {
+            connectionState.focus(configuration.name);
+            return;
         }
-    });
+        if (isBusy(configuration)) {
+            return;
+        }
+        void connectionState.connect(configuration);
+    };
 
-    const serverLabel = () =>
-        props.mode === "stub"
-            ? "Stubbed backend (local fixtures)"
-            : props.socketPath
-            ? `Socket: ${props.socketPath}`
-            : `Server: ${props.host}:${props.port}`;
+    useScopedKeymap("configuration-selector", () => [
+        { pattern: "up", handler: () => move(-1), preventDefault: true },
+        { pattern: "k", handler: () => move(-1), preventDefault: true },
+        { pattern: "ctrl+p", handler: () => move(-1), preventDefault: true },
+        { pattern: "down", handler: () => move(1), preventDefault: true },
+        { pattern: "j", handler: () => move(1), preventDefault: true },
+        { pattern: "ctrl+n", handler: () => move(1), preventDefault: true },
+        { pattern: "pageup", handler: () => move(-10), preventDefault: true },
+        { pattern: "pagedown", handler: () => move(10), preventDefault: true },
+        { pattern: "return", handler: handleSelect, preventDefault: true },
+        { pattern: "ctrl+r", handler: () => void refresh(), preventDefault: true },
+    ]);
 
     return (
         <box flexDirection="column" flexGrow={1} padding={1}>
@@ -171,47 +104,50 @@ export function ConfigurationSelector(props: ConfigurationSelectorProps) {
             <text attributes={TextAttributes.DIM}>{serverLabel()}</text>
             <box height={1} />
 
-            {loading() ? (
-                <text>Loading configurations...</text>
-            ) : error() ? (
-                <text fg="red">{error()}</text>
-            ) : (
-                <box flexDirection="column">
-                    <text attributes={TextAttributes.BOLD}>Configurations:</text>
-                    <box height={1} />
-                    <For each={configurations()}>
-                        {(configuration, index) => (
-                            <box flexDirection="row">
-                                <text
-                                    fg={index() === selectedIndex() ? "cyan" : undefined}
-                                    attributes={
-                                        index() === selectedIndex()
-                                            ? TextAttributes.BOLD
-                                            : TextAttributes.NONE
-                                    }
-                                >
-                                    {index() === selectedIndex() ? "> " : "  "}
-                                    {configuration.name} ({configuration.type}) - {configuration.host}:{configuration.port}/{configuration.database}
-                                    {rowStatus(configuration)}
-                                </text>
-                            </box>
-                        )}
-                    </For>
-                    {(() => {
-                        const message = connectBanner();
-                        return message ? (
-                            <>
-                                <box height={1} />
-                                <text fg="yellow">{message}</text>
-                            </>
-                        ) : null;
-                    })()}
-                    <box height={1} />
-                    <text attributes={TextAttributes.DIM}>
-                        Use ↑/↓ arrows, j/k, Ctrl+N/P, PgUp/PgDn to navigate. Enter to select.
-                    </text>
-                </box>
-            )}
+            <Show when={!loading()} fallback={<text>Loading configurations...</text>}>
+                <Show
+                    when={!error()}
+                    fallback={<text fg="red">Failed to load configurations: {error()}</text>}
+                >
+                    <box flexDirection="column">
+                        <text attributes={TextAttributes.BOLD}>Configurations:</text>
+                        <box height={1} />
+                        <For each={configurations()}>
+                            {(configuration, index) => (
+                                <box flexDirection="row">
+                                    <text
+                                        fg={index() === selectedIndex() ? "cyan" : undefined}
+                                        attributes=
+                                            {index() === selectedIndex()
+                                                ? TextAttributes.BOLD
+                                                : TextAttributes.NONE}
+                                    >
+                                        {index() === selectedIndex() ? "> " : "  "}
+                                        {configuration.name} ({configuration.type}) -
+                                        {" "}
+                                        {configuration.host}:{configuration.port}/
+                                        {configuration.database}
+                                        {rowStatus(configuration)}
+                                    </text>
+                                </box>
+                            )}
+                        </For>
+                        <Show when={connectBanner()}>
+                            {(message) => (
+                                <>
+                                    <box height={1} />
+                                    <text fg="yellow">{message()}</text>
+                                </>
+                            )}
+                        </Show>
+                        <box height={1} />
+                        <text attributes={TextAttributes.DIM}>
+                            Use ↑/↓ arrows, j/k, Ctrl+N/P, PgUp/PgDn to navigate. Enter to connect or
+                            focus existing sessions.
+                        </text>
+                    </box>
+                </Show>
+            </Show>
         </box>
     );
 }
