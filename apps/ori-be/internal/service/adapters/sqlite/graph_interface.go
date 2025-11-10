@@ -59,3 +59,24 @@ func (a *Adapter) Hydrate(ctx context.Context, target *model.Node) ([]*model.Nod
 		return []*model.Node{target}, nil
 	}
 }
+
+func (a *Adapter) databaseDisplayName(connectionName, dbName, file string) string {
+	if file == "" {
+		return fmt.Sprintf("%s (%s)", dbName, connectionName)
+	}
+	return fmt.Sprintf("%s (%s)", dbName, file)
+}
+
+func (a *Adapter) pragmaInt(ctx context.Context, schema, pragma string) (int64, error) {
+	query := fmt.Sprintf(`PRAGMA "%s".%s`, escapeIdentifier(schema), pragma)
+	var value int64
+	err := a.db.QueryRowContext(ctx, query).Scan(&value)
+	return value, err
+}
+
+func (a *Adapter) pragmaText(ctx context.Context, schema, pragma string) (string, error) {
+	query := fmt.Sprintf(`PRAGMA "%s".%s`, escapeIdentifier(schema), pragma)
+	var value string
+	err := a.db.QueryRowContext(ctx, query).Scan(&value)
+	return value, err
+}
