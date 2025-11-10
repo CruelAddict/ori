@@ -1,0 +1,47 @@
+package service
+
+import (
+	"context"
+	"time"
+)
+
+// JobStatus represents the status of a query job
+type JobStatus string
+
+const (
+	JobStatusRunning  JobStatus = "running"
+	JobStatusSuccess  JobStatus = "success"
+	JobStatusFailed   JobStatus = "failed"
+	JobStatusCanceled JobStatus = "canceled"
+)
+
+// QueryJob represents an asynchronous query execution job
+type QueryJob struct {
+	ID                string
+	ConfigurationName string
+	Query             string
+	Params            any // Can be map[string]interface{} or []interface{}
+	Options           *QueryExecOptions
+	Status            JobStatus
+	CreatedAt         time.Time
+	StartedAt         *time.Time
+	FinishedAt        *time.Time
+	DurationMs        int64
+	Error             string
+	Cancel            context.CancelFunc
+}
+
+// QueryResult represents the result of a query execution
+type QueryResult struct {
+	JobID             string
+	ConfigurationName string
+	Status            JobStatus
+	Columns           []string
+	Rows              [][]any
+	RowCount          int
+	Truncated         bool
+	RowsAffected      *int64
+	Error             string
+	FinishedAt        time.Time
+	DurationMs        int64
+}

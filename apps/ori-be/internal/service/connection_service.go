@@ -2,16 +2,14 @@ package service
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"log/slog"
-	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/crueladdict/ori/apps/ori-server/internal/events"
-
-	_ "modernc.org/sqlite"
+	"github.com/crueladdict/ori/apps/ori-server/internal/model"
 )
 
 type ConnectOutcome struct {
@@ -27,36 +25,75 @@ const (
 
 const connectAttemptTimeout = 30 * time.Second
 
+// ConnectionHandle represents an established connection backed by a concrete adapter instance.
+type ConnectionHandle struct {
+	Name          string
+	Configuration *model.Configuration
+	Adapter       ConnectionAdapter
+	connectedAt   time.Time
+}
+
+// Close releases resources held by the handle's adapter.
+func (h *ConnectionHandle) Close() error {
+	if h == nil || h.Adapter == nil {
+		return nil
+	}
+	return h.Adapter.Close()
+}
+
+// Ping delegates to the underlying adapter to verify connection health.
+func (h *ConnectionHandle) Ping(ctx context.Context) error {
+	if h == nil || h.Adapter == nil {
+		return fmt.Errorf("connection handle missing adapter")
+	}
+	return h.Adapter.Ping(ctx)
+}
+
 type ConnectionService struct {
 	configs *ConfigService
 	events  *events.Hub
-	mu      sync.RWMutex
-	conns   map[string]*sql.DB
+
+	connMu      sync.RWMutex
+	connections map[string]*ConnectionHandle
+
+	factoryMu sync.RWMutex
+	factories map[string]ConnectionAdapterFactory
 }
 
 func NewConnectionService(configService *ConfigService, eventHub *events.Hub) *ConnectionService {
 	return &ConnectionService{
-		configs: configService,
-		events:  eventHub,
-		conns:   make(map[string]*sql.DB),
+		configs:     configService,
+		events:      eventHub,
+		connections: make(map[string]*ConnectionHandle),
+		factories:   make(map[string]ConnectionAdapterFactory),
 	}
 }
 
-func (cs *ConnectionService) Connect(ctx context.Context, name string) ConnectOutcome {
-	db, ok := cs.GetConnection(name)
+// RegisterAdapter binds a database type to an adapter factory.
+func (cs *ConnectionService) RegisterAdapter(dbType string, factory ConnectionAdapterFactory) {
+	if factory == nil {
+		return
+	}
+	normalized := strings.ToLower(strings.TrimSpace(dbType))
+	if normalized == "" {
+		return
+	}
+	cs.factoryMu.Lock()
+	cs.factories[normalized] = factory
+	cs.factoryMu.Unlock()
+}
 
-	if ok && db != nil {
+func (cs *ConnectionService) Connect(ctx context.Context, name string) ConnectOutcome {
+	handle, ok := cs.GetConnection(name)
+	if ok && handle != nil {
 		pingCtx, cancel := context.WithTimeout(ctx, 250*time.Millisecond)
 		defer cancel()
-		if err := db.PingContext(pingCtx); err != nil {
-			cs.mu.Lock()
-			_ = db.Close()
-			delete(cs.conns, name)
-			cs.mu.Unlock()
-		} else {
+		if err := handle.Ping(pingCtx); err == nil {
 			cs.emitConnectionEvent(name, events.ConnectionStateConnected, fmt.Sprintf("connection '%s' ready", name), nil)
 			return ConnectOutcome{Result: ConnectResultSuccess}
 		}
+		slog.Info("connection ping failed; reopening", slog.String("configuration", name))
+		cs.removeConnection(name)
 	}
 
 	message := fmt.Sprintf("connecting to '%s'", name)
@@ -76,46 +113,75 @@ func (cs *ConnectionService) openInBackground(name string) {
 		return
 	}
 
-	var (
-		db      *sql.DB
-		openErr error
-	)
-
-	switch cfg.Type {
-	case "sqlite":
-		path := cfg.Database
-		if path == "" {
-			openErr = fmt.Errorf("sqlite configuration '%s' missing database path", name)
-			break
-		}
-		if !filepath.IsAbs(path) {
-			base := cs.configs.ConfigBaseDir()
-			path = filepath.Join(base, path)
-		}
-		path = filepath.Clean(path)
-		db, openErr = sql.Open("sqlite", path)
-	default:
-		openErr = fmt.Errorf("unsupported database type: %s", cfg.Type)
-	}
-	if openErr != nil {
+	factory, ok := cs.adapterFactory(cfg.Type)
+	if !ok {
+		openErr := fmt.Errorf("unsupported database type: %s", cfg.Type)
 		cs.emitConnectionEvent(name, events.ConnectionStateFailed, "", openErr)
 		slog.Error("database connect failed", slog.String("configuration", name), slog.Any("err", openErr))
 		return
 	}
 
-	if pingErr := db.PingContext(ctx); pingErr != nil {
-		_ = db.Close()
-		cs.emitConnectionEvent(name, events.ConnectionStateFailed, "", pingErr)
-		slog.Error("database connect failed", slog.String("configuration", name), slog.Any("err", pingErr))
+	params := AdapterFactoryParams{
+		ConnectionName: name,
+		Configuration:  cfg,
+		BaseDir:        cs.configs.ConfigBaseDir(),
+	}
+
+	adapter, err := factory(params)
+	if err != nil {
+		cs.emitConnectionEvent(name, events.ConnectionStateFailed, "", err)
+		slog.Error("database connect failed", slog.String("configuration", name), slog.Any("err", err))
 		return
 	}
 
-	cs.mu.Lock()
-	cs.conns[name] = db
-	cs.mu.Unlock()
+	if err := adapter.Connect(ctx); err != nil {
+		_ = adapter.Close()
+		cs.emitConnectionEvent(name, events.ConnectionStateFailed, "", err)
+		slog.Error("database connect failed", slog.String("configuration", name), slog.Any("err", err))
+		return
+	}
+
+	if err := adapter.Ping(ctx); err != nil {
+		_ = adapter.Close()
+		cs.emitConnectionEvent(name, events.ConnectionStateFailed, "", err)
+		slog.Error("database ping failed", slog.String("configuration", name), slog.Any("err", err))
+		return
+	}
+
+	handle := &ConnectionHandle{
+		Name:          name,
+		Configuration: cfg,
+		Adapter:       adapter,
+		connectedAt:   time.Now(),
+	}
+
+	var previous *ConnectionHandle
+	cs.connMu.Lock()
+	previous = cs.connections[name]
+	cs.connections[name] = handle
+	cs.connMu.Unlock()
+
+	if previous != nil {
+		if err := previous.Close(); err != nil {
+			slog.Warn("failed to close previous connection adapter", slog.String("configuration", name), slog.Any("err", err))
+		}
+	}
 
 	slog.Info("database connected", slog.String("configuration", name), slog.String("driver", cfg.Type))
 	cs.emitConnectionEvent(name, events.ConnectionStateConnected, fmt.Sprintf("connected to '%s'", name), nil)
+}
+
+func (cs *ConnectionService) removeConnection(name string) {
+	cs.connMu.Lock()
+	handle := cs.connections[name]
+	delete(cs.connections, name)
+	cs.connMu.Unlock()
+
+	if handle != nil {
+		if err := handle.Close(); err != nil {
+			slog.Warn("failed to close connection adapter", slog.String("configuration", name), slog.Any("err", err))
+		}
+	}
 }
 
 func (cs *ConnectionService) emitConnectionEvent(name, state, message string, err error) {
@@ -140,9 +206,17 @@ func (cs *ConnectionService) emitConnectionEvent(name, state, message string, er
 	cs.events.Publish(events.Event{Name: events.ConnectionStateEvent, Payload: payload})
 }
 
-func (cs *ConnectionService) GetConnection(name string) (*sql.DB, bool) {
-	cs.mu.RLock()
-	defer cs.mu.RUnlock()
-	db, ok := cs.conns[name]
-	return db, ok
+func (cs *ConnectionService) GetConnection(name string) (*ConnectionHandle, bool) {
+	cs.connMu.RLock()
+	defer cs.connMu.RUnlock()
+	handle, ok := cs.connections[name]
+	return handle, ok
+}
+
+func (cs *ConnectionService) adapterFactory(dbType string) (ConnectionAdapterFactory, bool) {
+	normalized := strings.ToLower(strings.TrimSpace(dbType))
+	cs.factoryMu.RLock()
+	factory, ok := cs.factories[normalized]
+	cs.factoryMu.RUnlock()
+	return factory, ok
 }

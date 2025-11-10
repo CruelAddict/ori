@@ -27,6 +27,14 @@ channels:
     description: |
       Continuous SSE stream. Each dispatch uses the `connection.state` event name
       and a JSON payload compliant with `ConnectionStateEvent`.
+  queryJobCompleted:
+    address: /events
+    messages:
+      queryJobCompleted:
+        $ref: '#/components/messages/QueryJobCompleted'
+    description: |
+      SSE event fired when a query job execution completes (success, failed, or canceled).
+      Uses the `query.job.completed` event name with a JSON payload.
 components:
   messages:
     ConnectionState:
@@ -36,6 +44,13 @@ components:
       contentType: application/json
       payload:
         $ref: '#/components/schemas/ConnectionStateEvent'
+    QueryJobCompleted:
+      name: query.job.completed
+      title: QueryJobCompleted
+      summary: Notifies subscribers when a query job execution completes.
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/QueryJobCompletedEvent'
   schemas:
     ConnectionStateEvent:
       type: object
@@ -59,3 +74,40 @@ components:
         error:
           type: string
           description: Error text when `state` is `failed`.
+    QueryJobCompletedEvent:
+      type: object
+      required:
+        - jobId
+        - configurationName
+        - status
+        - finishedAt
+      properties:
+        jobId:
+          type: string
+          description: Unique job identifier.
+        configurationName:
+          type: string
+          description: Name of the configuration used for the query.
+        status:
+          type: string
+          enum:
+            - success
+            - failed
+            - canceled
+          description: Final job status.
+        finishedAt:
+          type: string
+          format: date-time
+          description: ISO timestamp when job completed.
+        durationMs:
+          type: integer
+          description: Job execution duration in milliseconds.
+        error:
+          type: string
+          description: Error message when status is failed.
+        message:
+          type: string
+          description: Optional user-facing message.
+        stored:
+          type: boolean
+          description: Whether the result was stored in the cache.

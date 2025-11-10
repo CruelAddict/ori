@@ -16,14 +16,16 @@ type Handler struct {
 	configService     *service.ConfigService
 	connectionService *service.ConnectionService
 	nodeService       *service.NodeService
+	queryService      *service.QueryService
 }
 
 // NewHandler creates a new RPC handler
-func NewHandler(configService *service.ConfigService, connectionService *service.ConnectionService, nodeService *service.NodeService) *Handler {
+func NewHandler(configService *service.ConfigService, connectionService *service.ConnectionService, nodeService *service.NodeService, queryService *service.QueryService) *Handler {
 	return &Handler{
 		configService:     configService,
 		connectionService: connectionService,
 		nodeService:       nodeService,
+		queryService:      queryService,
 	}
 }
 
@@ -38,6 +40,8 @@ func (h *Handler) Handle(ctx context.Context, req *jsonrpc2.Request) (interface{
 		return handlers.Connect(ctx, h.connectionService, req.Params)
 	case "getNodes":
 		return handlers.GetNodes(ctx, h.nodeService, req.Params)
+	case "query.exec":
+		return handlers.QueryExec(h.queryService, req.Params)
 	default:
 		slog.Error("rpc method not found", slog.String("method", req.Method))
 		return nil, fmt.Errorf("%w: %s", jsonrpc2.ErrMethodNotFound, req.Method)

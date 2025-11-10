@@ -50,9 +50,10 @@ func TestListConfigurationsAndConnectSQLiteOverUDS(t *testing.T) {
 	ctx := context.Background()
 	eventHub := events.NewHub()
 	connectionService := service.NewConnectionService(configService, eventHub)
+	connectionService.RegisterAdapter("sqlite", sqliteadapter.NewAdapter)
 	nodeService := service.NewNodeService(configService, connectionService)
-	nodeService.RegisterAdapter("sqlite", sqliteadapter.NewAdapter())
-	handler := rpc.NewHandler(configService, connectionService, nodeService)
+	queryService := service.NewQueryService(connectionService, eventHub, ctx)
+	handler := rpc.NewHandler(configService, connectionService, nodeService, queryService)
 
 	// Start server over Unix domain socket
 	sockPath := filepath.Join(os.TempDir(), "ori-be-test.sock")

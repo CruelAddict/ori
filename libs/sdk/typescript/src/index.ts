@@ -35,6 +35,41 @@ export type StringDoaGddGA = string;
 export type UnorderedSetOfStringDoaGddGAKlUAMtyV = StringDoaGddGA[];
 /**
  *
+ * Name of the database configuration to use
+ *
+ */
+export type StringTooqGZpe = string;
+/**
+ *
+ * Database query or statement to execute
+ *
+ */
+export type String1CDBMuTF = string;
+/**
+ *
+ * Query parameters (can be object for named or array for positional)
+ *
+ */
+export type Any0Gu4CVQC = any;
+/**
+ *
+ * Maximum rows to store in memory (truncate if exceeded)
+ *
+ * @default 200
+ *
+ */
+export type IntegerHtDReg6V = number;
+/**
+ *
+ * Execution options
+ *
+ */
+export interface ObjectOfIntegerHtDReg6VVmlo1ITu {
+  maxRows?: IntegerHtDReg6V;
+  [k: string]: any;
+}
+/**
+ *
  * Human-readable connection name
  *
  */
@@ -143,6 +178,24 @@ export interface ObjectOfStringDoaGddGAStringDoaGddGAStringDoaGddGAObject8HCUdmO
   [k: string]: any;
 }
 export type UnorderedSetOfObjectOfStringDoaGddGAStringDoaGddGAStringDoaGddGAObject8HCUdmO7ObjectKCbcLkTNFuJiolQg1V3Iawrd = ObjectOfStringDoaGddGAStringDoaGddGAStringDoaGddGAObject8HCUdmO7ObjectKCbcLkTNFuJiolQg[];
+/**
+ *
+ * Unique job identifier for tracking execution
+ *
+ */
+export type String1XGixr0N = string;
+/**
+ *
+ * Initial job status
+ *
+ */
+export type StringLK7ZrtMI = "running" | "failed";
+/**
+ *
+ * Optional status message
+ *
+ */
+export type StringYRfSpOUi = string;
 export interface ObjectOfStringMt4FlmeX55Q21Zjl {
   configurationName: StringMt4FlmeX;
   [k: string]: any;
@@ -150,6 +203,13 @@ export interface ObjectOfStringMt4FlmeX55Q21Zjl {
 export interface ObjectOfUnorderedSetOfStringDoaGddGAKlUAMtyVStringMt4FlmeXZEe5NW5H {
   configurationName: StringMt4FlmeX;
   nodeIDs?: UnorderedSetOfStringDoaGddGAKlUAMtyV;
+  [k: string]: any;
+}
+export interface ObjectOfString1CDBMuTFAny0Gu4CVQCObjectOfIntegerHtDReg6VVmlo1ITuStringTooqGZpe7UaKFTbx {
+  configurationName: StringTooqGZpe;
+  query: String1CDBMuTF;
+  params?: Any0Gu4CVQC;
+  options?: ObjectOfIntegerHtDReg6VVmlo1ITu;
   [k: string]: any;
 }
 export interface ObjectOfUnorderedSetOfObjectOfString1Ac98OeCStringVc4ApXEDIntegerLz1UwwG4ObjectOfStringCsUvb1ADStringXRxQBYhTWrpyYBUSStringSZpdTXHEStringOlqPwczyStringErJ2QyX2WrpyYBUSwrpyYBUSWrpyYBUS {
@@ -165,15 +225,22 @@ export interface ObjectOfUnorderedSetOfObjectOfStringDoaGddGAStringDoaGddGAStrin
   nodes: UnorderedSetOfObjectOfStringDoaGddGAStringDoaGddGAStringDoaGddGAObject8HCUdmO7ObjectKCbcLkTNFuJiolQg1V3Iawrd;
   [k: string]: any;
 }
+export interface ObjectOfStringLK7ZrtMIStringYRfSpOUiString1XGixr0N00CA3SuY {
+  jobId: String1XGixr0N;
+  status: StringLK7ZrtMI;
+  message?: StringYRfSpOUi;
+  [k: string]: any;
+}
 /**
  *
  * Generated! Represents an alias to any of the provided schemas
  *
  */
-export type AnyOfObjectOfStringMt4FlmeX55Q21ZjlObjectOfUnorderedSetOfStringDoaGddGAKlUAMtyVStringMt4FlmeXZEe5NW5HObjectOfUnorderedSetOfObjectOfString1Ac98OeCStringVc4ApXEDIntegerLz1UwwG4ObjectOfStringCsUvb1ADStringXRxQBYhTWrpyYBUSStringSZpdTXHEStringOlqPwczyStringErJ2QyX2WrpyYBUSwrpyYBUSWrpyYBUSObjectOfStringQHG7IjOgStringBFCLQyc2IHaGdl5FObjectOfUnorderedSetOfObjectOfStringDoaGddGAStringDoaGddGAStringDoaGddGAObject8HCUdmO7ObjectKCbcLkTNFuJiolQg1V3Iawrd9SdFWp1Y = ObjectOfStringMt4FlmeX55Q21Zjl | ObjectOfUnorderedSetOfStringDoaGddGAKlUAMtyVStringMt4FlmeXZEe5NW5H | ObjectOfUnorderedSetOfObjectOfString1Ac98OeCStringVc4ApXEDIntegerLz1UwwG4ObjectOfStringCsUvb1ADStringXRxQBYhTWrpyYBUSStringSZpdTXHEStringOlqPwczyStringErJ2QyX2WrpyYBUSwrpyYBUSWrpyYBUS | ObjectOfStringQHG7IjOgStringBFCLQyc2IHaGdl5F | ObjectOfUnorderedSetOfObjectOfStringDoaGddGAStringDoaGddGAStringDoaGddGAObject8HCUdmO7ObjectKCbcLkTNFuJiolQg1V3Iawrd9SdFWp1Y;
+export type AnyOfObjectOfStringMt4FlmeX55Q21ZjlObjectOfUnorderedSetOfStringDoaGddGAKlUAMtyVStringMt4FlmeXZEe5NW5HObjectOfString1CDBMuTFAny0Gu4CVQCObjectOfIntegerHtDReg6VVmlo1ITuStringTooqGZpe7UaKFTbxObjectOfUnorderedSetOfObjectOfString1Ac98OeCStringVc4ApXEDIntegerLz1UwwG4ObjectOfStringCsUvb1ADStringXRxQBYhTWrpyYBUSStringSZpdTXHEStringOlqPwczyStringErJ2QyX2WrpyYBUSwrpyYBUSWrpyYBUSObjectOfStringQHG7IjOgStringBFCLQyc2IHaGdl5FObjectOfUnorderedSetOfObjectOfStringDoaGddGAStringDoaGddGAStringDoaGddGAObject8HCUdmO7ObjectKCbcLkTNFuJiolQg1V3Iawrd9SdFWp1YObjectOfStringLK7ZrtMIStringYRfSpOUiString1XGixr0N00CA3SuY = ObjectOfStringMt4FlmeX55Q21Zjl | ObjectOfUnorderedSetOfStringDoaGddGAKlUAMtyVStringMt4FlmeXZEe5NW5H | ObjectOfString1CDBMuTFAny0Gu4CVQCObjectOfIntegerHtDReg6VVmlo1ITuStringTooqGZpe7UaKFTbx | ObjectOfUnorderedSetOfObjectOfString1Ac98OeCStringVc4ApXEDIntegerLz1UwwG4ObjectOfStringCsUvb1ADStringXRxQBYhTWrpyYBUSStringSZpdTXHEStringOlqPwczyStringErJ2QyX2WrpyYBUSwrpyYBUSWrpyYBUS | ObjectOfStringQHG7IjOgStringBFCLQyc2IHaGdl5F | ObjectOfUnorderedSetOfObjectOfStringDoaGddGAStringDoaGddGAStringDoaGddGAObject8HCUdmO7ObjectKCbcLkTNFuJiolQg1V3Iawrd9SdFWp1Y | ObjectOfStringLK7ZrtMIStringYRfSpOUiString1XGixr0N00CA3SuY;
 export type ListConfigurations = () => Promise<ObjectOfUnorderedSetOfObjectOfString1Ac98OeCStringVc4ApXEDIntegerLz1UwwG4ObjectOfStringCsUvb1ADStringXRxQBYhTWrpyYBUSStringSZpdTXHEStringOlqPwczyStringErJ2QyX2WrpyYBUSwrpyYBUSWrpyYBUS>;
 export type Connect = (connection: ObjectOfStringMt4FlmeX55Q21Zjl) => Promise<ObjectOfStringQHG7IjOgStringBFCLQyc2IHaGdl5F>;
 export type GetNodes = (request: ObjectOfUnorderedSetOfStringDoaGddGAKlUAMtyVStringMt4FlmeXZEe5NW5H) => Promise<ObjectOfUnorderedSetOfObjectOfStringDoaGddGAStringDoaGddGAStringDoaGddGAObject8HCUdmO7ObjectKCbcLkTNFuJiolQg1V3Iawrd9SdFWp1Y>;
+export type QueryExec = (request: ObjectOfString1CDBMuTFAny0Gu4CVQCObjectOfIntegerHtDReg6VVmlo1ITuStringTooqGZpe7UaKFTbx) => Promise<ObjectOfStringLK7ZrtMIStringYRfSpOUiString1XGixr0N00CA3SuY>;
 
 export interface Options {
   transport: {
@@ -187,7 +254,7 @@ export interface Options {
 
 export class OriDatabaseExplorerAPI {
   public rpc: Client;
-  public static openrpcDocument: OpenRPC = {"openrpc":"1.3.2","info":{"title":"Ori Database Explorer API","description":"JSON-RPC API for exploring database configurations and metadata","version":"1.0.0"},"methods":[{"name":"listConfigurations","summary":"List all database configurations","description":"Returns a list of all configured database connections from the server configuration file","params":[],"result":{"name":"ConfigurationsResult","description":"List of database connection configurations","schema":{"$ref":"#/components/schemas/ConfigurationsResult"}}},{"name":"connect","summary":"Open a database connection by configuration name","description":"If the connection already exists, returns success. Otherwise starts connecting asynchronously and returns connecting.","params":[{"name":"connection","schema":{"$ref":"#/components/schemas/ConnectParams"}}],"result":{"name":"ConnectResult","schema":{"$ref":"#/components/schemas/ConnectResult"}}},{"name":"getNodes","summary":"Retrieve graph nodes for a configuration","description":"Returns either top-level nodes (when nodeIDs is omitted) or fully hydrated nodes for the provided IDs. When edges exceed the limit the truncated flag is set.","params":[{"name":"request","schema":{"$ref":"#/components/schemas/GetNodesParams"}}],"result":{"name":"GetNodesResult","schema":{"$ref":"#/components/schemas/GetNodesResult"}}}],"components":{"schemas":{"ConfigurationsResult":{"type":"object","properties":{"connections":{"type":"array","description":"Array of database connection configurations","items":{"$ref":"#/components/schemas/ConnectionConfig"}}},"required":["connections"]},"ConnectionConfig":{"type":"object","properties":{"name":{"type":"string","description":"Human-readable connection name"},"type":{"type":"string","description":"Database type (mysql, postgresql, etc.)"},"host":{"type":"string","description":"Database host address"},"port":{"type":"integer","description":"Database port number"},"database":{"type":"string","description":"Database name"},"username":{"type":"string","description":"Database username"},"password":{"$ref":"#/components/schemas/PasswordConfig"}},"required":["name","type","host","port","database","username","password"]},"PasswordConfig":{"type":"object","description":"Password retrieval configuration","properties":{"type":{"type":"string","description":"Password provider type","enum":["plain_text","macos-keychain"]},"key":{"type":"string","description":"The key/value for password retrieval"}},"required":["type","key"]},"ConnectParams":{"type":"object","properties":{"configurationName":{"type":"string","description":"Connection name from configuration"}},"required":["configurationName"]},"ConnectResult":{"type":"object","properties":{"result":{"type":"string","enum":["success","fail","connecting"]},"userMessage":{"type":"string","description":"Optional message for the user"}},"required":["result"]},"NodeEdge":{"type":"object","properties":{"items":{"type":"array","items":{"type":"string"},"description":"List of related node IDs"},"truncated":{"type":"boolean","description":"True when more related nodes exist beyond the returned slice"}},"required":["items","truncated"]},"Node":{"type":"object","properties":{"id":{"type":"string"},"type":{"type":"string"},"name":{"type":"string"},"attributes":{"type":"object","additionalProperties":{}},"edges":{"type":"object","additionalProperties":{"$ref":"#/components/schemas/NodeEdge"}}},"required":["id","type","name","attributes","edges"]},"GetNodesParams":{"type":"object","properties":{"configurationName":{"type":"string","description":"Connection name from configuration"},"nodeIDs":{"type":"array","items":{"type":"string"},"maxItems":1000,"description":"Optional node IDs to hydrate"}},"required":["configurationName"]},"GetNodesResult":{"type":"object","properties":{"nodes":{"type":"array","items":{"$ref":"#/components/schemas/Node"}}},"required":["nodes"]}}}};
+  public static openrpcDocument: OpenRPC = {"openrpc":"1.3.2","info":{"title":"Ori Database Explorer API","description":"JSON-RPC API for exploring database configurations and metadata","version":"1.0.0"},"methods":[{"name":"listConfigurations","summary":"List all database configurations","description":"Returns a list of all configured database connections from the server configuration file","params":[],"result":{"name":"ConfigurationsResult","description":"List of database connection configurations","schema":{"$ref":"#/components/schemas/ConfigurationsResult"}}},{"name":"connect","summary":"Open a database connection by configuration name","description":"If the connection already exists, returns success. Otherwise starts connecting asynchronously and returns connecting.","params":[{"name":"connection","schema":{"$ref":"#/components/schemas/ConnectParams"}}],"result":{"name":"ConnectResult","schema":{"$ref":"#/components/schemas/ConnectResult"}}},{"name":"getNodes","summary":"Retrieve graph nodes for a configuration","description":"Returns either top-level nodes (when nodeIDs is omitted) or fully hydrated nodes for the provided IDs. When edges exceed the limit the truncated flag is set.","params":[{"name":"request","schema":{"$ref":"#/components/schemas/GetNodesParams"}}],"result":{"name":"GetNodesResult","schema":{"$ref":"#/components/schemas/GetNodesResult"}}},{"name":"query.exec","summary":"Start execution of a database query or statement asynchronously.","description":"Executes a database query asynchronously and returns a job ID. Results are stored in memory and can be retrieved later. Completion is announced via SSE.","params":[{"name":"request","schema":{"$ref":"#/components/schemas/QueryExecParams"}}],"result":{"name":"QueryExecResult","schema":{"$ref":"#/components/schemas/QueryExecResult"}}}],"components":{"schemas":{"ConfigurationsResult":{"type":"object","properties":{"connections":{"type":"array","description":"Array of database connection configurations","items":{"$ref":"#/components/schemas/ConnectionConfig"}}},"required":["connections"]},"ConnectionConfig":{"type":"object","properties":{"name":{"type":"string","description":"Human-readable connection name"},"type":{"type":"string","description":"Database type (mysql, postgresql, etc.)"},"host":{"type":"string","description":"Database host address"},"port":{"type":"integer","description":"Database port number"},"database":{"type":"string","description":"Database name"},"username":{"type":"string","description":"Database username"},"password":{"$ref":"#/components/schemas/PasswordConfig"}},"required":["name","type","host","port","database","username","password"]},"PasswordConfig":{"type":"object","description":"Password retrieval configuration","properties":{"type":{"type":"string","description":"Password provider type","enum":["plain_text","macos-keychain"]},"key":{"type":"string","description":"The key/value for password retrieval"}},"required":["type","key"]},"ConnectParams":{"type":"object","properties":{"configurationName":{"type":"string","description":"Connection name from configuration"}},"required":["configurationName"]},"ConnectResult":{"type":"object","properties":{"result":{"type":"string","enum":["success","fail","connecting"]},"userMessage":{"type":"string","description":"Optional message for the user"}},"required":["result"]},"NodeEdge":{"type":"object","properties":{"items":{"type":"array","items":{"type":"string"},"description":"List of related node IDs"},"truncated":{"type":"boolean","description":"True when more related nodes exist beyond the returned slice"}},"required":["items","truncated"]},"Node":{"type":"object","properties":{"id":{"type":"string"},"type":{"type":"string"},"name":{"type":"string"},"attributes":{"type":"object","additionalProperties":{}},"edges":{"type":"object","additionalProperties":{"$ref":"#/components/schemas/NodeEdge"}}},"required":["id","type","name","attributes","edges"]},"GetNodesParams":{"type":"object","properties":{"configurationName":{"type":"string","description":"Connection name from configuration"},"nodeIDs":{"type":"array","items":{"type":"string"},"maxItems":1000,"description":"Optional node IDs to hydrate"}},"required":["configurationName"]},"GetNodesResult":{"type":"object","properties":{"nodes":{"type":"array","items":{"$ref":"#/components/schemas/Node"}}},"required":["nodes"]},"QueryExecParams":{"type":"object","properties":{"configurationName":{"type":"string","description":"Name of the database configuration to use"},"query":{"type":"string","description":"Database query or statement to execute"},"params":{"description":"Query parameters (can be object for named or array for positional)"},"options":{"type":"object","properties":{"maxRows":{"type":"integer","minimum":1,"maximum":1000,"default":200,"description":"Maximum rows to store in memory (truncate if exceeded)"}},"description":"Execution options"}},"required":["configurationName","query"]},"QueryExecResult":{"type":"object","properties":{"jobId":{"type":"string","description":"Unique job identifier for tracking execution"},"status":{"type":"string","enum":["running","failed"],"description":"Initial job status"},"message":{"type":"string","description":"Optional status message"}},"required":["jobId","status"]}}}};
   public dereffedDocument: OpenRPC | undefined;
   public transport:
     | HTTPTransport
@@ -375,6 +442,14 @@ export class OriDatabaseExplorerAPI {
   // tslint:disable-next-line:max-line-length
   public getNodes: GetNodes = (...params) => {
     return this.request("getNodes", params);
+  }
+  
+  /**
+   * Start execution of a database query or statement asynchronously.
+   */
+  // tslint:disable-next-line:max-line-length
+  public queryExec: QueryExec = (...params) => {
+    return this.request("query.exec", params);
   }
   
 }

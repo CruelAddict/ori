@@ -55,3 +55,23 @@ type GetNodesParams struct {
 type GetNodesResult struct {
 	Nodes []Node `json:"nodes"`
 }
+
+// QueryExecParams represents the parameters for query.exec method
+type QueryExecParams struct {
+	ConfigurationName string            `json:"configurationName"`
+	Query             string            `json:"query"`
+	Params            interface{}       `json:"params,omitempty"` // Can be map[string]interface{} or []interface{}
+	Options           *QueryExecOptions `json:"options,omitempty"`
+}
+
+// QueryExecOptions represents execution options for database queries
+type QueryExecOptions struct {
+	MaxRows int `json:"maxRows,omitempty"`
+}
+
+// QueryExecResult represents the immediate result of query.exec method
+type QueryExecResult struct {
+	JobID   string `json:"jobId"`
+	Status  string `json:"status"` // "running" or "failed"
+	Message string `json:"message,omitempty"`
+}

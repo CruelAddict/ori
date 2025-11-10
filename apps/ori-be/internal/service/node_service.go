@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
 	"strings"
@@ -17,32 +16,15 @@ const (
 )
 
 var (
-	ErrAdapterNotRegistered  = errors.New("no node adapter registered for configuration type")
 	ErrConnectionUnavailable = errors.New("connection is not available")
 	ErrNodeLimitExceeded     = errors.New("too many node IDs requested")
 	ErrUnknownNode           = errors.New("requested node is not known; hydrate its parent first")
 )
 
-// NodeAdapter exposes database-specific metadata discovery capabilities.
-type NodeAdapter interface {
-	Bootstrap(ctx context.Context, req *NodeAdapterRequest) ([]*model.Node, error)
-	Hydrate(ctx context.Context, req *NodeAdapterRequest, target *model.Node) ([]*model.Node, error)
-}
-
-// NodeAdapterRequest bundles contextual information each adapter may need.
-type NodeAdapterRequest struct {
-	Configuration  *model.Configuration
-	ConnectionName string
-	DB             *sql.DB
-}
-
 // NodeService orchestrates graph retrieval, caching, and adapter dispatch.
 type NodeService struct {
 	configs     *ConfigService
 	connections *ConnectionService
-
-	adaptersMu sync.RWMutex
-	adapters   map[string]NodeAdapter
 
 	graphsMu         sync.RWMutex
 	connectionGraphs map[string]*connectionGraph
@@ -54,31 +36,16 @@ type NodeService struct {
 	idLimit   int
 }
 
-// NewNodeService builds a NodeService instance without any adapters registered.
+// NewNodeService builds a NodeService instance.
 func NewNodeService(configs *ConfigService, connections *ConnectionService) *NodeService {
 	return &NodeService{
 		configs:          configs,
 		connections:      connections,
-		adapters:         make(map[string]NodeAdapter),
 		connectionGraphs: make(map[string]*connectionGraph),
 		inflight:         make(map[hydrationKey]*sync.WaitGroup),
 		edgeLimit:        defaultEdgeLimit,
 		idLimit:          defaultNodeIDLimit,
 	}
-}
-
-// RegisterAdapter binds a database type (e.g. "sqlite") to a concrete adapter.
-func (ns *NodeService) RegisterAdapter(dbType string, adapter NodeAdapter) {
-	if adapter == nil {
-		return
-	}
-	dbType = strings.ToLower(strings.TrimSpace(dbType))
-	if dbType == "" {
-		return
-	}
-	ns.adaptersMu.Lock()
-	defer ns.adaptersMu.Unlock()
-	ns.adapters[dbType] = adapter
 }
 
 // GetNodes returns root nodes (when nodeIDs is empty) or hydrates the requested nodes.
@@ -96,39 +63,26 @@ func (ns *NodeService) GetNodes(ctx context.Context, configurationName string, n
 		}
 	}
 
-	cfg, err := ns.configs.ByName(configurationName)
-	if err != nil {
-		return nil, err
-	}
-	adapter, err := ns.adapterForType(cfg.Type)
-	if err != nil {
-		return nil, err
-	}
-	db, ok := ns.connections.GetConnection(configurationName)
-	if !ok || db == nil {
+	handle, ok := ns.connections.GetConnection(configurationName)
+	if !ok || handle == nil || handle.Adapter == nil {
 		return nil, fmt.Errorf("%w: %s", ErrConnectionUnavailable, configurationName)
 	}
 
 	cGraph := ns.getOrCreateConnGraph(configurationName)
-	req := &NodeAdapterRequest{
-		Configuration:  cfg,
-		ConnectionName: configurationName,
-		DB:             db,
-	}
 
 	if len(nodeIDs) == 0 {
-		return ns.ensureRootNodes(ctx, cGraph, adapter, req)
+		return ns.ensureRootNodes(ctx, cGraph, handle)
 	}
 
 	if !cGraph.hasRoots() {
-		if _, err := ns.ensureRootNodes(ctx, cGraph, adapter, req); err != nil {
+		if _, err := ns.ensureRootNodes(ctx, cGraph, handle); err != nil {
 			return nil, err
 		}
 	}
 
 	uniqueIDs := uniqueStrings(nodeIDs)
 	for _, id := range uniqueIDs {
-		if err := ns.ensureNodeAvailable(ctx, cGraph, adapter, req, id); err != nil {
+		if err := ns.ensureNodeAvailable(ctx, cGraph, handle, id); err != nil {
 			return nil, err
 		}
 	}
@@ -136,32 +90,21 @@ func (ns *NodeService) GetNodes(ctx context.Context, configurationName string, n
 	return cGraph.snapshot(uniqueIDs)
 }
 
-func (ns *NodeService) adapterForType(dbType string) (NodeAdapter, error) {
-	dbType = strings.ToLower(strings.TrimSpace(dbType))
-	ns.adaptersMu.RLock()
-	adapter, ok := ns.adapters[dbType]
-	ns.adaptersMu.RUnlock()
-	if !ok {
-		return nil, fmt.Errorf("%w: %s", ErrAdapterNotRegistered, dbType)
-	}
-	return adapter, nil
-}
-
-func (ns *NodeService) ensureRootNodes(ctx context.Context, graph *connectionGraph, adapter NodeAdapter, req *NodeAdapterRequest) ([]*model.Node, error) {
+func (ns *NodeService) ensureRootNodes(ctx context.Context, graph *connectionGraph, handle *ConnectionHandle) ([]*model.Node, error) {
 	if !graph.hasRoots() {
-		nodes, err := adapter.Bootstrap(ctx, req)
+		nodes, err := handle.Adapter.Bootstrap(ctx)
 		if err != nil {
 			return nil, err
 		}
 		if len(nodes) == 0 {
-			return nil, errors.New("db adapter returned no root nodes")
+			return nil, errors.New("adapter returned no root nodes")
 		}
 		ns.prepareNodes(nodes)
 		graph.setRootNodes(nodes)
 	}
 
 	for _, rootID := range graph.rootIDList() {
-		if err := ns.ensureNodeAvailable(ctx, graph, adapter, req, rootID); err != nil {
+		if err := ns.ensureNodeAvailable(ctx, graph, handle, rootID); err != nil {
 			return nil, err
 		}
 	}
@@ -169,7 +112,7 @@ func (ns *NodeService) ensureRootNodes(ctx context.Context, graph *connectionGra
 	return graph.rootSnapshot(), nil
 }
 
-func (ns *NodeService) ensureNodeAvailable(ctx context.Context, graph *connectionGraph, adapter NodeAdapter, req *NodeAdapterRequest, nodeID string) error {
+func (ns *NodeService) ensureNodeAvailable(ctx context.Context, graph *connectionGraph, handle *ConnectionHandle, nodeID string) error {
 	node, ok := graph.get(nodeID)
 	if !ok {
 		return fmt.Errorf("%w: %s", ErrUnknownNode, nodeID)
@@ -177,11 +120,11 @@ func (ns *NodeService) ensureNodeAvailable(ctx context.Context, graph *connectio
 	if node.Hydrated {
 		return nil
 	}
-	return ns.hydrateNode(ctx, graph, adapter, req, nodeID)
+	return ns.hydrateNode(ctx, graph, handle, nodeID)
 }
 
-func (ns *NodeService) hydrateNode(ctx context.Context, graph *connectionGraph, adapter NodeAdapter, req *NodeAdapterRequest, nodeID string) error {
-	key := hydrationKey{config: req.ConnectionName, node: nodeID}
+func (ns *NodeService) hydrateNode(ctx context.Context, graph *connectionGraph, handle *ConnectionHandle, nodeID string) error {
+	key := hydrationKey{config: handle.Name, node: nodeID}
 	wg, owner := ns.enterHydration(key)
 	if !owner {
 		wg.Wait()
@@ -199,7 +142,7 @@ func (ns *NodeService) hydrateNode(ctx context.Context, graph *connectionGraph, 
 	}
 
 	nodeCopy := cloneNode(node)
-	nodes, err := adapter.Hydrate(ctx, req, nodeCopy)
+	nodes, err := handle.Adapter.Hydrate(ctx, nodeCopy)
 	if err != nil {
 		ns.leaveHydration(key)
 		return err

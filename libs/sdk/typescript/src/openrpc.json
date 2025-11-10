@@ -56,6 +56,25 @@
           "$ref": "#/components/schemas/GetNodesResult"
         }
       }
+    },
+    {
+      "name": "query.exec",
+      "summary": "Start execution of a database query or statement asynchronously.",
+      "description": "Executes a database query asynchronously and returns a job ID. Results are stored in memory and can be retrieved later. Completion is announced via SSE.",
+      "params": [
+        {
+          "name": "request",
+          "schema": {
+            "$ref": "#/components/schemas/QueryExecParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "QueryExecResult",
+        "schema": {
+          "$ref": "#/components/schemas/QueryExecResult"
+        }
+      }
     }
   ],
   "components": {
@@ -253,6 +272,64 @@
         },
         "required": [
           "nodes"
+        ]
+      },
+      "QueryExecParams": {
+        "type": "object",
+        "properties": {
+          "configurationName": {
+            "type": "string",
+            "description": "Name of the database configuration to use"
+          },
+          "query": {
+            "type": "string",
+            "description": "Database query or statement to execute"
+          },
+          "params": {
+            "description": "Query parameters (can be object for named or array for positional)"
+          },
+          "options": {
+            "type": "object",
+            "properties": {
+              "maxRows": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 1000,
+                "default": 200,
+                "description": "Maximum rows to store in memory (truncate if exceeded)"
+              }
+            },
+            "description": "Execution options"
+          }
+        },
+        "required": [
+          "configurationName",
+          "query"
+        ]
+      },
+      "QueryExecResult": {
+        "type": "object",
+        "properties": {
+          "jobId": {
+            "type": "string",
+            "description": "Unique job identifier for tracking execution"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "running",
+              "failed"
+            ],
+            "description": "Initial job status"
+          },
+          "message": {
+            "type": "string",
+            "description": "Optional status message"
+          }
+        },
+        "required": [
+          "jobId",
+          "status"
         ]
       }
     }

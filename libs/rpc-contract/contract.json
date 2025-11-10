@@ -56,6 +56,25 @@
           "$ref": "#/components/schemas/GetNodesResult"
         }
       }
+    },
+    {
+      "name": "query.exec",
+      "summary": "Start execution of a database query or statement asynchronously.",
+      "description": "Executes a database query asynchronously and returns a job ID. Results are stored in memory and can be retrieved later. Completion is announced via SSE.",
+      "params": [
+        {
+          "name": "request",
+          "schema": {
+            "$ref": "#/components/schemas/QueryExecParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "QueryExecResult",
+        "schema": {
+          "$ref": "#/components/schemas/QueryExecResult"
+        }
+      }
     }
   ],
   "components": {
@@ -71,7 +90,9 @@
             }
           }
         },
-        "required": ["connections"]
+        "required": [
+          "connections"
+        ]
       },
       "ConnectionConfig": {
         "type": "object",
@@ -104,7 +125,15 @@
             "$ref": "#/components/schemas/PasswordConfig"
           }
         },
-        "required": ["name", "type", "host", "port", "database", "username", "password"]
+        "required": [
+          "name",
+          "type",
+          "host",
+          "port",
+          "database",
+          "username",
+          "password"
+        ]
       },
       "PasswordConfig": {
         "type": "object",
@@ -113,14 +142,20 @@
           "type": {
             "type": "string",
             "description": "Password provider type",
-            "enum": ["plain_text", "macos-keychain"]
+            "enum": [
+              "plain_text",
+              "macos-keychain"
+            ]
           },
           "key": {
             "type": "string",
             "description": "The key/value for password retrieval"
           }
         },
-        "required": ["type", "key"]
+        "required": [
+          "type",
+          "key"
+        ]
       },
       "ConnectParams": {
         "type": "object",
@@ -130,28 +165,38 @@
             "description": "Connection name from configuration"
           }
         },
-        "required": ["configurationName"]
+        "required": [
+          "configurationName"
+        ]
       },
       "ConnectResult": {
         "type": "object",
         "properties": {
           "result": {
             "type": "string",
-            "enum": ["success", "fail", "connecting"]
+            "enum": [
+              "success",
+              "fail",
+              "connecting"
+            ]
           },
           "userMessage": {
             "type": "string",
             "description": "Optional message for the user"
           }
         },
-        "required": ["result"]
+        "required": [
+          "result"
+        ]
       },
       "NodeEdge": {
         "type": "object",
         "properties": {
           "items": {
             "type": "array",
-            "items": { "type": "string" },
+            "items": {
+              "type": "string"
+            },
             "description": "List of related node IDs"
           },
           "truncated": {
@@ -159,14 +204,23 @@
             "description": "True when more related nodes exist beyond the returned slice"
           }
         },
-        "required": ["items", "truncated"]
+        "required": [
+          "items",
+          "truncated"
+        ]
       },
       "Node": {
         "type": "object",
         "properties": {
-          "id": { "type": "string" },
-          "type": { "type": "string" },
-          "name": { "type": "string" },
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
           "attributes": {
             "type": "object",
             "additionalProperties": {}
@@ -178,7 +232,13 @@
             }
           }
         },
-        "required": ["id", "type", "name", "attributes", "edges"]
+        "required": [
+          "id",
+          "type",
+          "name",
+          "attributes",
+          "edges"
+        ]
       },
       "GetNodesParams": {
         "type": "object",
@@ -189,22 +249,88 @@
           },
           "nodeIDs": {
             "type": "array",
-            "items": { "type": "string" },
+            "items": {
+              "type": "string"
+            },
             "maxItems": 1000,
             "description": "Optional node IDs to hydrate"
           }
         },
-        "required": ["configurationName"]
+        "required": [
+          "configurationName"
+        ]
       },
       "GetNodesResult": {
         "type": "object",
         "properties": {
           "nodes": {
             "type": "array",
-            "items": { "$ref": "#/components/schemas/Node" }
+            "items": {
+              "$ref": "#/components/schemas/Node"
+            }
           }
         },
-        "required": ["nodes"]
+        "required": [
+          "nodes"
+        ]
+      },
+      "QueryExecParams": {
+        "type": "object",
+        "properties": {
+          "configurationName": {
+            "type": "string",
+            "description": "Name of the database configuration to use"
+          },
+          "query": {
+            "type": "string",
+            "description": "Database query or statement to execute"
+          },
+          "params": {
+            "description": "Query parameters (can be object for named or array for positional)"
+          },
+          "options": {
+            "type": "object",
+            "properties": {
+              "maxRows": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 1000,
+                "default": 200,
+                "description": "Maximum rows to store in memory (truncate if exceeded)"
+              }
+            },
+            "description": "Execution options"
+          }
+        },
+        "required": [
+          "configurationName",
+          "query"
+        ]
+      },
+      "QueryExecResult": {
+        "type": "object",
+        "properties": {
+          "jobId": {
+            "type": "string",
+            "description": "Unique job identifier for tracking execution"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "running",
+              "failed"
+            ],
+            "description": "Initial job status"
+          },
+          "message": {
+            "type": "string",
+            "description": "Optional status message"
+          }
+        },
+        "required": [
+          "jobId",
+          "status"
+        ]
       }
     }
   }

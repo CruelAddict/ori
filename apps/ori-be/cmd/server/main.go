@@ -79,11 +79,12 @@ func main() {
 
 	eventHub := events.NewHub()
 	connectionService := service.NewConnectionService(configService, eventHub)
+	connectionService.RegisterAdapter("sqlite", sqliteadapter.NewAdapter)
 
 	nodeService := service.NewNodeService(configService, connectionService)
-	nodeService.RegisterAdapter("sqlite", sqliteadapter.NewAdapter())
+	queryService := service.NewQueryService(connectionService, eventHub, ctx)
 
-	handler := rpc.NewHandler(configService, connectionService, nodeService)
+	handler := rpc.NewHandler(configService, connectionService, nodeService, queryService)
 
 	var (
 		server *rpc.Server
@@ -110,6 +111,9 @@ func main() {
 	<-quit
 
 	slog.Info("shutting down")
+
+	// Stop query service to cancel running jobs
+	queryService.Stop()
 
 	if err := server.Shutdown(); err != nil {
 		slog.Error("server forced to shutdown", slog.Any("err", err))
