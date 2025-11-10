@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -10,6 +11,19 @@ import (
 
 	"github.com/crueladdict/ori/apps/ori-server/internal/events"
 )
+
+var (
+	ErrJobNotFound     = errors.New("job not found")
+	ErrJobStillRunning = errors.New("job is still running")
+)
+
+// QueryResultView represents a paginated view of query results
+type QueryResultView struct {
+	Columns   []QueryColumn `json:"columns"`
+	Rows      [][]any       `json:"rows"`
+	RowCount  int           `json:"rowCount"`
+	Truncated bool          `json:"truncated"`
+}
 
 // QueryService manages query job execution
 type QueryService struct {
@@ -90,6 +104,62 @@ func (qs *QueryService) GetJob(jobID string) (*QueryJob, bool) {
 // GetResult retrieves a stored result by job ID
 func (qs *QueryService) GetResult(jobID string) (*QueryResult, bool) {
 	return qs.resultStore.Get(jobID)
+}
+
+// BuildResultView builds a paginated view of a stored query result
+func (qs *QueryService) BuildResultView(jobID string, limit, offset *int) (*QueryResultView, error) {
+	job, exists := qs.GetJob(jobID)
+	if !exists {
+		return nil, ErrJobNotFound
+	}
+	if job.Status == JobStatusRunning {
+		return nil, ErrJobStillRunning
+	}
+
+	result, stored := qs.resultStore.Get(jobID)
+	if !stored {
+		return nil, ErrJobNotFound
+	}
+
+	if offset != nil && *offset < 0 {
+		return nil, fmt.Errorf("offset cannot be negative")
+	}
+	if limit != nil && *limit <= 0 {
+		return nil, fmt.Errorf("limit must be positive")
+	}
+
+	// Apply defaults
+	actualOffset := 0
+	if offset != nil {
+		actualOffset = *offset
+	}
+	actualLimit := result.RowCount
+	if limit != nil {
+		actualLimit = *limit
+	}
+
+	start := actualOffset
+	end := actualOffset + actualLimit
+	if start > result.RowCount {
+		start = result.RowCount
+	}
+	if end > result.RowCount {
+		end = result.RowCount
+	}
+
+	var paginatedRows [][]any
+	if start < result.RowCount {
+		paginatedRows = result.Rows[start:end]
+	}
+
+	view := &QueryResultView{
+		Columns:   result.Columns,
+		Rows:      paginatedRows,
+		RowCount:  result.RowCount,
+		Truncated: result.Truncated,
+	}
+
+	return view, nil
 }
 
 // Stop cancels all running jobs
