@@ -31,12 +31,18 @@ type QueryJob struct {
 	Cancel            context.CancelFunc
 }
 
+// QueryColumn represents column metadata for query results
+type QueryColumn struct {
+	Name string `json:"name"`
+	Type string `json:"type"`
+}
+
 // QueryResult represents the result of a query execution
 type QueryResult struct {
 	JobID             string
 	ConfigurationName string
 	Status            JobStatus
-	Columns           []string
+	Columns           []QueryColumn
 	Rows              [][]any
 	RowCount          int
 	Truncated         bool

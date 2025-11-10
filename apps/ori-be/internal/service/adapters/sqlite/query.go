@@ -57,6 +57,28 @@ func (a *Adapter) executeSelect(ctx context.Context, stmt *sql.Stmt, query strin
 		return nil, fmt.Errorf("failed to get columns: %w", err)
 	}
 
+	// Get column types
+	columnTypes, err := rows.ColumnTypes()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get column types: %w", err)
+	}
+
+	// Build column metadata
+	queryColumns := make([]service.QueryColumn, len(columns))
+	for i, name := range columns {
+		colType := "unknown"
+		if i < len(columnTypes) {
+			dbType := columnTypes[i].DatabaseTypeName()
+			if dbType != "" {
+				colType = dbType
+			}
+		}
+		queryColumns[i] = service.QueryColumn{
+			Name: name,
+			Type: colType,
+		}
+	}
+
 	// Prepare slice to hold row data
 	rowData := make([]interface{}, len(columns))
 	rowPtrs := make([]interface{}, len(columns))
@@ -99,7 +121,7 @@ func (a *Adapter) executeSelect(ctx context.Context, stmt *sql.Stmt, query strin
 
 	return &service.QueryResult{
 		Status:    service.JobStatusSuccess,
-		Columns:   columns,
+		Columns:   queryColumns,
 		Rows:      allRows,
 		RowCount:  rowCount,
 		Truncated: truncated,
