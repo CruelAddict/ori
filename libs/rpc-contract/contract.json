@@ -75,6 +75,25 @@
           "$ref": "#/components/schemas/QueryExecResult"
         }
       }
+    },
+    {
+      "name": "query.getResult",
+      "summary": "Returns result of a completed db query by its job ID",
+      "params": [
+        {
+          "name": "request",
+          "required": true,
+          "schema": {
+            "$ref": "#/components/schemas/QueryGetResultParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "QueryGetResultResult",
+        "schema": {
+          "$ref": "#/components/schemas/QueryGetResultResult"
+        }
+      }
     }
   ],
   "components": {
@@ -330,6 +349,71 @@
         "required": [
           "jobId",
           "status"
+        ]
+      },
+      "QueryGetResultParams": {
+        "type": "object",
+        "properties": {
+          "jobId": {
+            "type": "string",
+            "description": "Unique job identifier for tracking execution"
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Max rows in result set"
+          },
+          "offset": {
+            "type": "integer",
+            "description": "Amount of rows to skip when retrieving the result set"
+          }
+        },
+        "required": [
+          "jobId"
+        ]
+      },
+      "QueryGetResultResult": {
+        "type": "object",
+        "properties": {
+          "columns": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "name",
+                "type"
+              ],
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "type": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "rows": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {}
+            },
+            "description": "Row values in column order."
+          },
+          "row_count": {
+            "type": "integer",
+            "description": "Number of rows actually stored."
+          },
+          "truncated": {
+            "type": "boolean",
+            "description": "True if result was cut due to maxRows limit."
+          }
+        },
+        "required": [
+          "columns",
+          "rows",
+          "row_count",
+          "truncated"
         ]
       }
     }

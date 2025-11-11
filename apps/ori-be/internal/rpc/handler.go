@@ -42,6 +42,8 @@ func (h *Handler) Handle(ctx context.Context, req *jsonrpc2.Request) (interface{
 		return handlers.GetNodes(ctx, h.nodeService, req.Params)
 	case "query.exec":
 		return handlers.QueryExec(h.queryService, req.Params)
+	case "query.getResult":
+		return handlers.QueryGetResult(h.queryService, req.Params)
 	default:
 		slog.Error("rpc method not found", slog.String("method", req.Method))
 		return nil, fmt.Errorf("%w: %s", jsonrpc2.ErrMethodNotFound, req.Method)

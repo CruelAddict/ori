@@ -13,8 +13,7 @@ import (
 )
 
 var (
-	ErrJobNotFound     = errors.New("job not found")
-	ErrJobStillRunning = errors.New("job is still running")
+	ErrNotFound = errors.New("query result not found")
 )
 
 // QueryResultView represents a paginated view of query results
@@ -31,7 +30,7 @@ type QueryService struct {
 	eventHub          *events.Hub
 	resultStore       *ResultStore
 	mu                sync.RWMutex
-	jobs              map[string]*QueryJob
+	activeJobs        map[string]*QueryJob
 	rootCtx           context.Context
 }
 
@@ -41,7 +40,7 @@ func NewQueryService(connectionService *ConnectionService, eventHub *events.Hub,
 		connectionService: connectionService,
 		eventHub:          eventHub,
 		resultStore:       NewResultStore(),
-		jobs:              make(map[string]*QueryJob),
+		activeJobs:        make(map[string]*QueryJob),
 		rootCtx:           rootCtx,
 	}
 }
@@ -83,7 +82,7 @@ func (qs *QueryService) Exec(configurationName, query string, params interface{}
 
 	// Store job
 	qs.mu.Lock()
-	qs.jobs[jobID] = job
+	qs.activeJobs[jobID] = job
 	qs.mu.Unlock()
 
 	// Start execution in goroutine
@@ -92,33 +91,20 @@ func (qs *QueryService) Exec(configurationName, query string, params interface{}
 	return job, nil
 }
 
-// GetJob retrieves a job by ID
-func (qs *QueryService) GetJob(jobID string) (*QueryJob, bool) {
+// GetActiveJob retrieves a job by ID
+func (qs *QueryService) GetActiveJob(jobID string) (*QueryJob, bool) {
 	qs.mu.RLock()
 	defer qs.mu.RUnlock()
 
-	job, ok := qs.jobs[jobID]
+	job, ok := qs.activeJobs[jobID]
 	return job, ok
-}
-
-// GetResult retrieves a stored result by job ID
-func (qs *QueryService) GetResult(jobID string) (*QueryResult, bool) {
-	return qs.resultStore.Get(jobID)
 }
 
 // BuildResultView builds a paginated view of a stored query result
 func (qs *QueryService) BuildResultView(jobID string, limit, offset *int) (*QueryResultView, error) {
-	job, exists := qs.GetJob(jobID)
+	result, exists := qs.resultStore.Get(jobID)
 	if !exists {
-		return nil, ErrJobNotFound
-	}
-	if job.Status == JobStatusRunning {
-		return nil, ErrJobStillRunning
-	}
-
-	result, stored := qs.resultStore.Get(jobID)
-	if !stored {
-		return nil, ErrJobNotFound
+		return nil, ErrNotFound
 	}
 
 	if offset != nil && *offset < 0 {
@@ -167,7 +153,7 @@ func (qs *QueryService) Stop() {
 	qs.mu.Lock()
 	defer qs.mu.Unlock()
 
-	for _, job := range qs.jobs {
+	for _, job := range qs.activeJobs {
 		if job.Status == JobStatusRunning {
 			job.Cancel()
 			job.Status = JobStatusCanceled
@@ -196,7 +182,7 @@ func (qs *QueryService) runJob(ctx context.Context, job *QueryJob, handle *Conne
 
 		// Remove from active jobs
 		qs.mu.Lock()
-		delete(qs.jobs, job.ID)
+		delete(qs.activeJobs, job.ID)
 		qs.mu.Unlock()
 
 		// Emit completion event

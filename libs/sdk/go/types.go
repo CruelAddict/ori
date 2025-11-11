@@ -75,3 +75,24 @@ type QueryExecResult struct {
 	Status  string `json:"status"` // "running" or "failed"
 	Message string `json:"message,omitempty"`
 }
+
+// QueryResultColumn represents column metadata in query results
+type QueryResultColumn struct {
+	Name string `json:"name"`
+	Type string `json:"type"`
+}
+
+// QueryGetResultParams represents the parameters for query.getResult method
+type QueryGetResultParams struct {
+	JobID  string `json:"jobId"`
+	Limit  *int   `json:"limit,omitempty"`
+	Offset *int   `json:"offset,omitempty"`
+}
+
+// QueryGetResultResult represents the result of query.getResult method
+type QueryGetResultResult struct {
+	Columns   []QueryResultColumn `json:"columns"`
+	Rows      [][]any             `json:"rows"`
+	RowCount  int                 `json:"rowCount"`
+	Truncated bool                `json:"truncated"`
+}
