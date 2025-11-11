@@ -146,3 +146,34 @@ func (c *Client) GetNodes(configurationName string, nodeIDs ...string) (*GetNode
 	}
 	return &result, nil
 }
+
+// QueryExec calls the query.exec RPC method
+func (c *Client) QueryExec(configurationName, query string) (*QueryExecResult, error) {
+	params := QueryExecParams{
+		ConfigurationName: configurationName,
+		Query:             query,
+	}
+	var result QueryExecResult
+	if err := c.call("query.exec", params, &result); err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
+// QueryGetResult calls the query.getResult RPC method
+func (c *Client) QueryGetResult(jobID string, limit, offset *int) (*QueryGetResultResult, error) {
+	params := QueryGetResultParams{
+		JobID: jobID,
+	}
+	if limit != nil {
+		params.Limit = limit
+	}
+	if offset != nil {
+		params.Offset = offset
+	}
+	var result QueryGetResultResult
+	if err := c.call("query.getResult", params, &result); err != nil {
+		return nil, err
+	}
+	return &result, nil
+}

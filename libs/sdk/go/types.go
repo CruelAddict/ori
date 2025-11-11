@@ -93,6 +93,6 @@ type QueryGetResultParams struct {
 type QueryGetResultResult struct {
 	Columns   []QueryResultColumn `json:"columns"`
 	Rows      [][]any             `json:"rows"`
-	RowCount  int                 `json:"rowCount"`
+	RowCount  int                 `json:"row_count"`
 	Truncated bool                `json:"truncated"`
 }
