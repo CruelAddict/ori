@@ -16,6 +16,10 @@ export type KeyboardEventLike = Pick<KeyEvent, "name" | "ctrl" | "meta" | "shift
 
 const normalize = (value?: string) => value?.toLowerCase().trim();
 
+const KEY_ALIASES: Record<string, string> = {
+    enter: "return",
+};
+
 const parsePattern = (pattern: string) => {
     const tokens = pattern
         .split("+")
@@ -50,7 +54,7 @@ const parsePattern = (pattern: string) => {
                 requirements.alt = true;
                 break;
             default:
-                keyName = token;
+                keyName = KEY_ALIASES[token] ?? token;
                 break;
         }
     }

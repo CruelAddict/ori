@@ -24,10 +24,30 @@ export interface Node {
     edges: Record<string, NodeEdge>;
 }
 
+export interface QueryExecResult {
+    jobId: string;
+    status: "running" | "failed";
+    message?: string;
+}
+
+export interface QueryColumn {
+    name: string;
+    type: string;
+}
+
+export interface QueryResultView {
+    columns: QueryColumn[];
+    rows: any[][];
+    rowCount: number;
+    truncated: boolean;
+}
+
 export interface OriClient {
     listConfigurations(): Promise<Configuration[]>;
     connect(configurationName: string): Promise<ConnectResult>;
     getNodes(configurationName: string, nodeIDs?: string[]): Promise<Node[]>;
+    queryExec(configurationName: string, query: string, params?: any): Promise<QueryExecResult>;
+    queryGetResult(jobId: string, limit?: number, offset?: number): Promise<QueryResultView>;
     openEventStream(onEvent: (event: ServerEvent) => void): () => void;
 }
 
@@ -156,6 +176,27 @@ class HttpOriClient implements OriClient {
         return extractNodes(result);
     }
 
+    async queryExec(configurationName: string, query: string, params?: any): Promise<QueryExecResult> {
+        const requestParams: Record<string, any> = { configurationName, query };
+        if (params !== undefined) {
+            requestParams.params = params;
+        }
+        const result = await this.rpc.request("query.exec", requestParams);
+        return extractQueryExecResult(result);
+    }
+
+    async queryGetResult(jobId: string, limit?: number, offset?: number): Promise<QueryResultView> {
+        const requestParams: Record<string, any> = { jobId };
+        if (limit !== undefined) {
+            requestParams.limit = limit;
+        }
+        if (offset !== undefined) {
+            requestParams.offset = offset;
+        }
+        const result = await this.rpc.request("query.getResult", requestParams);
+        return extractQueryResultView(result);
+    }
+
     openEventStream(onEvent: (event: ServerEvent) => void): () => void {
         return createSSEStream(
             {
@@ -204,6 +245,27 @@ class UnixSocketOriClient implements OriClient {
         return extractNodes(result);
     }
 
+    async queryExec(configurationName: string, query: string, params?: any): Promise<QueryExecResult> {
+        const requestParams: Record<string, any> = { configurationName, query };
+        if (params !== undefined) {
+            requestParams.params = params;
+        }
+        const result = await this.rpc.request("query.exec", requestParams);
+        return extractQueryExecResult(result);
+    }
+
+    async queryGetResult(jobId: string, limit?: number, offset?: number): Promise<QueryResultView> {
+        const requestParams: Record<string, any> = { jobId };
+        if (limit !== undefined) {
+            requestParams.limit = limit;
+        }
+        if (offset !== undefined) {
+            requestParams.offset = offset;
+        }
+        const result = await this.rpc.request("query.getResult", requestParams);
+        return extractQueryResultView(result);
+    }
+
     openEventStream(onEvent: (event: ServerEvent) => void): () => void {
         return createSSEStream(
             {
@@ -250,6 +312,28 @@ class StubOriClient implements OriClient {
         return nodes;
     }
 
+    async queryExec(configurationName: string, query: string): Promise<QueryExecResult> {
+        return {
+            jobId: "stub-job-123",
+            status: "running",
+        };
+    }
+
+    async queryGetResult(): Promise<QueryResultView> {
+        return {
+            columns: [
+                { name: "id", type: "integer" },
+                { name: "name", type: "text" },
+            ],
+            rows: [
+                [1, "Sample Row 1"],
+                [2, "Sample Row 2"],
+            ],
+            rowCount: 2,
+            truncated: false,
+        };
+    }
+
     openEventStream(): () => void {
         return () => undefined;
     }
@@ -288,6 +372,23 @@ function extractConnectResult(result: any): ConnectResult {
 
 function extractNodes(result: any): Node[] {
     return Array.isArray(result?.nodes) ? (result.nodes as Node[]) : [];
+}
+
+function extractQueryExecResult(result: any): QueryExecResult {
+    return {
+        jobId: result?.jobId ?? result?.jobID ?? "",
+        status: result?.status ?? "failed",
+        message: result?.message ?? undefined,
+    };
+}
+
+function extractQueryResultView(result: any): QueryResultView {
+    return {
+        columns: Array.isArray(result?.columns) ? result.columns : [],
+        rows: Array.isArray(result?.rows) ? result.rows : [],
+        rowCount: result?.rowCount ?? result?.row_count ?? 0,
+        truncated: result?.truncated ?? false,
+    };
 }
 
 function rootNodeId(configurationName: string): string {

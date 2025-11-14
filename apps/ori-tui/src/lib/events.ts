@@ -15,9 +15,27 @@ export interface ConnectionStateEvent {
     id?: string;
 }
 
-export type ServerEvent = ConnectionStateEvent;
+export interface QueryJobCompletedPayload {
+    jobId: string;
+    configurationName: string;
+    status: string;
+    finishedAt: string;
+    durationMs: number;
+    error?: string;
+    message?: string;
+    stored: boolean;
+}
+
+export interface QueryJobCompletedEvent {
+    type: "query.job.completed";
+    payload: QueryJobCompletedPayload;
+    id?: string;
+}
+
+export type ServerEvent = ConnectionStateEvent | QueryJobCompletedEvent;
 
 export const CONNECTION_STATE_EVENT = "connection.state" as const;
+export const QUERY_JOB_COMPLETED_EVENT = "query.job.completed" as const;
 
 export function decodeServerEvent(message: SSEMessage): ServerEvent | null {
     if (!message.data) {
@@ -28,6 +46,15 @@ export function decodeServerEvent(message: SSEMessage): ServerEvent | null {
         const payload = JSON.parse(message.data) as ConnectionStatePayload;
         return {
             type: CONNECTION_STATE_EVENT,
+            payload,
+            id: message.id,
+        };
+    }
+
+    if (message.event === QUERY_JOB_COMPLETED_EVENT) {
+        const payload = JSON.parse(message.data) as QueryJobCompletedPayload;
+        return {
+            type: QUERY_JOB_COMPLETED_EVENT,
             payload,
             id: message.id,
         };

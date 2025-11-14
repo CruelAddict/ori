@@ -11,6 +11,7 @@ interface KeyBinding {
     when?: () => boolean;
     preventDefault?: boolean;
     priority?: number;
+    mode?: "normal" | "leader";
 }
 
 interface KeymapEntry extends KeyBinding {
@@ -41,21 +42,48 @@ export function KeymapProvider(props: KeymapProviderProps) {
         };
     };
 
+    let awaitingLeader = false;
+
+    const exitLeaderMode = () => {
+        awaitingLeader = false;
+    };
+
     useKeyboard((evt) => {
-        const snapshots = [...bindings].sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0));
         const parsed = parser.parse(evt as KeyboardEventLike);
+
+        if (!awaitingLeader && parsed.ctrl && parsed.name === "x") {
+            awaitingLeader = true;
+            evt.preventDefault?.();
+            return;
+        }
+
+        const snapshots = [...bindings].sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0));
+        const activeMode: "normal" | "leader" = awaitingLeader ? "leader" : "normal";
+
         for (const entry of snapshots) {
+            const entryMode = entry.mode ?? "normal";
+            if (entryMode !== activeMode) {
+                continue;
+            }
             if (entry.when && !entry.when()) {
                 continue;
             }
             if (!Keybind.match(entry.pattern, parsed)) {
                 continue;
             }
-            if (entry.preventDefault) {
+            if (entry.preventDefault || awaitingLeader) {
                 evt.preventDefault?.();
             }
             entry.handler(evt);
-            break;
+            if (awaitingLeader) {
+                exitLeaderMode();
+            }
+            return;
+        }
+
+        if (awaitingLeader) {
+            evt.preventDefault?.();
+            exitLeaderMode();
         }
     });
 

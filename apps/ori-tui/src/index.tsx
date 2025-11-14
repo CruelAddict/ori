@@ -11,6 +11,7 @@ import { ConfigurationsProvider } from "@src/providers/configurations";
 import { ConnectionStateProvider, useConnectionState } from "@src/providers/connectionState";
 import { NavigationProvider, OverlayHost, useNavigation, type ConnectionPage } from "@src/providers/navigation";
 import { KeymapProvider, useScopedKeymap } from "@src/providers/keymap";
+import { QueryJobsProvider } from "@src/providers/queryJobs";
 
 function App() {
     useFocusNavigation();
@@ -88,11 +89,13 @@ export function main() {
                 >
                     <ConfigurationsProvider>
                         <ConnectionStateProvider>
-                            <NavigationProvider>
-                                <KeymapProvider>
-                                    <App />
-                                </KeymapProvider>
-                            </NavigationProvider>
+                            <QueryJobsProvider>
+                                <NavigationProvider>
+                                    <KeymapProvider>
+                                        <App />
+                                    </KeymapProvider>
+                                </NavigationProvider>
+                            </QueryJobsProvider>
                         </ConnectionStateProvider>
                     </ConfigurationsProvider>
                 </ClientProvider>
