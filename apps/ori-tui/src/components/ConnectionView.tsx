@@ -1,14 +1,13 @@
 import { TextAttributes } from "@opentui/core";
 import type { KeyEvent } from "@opentui/core";
 import { For, Show, createMemo, createSignal, createEffect } from "solid-js";
-import { useKeyboard } from "@opentui/solid";
 import { useGraphSnapshot } from "@src/lib/useGraphSnapshot";
 import { useSchemaTree } from "@src/lib/schemaTree";
-import { useScopedKeymap } from "@src/providers/keymap";
-import { useConfigurationByName } from "@src/providers/configurations";
+import { useConfigurationByName } from "@src/core/stores/configurationListStore";
 import { useQueryJobs } from "@src/providers/queryJobs";
 import { QueryEditor } from "@src/components/QueryEditor";
 import { QueryResultsPane } from "@src/components/QueryResultsPane";
+import { KeyScope } from "@src/core/services/keyScopes";
 
 export interface ConnectionViewProps {
     configurationName: string;
@@ -111,26 +110,6 @@ export function ConnectionView(props: ConnectionViewProps) {
         }
     };
 
-    // Raw keyboard handler for ctrl shortcuts that bypass scoped bindings
-    useKeyboard((evt: KeyEvent) => {
-        if (evt.ctrl && evt.name === "e") {
-            evt.preventDefault?.();
-            toggleTreeVisible();
-            return;
-        }
-
-        if (evt.ctrl && evt.name === "r") {
-            evt.preventDefault?.();
-            toggleResultsVisible();
-            return;
-        }
-
-        if (evt.ctrl && evt.shift && evt.name === "r") {
-            evt.preventDefault?.();
-            void refresh();
-            return;
-        }
-    });
 
     const handleTreeDown = () => {
         if (focusedPane() === "tree") {
@@ -156,105 +135,120 @@ export function ConnectionView(props: ConnectionViewProps) {
         }
     };
 
-    useScopedKeymap("connection-view", () => [
+    const keyBindings = createMemo(() => [
         {
             pattern: "escape",
             handler: handleExit,
-            preventDefault: true
+            preventDefault: true,
         },
         {
             pattern: "backspace",
             handler: handleExit,
             when: () => focusedPane() !== "editor",
-            preventDefault: true
+            preventDefault: true,
         },
         {
             pattern: "ctrl+[",
             handler: handleExit,
-            preventDefault: true
+            preventDefault: true,
         },
-
+        {
+            pattern: "ctrl+e",
+            handler: toggleTreeVisible,
+            preventDefault: true,
+        },
+        {
+            pattern: "ctrl+r",
+            handler: toggleResultsVisible,
+            preventDefault: true,
+        },
+        {
+            pattern: "ctrl+shift+r",
+            handler: () => {
+                void refresh();
+            },
+            preventDefault: true,
+        },
         // Tree navigation (only when tree is focused)
         {
             pattern: "down",
             handler: handleTreeDown,
             when: () => focusedPane() === "tree",
-            preventDefault: true
+            preventDefault: true,
         },
         {
             pattern: "j",
             handler: handleTreeDown,
             when: () => focusedPane() === "tree",
-            preventDefault: true
+            preventDefault: true,
         },
         {
             pattern: "up",
             handler: handleTreeUp,
             when: () => focusedPane() === "tree",
-            preventDefault: true
+            preventDefault: true,
         },
         {
             pattern: "k",
             handler: handleTreeUp,
             when: () => focusedPane() === "tree",
-            preventDefault: true
+            preventDefault: true,
         },
         {
             pattern: "right",
             handler: handleTreeRight,
             when: () => focusedPane() === "tree",
-            preventDefault: true
+            preventDefault: true,
         },
         {
             pattern: "l",
             handler: handleTreeRight,
             when: () => focusedPane() === "tree",
-            preventDefault: true
+            preventDefault: true,
         },
         {
             pattern: "left",
             handler: handleTreeLeft,
             when: () => focusedPane() === "tree",
-            preventDefault: true
+            preventDefault: true,
         },
         {
             pattern: "h",
             handler: handleTreeLeft,
             when: () => focusedPane() === "tree",
-            preventDefault: true
+            preventDefault: true,
         },
-
         // Leader key commands for pane navigation and execution
         {
             pattern: "h",
-            mode: "leader",
+            mode: "leader" as const,
             handler: () => moveFocusLeft(),
             when: () => treeVisible(),
             preventDefault: true,
         },
         {
             pattern: "l",
-            mode: "leader",
+            mode: "leader" as const,
             handler: () => moveFocusRight(),
             preventDefault: true,
         },
         {
             pattern: "j",
-            mode: "leader",
+            mode: "leader" as const,
             handler: () => moveFocusDown(),
             when: () => resultsVisible(),
             preventDefault: true,
         },
         {
             pattern: "k",
-            mode: "leader",
+            mode: "leader" as const,
             handler: () => moveFocusUp(),
             when: () => focusedPane() === "results",
             preventDefault: true,
         },
         {
             pattern: "enter",
-            mode: "leader",
+            mode: "leader" as const,
             handler: () => {
                 void handleExecuteQuery();
             },
@@ -263,104 +257,106 @@ export function ConnectionView(props: ConnectionViewProps) {
     ]);
 
     return (
-        <box flexDirection="column" flexGrow={1} padding={1}>
-            <text attributes={TextAttributes.BOLD}>Connection</text>
-            <text attributes={TextAttributes.DIM}>{title()}</text>
-            <box height={1} />
+        <KeyScope id="connection-view" bindings={keyBindings}>
+            <box flexDirection="column" flexGrow={1} padding={1}>
+                <text attributes={TextAttributes.BOLD}>Connection</text>
+                <text attributes={TextAttributes.DIM}>{title()}</text>
+                <box height={1} />
 
-            <box flexDirection="row" flexGrow={1}>
-                {/* Left pane: Schema Tree */}
-                <Show when={treeVisible()}>
-                    <box
-                        flexDirection="column"
-                        width={40}
-                        flexShrink={0}
-                        borderStyle="single"
-                        borderColor={focusedPane() === "tree" ? "cyan" : "gray"}
-                    >
-                        <box padding={1} flexDirection="column" flexGrow={1}>
-                            <Show when={loading()}>
-                                <text>Loading schema graph...</text>
-                            </Show>
-                            <Show when={!loading() && error()}>
-                                {(message: () => any) => <text fg="red">Failed to load graph: {message()}</text>}
-                            </Show>
-                            <Show when={!loading() && !error()}>
-                                <box flexDirection="column">
-                                    <For each={tree.rows()}>
-                                        {(row) => {
-                                            const isSelected = () => tree.selectedId() === row.id;
-                                            const toggleGlyph = row.entity.hasChildren
-                                                ? row.isExpanded
-                                                    ? "[-]"
-                                                    : "[+]"
-                                                : "   ";
-                                            const fg = () => (isSelected() ? "cyan" : undefined);
-                                            const attrs = () => (isSelected() ? TextAttributes.BOLD : TextAttributes.NONE);
-                                            return (
-                                                <box flexDirection="row" paddingLeft={row.depth * 2}>
-                                                    <text fg={fg()} attributes={attrs()}>
-                                                        {isSelected() ? "> " : "  "}
-                                                        {toggleGlyph} {row.entity.icon} {row.entity.label}
-                                                    </text>
-                                                    {row.entity.description && (
-                                                        <text attributes={TextAttributes.DIM}> {row.entity.description}</text>
-                                                    )}
-                                                    {row.entity.badges && <text fg="cyan"> {row.entity.badges}</text>}
-                                                </box>
-                                            );
-                                        }}
-                                    </For>
-                                    <Show when={tree.rows().length === 0}>
-                                        <text attributes={TextAttributes.DIM}>Graph is empty. Try refreshing later.</text>
-                                    </Show>
-                                </box>
-                            </Show>
-                        </box>
-                    </box>
-                </Show>
-
-                {/* Right pane: Query Editor and Results */}
-                <box flexDirection="column" flexGrow={1} marginLeft={treeVisible() ? 1 : 0}>
-                    {/* Query Editor */}
-                    <box
-                        flexDirection="column"
-                        flexGrow={resultsVisible() ? 1 : 1}
-                        borderStyle="single"
-                        borderColor={focusedPane() === "editor" ? "cyan" : "gray"}
-                    >
-                        <QueryEditor
-                            configurationName={props.configurationName}
-                            value={queryText()}
-                            onChange={handleQueryChange}
-                            onExecute={handleExecuteQuery}
-                            executing={isExecuting()}
-                            focused={focusedPane() === "editor"}
-                        />
-                    </box>
-
-                    {/* Query Results */}
-                    <Show when={resultsVisible()}>
-                        <box height={1} />
+                <box flexDirection="row" flexGrow={1}>
+                    {/* Left pane: Schema Tree */}
+                    <Show when={treeVisible()}>
                         <box
                             flexDirection="column"
-                            flexGrow={1}
+                            width={40}
+                            flexShrink={0}
                             borderStyle="single"
-                            borderColor={focusedPane() === "results" ? "cyan" : "gray"}
+                            borderColor={focusedPane() === "tree" ? "cyan" : "gray"}
                         >
-                            <QueryResultsPane
-                                job={currentJob()}
-                                visible={resultsVisible()}
-                            />
+                            <box padding={1} flexDirection="column" flexGrow={1}>
+                                <Show when={loading()}>
+                                    <text>Loading schema graph...</text>
+                                </Show>
+                                <Show when={!loading() && error()}>
+                                    {(message: () => any) => <text fg="red">Failed to load graph: {message()}</text>}
+                                </Show>
+                                <Show when={!loading() && !error()}>
+                                    <box flexDirection="column">
+                                        <For each={tree.rows()}>
+                                            {(row) => {
+                                                const isSelected = () => tree.selectedId() === row.id;
+                                                const toggleGlyph = row.entity.hasChildren
+                                                    ? row.isExpanded
+                                                        ? "[-]"
+                                                        : "[+]"
+                                                    : "   ";
+                                                const fg = () => (isSelected() ? "cyan" : undefined);
+                                                const attrs = () => (isSelected() ? TextAttributes.BOLD : TextAttributes.NONE);
+                                                return (
+                                                    <box flexDirection="row" paddingLeft={row.depth * 2}>
+                                                        <text fg={fg()} attributes={attrs()}>
+                                                            {isSelected() ? "> " : "  "}
+                                                            {toggleGlyph} {row.entity.icon} {row.entity.label}
+                                                        </text>
+                                                        {row.entity.description && (
+                                                            <text attributes={TextAttributes.DIM}> {row.entity.description}</text>
+                                                        )}
+                                                        {row.entity.badges && <text fg="cyan"> {row.entity.badges}</text>}
+                                                    </box>
+                                                );
+                                            }}
+                                        </For>
+                                        <Show when={tree.rows().length === 0}>
+                                            <text attributes={TextAttributes.DIM}>Graph is empty. Try refreshing later.</text>
+                                        </Show>
+                                    </box>
+                                </Show>
+                            </box>
                         </box>
                     </Show>
-                </box>
-            </box>
 
-            <box height={1} />
-            <text attributes={TextAttributes.DIM}>
-                Ctrl+E: toggle tree | Ctrl+R: toggle results | Ctrl+Shift+R: refresh | Ctrl+X then H/J/K/L: move focus | Ctrl+X then Enter: execute | Esc: back
-            </text>
-        </box>
+                    {/* Right pane: Query Editor and Results */}
+                    <box flexDirection="column" flexGrow={1} marginLeft={treeVisible() ? 1 : 0}>
+                        {/* Query Editor */}
+                        <box
+                            flexDirection="column"
+                            flexGrow={resultsVisible() ? 1 : 1}
+                            borderStyle="single"
+                            borderColor={focusedPane() === "editor" ? "cyan" : "gray"}
+                        >
+                            <QueryEditor
+                                configurationName={props.configurationName}
+                                value={queryText()}
+                                onChange={handleQueryChange}
+                                onExecute={handleExecuteQuery}
+                                executing={isExecuting()}
+                                focused={focusedPane() === "editor"}
+                            />
+                        </box>
+
+                        {/* Query Results */}
+                        <Show when={resultsVisible()}>
+                            <box height={1} />
+                            <box
+                                flexDirection="column"
+                                flexGrow={1}
+                                borderStyle="single"
+                                borderColor={focusedPane() === "results" ? "cyan" : "gray"}
+                            >
+                                <QueryResultsPane
+                                    job={currentJob()}
+                                    visible={resultsVisible()}
+                                />
+                            </box>
+                        </Show>
+                    </box>
+                </box>
+
+                <box height={1} />
+                <text attributes={TextAttributes.DIM}>
+                    Ctrl+E: toggle tree | Ctrl+R: toggle results | Ctrl+Shift+R: refresh | Ctrl+X then H/J/K/L: move focus | Ctrl+X then Enter: execute | Esc: back
+                </text>
+            </box>
+        </KeyScope>
     );
 }

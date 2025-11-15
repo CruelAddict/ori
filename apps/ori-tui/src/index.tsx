@@ -1,21 +1,22 @@
 import { render } from "@opentui/solid";
 import { Match, Switch, createMemo } from "solid-js";
-import { ConfigurationSelector } from "@src/components/ConfigurationSelector";
 import { ConnectionView } from "@src/components/ConnectionView";
 import { createLogger } from "@src/lib/logger";
 import { parseArgs } from "@src/utils/args";
 import { useFocusNavigation } from "@src/hooks/useFocusNavigation";
 import { LoggerProvider } from "@src/providers/logger";
 import { ClientProvider } from "@src/providers/client";
-import { ConfigurationsProvider } from "@src/providers/configurations";
 import { ConnectionStateProvider, useConnectionState } from "@src/providers/connectionState";
 import { NavigationProvider, OverlayHost, useNavigation, type ConnectionPage } from "@src/providers/navigation";
-import { KeymapProvider, useScopedKeymap } from "@src/providers/keymap";
 import { QueryJobsProvider } from "@src/providers/queryJobs";
+import { KeymapProvider, KeyScope } from "@src/core/services/keyScopes";
+import { ConfigurationListScreen } from "@src/ui/screens/ConfigurationList";
+import { ConfigurationsServiceProvider } from "@src/core/services/configurations";
+import { ConfigurationListStoreProvider } from "@src/core/stores/configurationListStore";
 
 function App() {
     useFocusNavigation();
-    
+
     const connectionState = useConnectionState();
     const navigation = useNavigation();
 
@@ -43,7 +44,7 @@ function App() {
                     )}
                 </Match>
                 <Match when={true}>
-                    <ConfigurationSelector />
+                    <ConfigurationListScreen />
                 </Match>
             </Switch>
             <OverlayHost />
@@ -52,16 +53,20 @@ function App() {
 }
 
 function GlobalHotkeys() {
-    useScopedKeymap("global", [
-        {
-            pattern: "ctrl+c",
-            handler: () => {
-                process.exit(0);
-            },
-            preventDefault: true,
-        },
-    ]);
-    return null;
+    return (
+        <KeyScope
+            id="global"
+            bindings={[
+                {
+                    pattern: "ctrl+c",
+                    handler: () => {
+                        process.exit(0);
+                    },
+                    preventDefault: true,
+                },
+            ]}
+        />
+    );
 }
 
 
@@ -87,17 +92,19 @@ export function main() {
                         socketPath,
                     }}
                 >
-                    <ConfigurationsProvider>
-                        <ConnectionStateProvider>
-                            <QueryJobsProvider>
-                                <NavigationProvider>
-                                    <KeymapProvider>
-                                        <App />
-                                    </KeymapProvider>
-                                </NavigationProvider>
-                            </QueryJobsProvider>
-                        </ConnectionStateProvider>
-                    </ConfigurationsProvider>
+                    <ConfigurationsServiceProvider>
+                        <ConfigurationListStoreProvider>
+                            <ConnectionStateProvider>
+                                <QueryJobsProvider>
+                                    <NavigationProvider>
+                                        <KeymapProvider>
+                                            <App />
+                                        </KeymapProvider>
+                                    </NavigationProvider>
+                                </QueryJobsProvider>
+                            </ConnectionStateProvider>
+                        </ConfigurationListStoreProvider>
+                    </ConfigurationsServiceProvider>
                 </ClientProvider>
             </LoggerProvider>
         ),

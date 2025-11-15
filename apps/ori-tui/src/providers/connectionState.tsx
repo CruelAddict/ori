@@ -5,7 +5,7 @@ import type { Configuration } from "@src/lib/configuration";
 import type { ConnectResult } from "@src/lib/configurationsClient";
 import { useOriClient } from "@src/providers/client";
 import { useLogger } from "@src/providers/logger";
-import { useConfigurations } from "@src/providers/configurations";
+import { useConfigurations } from "@src/core/stores/configurationListStore";
 import { CONNECTION_STATE_EVENT, type ServerEvent } from "@src/lib/events";
 
 export type ConnectionLifecycle = "idle" | "requesting" | "waiting" | "connected" | "failed";
