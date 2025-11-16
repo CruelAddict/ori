@@ -6,13 +6,13 @@ import { parseArgs } from "@src/utils/args";
 import { useFocusNavigation } from "@src/hooks/useFocusNavigation";
 import { LoggerProvider } from "@src/providers/logger";
 import { ClientProvider } from "@src/providers/client";
-import { ConnectionStateProvider, useConnectionState } from "@src/providers/connectionState";
+import { useConnectionState } from "@src/entities/connection/model/connection_state";
+import { ConnectionEntityProvider } from "@src/entities/connection/providers/connection_entity_provider";
 import { NavigationProvider, OverlayHost, useNavigation, type ConnectionPage } from "@src/providers/navigation";
 import { QueryJobsProvider } from "@src/providers/queryJobs";
 import { KeymapProvider, KeyScope } from "@src/core/services/keyScopes";
-import { ConfigurationListScreen } from "@src/ui/screens/ConfigurationList";
-import { ConfigurationsServiceProvider } from "@src/core/services/configurations";
-import { ConfigurationListStoreProvider } from "@src/core/stores/configurationListStore";
+import { ConfigurationViewPage } from "@src/pages/configuration_view/configuration_view";
+import { ConfigurationEntityProvider } from "@src/entities/configuration/providers/configuration_entity_provider";
 
 function App() {
     useFocusNavigation();
@@ -44,7 +44,7 @@ function App() {
                     )}
                 </Match>
                 <Match when={true}>
-                    <ConfigurationListScreen />
+                    <ConfigurationViewPage />
                 </Match>
             </Switch>
             <OverlayHost />
@@ -92,19 +92,17 @@ export function main() {
                         socketPath,
                     }}
                 >
-                    <ConfigurationsServiceProvider>
-                        <ConfigurationListStoreProvider>
-                            <ConnectionStateProvider>
-                                <QueryJobsProvider>
-                                    <NavigationProvider>
-                                        <KeymapProvider>
-                                            <App />
-                                        </KeymapProvider>
-                                    </NavigationProvider>
-                                </QueryJobsProvider>
-                            </ConnectionStateProvider>
-                        </ConfigurationListStoreProvider>
-                    </ConfigurationsServiceProvider>
+                    <ConfigurationEntityProvider>
+                        <ConnectionEntityProvider>
+                            <QueryJobsProvider>
+                                <NavigationProvider>
+                                    <KeymapProvider>
+                                        <App />
+                                    </KeymapProvider>
+                                </NavigationProvider>
+                            </QueryJobsProvider>
+                        </ConnectionEntityProvider>
+                    </ConfigurationEntityProvider>
                 </ClientProvider>
             </LoggerProvider>
         ),

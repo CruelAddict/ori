@@ -1,5 +1,5 @@
 import { createEffect } from "solid-js";
-import { useConnectionState } from "@src/providers/connectionState";
+import { useConnectionState } from "@src/entities/connection/model/connection_state";
 import { useNavigation } from "@src/providers/navigation";
 
 export function useFocusNavigation() {

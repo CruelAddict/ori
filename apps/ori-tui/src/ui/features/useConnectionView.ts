@@ -1,7 +1,7 @@
 import { createMemo, createSignal } from "solid-js";
 import type { Accessor } from "solid-js";
 import type { KeyBinding } from "@src/core/stores/keyScopes";
-import { useConfigurationByName } from "@src/core/stores/configurationListStore";
+import { useConfigurationByName } from "@src/entities/configuration/model/configuration_list_store";
 import { useTreePaneView, type TreePaneViewModel } from "@src/ui/features/connectionView/useTreePaneView";
 import { useEditorPaneView, type EditorPaneViewModel } from "@src/ui/features/connectionView/useEditorPaneView";
 import { useResultsPaneView, type ResultsPaneViewModel } from "@src/ui/features/connectionView/useResultsPaneView";

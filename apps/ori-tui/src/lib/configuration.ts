@@ -1,1 +1,1 @@
-export * from "@shared/lib/configuration";
+export * from "@src/entities/configuration/model/configuration";

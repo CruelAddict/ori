@@ -1,8 +1,8 @@
 import type { JSX, Accessor } from "solid-js";
 import { createContext, createEffect, createMemo, createSignal, onMount, useContext } from "solid-js";
-import type { Configuration } from "@src/lib/configuration";
+import type { Configuration } from "@src/entities/configuration/model/configuration";
 import { useLogger } from "@src/providers/logger";
-import { useConfigurationsService } from "@src/core/services/configurations";
+import { useConfigurationsService } from "@src/entities/configuration/api/configurations_service";
 
 interface ConfigurationListStoreValue {
     configurations: Accessor<Configuration[]>;
@@ -145,4 +145,3 @@ export function useConfigurationByName(name: Accessor<string | null>) {
         return store.configurationMap().get(key);
     });
 }
-

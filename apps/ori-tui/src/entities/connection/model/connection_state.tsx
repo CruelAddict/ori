@@ -1,11 +1,11 @@
 import type { JSX, Accessor } from "solid-js";
 import { createContext, createEffect, createMemo, onCleanup, useContext } from "solid-js";
 import { createStore } from "solid-js/store";
-import type { Configuration } from "@src/lib/configuration";
-import type { ConnectResult } from "@src/lib/configurationsClient";
+import type { Configuration } from "@src/entities/configuration/model/configuration";
+import type { ConnectResult } from "@src/shared/lib/configurationsClient";
 import { useOriClient } from "@src/providers/client";
 import { useLogger } from "@src/providers/logger";
-import { useConfigurations } from "@src/core/stores/configurationListStore";
+import { useConfigurations } from "@src/entities/configuration/model/configuration_list_store";
 import { CONNECTION_STATE_EVENT, type ServerEvent } from "@src/lib/events";
 
 export type ConnectionLifecycle = "idle" | "requesting" | "waiting" | "connected" | "failed";
@@ -287,4 +287,3 @@ export function useConnectionRecord(configurationName: Accessor<string | null>) 
         return ctx.getRecord(name);
     });
 }
-
