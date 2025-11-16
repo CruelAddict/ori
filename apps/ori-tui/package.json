@@ -5,10 +5,15 @@
   "private": true,
   "scripts": {
     "dev": "bun run --watch src/index.tsx",
-    "build": "./build.ts"
+    "build": "./build.ts",
+    "lint": "eslint ."
   },
   "devDependencies": {
-    "@types/bun": "latest"
+    "@types/bun": "latest",
+    "@eslint/js": "^9.11.1",
+    "eslint": "^9.11.1",
+    "eslint-plugin-boundaries": "^4.2.1",
+    "typescript-eslint": "^8.8.0"
   },
   "peerDependencies": {
     "typescript": "^5"

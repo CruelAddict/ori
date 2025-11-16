@@ -12,6 +12,17 @@
     "verbatimModuleSyntax": true,
     "baseUrl": ".",
     "paths": {
+      "@app/*": ["src/app/*"],
+      "@processes/*": ["src/processes/*"],
+      "@pages/*": ["src/pages/*"],
+      "@widgets/*": ["src/widgets/*"],
+      "@features/*": ["src/features/*"],
+      "@entities/*": ["src/entities/*"],
+      "@shared/*": ["src/shared/*"],
+      "@shared/api/*": ["src/shared/api/*"],
+      "@shared/lib/*": ["src/shared/lib/*"],
+      "@shared/ui/*": ["src/shared/ui/*"],
+      "@shared/config/*": ["src/shared/config/*"],
       "@src/*": ["src/*"]
     },
     "noEmit": true,
