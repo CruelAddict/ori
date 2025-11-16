@@ -1,10 +1,9 @@
 import { createEffect, createSignal } from "solid-js";
 import type { Accessor } from "solid-js";
-import type { PaneFocusController, PaneScopeModel } from "@src/features/connection/view/pane_types";
+import type { PaneFocusController } from "@src/features/connection/view/pane_types";
 import type { QueryJob } from "@src/entities/query-job/providers/query_jobs_provider";
 
 export interface ResultsPaneViewModel {
-    scope: PaneScopeModel;
     visible: Accessor<boolean>;
     isFocused: Accessor<boolean>;
     job: Accessor<QueryJob | undefined>;
@@ -38,14 +37,7 @@ export function useResultsPane(options: UseResultsPaneOptions): ResultsPaneViewM
         }
     });
 
-    const scope: PaneScopeModel = {
-        id: "connection-view.results",
-        bindings: () => [],
-        enabled: () => visible() && options.focus.isFocused(),
-    };
-
     return {
-        scope,
         visible,
         isFocused: options.focus.isFocused,
         job: options.job,

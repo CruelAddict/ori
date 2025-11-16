@@ -1,6 +1,5 @@
 import { createMemo, createSignal } from "solid-js";
 import type { Accessor } from "solid-js";
-import type { KeyBinding } from "@src/core/stores/keyScopes";
 import { useConfigurationByName } from "@src/entities/configuration/model/configuration_list_store";
 import type { PaneFocusController } from "@src/features/connection/view/pane_types";
 import { useTreePane, type TreePaneViewModel } from "@src/features/tree-pane/use_tree_pane";
@@ -20,12 +19,15 @@ export interface ConnectionViewActions {
     onQueryChange: (text: string) => void;
     executeQuery: () => Promise<void>;
     refreshGraph: () => Promise<void>;
+    moveFocusLeft: () => void;
+    moveFocusRight: () => void;
+    moveFocusUp: () => void;
+    moveFocusDown: () => void;
     exit: () => void;
 }
 
 export interface ConnectionViewModel {
     title: Accessor<string>;
-    screenKeyBindings: Accessor<KeyBinding[]>;
     helpText: string;
     treePane: TreePaneViewModel;
     editorPane: EditorPaneViewModel;
@@ -95,83 +97,11 @@ export function useConnectionView(options: UseConnectionViewOptions): Connection
         options.onBack();
     };
 
-    const screenKeyBindings = createMemo<KeyBinding[]>(() => [
-        {
-            pattern: "escape",
-            handler: exit,
-            preventDefault: true,
-        },
-        {
-            pattern: "backspace",
-            handler: exit,
-            when: () => focusedPane() !== "editor",
-            preventDefault: true,
-        },
-        {
-            pattern: "ctrl+[",
-            handler: exit,
-            preventDefault: true,
-        },
-        {
-            pattern: "ctrl+e",
-            handler: treePane.toggleVisible,
-            preventDefault: true,
-        },
-        {
-            pattern: "ctrl+r",
-            handler: resultsPane.toggleVisible,
-            preventDefault: true,
-        },
-        {
-            pattern: "ctrl+shift+r",
-            handler: () => {
-                void treePane.refreshGraph();
-            },
-            preventDefault: true,
-        },
-        {
-            pattern: "h",
-            mode: "leader",
-            handler: moveFocusLeft,
-            when: () => treePane.visible(),
-            preventDefault: true,
-        },
-        {
-            pattern: "l",
-            mode: "leader",
-            handler: moveFocusRight,
-            preventDefault: true,
-        },
-        {
-            pattern: "j",
-            mode: "leader",
-            handler: moveFocusDown,
-            when: () => resultsPane.visible(),
-            preventDefault: true,
-        },
-        {
-            pattern: "k",
-            mode: "leader",
-            handler: moveFocusUp,
-            when: () => focusedPane() === "results",
-            preventDefault: true,
-        },
-        {
-            pattern: "enter",
-            mode: "leader",
-            handler: () => {
-                void editorPane.executeQuery();
-            },
-            preventDefault: true,
-        },
-    ]);
-
     const helpText =
         "Ctrl+E: toggle tree | Ctrl+R: toggle results | Ctrl+Shift+R: refresh | Ctrl+X then H/J/K/L: move focus | Ctrl+X then Enter: execute | Esc: back";
 
     return {
         title,
-        screenKeyBindings,
         helpText,
         treePane,
         editorPane,
@@ -182,6 +112,10 @@ export function useConnectionView(options: UseConnectionViewOptions): Connection
             onQueryChange: editorPane.onQueryChange,
             executeQuery: editorPane.executeQuery,
             refreshGraph: treePane.refreshGraph,
+            moveFocusLeft,
+            moveFocusRight,
+            moveFocusUp,
+            moveFocusDown,
             exit,
         },
     };

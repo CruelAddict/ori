@@ -1,10 +1,9 @@
 import { createMemo } from "solid-js";
 import type { Accessor } from "solid-js";
-import type { PaneFocusController, PaneScopeModel } from "@src/features/connection/view/pane_types";
+import type { PaneFocusController } from "@src/features/connection/view/pane_types";
 import { useQueryJobs, type QueryJob } from "@src/entities/query-job/providers/query_jobs_provider";
 
 export interface EditorPaneViewModel {
-    scope: PaneScopeModel;
     queryText: Accessor<string>;
     currentJob: Accessor<QueryJob | undefined>;
     isExecuting: Accessor<boolean>;
@@ -37,14 +36,7 @@ export function useEditorPane(options: UseEditorPaneOptions): EditorPaneViewMode
         await queryJobs.executeQuery(options.configurationName(), text);
     };
 
-    const scope: PaneScopeModel = {
-        id: "connection-view.editor",
-        bindings: () => [],
-        enabled: options.focus.isFocused,
-    };
-
     return {
-        scope,
         queryText,
         currentJob,
         isExecuting,

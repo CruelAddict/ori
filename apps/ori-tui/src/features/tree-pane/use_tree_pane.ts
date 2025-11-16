@@ -1,12 +1,10 @@
-import { createMemo, createSignal } from "solid-js";
+import { createSignal } from "solid-js";
 import type { Accessor } from "solid-js";
-import type { KeyBinding } from "@src/core/stores/keyScopes";
 import { useGraphSnapshot } from "@src/lib/useGraphSnapshot";
 import { useSchemaTree, type SchemaTreeController } from "@src/lib/schemaTree";
-import type { PaneFocusController, PaneScopeModel } from "@src/features/connection/view/pane_types";
+import type { PaneFocusController } from "@src/features/connection/view/pane_types";
 
 export interface TreePaneViewModel {
-    scope: PaneScopeModel;
     controller: SchemaTreeController;
     visible: Accessor<boolean>;
     isFocused: Accessor<boolean>;
@@ -38,76 +36,11 @@ export function useTreePane(options: UseTreePaneOptions): TreePaneViewModel {
         });
     };
 
-    const moveSelection = (delta: number) => {
-        controller.moveSelection(delta);
-    };
-
-    const handleTreeDown = () => moveSelection(1);
-    const handleTreeUp = () => moveSelection(-1);
-
-    const handleTreeRight = () => {
-        controller.focusFirstChild();
-    };
-
-    const handleTreeLeft = () => {
-        controller.collapseCurrentOrParent();
-    };
-
-    const bindings = createMemo<KeyBinding[]>(() => [
-        {
-            pattern: "down",
-            handler: handleTreeDown,
-            preventDefault: true,
-        },
-        {
-            pattern: "j",
-            handler: handleTreeDown,
-            preventDefault: true,
-        },
-        {
-            pattern: "up",
-            handler: handleTreeUp,
-            preventDefault: true,
-        },
-        {
-            pattern: "k",
-            handler: handleTreeUp,
-            preventDefault: true,
-        },
-        {
-            pattern: "right",
-            handler: handleTreeRight,
-            preventDefault: true,
-        },
-        {
-            pattern: "l",
-            handler: handleTreeRight,
-            preventDefault: true,
-        },
-        {
-            pattern: "left",
-            handler: handleTreeLeft,
-            preventDefault: true,
-        },
-        {
-            pattern: "h",
-            handler: handleTreeLeft,
-            preventDefault: true,
-        },
-    ]);
-
-    const scope: PaneScopeModel = {
-        id: "connection-view.tree",
-        bindings,
-        enabled: () => visible() && options.focus.isFocused(),
-    };
-
     const refreshGraph = async () => {
         await refresh();
     };
 
     return {
-        scope,
         controller,
         visible,
         isFocused: options.focus.isFocused,

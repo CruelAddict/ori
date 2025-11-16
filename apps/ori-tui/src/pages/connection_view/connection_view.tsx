@@ -1,6 +1,6 @@
 import { TextAttributes } from "@opentui/core";
 import { Show } from "solid-js";
-import { KeyScope } from "@src/core/services/keyScopes";
+import { KeyScope, type KeyBinding } from "@src/core/services/keyScopes";
 import { useConnectionView } from "@src/features/connection/view/use_connection_view";
 import { TreePanel } from "@src/widgets/tree_panel/tree_panel";
 import { EditorPanel } from "@src/widgets/editor_panel/editor_panel";
@@ -17,8 +17,79 @@ export function ConnectionViewPage(props: ConnectionViewPageProps) {
         onBack: props.onBack,
     });
 
+    const screenKeyBindings: KeyBinding[] = [
+        {
+            pattern: "escape",
+            handler: vm.actions.exit,
+            preventDefault: true,
+        },
+        {
+            pattern: "backspace",
+            handler: vm.actions.exit,
+            when: () => !vm.editorPane.isFocused(),
+            preventDefault: true,
+        },
+        {
+            pattern: "ctrl+[",
+            handler: vm.actions.exit,
+            preventDefault: true,
+        },
+        {
+            pattern: "ctrl+e",
+            handler: vm.actions.toggleTreeVisible,
+            preventDefault: true,
+        },
+        {
+            pattern: "ctrl+r",
+            handler: vm.actions.toggleResultsVisible,
+            preventDefault: true,
+        },
+        {
+            pattern: "ctrl+shift+r",
+            handler: () => {
+                void vm.actions.refreshGraph();
+            },
+            preventDefault: true,
+        },
+        {
+            pattern: "h",
+            mode: "leader",
+            handler: vm.actions.moveFocusLeft,
+            when: () => vm.treePane.visible(),
+            preventDefault: true,
+        },
+        {
+            pattern: "l",
+            mode: "leader",
+            handler: vm.actions.moveFocusRight,
+            preventDefault: true,
+        },
+        {
+            pattern: "j",
+            mode: "leader",
+            handler: vm.actions.moveFocusDown,
+            when: () => vm.resultsPane.visible(),
+            preventDefault: true,
+        },
+        {
+            pattern: "k",
+            mode: "leader",
+            handler: vm.actions.moveFocusUp,
+            when: () => vm.resultsPane.isFocused(),
+            preventDefault: true,
+        },
+        {
+            pattern: "enter",
+            mode: "leader",
+            handler: () => {
+                void vm.actions.executeQuery();
+            },
+            preventDefault: true,
+        },
+    ];
+
     return (
-        <KeyScope id="connection-view" bindings={vm.screenKeyBindings}>
+        <KeyScope id="connection-view" bindings={screenKeyBindings}>
             <box flexDirection="column" flexGrow={1} padding={1}>
                 <text attributes={TextAttributes.BOLD}>Connection</text>
                 <text attributes={TextAttributes.DIM}>{vm.title()}</text>

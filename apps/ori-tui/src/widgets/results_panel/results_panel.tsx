@@ -1,7 +1,9 @@
 import { Show } from "solid-js";
-import { KeyScope } from "@src/core/services/keyScopes";
+import { KeyScope, type KeyBinding } from "@src/core/services/keyScopes";
 import type { ResultsPaneViewModel } from "@src/features/results-pane/use_results_pane";
 import { QueryResultsPane } from "@src/ui/components/QueryResultsPane";
+
+const RESULTS_SCOPE_ID = "connection-view.results";
 
 export interface ResultsPanelProps {
     viewModel: ResultsPaneViewModel;
@@ -10,9 +12,12 @@ export interface ResultsPanelProps {
 export function ResultsPanel(props: ResultsPanelProps) {
     const pane = props.viewModel;
 
+    const bindings: KeyBinding[] = [];
+    const enabled = () => pane.visible() && pane.isFocused();
+
     return (
         <Show when={pane.visible()}>
-            <KeyScope id={pane.scope.id} bindings={pane.scope.bindings} enabled={pane.scope.enabled}>
+            <KeyScope id={RESULTS_SCOPE_ID} bindings={bindings} enabled={enabled}>
                 <box
                     flexDirection="column"
                     flexGrow={1}

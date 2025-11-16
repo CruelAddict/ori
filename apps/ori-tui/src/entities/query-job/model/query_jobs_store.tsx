@@ -4,7 +4,7 @@ import { createStore } from "solid-js/store";
 import type { QueryResultView } from "@src/lib/configurationsClient";
 import { useLogger } from "@src/providers/logger";
 import { type QueryJobCompletedEvent } from "@src/lib/events";
-import { useQueryJobsService } from "@src/entities/query-job/api/query_jobs_service";
+import { useQueryJobsApi } from "@src/entities/query-job/api/api";
 
 export interface QueryJob {
     jobId: string;
@@ -40,7 +40,7 @@ export interface QueryJobsStoreProviderProps {
 }
 
 export function QueryJobsStoreProvider(props: QueryJobsStoreProviderProps) {
-    const service = useQueryJobsService();
+    const api = useQueryJobsApi();
     const logger = useLogger();
 
     const [state, setState] = createStore<QueryJobsStoreState>({
@@ -59,7 +59,7 @@ export function QueryJobsStoreProvider(props: QueryJobsStoreProviderProps) {
 
     const executeQuery = async (configurationName: string, query: string) => {
         try {
-            const execResult = await service.executeQuery(configurationName, query);
+            const execResult = await api.executeQuery(configurationName, query);
             setState("jobsByConfiguration", configurationName, {
                 jobId: execResult.jobId,
                 configurationName,
@@ -91,7 +91,7 @@ export function QueryJobsStoreProvider(props: QueryJobsStoreProviderProps) {
 
         if (status === "success" && stored) {
             try {
-                const result = await service.fetchQueryResult(jobId);
+                const result = await api.fetchQueryResult(jobId);
                 setState("jobsByConfiguration", configurationName, {
                     ...currentJob,
                     status: "success",
@@ -117,7 +117,7 @@ export function QueryJobsStoreProvider(props: QueryJobsStoreProviderProps) {
         });
     };
 
-    const unsubscribe = service.onJobCompleted(handleQueryJobCompleted);
+    const unsubscribe = api.onJobCompleted(handleQueryJobCompleted);
     onCleanup(() => unsubscribe());
 
     const getJob = (configurationName: string) => state.jobsByConfiguration[configurationName];

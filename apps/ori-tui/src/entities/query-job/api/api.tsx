@@ -5,19 +5,19 @@ import { useOriClient } from "@src/providers/client";
 import { useLogger } from "@src/providers/logger";
 import { QUERY_JOB_COMPLETED_EVENT, type QueryJobCompletedEvent, type ServerEvent } from "@src/lib/events";
 
-export interface QueryJobsService {
+export interface QueryJobsApi {
     executeQuery(configurationName: string, query: string): Promise<QueryExecResult>;
     fetchQueryResult(jobId: string): Promise<QueryResultView>;
     onJobCompleted(listener: (event: QueryJobCompletedEvent) => void): () => void;
 }
 
-const QueryJobsServiceContext = createContext<QueryJobsService>();
+const QueryJobsApiContext = createContext<QueryJobsApi>();
 
-export interface QueryJobsServiceProviderProps {
+export interface QueryJobsApiProviderProps {
     children: JSX.Element;
 }
 
-export function QueryJobsServiceProvider(props: QueryJobsServiceProviderProps) {
+export function QueryJobsApiProvider(props: QueryJobsApiProviderProps) {
     const client = useOriClient();
     const logger = useLogger();
     const listeners = new Set<(event: QueryJobCompletedEvent) => void>();
@@ -65,23 +65,23 @@ export function QueryJobsServiceProvider(props: QueryJobsServiceProviderProps) {
         onCleanup(() => dispose());
     });
 
-    const service: QueryJobsService = {
+    const api: QueryJobsApi = {
         executeQuery,
         fetchQueryResult,
         onJobCompleted,
     };
 
     return (
-        <QueryJobsServiceContext.Provider value={service}>
+        <QueryJobsApiContext.Provider value={api}>
             {props.children}
-        </QueryJobsServiceContext.Provider>
+        </QueryJobsApiContext.Provider>
     );
 }
 
-export function useQueryJobsService(): QueryJobsService {
-    const ctx = useContext(QueryJobsServiceContext);
+export function useQueryJobsApi(): QueryJobsApi {
+    const ctx = useContext(QueryJobsApiContext);
     if (!ctx) {
-        throw new Error("QueryJobsServiceProvider is missing in component tree");
+        throw new Error("QueryJobsApiProvider is missing in component tree");
     }
     return ctx;
 }

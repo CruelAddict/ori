@@ -1,6 +1,8 @@
-import { KeyScope } from "@src/core/services/keyScopes";
+import { KeyScope, type KeyBinding } from "@src/core/services/keyScopes";
 import type { EditorPaneViewModel } from "@src/features/editor-pane/use_editor_pane";
 import { QueryEditor } from "@src/ui/components/QueryEditor";
+
+const EDITOR_SCOPE_ID = "connection-view.editor";
 
 export interface EditorPanelProps {
     viewModel: EditorPaneViewModel;
@@ -11,8 +13,10 @@ export interface EditorPanelProps {
 export function EditorPanel(props: EditorPanelProps) {
     const pane = props.viewModel;
 
+    const bindings: KeyBinding[] = [];
+
     return (
-        <KeyScope id={pane.scope.id} bindings={pane.scope.bindings} enabled={pane.scope.enabled}>
+        <KeyScope id={EDITOR_SCOPE_ID} bindings={bindings} enabled={pane.isFocused}>
             <box
                 flexDirection="column"
                 flexGrow={1}

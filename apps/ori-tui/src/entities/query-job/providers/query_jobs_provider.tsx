@@ -1,5 +1,5 @@
 import type { JSX } from "solid-js";
-import { QueryJobsServiceProvider } from "@src/entities/query-job/api/query_jobs_service";
+import { QueryJobsApiProvider } from "@src/entities/query-job/api/api";
 import { QueryJobsStoreProvider } from "@src/entities/query-job/model/query_jobs_store";
 
 export interface QueryJobsProviderProps {
@@ -8,9 +8,9 @@ export interface QueryJobsProviderProps {
 
 export function QueryJobsProvider(props: QueryJobsProviderProps) {
     return (
-        <QueryJobsServiceProvider>
+        <QueryJobsApiProvider>
             <QueryJobsStoreProvider>{props.children}</QueryJobsStoreProvider>
-        </QueryJobsServiceProvider>
+        </QueryJobsApiProvider>
     );
 }
 
