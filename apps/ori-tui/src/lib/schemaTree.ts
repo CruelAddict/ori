@@ -1,7 +1,7 @@
 import { createMemo, createSignal, createEffect } from "solid-js";
 import type { Accessor } from "solid-js";
 import type { GraphSnapshot } from "@src/lib/graph";
-import { buildNodeEntityMap, type NodeEntity } from "@src/components/nodes/entity";
+import { buildNodeEntityMap, type NodeEntity } from "@src/lib/nodes/entity";
 
 export interface TreeRow {
     id: string;

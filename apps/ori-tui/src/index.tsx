@@ -1,6 +1,6 @@
 import { render } from "@opentui/solid";
 import { Match, Switch, createMemo } from "solid-js";
-import { ConnectionView } from "@src/components/ConnectionView";
+import { ConnectionView } from "@src/ui/screens/ConnectionView";
 import { createLogger } from "@src/lib/logger";
 import { parseArgs } from "@src/utils/args";
 import { useFocusNavigation } from "@src/hooks/useFocusNavigation";
