@@ -3,7 +3,7 @@ import type { Accessor } from "solid-js";
 import type { KeyBinding } from "@src/core/stores/keyScopes";
 import { useGraphSnapshot } from "@src/lib/useGraphSnapshot";
 import { useSchemaTree, type SchemaTreeController } from "@src/lib/schemaTree";
-import type { PaneFocusController, PaneScopeModel } from "./paneTypes";
+import type { PaneFocusController, PaneScopeModel } from "@src/features/connection/view/pane_types";
 
 export interface TreePaneViewModel {
     scope: PaneScopeModel;
@@ -21,7 +21,7 @@ interface UseTreePaneOptions {
     focus: PaneFocusController;
 }
 
-export function useTreePaneView(options: UseTreePaneOptions): TreePaneViewModel {
+export function useTreePane(options: UseTreePaneOptions): TreePaneViewModel {
     const { snapshot, loading, error, refresh } = useGraphSnapshot(options.configurationName);
     const controller = useSchemaTree(snapshot);
     const [visible, setVisible] = createSignal(true);

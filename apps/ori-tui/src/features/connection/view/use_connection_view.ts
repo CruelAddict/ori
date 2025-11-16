@@ -2,9 +2,10 @@ import { createMemo, createSignal } from "solid-js";
 import type { Accessor } from "solid-js";
 import type { KeyBinding } from "@src/core/stores/keyScopes";
 import { useConfigurationByName } from "@src/entities/configuration/model/configuration_list_store";
-import { useTreePaneView, type TreePaneViewModel } from "@src/ui/features/connectionView/useTreePaneView";
-import { useEditorPaneView, type EditorPaneViewModel } from "@src/ui/features/connectionView/useEditorPaneView";
-import { useResultsPaneView, type ResultsPaneViewModel } from "@src/ui/features/connectionView/useResultsPaneView";
+import type { PaneFocusController } from "@src/features/connection/view/pane_types";
+import { useTreePane, type TreePaneViewModel } from "@src/features/tree-pane/use_tree_pane";
+import { useEditorPane, type EditorPaneViewModel } from "@src/features/editor-pane/use_editor_pane";
+import { useResultsPane, type ResultsPaneViewModel } from "@src/features/results-pane/use_results_pane";
 
 export type FocusPane = "tree" | "editor" | "results";
 
@@ -41,30 +42,25 @@ export function useConnectionView(options: UseConnectionViewOptions): Connection
     const focusEditor = () => setFocusedPane("editor");
     const focusResults = () => setFocusedPane("results");
 
-    const treePane = useTreePaneView({
-        configurationName: options.configurationName,
-        focus: {
-            isFocused: () => focusedPane() === "tree",
-            focusSelf: focusTree,
-            focusFallback: focusEditor,
-        },
+    const createFocusController = (pane: FocusPane, fallback?: () => void): PaneFocusController => ({
+        isFocused: () => focusedPane() === pane,
+        focusSelf: () => setFocusedPane(pane),
+        focusFallback: fallback,
     });
 
-    const editorPane = useEditorPaneView({
+    const treePane = useTreePane({
         configurationName: options.configurationName,
-        focus: {
-            isFocused: () => focusedPane() === "editor",
-            focusSelf: focusEditor,
-        },
+        focus: createFocusController("tree", () => setFocusedPane("editor")),
     });
 
-    const resultsPane = useResultsPaneView({
+    const editorPane = useEditorPane({
+        configurationName: options.configurationName,
+        focus: createFocusController("editor"),
+    });
+
+    const resultsPane = useResultsPane({
         job: editorPane.currentJob,
-        focus: {
-            isFocused: () => focusedPane() === "results",
-            focusSelf: focusResults,
-            focusFallback: focusEditor,
-        },
+        focus: createFocusController("results", () => setFocusedPane("editor")),
     });
 
     const moveFocusLeft = () => {

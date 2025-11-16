@@ -1,7 +1,7 @@
 import { createEffect, createSignal } from "solid-js";
 import type { Accessor } from "solid-js";
-import type { PaneFocusController, PaneScopeModel } from "./paneTypes";
-import type { QueryJob } from "@src/providers/queryJobs";
+import type { PaneFocusController, PaneScopeModel } from "@src/features/connection/view/pane_types";
+import type { QueryJob } from "@src/entities/query-job/providers/query_jobs_provider";
 
 export interface ResultsPaneViewModel {
     scope: PaneScopeModel;
@@ -16,7 +16,7 @@ interface UseResultsPaneOptions {
     focus: PaneFocusController;
 }
 
-export function useResultsPaneView(options: UseResultsPaneOptions): ResultsPaneViewModel {
+export function useResultsPane(options: UseResultsPaneOptions): ResultsPaneViewModel {
     const [visible, setVisible] = createSignal(false);
 
     const toggleVisible = () => {

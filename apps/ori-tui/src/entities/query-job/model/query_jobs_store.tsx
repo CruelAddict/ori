@@ -4,7 +4,7 @@ import { createStore } from "solid-js/store";
 import type { QueryResultView } from "@src/lib/configurationsClient";
 import { useLogger } from "@src/providers/logger";
 import { type QueryJobCompletedEvent } from "@src/lib/events";
-import { useQueryJobsService } from "@src/core/services/queryJobs";
+import { useQueryJobsService } from "@src/entities/query-job/api/query_jobs_service";
 
 export interface QueryJob {
     jobId: string;

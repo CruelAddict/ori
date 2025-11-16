@@ -1,6 +1,6 @@
 import { TextAttributes } from "@opentui/core";
 import { For, Show, createMemo } from "solid-js";
-import type { QueryJob } from "@src/providers/queryJobs";
+import type { QueryJob } from "@src/entities/query-job/providers/query_jobs_provider";
 
 export interface QueryResultsPaneProps {
     job: QueryJob | undefined;
