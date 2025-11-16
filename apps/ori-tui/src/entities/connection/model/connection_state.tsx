@@ -20,19 +20,16 @@ export interface ConnectionRecord {
 
 interface ConnectionStateStore {
     records: Record<string, ConnectionRecord>;
-    focusedConfigurationName: string | null;
 }
 
 interface ConnectionActions {
     connect(configuration: Configuration): Promise<void>;
-    focus(configurationName: string | null): void;
     clear(configurationName: string): void;
 }
 
 interface ConnectionStateContextValue extends ConnectionActions {
     records: Accessor<Record<string, ConnectionRecord>>;
     getRecord: (configurationName: string) => ConnectionRecord | undefined;
-    focusedConfigurationName: Accessor<string | null>;
 }
 
 export const ConnectionStateContext = createContext<ConnectionStateContextValue>();
@@ -44,7 +41,6 @@ export function createConnectionStateContextValue(): ConnectionStateContextValue
 
     const [state, setState] = createStore<ConnectionStateStore>({
         records: {},
-        focusedConfigurationName: null,
     });
 
     const getRecord = (configurationName: string) => state.records[configurationName];
@@ -78,19 +74,12 @@ export function createConnectionStateContextValue(): ConnectionStateContextValue
         });
     };
 
-    const focus = (configurationName: string | null) => {
-        setState("focusedConfigurationName", configurationName);
-    };
-
     const clear = (configurationName: string) => {
         setState("records", (records) => {
             const next = { ...records };
             delete next[configurationName];
             return next;
         });
-        if (state.focusedConfigurationName === configurationName) {
-            focus(null);
-        }
     };
 
     const handleConnectResult = (
@@ -111,9 +100,6 @@ export function createConnectionStateContextValue(): ConnectionStateContextValue
                 }),
                 { configuration }
             );
-            if (state.focusedConfigurationName !== configurationName) {
-                focus(configurationName);
-            }
             return;
         }
 
@@ -207,9 +193,6 @@ export function createConnectionStateContextValue(): ConnectionStateContextValue
                 }),
                 { configuration }
             );
-            if (state.focusedConfigurationName !== configurationName) {
-                focus(configurationName);
-            }
             return;
         }
         if (lifecycle === "failed") {
@@ -249,15 +232,12 @@ export function createConnectionStateContextValue(): ConnectionStateContextValue
     });
 
     const recordsAccessor: Accessor<Record<string, ConnectionRecord>> = () => state.records;
-    const focusedConfigurationName = () => state.focusedConfigurationName;
 
     return {
         records: recordsAccessor,
         getRecord,
         connect,
-        focus,
         clear,
-        focusedConfigurationName,
     };
 }
 

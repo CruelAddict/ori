@@ -3,10 +3,8 @@ import { Match, Switch, createMemo } from "solid-js";
 import { ConnectionViewPage } from "@src/pages/connection_view/connection_view";
 import { createLogger } from "@src/lib/logger";
 import { parseArgs } from "@src/utils/args";
-import { useFocusNavigation } from "@src/hooks/useFocusNavigation";
 import { LoggerProvider } from "@src/providers/logger";
 import { ClientProvider } from "@src/providers/client";
-import { useConnectionState } from "@src/entities/connection/model/connection_state";
 import { ConnectionEntityProvider } from "@src/entities/connection/providers/connection_entity_provider";
 import { NavigationProvider, OverlayHost, useNavigation, type ConnectionPage } from "@src/providers/navigation";
 import { QueryJobsProvider } from "@src/entities/query-job/providers/query_jobs_provider";
@@ -15,9 +13,6 @@ import { ConfigurationViewPage } from "@src/pages/configuration_view/configurati
 import { ConfigurationEntityProvider } from "@src/entities/configuration/providers/configuration_entity_provider";
 
 function App() {
-    useFocusNavigation();
-
-    const connectionState = useConnectionState();
     const navigation = useNavigation();
 
     const currentPage = navigation.current;
@@ -28,7 +23,6 @@ function App() {
 
     const handleConnectionBack = () => {
         navigation.pop();
-        connectionState.focus(null);
     };
 
     return (

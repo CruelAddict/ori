@@ -3,6 +3,7 @@ import type { Accessor } from "solid-js";
 import type { Configuration } from "@src/entities/configuration/model/configuration";
 import { useConfigurationListStore } from "@src/entities/configuration/model/configuration_list_store";
 import { useConnectionState, type ConnectionRecord } from "@src/entities/connection/model/connection_state";
+import { useConnectionNavigator } from "@src/features/connection/navigate-on-connect/use_connection_navigator";
 import { useClientInfo } from "@src/providers/client";
 
 export interface ConfigurationSelectViewModel {
@@ -28,6 +29,7 @@ export interface ConfigurationSelectViewModel {
 export function useConfigurationSelect(): ConfigurationSelectViewModel {
     const store = useConfigurationListStore();
     const connectionState = useConnectionState();
+    const connectionNavigator = useConnectionNavigator();
     const clientInfo = useClientInfo();
 
     const records = connectionState.records;
@@ -51,12 +53,6 @@ export function useConfigurationSelect(): ConfigurationSelectViewModel {
             ? `Socket: ${clientInfo.socketPath}`
             : `Server: ${clientInfo.host ?? "localhost"}:${clientInfo.port ?? 8080}`;
     });
-
-    const isBusy = (configuration: Configuration) => {
-        const record = records()[configuration.name];
-        if (!record) return false;
-        return record.status === "requesting" || record.status === "waiting";
-    };
 
     const rowStatus = (configuration: Configuration) => {
         const record = records()[configuration.name];
@@ -86,15 +82,7 @@ export function useConfigurationSelect(): ConfigurationSelectViewModel {
     const handleSelect = () => {
         const configuration = selectedConfiguration();
         if (!configuration) return;
-        const record = records()[configuration.name];
-        if (record?.status === "connected") {
-            connectionState.focus(configuration.name);
-            return;
-        }
-        if (isBusy(configuration)) {
-            return;
-        }
-        void connectionState.connect(configuration);
+        connectionNavigator.requestNavigation(configuration);
     };
 
     const actions = {
