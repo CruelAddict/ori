@@ -4,6 +4,7 @@ import type { Accessor } from "solid-js";
 import type { ConfigurationSelectViewModel } from "@src/features/configuration/select/use_configuration_select";
 import type { Configuration } from "@src/entities/configuration/model/configuration";
 import { KeyScope } from "@src/core/services/keyScopes";
+import type { KeyBinding } from "@src/core/stores/keyScopes";
 
 export interface ConfigurationSelectorProps {
     viewModel: ConfigurationSelectViewModel;
@@ -12,8 +13,21 @@ export interface ConfigurationSelectorProps {
 export function ConfigurationSelector(props: ConfigurationSelectorProps) {
     const vm = props.viewModel;
 
+    const bindings: KeyBinding[] = [
+        { pattern: "up", handler: vm.actions.moveUp, preventDefault: true },
+        { pattern: "k", handler: vm.actions.moveUp, preventDefault: true },
+        { pattern: "ctrl+p", handler: vm.actions.moveUp, preventDefault: true },
+        { pattern: "down", handler: vm.actions.moveDown, preventDefault: true },
+        { pattern: "j", handler: vm.actions.moveDown, preventDefault: true },
+        { pattern: "ctrl+n", handler: vm.actions.moveDown, preventDefault: true },
+        { pattern: "pageup", handler: vm.actions.pageUp, preventDefault: true },
+        { pattern: "pagedown", handler: vm.actions.pageDown, preventDefault: true },
+        { pattern: "return", handler: vm.actions.select, preventDefault: true },
+        { pattern: "ctrl+r", handler: () => void vm.actions.refresh(), preventDefault: true },
+    ];
+
     return (
-        <KeyScope id={vm.scope.id} bindings={vm.scope.bindings}>
+        <KeyScope id="configuration-list" bindings={bindings}>
             <Show when={!vm.loading()} fallback={<text>Loading configurations...</text>}>
                 <Show when={!vm.error()} fallback={<text fg="red">Failed to load configurations: {vm.error()}</text>}>
                     <ConfigurationList

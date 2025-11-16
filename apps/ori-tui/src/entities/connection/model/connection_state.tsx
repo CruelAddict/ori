@@ -1,4 +1,4 @@
-import type { JSX, Accessor } from "solid-js";
+import type { Accessor } from "solid-js";
 import { createContext, createEffect, createMemo, onCleanup, useContext } from "solid-js";
 import { createStore } from "solid-js/store";
 import type { Configuration } from "@src/entities/configuration/model/configuration";
@@ -35,13 +35,9 @@ interface ConnectionStateContextValue extends ConnectionActions {
     focusedConfigurationName: Accessor<string | null>;
 }
 
-const ConnectionStateContext = createContext<ConnectionStateContextValue>();
+export const ConnectionStateContext = createContext<ConnectionStateContextValue>();
 
-export interface ConnectionStateProviderProps {
-    children: JSX.Element;
-}
-
-export function ConnectionStateProvider(props: ConnectionStateProviderProps) {
+export function createConnectionStateContextValue(): ConnectionStateContextValue {
     const client = useOriClient();
     const logger = useLogger();
     const { configurationMap } = useConfigurations();
@@ -255,7 +251,7 @@ export function ConnectionStateProvider(props: ConnectionStateProviderProps) {
     const recordsAccessor: Accessor<Record<string, ConnectionRecord>> = () => state.records;
     const focusedConfigurationName = () => state.focusedConfigurationName;
 
-    const value: ConnectionStateContextValue = {
+    return {
         records: recordsAccessor,
         getRecord,
         connect,
@@ -263,18 +259,12 @@ export function ConnectionStateProvider(props: ConnectionStateProviderProps) {
         clear,
         focusedConfigurationName,
     };
-
-    return (
-        <ConnectionStateContext.Provider value={value}>
-            {props.children}
-        </ConnectionStateContext.Provider>
-    );
 }
 
 export function useConnectionState(): ConnectionStateContextValue {
     const ctx = useContext(ConnectionStateContext);
     if (!ctx) {
-        throw new Error("ConnectionStateProvider is missing in component tree");
+        throw new Error("ConnectionEntityProvider is missing in component tree");
     }
     return ctx;
 }

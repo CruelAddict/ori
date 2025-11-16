@@ -1,7 +1,6 @@
 import { createMemo } from "solid-js";
 import type { Accessor } from "solid-js";
 import type { Configuration } from "@src/entities/configuration/model/configuration";
-import type { KeyBinding } from "@src/core/stores/keyScopes";
 import { useConfigurationListStore } from "@src/entities/configuration/model/configuration_list_store";
 import { useConnectionState, type ConnectionRecord } from "@src/entities/connection/model/connection_state";
 import { useClientInfo } from "@src/providers/client";
@@ -16,10 +15,6 @@ export interface ConfigurationSelectViewModel {
     rowStatus: (configuration: Configuration) => string;
     isSelected: (index: number) => boolean;
     helpText: string;
-    scope: {
-        id: string;
-        bindings: KeyBinding[];
-    };
     actions: {
         moveUp: () => void;
         moveDown: () => void;
@@ -111,19 +106,6 @@ export function useConfigurationSelect(): ConfigurationSelectViewModel {
         refresh: () => store.refresh(),
     };
 
-    const bindings: KeyBinding[] = [
-        { pattern: "up", handler: actions.moveUp, preventDefault: true },
-        { pattern: "k", handler: actions.moveUp, preventDefault: true },
-        { pattern: "ctrl+p", handler: actions.moveUp, preventDefault: true },
-        { pattern: "down", handler: actions.moveDown, preventDefault: true },
-        { pattern: "j", handler: actions.moveDown, preventDefault: true },
-        { pattern: "ctrl+n", handler: actions.moveDown, preventDefault: true },
-        { pattern: "pageup", handler: actions.pageUp, preventDefault: true },
-        { pattern: "pagedown", handler: actions.pageDown, preventDefault: true },
-        { pattern: "return", handler: actions.select, preventDefault: true },
-        { pattern: "ctrl+r", handler: () => void actions.refresh(), preventDefault: true },
-    ];
-
     return {
         configurations: store.configurations,
         loading: store.loading,
@@ -135,10 +117,7 @@ export function useConfigurationSelect(): ConfigurationSelectViewModel {
         isSelected: (index: number) => index === store.selectedIndex(),
         helpText:
             "Use ↑/↓ arrows, j/k, Ctrl+N/P, PgUp/PgDn to navigate. Enter to connect or focus existing sessions.",
-        scope: {
-            id: "configuration-list",
-            bindings,
-        },
         actions,
     };
 }
+
