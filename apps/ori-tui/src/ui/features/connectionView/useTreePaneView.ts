@@ -102,6 +102,10 @@ export function useTreePaneView(options: UseTreePaneOptions): TreePaneViewModel 
         enabled: () => visible() && options.focus.isFocused(),
     };
 
+    const refreshGraph = async () => {
+        await refresh();
+    };
+
     return {
         scope,
         controller,
@@ -110,6 +114,6 @@ export function useTreePaneView(options: UseTreePaneOptions): TreePaneViewModel 
         loading,
         error,
         toggleVisible,
-        refreshGraph: refresh,
+        refreshGraph,
     };
 }
