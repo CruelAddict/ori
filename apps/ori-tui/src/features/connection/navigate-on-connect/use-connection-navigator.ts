@@ -1,7 +1,9 @@
 import { createEffect, createSignal, type Accessor } from "solid-js";
 import type { Configuration } from "@src/entities/configuration/model/configuration";
 import { useConnectionState } from "@src/entities/connection/model/connection-state";
-import { useNavigation } from "@src/providers/navigation";
+import { connectionRoute } from "@app/routes/types";
+import { useRouteNavigation } from "@app/routes/router";
+
 
 interface ConnectionNavigator {
     pendingConfigurationName: Accessor<string | null>;
@@ -11,7 +13,7 @@ interface ConnectionNavigator {
 
 export function useConnectionNavigator(): ConnectionNavigator {
     const connectionState = useConnectionState();
-    const navigation = useNavigation();
+    const navigation = useRouteNavigation();
     const [pendingConfigurationName, setPendingConfigurationName] = createSignal<string | null>(null);
 
     const navigateToConnection = (configurationName: string) => {
@@ -19,18 +21,20 @@ export function useConnectionNavigator(): ConnectionNavigator {
         const depth = pages.length;
         const top = pages[depth - 1];
 
+        const targetRoute = connectionRoute(configurationName);
+
         if (depth === 1) {
-            navigation.push({ type: "connection", configurationName });
+            navigation.push(targetRoute);
             return;
         }
 
         if (depth === 2) {
             if (top?.type === "connection") {
                 if (top.configurationName !== configurationName) {
-                    navigation.replace({ type: "connection", configurationName });
+                    navigation.replace(targetRoute);
                 }
             } else {
-                navigation.push({ type: "connection", configurationName });
+                navigation.push(targetRoute);
             }
         }
     };

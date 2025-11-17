@@ -1,46 +1,23 @@
 import { render } from "@opentui/solid";
-import { Match, Switch, createMemo } from "solid-js";
-import { ConnectionViewPage } from "@src/pages/connection-view/connection-view";
 import { createLogger } from "@src/lib/logger";
 import { parseArgs } from "@src/utils/args";
 import { LoggerProvider } from "@src/providers/logger";
 import { ClientProvider } from "@src/providers/client";
 import { ConnectionEntityProvider } from "@src/entities/connection/providers/connection-entity-provider";
-import { NavigationProvider, OverlayHost, useNavigation, type ConnectionPage } from "@src/providers/navigation";
+import { NavigationProvider } from "@app/providers/navigation";
+import { OverlayProvider } from "@app/providers/overlay";
+import { OverlayHost } from "@app/overlay/OverlayHost";
 import { QueryJobsProvider } from "@src/entities/query-job/providers/query-jobs-provider";
 import { KeymapProvider, KeyScope } from "@src/core/services/key-scopes";
-import { ConfigurationViewPage } from "@src/pages/configuration-view/configuration-view";
 import { ConfigurationEntityProvider } from "@src/entities/configuration/providers/configuration-entity-provider";
+import { RouteOutlet } from "@app/routes/RouteOutlet";
+
 
 function App() {
-    const navigation = useNavigation();
-
-    const currentPage = navigation.current;
-    const connectionPage = createMemo(() => {
-        const page = currentPage();
-        return page.type === "connection" ? page : null;
-    });
-
-    const handleConnectionBack = () => {
-        navigation.pop();
-    };
-
     return (
         <>
             <GlobalHotkeys />
-            <Switch>
-                <Match when={connectionPage()}>
-                    {(page: () => ConnectionPage) => (
-                        <ConnectionViewPage
-                            configurationName={page().configurationName}
-                            onBack={handleConnectionBack}
-                        />
-                    )}
-                </Match>
-                <Match when={true}>
-                    <ConfigurationViewPage />
-                </Match>
-            </Switch>
+            <RouteOutlet />
             <OverlayHost />
         </>
     );
@@ -90,9 +67,11 @@ export function main() {
                         <ConnectionEntityProvider>
                             <QueryJobsProvider>
                                 <NavigationProvider>
-                                    <KeymapProvider>
-                                        <App />
-                                    </KeymapProvider>
+                                    <OverlayProvider>
+                                        <KeymapProvider>
+                                            <App />
+                                        </KeymapProvider>
+                                    </OverlayProvider>
                                 </NavigationProvider>
                             </QueryJobsProvider>
                         </ConnectionEntityProvider>
