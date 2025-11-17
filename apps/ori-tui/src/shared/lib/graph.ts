@@ -1,5 +1,5 @@
 import type { Logger } from "pino";
-import type { Node, OriClient } from "@shared/lib/configurationsClient";
+import type { Node, OriClient } from "@shared/lib/configurations-client";
 
 export interface GraphSnapshot {
     nodes: Map<string, Node>;

@@ -1,4 +1,4 @@
-import type { ClientMode } from "@shared/lib/configurationsClient";
+import type { ClientMode } from "@shared/lib/configurations-client";
 import type { LogLevel } from "@shared/lib/logger";
 
 export interface ParsedArgs {

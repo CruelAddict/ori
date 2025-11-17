@@ -1,7 +1,7 @@
 import type { JSX } from "solid-js";
 import { createContext, createComponent, useContext } from "solid-js";
-import type { OriClient, CreateClientOptions, ClientMode } from "@shared/lib/configurationsClient";
-import { createOriClient } from "@shared/lib/configurationsClient";
+import type { OriClient, CreateClientOptions, ClientMode } from "@shared/lib/configurations-client";
+import { createOriClient } from "@shared/lib/configurations-client";
 import { useLogger } from "@shared/logger";
 
 interface ClientContextValue {

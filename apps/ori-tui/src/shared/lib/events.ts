@@ -1,4 +1,4 @@
-import type { SSEMessage } from "@shared/lib/sseClient";
+import type { SSEMessage } from "@shared/lib/sse-client";
 
 export type ConnectionState = "connecting" | "connected" | "failed";
 

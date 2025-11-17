@@ -1,4 +1,4 @@
-import type { Node, NodeEdge } from "@shared/lib/configurationsClient";
+import type { Node, NodeEdge } from "@shared/lib/configurations-client";
 
 export type NodeEntity = SnapshotNodeEntity | EdgeNodeEntity;
 
