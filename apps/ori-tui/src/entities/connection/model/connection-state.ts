@@ -3,8 +3,8 @@ import { createContext, createEffect, createMemo, onCleanup, useContext } from "
 import { createStore } from "solid-js/store";
 import type { Configuration } from "@src/entities/configuration/model/configuration";
 import type { ConnectResult } from "@src/shared/lib/configurations-client";
-import { useOriClient } from "@src/providers/client";
-import { useLogger } from "@src/providers/logger";
+import { useOriClient } from "@app/providers/client";
+import { useLogger } from "@app/providers/logger";
 import { useConfigurations } from "@src/entities/configuration/model/configuration-list-store";
 import { CONNECTION_STATE_EVENT, type ServerEvent } from "@src/lib/events";
 

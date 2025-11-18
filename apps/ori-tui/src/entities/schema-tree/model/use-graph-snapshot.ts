@@ -1,9 +1,9 @@
 import { createEffect, createMemo, createResource } from "solid-js";
 import type { Accessor } from "solid-js";
-import type { GraphSnapshot } from "@shared/lib/graph";
-import { loadFullGraph } from "@shared/lib/graph";
-import { useOriClient } from "@shared/api/client";
-import { useLogger } from "@shared/logger";
+import type { GraphSnapshot } from "../api/graph";
+import { loadFullGraph } from "../api/graph";
+import { useOriClient } from "@app/providers/client";
+import { useLogger } from "@app/providers/logger";
 
 interface GraphSnapshotControls {
     snapshot: Accessor<GraphSnapshot | null>;

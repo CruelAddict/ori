@@ -19,9 +19,7 @@
       "@features/*": ["src/features/*"],
       "@entities/*": ["src/entities/*"],
       "@shared/*": ["src/shared/*"],
-      "@shared/api/*": ["src/shared/api/*"],
       "@shared/lib/*": ["src/shared/lib/*"],
-      "@shared/ui/*": ["src/shared/ui/*"],
       "@shared/config/*": ["src/shared/config/*"],
       "@src/*": ["src/*"]
     },

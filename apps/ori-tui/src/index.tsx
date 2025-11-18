@@ -1,8 +1,8 @@
 import { render } from "@opentui/solid";
 import { createLogger } from "@src/lib/logger";
 import { parseArgs } from "@src/utils/args";
-import { LoggerProvider } from "@src/providers/logger";
-import { ClientProvider } from "@src/providers/client";
+import { LoggerProvider } from "@app/providers/logger";
+import { ClientProvider } from "@app/providers/client";
 import { ConnectionEntityProvider } from "@src/entities/connection/providers/connection-entity-provider";
 import { NavigationProvider } from "@app/providers/navigation";
 import { OverlayProvider } from "@app/providers/overlay";

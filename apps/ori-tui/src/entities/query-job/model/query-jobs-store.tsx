@@ -2,7 +2,7 @@ import type { JSX, Accessor } from "solid-js";
 import { createContext, useContext, onCleanup } from "solid-js";
 import { createStore } from "solid-js/store";
 import type { QueryResultView } from "@src/lib/configurations-client";
-import { useLogger } from "@src/providers/logger";
+import { useLogger } from "@app/providers/logger";
 import { type QueryJobCompletedEvent } from "@src/lib/events";
 import { useQueryJobsApi } from "@src/entities/query-job/api/api";
 

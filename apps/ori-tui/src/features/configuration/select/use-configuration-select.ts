@@ -4,7 +4,7 @@ import type { Configuration } from "@src/entities/configuration/model/configurat
 import { useConfigurationListStore } from "@src/entities/configuration/model/configuration-list-store";
 import { useConnectionState, type ConnectionRecord } from "@src/entities/connection/model/connection-state";
 import { useConnectionNavigator } from "@src/features/connection/navigate-on-connect/use-connection-navigator";
-import { useClientInfo } from "@src/providers/client";
+import { useClientInfo } from "@app/providers/client";
 
 export interface ConfigurationSelectViewModel {
     configurations: Accessor<Configuration[]>;

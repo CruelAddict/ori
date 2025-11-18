@@ -1,7 +1,6 @@
 import { createSignal } from "solid-js";
 import type { Accessor } from "solid-js";
-import { useGraphSnapshot } from "@src/lib/use-graph-snapshot";
-import { useSchemaTree, type SchemaTreeController } from "@src/lib/schema-tree";
+import { useGraphSnapshot, useSchemaTree, type SchemaTreeController } from "@entities/schema-tree";
 import type { PaneFocusController } from "@src/features/connection/view/pane-types";
 
 export interface TreePaneViewModel {

@@ -99,7 +99,7 @@ export function ConnectionViewPage(props: ConnectionViewPageProps) {
                     <TreePanel viewModel={vm.treePane} />
 
                     <box flexDirection="column" flexGrow={1} marginLeft={vm.treePane.visible() ? 1 : 0}>
-                        <EditorPanel viewModel={vm.editorPane} configurationName={props.configurationName} />
+                        <EditorPanel viewModel={vm.editorPane} />
                         <Show when={vm.resultsPane.visible()}>
                             <>
                                 <box height={1} />

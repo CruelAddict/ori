@@ -1,8 +1,8 @@
 import type { JSX } from "solid-js";
-import { createContext, createEffect, onCleanup, useContext } from "solid-js";
+import { createComponent, createContext, createEffect, onCleanup, useContext } from "solid-js";
 import type { QueryExecResult, QueryResultView } from "@src/lib/configurations-client";
-import { useOriClient } from "@src/providers/client";
-import { useLogger } from "@src/providers/logger";
+import { useOriClient } from "@app/providers/client";
+import { useLogger } from "@app/providers/logger";
 import { QUERY_JOB_COMPLETED_EVENT, type QueryJobCompletedEvent, type ServerEvent } from "@src/lib/events";
 
 export interface QueryJobsApi {
@@ -71,11 +71,12 @@ export function QueryJobsApiProvider(props: QueryJobsApiProviderProps) {
         onJobCompleted,
     };
 
-    return (
-        <QueryJobsApiContext.Provider value={api}>
-            {props.children}
-        </QueryJobsApiContext.Provider>
-    );
+    return createComponent(QueryJobsApiContext.Provider, {
+        value: api,
+        get children() {
+            return props.children;
+        },
+    });
 }
 
 export function useQueryJobsApi(): QueryJobsApi {

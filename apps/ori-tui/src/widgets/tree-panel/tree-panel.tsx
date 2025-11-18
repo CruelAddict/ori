@@ -1,7 +1,7 @@
-import { Show } from "solid-js";
+import { For, Show, type Accessor } from "solid-js";
+import { TextAttributes } from "@opentui/core";
 import { KeyScope, type KeyBinding } from "@src/core/services/key-scopes";
 import type { TreePaneViewModel } from "@src/features/tree-pane/use-tree-pane";
-import { SchemaTreePane } from "@src/ui/components/schema-tree-pane";
 
 const TREE_SCOPE_ID = "connection-view.tree";
 
@@ -11,6 +11,8 @@ export interface TreePanelProps {
 
 export function TreePanel(props: TreePanelProps) {
     const pane = props.viewModel;
+    const rows = pane.controller.rows;
+    const selectedId = pane.controller.selectedId;
 
     const moveSelection = (delta: number) => {
         pane.controller.moveSelection(delta);
@@ -32,12 +34,55 @@ export function TreePanel(props: TreePanelProps) {
     return (
         <Show when={pane.visible()}>
             <KeyScope id={TREE_SCOPE_ID} bindings={bindings} enabled={enabled}>
-                <SchemaTreePane
-                    controller={pane.controller}
-                    loading={pane.loading}
-                    error={pane.error}
-                    focused={pane.isFocused()}
-                />
+                <box
+                    flexDirection="column"
+                    width={40}
+                    flexShrink={0}
+                    borderStyle="single"
+                    borderColor={pane.isFocused() ? "cyan" : "gray"}
+                >
+                    <box padding={1} flexDirection="column" flexGrow={1}>
+                        <Show when={pane.loading()}>
+                            <text>Loading schema graph...</text>
+                        </Show>
+                        <Show when={!pane.loading() && pane.error()}>
+                            {(message: Accessor<string | null>) => (
+                                <text fg="red">Failed to load graph: {message()}</text>
+                            )}
+                        </Show>
+                        <Show when={!pane.loading() && !pane.error()}>
+                            <box flexDirection="column">
+                                <For each={rows()}>
+                                    {(row) => {
+                                        const isSelected = () => selectedId() === row.id;
+                                        const toggleGlyph = row.entity.hasChildren
+                                            ? row.isExpanded
+                                                ? "[-]"
+                                                : "[+]"
+                                            : "   ";
+                                        const fg = () => (isSelected() ? "cyan" : undefined);
+                                        const attrs = () => (isSelected() ? TextAttributes.BOLD : TextAttributes.NONE);
+                                        return (
+                                            <box flexDirection="row" paddingLeft={row.depth * 2}>
+                                                <text fg={fg()} attributes={attrs()}>
+                                                    {isSelected() ? "> " : "  "}
+                                                    {toggleGlyph} {row.entity.icon} {row.entity.label}
+                                                </text>
+                                                {row.entity.description && (
+                                                    <text attributes={TextAttributes.DIM}> {row.entity.description}</text>
+                                                )}
+                                                {row.entity.badges && <text fg="cyan"> {row.entity.badges}</text>}
+                                            </box>
+                                        );
+                                    }}
+                                </For>
+                                <Show when={rows().length === 0}>
+                                    <text attributes={TextAttributes.DIM}>Graph is empty. Try refreshing later.</text>
+                                </Show>
+                            </box>
+                        </Show>
+                    </box>
+                </box>
             </KeyScope>
         </Show>
     );

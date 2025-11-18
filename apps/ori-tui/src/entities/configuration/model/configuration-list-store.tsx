@@ -1,7 +1,7 @@
 import type { JSX, Accessor } from "solid-js";
 import { createContext, createEffect, createMemo, createSignal, onMount, useContext } from "solid-js";
 import type { Configuration } from "@src/entities/configuration/model/configuration";
-import { useLogger } from "@src/providers/logger";
+import { useLogger } from "@app/providers/logger";
 import { useConfigurationsService } from "@src/entities/configuration/api/configurations-service";
 
 interface ConfigurationListStoreValue {

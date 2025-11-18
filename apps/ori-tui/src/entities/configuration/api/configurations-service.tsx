@@ -1,7 +1,7 @@
 import type { JSX } from "solid-js";
 import { createContext, useContext } from "solid-js";
 import type { Configuration } from "@src/entities/configuration/model/configuration";
-import { useOriClient } from "@src/providers/client";
+import { useOriClient } from "@app/providers/client";
 
 export interface ConfigurationsService {
     listConfigurations(): Promise<Configuration[]>;
