@@ -5,6 +5,7 @@ import { useConnectionView } from "@src/features/connection/view/use-connection-
 import { TreePanel } from "@src/widgets/tree-panel/tree-panel";
 import { EditorPanel } from "@src/widgets/editor-panel/editor-panel";
 import { ResultsPanel } from "@src/widgets/results-panel/results-panel";
+import { useTheme } from "@app/providers/theme";
 
 export interface ConnectionViewPageProps {
     configurationName: string;
@@ -16,6 +17,8 @@ export function ConnectionViewPage(props: ConnectionViewPageProps) {
         configurationName: () => props.configurationName,
         onBack: props.onBack,
     });
+    const { theme } = useTheme();
+    const palette = theme;
 
     const screenKeyBindings: KeyBinding[] = [
         {
@@ -90,16 +93,23 @@ export function ConnectionViewPage(props: ConnectionViewPageProps) {
 
     return (
         <KeyScope id="connection-view" bindings={screenKeyBindings}>
-            <box flexDirection="column" flexGrow={1} padding={1}>
-                <text attributes={TextAttributes.BOLD}>Connection</text>
-                <text attributes={TextAttributes.DIM}>{vm.title()}</text>
+            <box flexDirection="column" flexGrow={1} padding={1} backgroundColor={palette().background}>
+                <text attributes={TextAttributes.BOLD} fg={palette().text}>
+                    Connection
+                </text>
+                <text attributes={TextAttributes.DIM} fg={palette().textMuted}>
+                    {vm.title()}
+                </text>
                 <box height={1} />
 
                 <box flexDirection="row" flexGrow={1}>
                     <TreePanel viewModel={vm.treePane} />
 
                     <box flexDirection="column" flexGrow={1} marginLeft={vm.treePane.visible() ? 1 : 0}>
-                        <EditorPanel viewModel={vm.editorPane} />
+                        <EditorPanel
+                            viewModel={vm.editorPane}
+                            borderColor={(focused) => (focused ? palette().primary : palette().border)}
+                        />
                         <Show when={vm.resultsPane.visible()}>
                             <>
                                 <box height={1} />
@@ -110,7 +120,9 @@ export function ConnectionViewPage(props: ConnectionViewPageProps) {
                 </box>
 
                 <box height={1} />
-                <text attributes={TextAttributes.DIM}>{vm.helpText}</text>
+                <text attributes={TextAttributes.DIM} fg={palette().textMuted}>
+                    {vm.helpText}
+                </text>
             </box>
         </KeyScope>
     );

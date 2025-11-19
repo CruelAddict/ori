@@ -6,6 +6,7 @@ export interface ParsedArgs {
     socketPath?: string;
     mode: ClientMode;
     logLevel: LogLevel;
+    theme?: string;
 }
 
 export function parseArgs(args: string[]): ParsedArgs {
@@ -13,6 +14,7 @@ export function parseArgs(args: string[]): ParsedArgs {
     let socketPath: string | undefined;
     let mode: ClientMode = "sdk";
     let logLevel: LogLevel = "warn";
+    let theme: string | undefined;
 
     for (let i = 0; i < args.length; i++) {
         const arg = args[i];
@@ -45,6 +47,12 @@ export function parseArgs(args: string[]): ParsedArgs {
             continue;
         }
 
+        if (arg === "--theme" && i + 1 < args.length) {
+            theme = args[i + 1];
+            i++;
+            continue;
+        }
+
         if (arg === "--stub") {
             mode = "stub";
             continue;
@@ -56,5 +64,5 @@ export function parseArgs(args: string[]): ParsedArgs {
         }
     }
 
-    return { serverAddress, socketPath, mode, logLevel };
+    return { serverAddress, socketPath, mode, logLevel, theme };
 }

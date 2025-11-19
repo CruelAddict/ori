@@ -2,6 +2,7 @@ import { Show, createEffect } from "solid-js";
 import { KeyScope, type KeyBinding } from "@src/core/services/key-scopes";
 import type { EditorPaneViewModel } from "@src/features/editor-pane/use-editor-pane";
 import type { TextareaRenderable } from "@opentui/core";
+import { useTheme } from "@app/providers/theme";
 
 const EDITOR_SCOPE_ID = "connection-view.editor";
 
@@ -13,6 +14,8 @@ export interface EditorPanelProps {
 export function EditorPanel(props: EditorPanelProps) {
     const pane = props.viewModel;
     let textarea: TextareaRenderable | undefined;
+    const { theme } = useTheme();
+    const palette = theme;
 
     const bindings: KeyBinding[] = [];
 
@@ -47,16 +50,16 @@ export function EditorPanel(props: EditorPanelProps) {
                 flexDirection="column"
                 flexGrow={1}
                 borderStyle="single"
-                borderColor={pane.isFocused() ? "cyan" : props.borderColor?.(pane.isFocused()) ?? "gray"}
+                borderColor={pane.isFocused() ? palette().primary : props.borderColor?.(pane.isFocused()) ?? palette().border}
             >
                 <box flexDirection="column" flexGrow={1} padding={1}>
                     <textarea
                         ref={(renderable: TextareaRenderable | undefined) => (textarea = renderable)}
                         placeholder={`Type to begin... (Enter inserts newline, Ctrl+X then Enter executes)`}
-                        textColor="white"
-                        focusedTextColor="white"
-                        backgroundColor="#1e1e1e"
-                        focusedBackgroundColor="#252525"
+                        textColor={palette().editorText}
+                        focusedTextColor={palette().editorText}
+                        backgroundColor={palette().editorBackground}
+                        focusedBackgroundColor={palette().editorBackgroundFocused}
                         minHeight={3}
                         maxHeight={12}
                         onContentChange={handleChange}
@@ -67,7 +70,7 @@ export function EditorPanel(props: EditorPanelProps) {
                     />
                     <Show when={pane.isExecuting()}>
                         <box paddingTop={1}>
-                            <text fg="yellow">Executing query...</text>
+                            <text fg={palette().warning}>Executing query...</text>
                         </box>
                     </Show>
                 </box>

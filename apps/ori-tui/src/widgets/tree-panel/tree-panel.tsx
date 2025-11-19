@@ -2,6 +2,7 @@ import { For, Show, type Accessor } from "solid-js";
 import { TextAttributes } from "@opentui/core";
 import { KeyScope, type KeyBinding } from "@src/core/services/key-scopes";
 import type { TreePaneViewModel } from "@src/features/tree-pane/use-tree-pane";
+import { useTheme } from "@app/providers/theme";
 
 const TREE_SCOPE_ID = "connection-view.tree";
 
@@ -13,6 +14,8 @@ export function TreePanel(props: TreePanelProps) {
     const pane = props.viewModel;
     const rows = pane.controller.rows;
     const selectedId = pane.controller.selectedId;
+    const { theme } = useTheme();
+    const palette = theme;
 
     const moveSelection = (delta: number) => {
         pane.controller.moveSelection(delta);
@@ -39,15 +42,16 @@ export function TreePanel(props: TreePanelProps) {
                     width={40}
                     flexShrink={0}
                     borderStyle="single"
-                    borderColor={pane.isFocused() ? "cyan" : "gray"}
+                    borderColor={pane.isFocused() ? palette().primary : palette().border}
+                    backgroundColor={palette().backgroundPanel}
                 >
                     <box padding={1} flexDirection="column" flexGrow={1}>
                         <Show when={pane.loading()}>
-                            <text>Loading schema graph...</text>
+                            <text fg={palette().text}>Loading schema graph...</text>
                         </Show>
                         <Show when={!pane.loading() && pane.error()}>
                             {(message: Accessor<string | null>) => (
-                                <text fg="red">Failed to load graph: {message()}</text>
+                                <text fg={palette().error}>Failed to load graph: {message()}</text>
                             )}
                         </Show>
                         <Show when={!pane.loading() && !pane.error()}>
@@ -60,7 +64,7 @@ export function TreePanel(props: TreePanelProps) {
                                                 ? "[-]"
                                                 : "[+]"
                                             : "   ";
-                                        const fg = () => (isSelected() ? "cyan" : undefined);
+                                        const fg = () => (isSelected() ? palette().primary : palette().text);
                                         const attrs = () => (isSelected() ? TextAttributes.BOLD : TextAttributes.NONE);
                                         return (
                                             <box flexDirection="row" paddingLeft={row.depth * 2}>
@@ -69,15 +73,20 @@ export function TreePanel(props: TreePanelProps) {
                                                     {toggleGlyph} {row.entity.icon} {row.entity.label}
                                                 </text>
                                                 {row.entity.description && (
-                                                    <text attributes={TextAttributes.DIM}> {row.entity.description}</text>
+                                                    <text attributes={TextAttributes.DIM} fg={palette().textMuted}>
+                                                        {" "}
+                                                        {row.entity.description}
+                                                    </text>
                                                 )}
-                                                {row.entity.badges && <text fg="cyan"> {row.entity.badges}</text>}
+                                                {row.entity.badges && <text fg={palette().accent}> {row.entity.badges}</text>}
                                             </box>
                                         );
                                     }}
                                 </For>
                                 <Show when={rows().length === 0}>
-                                    <text attributes={TextAttributes.DIM}>Graph is empty. Try refreshing later.</text>
+                                    <text attributes={TextAttributes.DIM} fg={palette().textMuted}>
+                                        Graph is empty. Try refreshing later.
+                                    </text>
                                 </Show>
                             </box>
                         </Show>

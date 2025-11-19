@@ -1,0 +1,41 @@
+{
+  "$schema": "https://ori.app/theme.json",
+  "defs": {
+    "background": "#0a0a0a",
+    "panel": "#141414",
+    "element": "#1e1e1e",
+    "border": "#484848",
+    "borderActive": "#606060",
+    "text": "#eeeeee",
+    "textMuted": "#808080",
+    "primary": "#fab283",
+    "secondary": "#5c9cf5",
+    "accent": "#9d7cd8",
+    "warning": "#f5a742",
+    "error": "#e06c75",
+    "success": "#7fd88f",
+    "info": "#56b6c2",
+    "editorBg": "#141414",
+    "editorBgFocus": "#1e1e1e",
+    "editorText": "#eeeeee"
+  },
+  "theme": {
+    "primary": "primary",
+    "secondary": "secondary",
+    "accent": "accent",
+    "text": "text",
+    "textMuted": "textMuted",
+    "background": "background",
+    "backgroundPanel": "panel",
+    "backgroundElement": "element",
+    "border": "border",
+    "borderActive": "borderActive",
+    "warning": "warning",
+    "error": "error",
+    "success": "success",
+    "info": "info",
+    "editorBackground": "editorBg",
+    "editorBackgroundFocused": "editorBgFocus",
+    "editorText": "editorText"
+  }
+}
