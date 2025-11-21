@@ -1,5 +1,4 @@
 {
-  "$schema": "https://ori.app/theme.json",
   "defs": {
     "background": "#0a0a0a",
     "panel": "#141414",

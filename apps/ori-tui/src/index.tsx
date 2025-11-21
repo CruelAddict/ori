@@ -8,7 +8,7 @@ import { NavigationProvider } from "@app/providers/navigation";
 import { OverlayProvider, useOverlayManager } from "@app/providers/overlay";
 import { OverlayHost } from "@app/overlay/OverlayHost";
 import { QueryJobsProvider } from "@src/entities/query-job/providers/query-jobs-provider";
-import { KeymapProvider, KeyScope } from "@src/core/services/key-scopes";
+import { KeymapProvider, KeyScope, SYSTEM_LAYER } from "@src/core/services/key-scopes";
 import { ConfigurationEntityProvider } from "@src/entities/configuration/providers/configuration-entity-provider";
 import { RouteOutlet } from "@app/routes/RouteOutlet";
 import { ThemeProvider, useTheme } from "@app/providers/theme";
@@ -37,26 +37,35 @@ function GlobalHotkeys() {
     };
 
     return (
-        <KeyScope
-            id="global"
-            bindings={[
-                {
-                    pattern: "ctrl+c",
-                    handler: () => {
-                        process.exit(0);
+        <>
+            <KeyScope
+                id="global"
+                bindings={[
+                    {
+                        pattern: "t",
+                        mode: "leader",
+                        handler: openThemePicker,
+                        preventDefault: true,
                     },
-                    preventDefault: true,
-                },
-                {
-                    pattern: "t",
-                    mode: "leader",
-                    handler: openThemePicker,
-                    preventDefault: true,
-                },
-            ]}
-        />
+                ]}
+            />
+            <KeyScope
+                id="system-shortcuts"
+                layer={SYSTEM_LAYER}
+                bindings={[
+                    {
+                        pattern: "ctrl+c",
+                        handler: () => {
+                            process.exit(0);
+                        },
+                        preventDefault: true,
+                    },
+                ]}
+            />
+        </>
     );
 }
+
 
 export function main() {
     const args = process.argv.slice(2);

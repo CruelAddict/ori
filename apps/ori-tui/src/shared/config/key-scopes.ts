@@ -10,10 +10,13 @@ export interface KeyBinding {
     mode?: "normal" | "leader";
 }
 
+export const SYSTEM_LAYER = Number.POSITIVE_INFINITY;
+
 export interface RegisterScopeOptions {
     id: string;
     parentId?: string | null;
     priority?: number;
+    layer: number;
     getBindings: () => KeyBinding[];
     isEnabled: () => boolean;
 }
@@ -21,6 +24,11 @@ export interface RegisterScopeOptions {
 interface ScopeEntry extends RegisterScopeOptions {
     depth: number;
     order: number;
+}
+
+export interface DispatchPlan {
+    primary: ScopeEntry[];
+    system: ScopeEntry[];
 }
 
 export interface ScopeHandle {
@@ -48,20 +56,35 @@ export class KeyScopeStore {
         };
     }
 
-    getDispatchList(): ScopeEntry[] {
-        return Array.from(this.scopes.values())
-            .filter((entry) => entry.isEnabled())
-            .sort((a, b) => {
-                if (a.depth !== b.depth) {
-                    return b.depth - a.depth;
-                }
-                const priorityA = a.priority ?? 0;
-                const priorityB = b.priority ?? 0;
-                if (priorityA !== priorityB) {
-                    return priorityB - priorityA;
-                }
-                return b.order - a.order;
-            });
+    getDispatchPlan(): DispatchPlan {
+        const enabled = Array.from(this.scopes.values()).filter((entry) => entry.isEnabled());
+        const systemEntries = enabled.filter((entry) => !Number.isFinite(entry.layer));
+        const normalEntries = enabled.filter((entry) => Number.isFinite(entry.layer));
+
+        let primary: ScopeEntry[] = [];
+        if (normalEntries.length > 0) {
+            const maxLayer = Math.max(...normalEntries.map((entry) => entry.layer));
+            primary = normalEntries.filter((entry) => entry.layer === maxLayer);
+        }
+
+        return {
+            primary: this.sortEntries(primary),
+            system: this.sortEntries(systemEntries),
+        };
+    }
+
+    private sortEntries(entries: ScopeEntry[]): ScopeEntry[] {
+        return [...entries].sort((a, b) => {
+            if (a.depth !== b.depth) {
+                return b.depth - a.depth;
+            }
+            const priorityA = a.priority ?? 0;
+            const priorityB = b.priority ?? 0;
+            if (priorityA !== priorityB) {
+                return priorityB - priorityA;
+            }
+            return b.order - a.order;
+        });
     }
 
     private resolveDepth(parentId?: string | null): number {

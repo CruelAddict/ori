@@ -7,11 +7,13 @@ export interface OverlayComponentProps {
 export interface OverlayEntry {
     id: string;
     render: Component<OverlayComponentProps>;
+    zIndex: number;
 }
 
 export interface OverlayOptions {
     id?: string;
     render: Component<OverlayComponentProps>;
+    zIndex?: number;
 }
 
 export interface OverlayManager {
@@ -24,10 +26,12 @@ export interface OverlayManager {
 export function createOverlayManager(): OverlayManager {
     const [overlays, setOverlays] = createSignal<OverlayEntry[]>([]);
     let overlayIdCounter = 0;
+    let nextLayer = 1;
 
     const show = (options: OverlayOptions) => {
         const id = options.id ?? `overlay-${++overlayIdCounter}`;
-        setOverlays((prev) => [...prev, { id, render: options.render }]);
+        const zIndex = options.zIndex ?? nextLayer++;
+        setOverlays((prev) => [...prev, { id, render: options.render, zIndex }]);
         return id;
     };
 
@@ -37,6 +41,7 @@ export function createOverlayManager(): OverlayManager {
 
     const dismissAll = () => {
         setOverlays([]);
+        nextLayer = 1;
     };
 
     return {
