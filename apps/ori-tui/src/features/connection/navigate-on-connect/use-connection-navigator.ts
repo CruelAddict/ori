@@ -11,7 +11,16 @@ interface ConnectionNavigator {
     cancelPending(): void;
 }
 
+let navigatorInstance: ConnectionNavigator | undefined;
+
 export function useConnectionNavigator(): ConnectionNavigator {
+    if (!navigatorInstance) {
+        navigatorInstance = createConnectionNavigator();
+    }
+    return navigatorInstance;
+}
+
+function createConnectionNavigator(): ConnectionNavigator {
     const connectionState = useConnectionState();
     const navigation = useRouteNavigation();
     const [pendingConfigurationName, setPendingConfigurationName] = createSignal<string | null>(null);

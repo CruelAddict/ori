@@ -7,6 +7,7 @@ import { ConnectionEntityProvider } from "@src/entities/connection/providers/con
 import { NavigationProvider } from "@app/providers/navigation";
 import { OverlayProvider, useOverlayManager } from "@app/providers/overlay";
 import { OverlayHost } from "@app/overlay/OverlayHost";
+import { ConfigurationPickerOverlay } from "@app/overlay/ConfigurationPickerOverlay";
 import { QueryJobsProvider } from "@src/entities/query-job/providers/query-jobs-provider";
 import { KeymapProvider, KeyScope, SYSTEM_LAYER } from "@src/core/services/key-scopes";
 import { ConfigurationEntityProvider } from "@src/entities/configuration/providers/configuration-entity-provider";
@@ -36,6 +37,13 @@ function GlobalHotkeys() {
         }, 0);
     };
 
+    const openConfigurationPicker = () => {
+        setTimeout(() => {
+            overlays.dismiss("configuration-picker");
+            overlays.show({ id: "configuration-picker", render: ConfigurationPickerOverlay });
+        }, 0);
+    };
+
     return (
         <>
             <KeyScope
@@ -45,6 +53,12 @@ function GlobalHotkeys() {
                         pattern: "t",
                         mode: "leader",
                         handler: openThemePicker,
+                        preventDefault: true,
+                    },
+                    {
+                        pattern: "c",
+                        mode: "leader",
+                        handler: openConfigurationPicker,
                         preventDefault: true,
                     },
                 ]}
