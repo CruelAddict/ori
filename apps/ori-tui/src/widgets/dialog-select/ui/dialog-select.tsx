@@ -23,6 +23,7 @@ export interface DialogSelectProps<T> {
     onSelect?: (option: DialogSelectOption<T>) => void;
     onCancel?: () => void;
     onFilterChange?: (value: string) => void;
+    onHighlightChange?: (option: DialogSelectOption<T> | undefined) => void;
 }
 
 export function DialogSelect<T>(props: DialogSelectProps<T>) {
@@ -104,19 +105,23 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
         ensureVisible(scrollRef, vm);
     });
 
+    createEffect(() => {
+        props.onHighlightChange?.(vm.selected());
+    });
+
     return (
         <KeyScope id={props.scopeId} bindings={bindings}>
             <box
                 flexDirection="column"
                 width={props.width ?? 100}
                 maxWidth={props.width ?? 100}
-                paddingLeft={3}
-                paddingRight={3}
+                paddingLeft={1}
+                paddingRight={1}
                 paddingTop={1}
                 paddingBottom={1}
                 backgroundColor={palette().backgroundPanel}
             >
-                <box flexDirection="row" justifyContent="space-between">
+                <box flexDirection="row" justifyContent="space-between" paddingLeft={2} paddingRight={3}>
                     <text fg={palette().text} attributes={TextAttributes.BOLD} wrapMode="none">
                         {props.title}
                     </text>
@@ -125,7 +130,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
                 <Show when={props.description}>
                     <text fg={palette().textMuted}>{props.description}</text>
                 </Show>
-                <box paddingBottom={2}>
+                <box paddingBottom={2} paddingLeft={2}>
                     <input
                         ref={(el) => (inputRef = el)}
                         value={vm.filter()}
@@ -143,7 +148,6 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
                     ref={(node: ScrollBoxRenderable) => (scrollRef = node)}
                     maxHeight={maxHeight()}
                     scrollbarOptions={{ visible: false }}
-                    paddingRight={1}
                 >
                     <box flexDirection="column">
                         <Show when={grouped().length > 0} fallback={<EmptyState message={emptyMessage} />}>
@@ -151,7 +155,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
                                 {([category, options], groupIndex) => (
                                     <box flexDirection="column">
                                         <Show when={category}>
-                                            <box paddingBottom={0} paddingLeft={1} paddingTop={groupIndex() > 0 ? 1 : 0}>
+                                            <box paddingBottom={0} paddingTop={groupIndex() > 0 ? 1 : 0}>
                                                 <text fg={palette().accent} attributes={TextAttributes.BOLD}>
                                                     {category}
                                                 </text>
@@ -202,7 +206,7 @@ function OptionRow<T>(props: {
         <box
             id={`dialog-option-${optionIndex()}`}
             flexDirection="row"
-            paddingLeft={1}
+            paddingLeft={2}
             paddingRight={1}
             backgroundColor={isCursor() ? props.palette().primary : undefined}
             onMouseOver={() => {
@@ -241,7 +245,7 @@ function OptionRow<T>(props: {
 function EmptyState(props: { message: string }) {
     const { theme } = useTheme();
     return (
-        <box padding={1}>
+        <box paddingLeft={2}>
             <text fg={theme().textMuted}>{props.message}</text>
         </box>
     );
@@ -273,7 +277,7 @@ function ensureVisible<T>(scroll: ScrollBoxRenderable | undefined, vm: DialogSel
     const index = vm.filtered().indexOf(current);
     if (index === -1) return;
     const id = `dialog-option-${index}`;
-    
+
     const target = findChildById(scroll, id);
     if (!target) return;
 

@@ -37,6 +37,9 @@ export function useDialogSelect<T>(params: UseDialogSelectParams<T>): DialogSele
 
     const selected = createMemo(() => filtered()[cursor()] ?? undefined);
 
+    const equals = params.equals ?? ((a: T, b: T) => a === b);
+    const selectedValue = params.selectedValue;
+
     createEffect(() => {
         const size = filtered().length;
         if (size === 0) {
@@ -56,8 +59,14 @@ export function useDialogSelect<T>(params: UseDialogSelectParams<T>): DialogSele
         setCursorIndex(0);
     });
 
-    const equals = params.equals ?? ((a: T, b: T) => a === b);
-    const selectedValue = params.selectedValue;
+    createEffect(() => {
+        if (!selectedValue) return;
+        const value = selectedValue();
+        if (value === undefined || value === null) return;
+        const index = filtered().findIndex((option) => equals(option.value, value));
+        if (index === -1) return;
+        setCursorIndex(index);
+    });
 
     const actions = {
         setFilter(value: string) {
