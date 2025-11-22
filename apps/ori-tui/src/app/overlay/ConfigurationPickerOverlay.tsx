@@ -7,7 +7,7 @@ import {
     useConnectionState,
     type ConnectionRecord,
 } from "@src/entities/connection/model/connection-state";
-import { useConnectionNavigator } from "@src/features/connection/navigate-on-connect/use-connection-navigator";
+import { useConnectionNavigator } from "@src/features/connection/navigate-on-connect";
 
 function formatConfigurationDetails(configuration: Configuration) {
     return `${configuration.type} • ${configuration.host}:${configuration.port}/${configuration.database}`;

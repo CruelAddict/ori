@@ -14,6 +14,7 @@ import { ConfigurationEntityProvider } from "@src/entities/configuration/provide
 import { RouteOutlet } from "@app/routes/RouteOutlet";
 import { ThemeProvider, useTheme } from "@app/providers/theme";
 import { ThemePickerOverlay } from "@app/overlay/ThemePickerOverlay";
+import { ConnectionNavigatorProvider } from "@src/features/connection/navigate-on-connect";
 
 function App() {
     const { theme } = useTheme();
@@ -106,13 +107,15 @@ export function main() {
                         <ConnectionEntityProvider>
                             <QueryJobsProvider>
                                 <NavigationProvider>
-                                    <OverlayProvider>
-                                        <KeymapProvider>
-                                            <ThemeProvider defaultTheme={themeArg}>
-                                                <App />
-                                            </ThemeProvider>
-                                        </KeymapProvider>
-                                    </OverlayProvider>
+                                    <ConnectionNavigatorProvider>
+                                        <OverlayProvider>
+                                            <KeymapProvider>
+                                                <ThemeProvider defaultTheme={themeArg}>
+                                                    <App />
+                                                </ThemeProvider>
+                                            </KeymapProvider>
+                                        </OverlayProvider>
+                                    </ConnectionNavigatorProvider>
                                 </NavigationProvider>
                             </QueryJobsProvider>
                         </ConnectionEntityProvider>

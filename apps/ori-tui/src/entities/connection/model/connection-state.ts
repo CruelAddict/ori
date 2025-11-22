@@ -87,6 +87,7 @@ export function createConnectionStateContextValue(): ConnectionStateContextValue
         configuration: Configuration,
         result: ConnectResult
     ) => {
+        logger.debug({ configuration: configurationName, result: result.result }, "connect RPC result");
         if (result.result === "success") {
             setRecord(
                 configurationName,
@@ -121,17 +122,31 @@ export function createConnectionStateContextValue(): ConnectionStateContextValue
 
         setRecord(
             configurationName,
-            (current) => ({
-                ...current,
-                configuration,
-                status: "waiting",
-                message: result.userMessage ?? "Waiting for backend...",
-                error: undefined,
-                lastUpdated: Date.now(),
-            }),
+            (current) => {
+                if (current.status === "connected") {
+                    logger.debug(
+                        { configuration: configurationName },
+                        "connect RPC result ignored because connection already connected"
+                    );
+                    return current;
+                }
+                logger.debug(
+                    { configuration: configurationName },
+                    "connect RPC indicates pending connection; marking waiting"
+                );
+                return {
+                    ...current,
+                    configuration,
+                    status: "waiting",
+                    message: result.userMessage ?? "Waiting for backend...",
+                    error: undefined,
+                    lastUpdated: Date.now(),
+                } satisfies ConnectionRecord;
+            },
             { configuration }
         );
     };
+
 
     const connect = async (configuration: Configuration) => {
         const { name } = configuration;
@@ -172,6 +187,15 @@ export function createConnectionStateContextValue(): ConnectionStateContextValue
             return;
         }
         const { configurationName, state: lifecycle, message, error } = event.payload;
+        const previous = state.records[configurationName];
+        logger.debug(
+            {
+                configuration: configurationName,
+                lifecycle,
+                previousStatus: previous?.status,
+            },
+            "connection lifecycle event received"
+        );
         const configuration = resolveConfiguration(configurationName);
         if (!configuration) {
             logger.warn(
@@ -181,6 +205,7 @@ export function createConnectionStateContextValue(): ConnectionStateContextValue
             return;
         }
         if (lifecycle === "connected") {
+            logger.debug({ configuration: configurationName }, "marking connection as connected");
             setRecord(
                 configurationName,
                 (current) => ({
@@ -196,6 +221,7 @@ export function createConnectionStateContextValue(): ConnectionStateContextValue
             return;
         }
         if (lifecycle === "failed") {
+            logger.debug({ configuration: configurationName }, "marking connection as failed");
             setRecord(
                 configurationName,
                 (current) => ({
@@ -213,18 +239,29 @@ export function createConnectionStateContextValue(): ConnectionStateContextValue
         if (lifecycle === "connecting") {
             setRecord(
                 configurationName,
-                (current) => ({
-                    ...current,
-                    configuration,
-                    status: "waiting",
-                    message: message ?? "Waiting for backend...",
-                    error: undefined,
-                    lastUpdated: Date.now(),
-                }),
+                (current) => {
+                    if (current.status === "connected") {
+                        logger.debug(
+                            { configuration: configurationName },
+                            "ignoring connecting event for already connected configuration"
+                        );
+                        return current;
+                    }
+                    logger.debug({ configuration: configurationName }, "marking connection as waiting");
+                    return {
+                        ...current,
+                        configuration,
+                        status: "waiting",
+                        message: message ?? "Waiting for backend...",
+                        error: undefined,
+                        lastUpdated: Date.now(),
+                    } satisfies ConnectionRecord;
+                },
                 { configuration }
             );
         }
     };
+
 
     createEffect(() => {
         const dispose = client.openEventStream(handleServerEvent);

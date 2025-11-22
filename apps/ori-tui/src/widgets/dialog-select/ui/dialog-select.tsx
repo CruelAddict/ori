@@ -128,7 +128,9 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
                     <text fg={palette().textMuted} paddingTop={1}>esc</text>
                 </box>
                 <Show when={props.description}>
-                    <text fg={palette().textMuted}>{props.description}</text>
+                    <box paddingLeft={2} marginBottom={1}>
+                        <text fg={palette().textMuted}>{props.description}</text>
+                    </box>
                 </Show>
                 <box paddingBottom={2} paddingLeft={2}>
                     <input
