@@ -8,12 +8,12 @@ import type {
     DialogSelectHint,
     DialogSelectOption,
     DialogSelectViewModel,
-    MaybeAccessor,
 } from "@widgets/dialog-select/types";
+
 
 export interface DialogSelectProps<T> {
     title: string;
-    options: MaybeAccessor<readonly DialogSelectOption<T>[]>;
+    options: Accessor<readonly DialogSelectOption<T>[]>;
     description?: string;
     placeholder?: string;
     emptyMessage?: string;
@@ -21,7 +21,7 @@ export interface DialogSelectProps<T> {
     maxHeight?: number;
     scopeId?: string;
     hints?: readonly DialogSelectHint[];
-    extraKeyBindings?: MaybeAccessor<KeyBinding[]>;
+    extraKeyBindings?: Accessor<KeyBinding[] | undefined>;
     initialFilter?: string;
     selectedId?: Accessor<string | null | undefined>;
     onSelect?: (option: DialogSelectOption<T>) => void;
@@ -94,7 +94,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
                 },
             },
         ];
-        const extras = resolveMaybe(props.extraKeyBindings) ?? [];
+        const extras = props.extraKeyBindings?.() ?? [];
         return [...base, ...extras];
     });
 
@@ -268,12 +268,6 @@ function groupByCategory<T>(options: readonly DialogSelectOption<T>[]) {
     return Array.from(map.entries());
 }
 
-function resolveMaybe<T>(value?: MaybeAccessor<T>): T | undefined {
-    if (typeof value === "function") {
-        return (value as () => T)();
-    }
-    return value;
-}
 
 function ensureVisible<T>(scroll: ScrollBoxRenderable | undefined, vm: DialogSelectViewModel<T>) {
     if (!scroll) return;

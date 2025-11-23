@@ -90,6 +90,7 @@ export function ConfigurationPickerOverlay(props: OverlayComponentProps) {
             width={80}
             maxHeight={16}
             options={options}
+            selectedId={pendingName}
             onSelect={handleSelect}
             onCancel={handleCancel}
         />

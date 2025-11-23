@@ -4,7 +4,6 @@ import type {
     DialogSelectActions,
     DialogSelectOption,
     DialogSelectViewModel,
-    MaybeAccessor,
     UseDialogSelectParams,
 } from "@widgets/dialog-select/types";
 
@@ -15,10 +14,6 @@ const DEFAULT_KEYS: readonly FuzzySearchKey<DialogSelectOption<unknown>>[] = [
     (option) => option.aliases?.join(" ") ?? "",
 ];
 
-function resolveAccessor<T>(value: MaybeAccessor<T>): T {
-    return typeof value === "function" ? (value as Accessor<T>)() : value;
-}
-
 export function useDialogSelect<T>(params: UseDialogSelectParams<T>): DialogSelectViewModel<T> {
     const limit = params.limit ?? 50;
     const pageSize = params.pageSize ?? 10;
@@ -27,7 +22,7 @@ export function useDialogSelect<T>(params: UseDialogSelectParams<T>): DialogSele
     const [filter, setFilterValue] = createSignal(params.initialFilter ?? "");
     const [cursor, setCursorIndex] = createSignal(0);
 
-    const options = createMemo(() => resolveAccessor(params.options));
+    const options = createMemo(() => params.options());
 
     const filtered = createMemo(() => {
         const list = options().filter((option) => option.disabled !== true);

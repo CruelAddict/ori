@@ -12,15 +12,13 @@ export interface DialogSelectOption<T> {
     disabled?: boolean;
 }
 
-export type MaybeAccessor<T> = T | Accessor<T>;
-
 export interface UseDialogSelectParams<T> {
-    options: MaybeAccessor<readonly DialogSelectOption<T>[]>;
+    options: Accessor<readonly DialogSelectOption<T>[]>;
     limit?: number;
     pageSize?: number;
     initialFilter?: string;
     selectedId?: Accessor<string | null | undefined>;
-    keys?: FuzzySearchKey<DialogSelectOption<T>>[];
+    keys?: readonly FuzzySearchKey<DialogSelectOption<T>>[];
 }
 
 export interface DialogSelectActions<T> {
