@@ -20,3 +20,6 @@ connections:
   - name: "local-sqlite"
     type: "sqlite"
     database: "./sqlite/simple.db"
+  - name: "long-names-sqlite"
+    type: "sqlite"
+    database: "./sqlite/long_names.db"
