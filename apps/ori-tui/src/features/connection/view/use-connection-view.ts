@@ -38,7 +38,7 @@ export interface ConnectionViewModel {
 export function useConnectionView(options: UseConnectionViewOptions): ConnectionViewModel {
     const configuration = useConfigurationByName(options.configurationName);
     const title = createMemo(() => configuration()?.name ?? options.configurationName());
-    const [focusedPane, setFocusedPane] = createSignal<FocusPane>("tree");
+    const [focusedPane, setFocusedPane] = createSignal<FocusPane>("editor");
 
     const focusTree = () => setFocusedPane("tree");
     const focusEditor = () => setFocusedPane("editor");
@@ -98,7 +98,7 @@ export function useConnectionView(options: UseConnectionViewOptions): Connection
     };
 
     const helpText =
-        "Ctrl+E: toggle tree | Ctrl+R: toggle results | Ctrl+Shift+R: refresh | Ctrl+X then H/J/K/L: move focus | Ctrl+X then Enter: execute | Esc: back";
+        "ctrl+e: toggle tree | ctrl+r: toggle results |  ctrl+x h/j/k/l: move focus | ctrl+x enter: execute";
 
     return {
         title,
