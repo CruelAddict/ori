@@ -1,4 +1,4 @@
-import { createMemo, createSignal, createEffect } from "solid-js";
+import { batch, createEffect, createMemo, createSignal, untrack } from "solid-js";
 import type { Accessor } from "solid-js";
 import type { GraphSnapshot } from "../api/graph";
 import { buildNodeEntityMap, type NodeEntity } from "./node-entity";
@@ -21,6 +21,7 @@ export interface SchemaTreeController {
     focusFirstChild: () => void;
     collapseCurrentOrParent: () => void;
     selectNode: (nodeId: string | null) => void;
+    getRowById: (nodeId: string | null) => TreeRow | null;
 }
 
 export function useSchemaTree(snapshot: Accessor<GraphSnapshot | null>): SchemaTreeController {
@@ -34,70 +35,129 @@ export function useSchemaTree(snapshot: Accessor<GraphSnapshot | null>): SchemaT
 
     const [expandedNodes, setExpandedNodes] = createSignal<Set<string>>(new Set());
     const [selectedId, setSelectedId] = createSignal<string | null>(null);
+    const [rows, setRows] = createSignal<TreeRow[]>([]);
 
-    const rows = createMemo<TreeRow[]>(() => {
+    createEffect(() => {
         const snap = snapshot();
         if (!snap) {
-            return [];
+            setRows([]);
+            setExpandedNodes(new Set<string>());
+            setSelectedId(null);
+            return;
         }
-        const expanded = expandedNodes();
         const map = entityMap();
-        const ordered: TreeRow[] = [];
-        const visited = new Set<string>();
-
-        const visit = (nodeId: string, depth: number, parentId?: string) => {
-            if (visited.has(nodeId)) {
-                return;
+        const preservedExpanded = new Set<string>();
+        const previous = untrack(() => expandedNodes());
+        for (const id of previous) {
+            if (map.has(id)) {
+                preservedExpanded.add(id);
             }
-            const entity = map.get(nodeId);
-            if (!entity) {
-                return;
-            }
-            visited.add(nodeId);
-            const isExpanded = entity.hasChildren && expanded.has(nodeId);
-            ordered.push({ id: entity.id, depth, entity, isExpanded, parentId });
-            if (!entity.hasChildren || !isExpanded) {
-                return;
-            }
-            for (const childId of entity.childIds) {
-                visit(childId, depth + 1, entity.id);
-            }
-        };
-
-        for (const rootId of snap.rootIds) {
-            visit(rootId, 0);
         }
-
-        return ordered;
+        setExpandedNodes(preservedExpanded);
+        setRows(buildRowsForSnapshot(snap, map, preservedExpanded));
     });
+
+    const rowIndexMap = createMemo(() => {
+        const list = rows();
+        const map = new Map<string, number>();
+        for (let index = 0; index < list.length; index += 1) {
+            map.set(list[index]!.id, index);
+        }
+        return map;
+    });
+
 
     const selectedRow = createMemo(() => {
         const currentId = selectedId();
         if (!currentId) return null;
-        return rows().find((row) => row.id === currentId) ?? null;
+        const index = rowIndexMap().get(currentId);
+        if (index === undefined) return null;
+        return rows()[index] ?? null;
     });
 
+    const getRowById = (nodeId: string | null) => {
+        if (!nodeId) return null;
+        const index = rowIndexMap().get(nodeId);
+        if (index === undefined) return null;
+        return rows()[index] ?? null;
+    };
+
+
+    // llm generated, supposedly does its job
     const expandNode = (nodeId: string | null) => {
         if (!nodeId) return;
-        setExpandedNodes((prev) => {
-            if (prev.has(nodeId)) {
-                return prev;
+        const map = entityMap();
+        const entity = map.get(nodeId);
+        if (!entity || !entity.hasChildren) {
+            return;
+        }
+        const currentExpanded = expandedNodes();
+        if (currentExpanded.has(nodeId)) {
+            return;
+        }
+        const nextExpanded = new Set(currentExpanded);
+        nextExpanded.add(nodeId);
+
+        const currentRows = rows();
+        const index = rowIndexMap().get(nodeId);
+        if (index === undefined) {
+            const snap = snapshot();
+            if (!snap) {
+                return;
             }
-            const next = new Set(prev);
-            next.add(nodeId);
-            return next;
+            batch(() => {
+                setExpandedNodes(nextExpanded);
+                setRows(buildRowsForSnapshot(snap, map, nextExpanded));
+            });
+            return;
+        }
+
+        const parentRow = currentRows[index]!;
+        const descendants = buildDescendantRows(entity, parentRow.depth + 1, map, nextExpanded);
+        const updatedRows = currentRows.slice();
+        updatedRows[index] = { ...parentRow, isExpanded: true };
+        if (descendants.length) {
+            updatedRows.splice(index + 1, 0, ...descendants);
+        }
+
+        batch(() => {
+            setExpandedNodes(nextExpanded);
+            setRows(updatedRows);
         });
     };
 
+    // llm generated, supposedly does its job
     const collapseNode = (nodeId: string | null) => {
         if (!nodeId) return;
-        setExpandedNodes((prev) => {
-            if (!prev.has(nodeId)) {
-                return prev;
-            }
-            const next = new Set(prev);
-            next.delete(nodeId);
-            return next;
+        const currentRows = rows();
+        const index = rowIndexMap().get(nodeId);
+        if (index === undefined) {
+            return;
+        }
+        const row = currentRows[index]!;
+        if (!row.entity.hasChildren) {
+            return;
+        }
+        const removal = collectDescendantSegment(currentRows, index);
+        if (removal.count === 0 && !row.isExpanded) {
+            return;
+        }
+
+        const updatedRows = currentRows.slice();
+        updatedRows[index] = { ...row, isExpanded: false };
+        if (removal.count > 0) {
+            updatedRows.splice(index + 1, removal.count);
+        }
+
+        const nextExpanded = new Set(expandedNodes());
+        nextExpanded.delete(nodeId);
+        for (const id of removal.ids) {
+            nextExpanded.delete(id);
+        }
+
+        batch(() => {
+            setExpandedNodes(nextExpanded);
+            setRows(updatedRows);
         });
     };
 
@@ -110,8 +170,9 @@ export function useSchemaTree(snapshot: Accessor<GraphSnapshot | null>): SchemaT
         if (!list.length) {
             return;
         }
-        const current = selectedRow();
-        const currentIndex = current ? list.findIndex((row) => row.id === current.id) : -1;
+        const currentId = selectedId();
+        const indexMap = rowIndexMap();
+        const currentIndex = currentId ? indexMap.get(currentId) ?? -1 : -1;
         const baseIndex = currentIndex === -1 ? 0 : currentIndex;
         const nextIndex = Math.max(0, Math.min(list.length - 1, baseIndex + delta));
         selectNode(list[nextIndex]?.id ?? null);
@@ -158,7 +219,7 @@ export function useSchemaTree(snapshot: Accessor<GraphSnapshot | null>): SchemaT
             setSelectedId(snap.rootIds[0]);
             return;
         }
-        if (!rows().some((row) => row.id === current)) {
+        if (!rowIndexMap().has(current)) {
             setSelectedId(snap.rootIds[0]);
         }
     });
@@ -180,5 +241,59 @@ export function useSchemaTree(snapshot: Accessor<GraphSnapshot | null>): SchemaT
         focusFirstChild,
         collapseCurrentOrParent,
         selectNode,
+        getRowById,
     };
+}
+
+function buildRowsForSnapshot(
+    snapshot: GraphSnapshot,
+    entities: Map<string, NodeEntity>,
+    expanded: Set<string>,
+): TreeRow[] {
+    const ordered: TreeRow[] = [];
+    for (const rootId of snapshot.rootIds) {
+        const entity = entities.get(rootId);
+        if (!entity) continue;
+        const isExpanded = entity.hasChildren && expanded.has(entity.id);
+        ordered.push({ id: entity.id, depth: 0, entity, isExpanded });
+        if (isExpanded) {
+            ordered.push(...buildDescendantRows(entity, 1, entities, expanded));
+        }
+    }
+    return ordered;
+}
+
+function buildDescendantRows(
+    parent: NodeEntity,
+    depth: number,
+    entities: Map<string, NodeEntity>,
+    expanded: Set<string>,
+): TreeRow[] {
+    const list: TreeRow[] = [];
+    for (const childId of parent.childIds) {
+        const entity = entities.get(childId);
+        if (!entity) continue;
+        const isExpanded = entity.hasChildren && expanded.has(entity.id);
+        const row: TreeRow = { id: entity.id, depth, entity, isExpanded, parentId: parent.id };
+        list.push(row);
+        if (isExpanded) {
+            list.push(...buildDescendantRows(entity, depth + 1, entities, expanded));
+        }
+    }
+    return list;
+}
+
+function collectDescendantSegment(list: TreeRow[], parentIndex: number) {
+    const parent = list[parentIndex];
+    if (!parent) {
+        return { count: 0, ids: [] as string[] };
+    }
+    const parentDepth = parent.depth;
+    const ids: string[] = [];
+    let cursor = parentIndex + 1;
+    while (cursor < list.length && list[cursor]!.depth > parentDepth) {
+        ids.push(list[cursor]!.id);
+        cursor += 1;
+    }
+    return { count: cursor - (parentIndex + 1), ids };
 }
