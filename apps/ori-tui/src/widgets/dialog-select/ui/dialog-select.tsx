@@ -1,7 +1,9 @@
 import { TextAttributes, type InputRenderable, type ScrollBoxRenderable } from "@opentui/core";
 import { For, Show, createEffect, createMemo, onMount } from "solid-js";
+import type { Accessor } from "solid-js";
 import { KeyScope, type KeyBinding } from "@src/core/services/key-scopes";
 import { useTheme } from "@app/providers/theme";
+import { useDialogSelect } from "@widgets/dialog-select";
 import type {
     DialogSelectHint,
     DialogSelectOption,
@@ -11,7 +13,7 @@ import type {
 
 export interface DialogSelectProps<T> {
     title: string;
-    viewModel: DialogSelectViewModel<T>;
+    options: MaybeAccessor<readonly DialogSelectOption<T>[]>;
     description?: string;
     placeholder?: string;
     emptyMessage?: string;
@@ -20,6 +22,8 @@ export interface DialogSelectProps<T> {
     scopeId?: string;
     hints?: readonly DialogSelectHint[];
     extraKeyBindings?: MaybeAccessor<KeyBinding[]>;
+    initialFilter?: string;
+    selectedId?: Accessor<string | null | undefined>;
     onSelect?: (option: DialogSelectOption<T>) => void;
     onCancel?: () => void;
     onFilterChange?: (value: string) => void;
@@ -29,7 +33,11 @@ export interface DialogSelectProps<T> {
 export function DialogSelect<T>(props: DialogSelectProps<T>) {
     const { theme } = useTheme();
     const palette = theme;
-    const vm = props.viewModel;
+    const vm = useDialogSelect<T>({
+        options: props.options,
+        initialFilter: props.initialFilter,
+        selectedId: props.selectedId,
+    });
     const placeholder = props.placeholder ?? "Type to search";
     const emptyMessage = props.emptyMessage ?? "No results found";
     const hints = () => props.hints ?? [];
@@ -233,11 +241,6 @@ function OptionRow<T>(props: {
             <Show when={option.badge}>
                 <text fg={isCursor() ? props.palette().background : props.palette().textMuted} attributes={TextAttributes.BOLD}>
                     {option.badge}
-                </text>
-            </Show>
-            <Show when={option.footer}>
-                <text fg={isCursor() ? props.palette().background : props.palette().textMuted} flexShrink={0}>
-                    {option.footer}
                 </text>
             </Show>
         </box>

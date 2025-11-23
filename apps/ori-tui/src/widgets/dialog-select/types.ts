@@ -2,11 +2,10 @@ import type { Accessor } from "solid-js";
 import type { FuzzySearchKey } from "@shared/lib/fuzzy";
 
 export interface DialogSelectOption<T> {
-    id?: string;
+    id: string;
     title: string;
     value: T;
     description?: string;
-    footer?: string;
     category?: string;
     badge?: string;
     aliases?: string[];
@@ -20,8 +19,7 @@ export interface UseDialogSelectParams<T> {
     limit?: number;
     pageSize?: number;
     initialFilter?: string;
-    selectedValue?: Accessor<T | null | undefined>;
-    equals?: (a: T, b: T) => boolean;
+    selectedId?: Accessor<string | null | undefined>;
     keys?: FuzzySearchKey<DialogSelectOption<T>>[];
 }
 

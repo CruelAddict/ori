@@ -1,7 +1,7 @@
-export type RouteLocation = ConfigurationRoute | ConnectionRoute;
+export type RouteLocation = WelcomeRoute | ConnectionRoute;
 
-export interface ConfigurationRoute {
-    type: "configuration-list";
+export interface WelcomeRoute {
+    type: "welcome";
 }
 
 export interface ConnectionRoute {
@@ -9,7 +9,7 @@ export interface ConnectionRoute {
     configurationName: string;
 }
 
-export const ROOT_ROUTE: ConfigurationRoute = { type: "configuration-list" };
+export const ROOT_ROUTE: WelcomeRoute = { type: "welcome" };
 
 export const connectionRoute = (configurationName: string): ConnectionRoute => ({
     type: "connection",

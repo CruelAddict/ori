@@ -1,3 +1,4 @@
+import { createEffect, createSignal } from "solid-js";
 import { render } from "@opentui/solid";
 import { createLogger } from "@src/lib/logger";
 import { parseArgs } from "@src/utils/args";
@@ -6,19 +7,46 @@ import { ClientProvider } from "@app/providers/client";
 import { ConnectionEntityProvider } from "@src/entities/connection/providers/connection-entity-provider";
 import { NavigationProvider } from "@app/providers/navigation";
 import { OverlayProvider, useOverlayManager } from "@app/providers/overlay";
+import type { OverlayManager } from "@app/overlay/overlay-store";
 import { OverlayHost } from "@app/overlay/OverlayHost";
 import { ConfigurationPickerOverlay } from "@app/overlay/ConfigurationPickerOverlay";
 import { QueryJobsProvider } from "@src/entities/query-job/providers/query-jobs-provider";
 import { KeymapProvider, KeyScope, SYSTEM_LAYER } from "@src/core/services/key-scopes";
 import { ConfigurationEntityProvider } from "@src/entities/configuration/providers/configuration-entity-provider";
 import { RouteOutlet } from "@app/routes/RouteOutlet";
+import { useRouteNavigation } from "@app/routes/router";
 import { ThemeProvider, useTheme } from "@app/providers/theme";
 import { ThemePickerOverlay } from "@app/overlay/ThemePickerOverlay";
-import { ConnectionNavigatorProvider } from "@src/features/connection/navigate-on-connect";
+
+const AUTO_OPEN_WELCOME_PICKER = process.env["ORI_AUTO_OPEN_PICKER"] !== "0";
+
+function openConfigurationPicker(overlays: OverlayManager) {
+    setTimeout(() => {
+        overlays.dismiss("configuration-picker");
+        overlays.show({ id: "configuration-picker", render: ConfigurationPickerOverlay });
+    }, 0);
+}
 
 function App() {
     const { theme } = useTheme();
     const palette = theme;
+    const overlays = useOverlayManager();
+    const navigation = useRouteNavigation();
+    const [welcomePickerOpened, setWelcomePickerOpened] = createSignal(false);
+
+    createEffect(() => {
+        const route = navigation.current();
+        if (route.type !== "welcome" || !AUTO_OPEN_WELCOME_PICKER) {
+            setWelcomePickerOpened(false);
+            return;
+        }
+        if (welcomePickerOpened()) {
+            return;
+        }
+        setWelcomePickerOpened(true);
+        openConfigurationPicker(overlays);
+    });
+
     return (
         <box flexDirection="column" flexGrow={1} backgroundColor={palette().background}>
             <GlobalHotkeys />
@@ -38,11 +66,8 @@ function GlobalHotkeys() {
         }, 0);
     };
 
-    const openConfigurationPicker = () => {
-        setTimeout(() => {
-            overlays.dismiss("configuration-picker");
-            overlays.show({ id: "configuration-picker", render: ConfigurationPickerOverlay });
-        }, 0);
+    const openPickerFromHotkey = () => {
+        openConfigurationPicker(overlays);
     };
 
     return (
@@ -59,7 +84,7 @@ function GlobalHotkeys() {
                     {
                         pattern: "c",
                         mode: "leader",
-                        handler: openConfigurationPicker,
+                        handler: openPickerFromHotkey,
                         preventDefault: true,
                     },
                 ]}
@@ -107,15 +132,13 @@ export function main() {
                         <ConnectionEntityProvider>
                             <QueryJobsProvider>
                                 <NavigationProvider>
-                                    <ConnectionNavigatorProvider>
-                                        <OverlayProvider>
-                                            <KeymapProvider>
-                                                <ThemeProvider defaultTheme={themeArg}>
-                                                    <App />
-                                                </ThemeProvider>
-                                            </KeymapProvider>
-                                        </OverlayProvider>
-                                    </ConnectionNavigatorProvider>
+                                    <OverlayProvider>
+                                        <KeymapProvider>
+                                            <ThemeProvider defaultTheme={themeArg}>
+                                                <App />
+                                            </ThemeProvider>
+                                        </KeymapProvider>
+                                    </OverlayProvider>
                                 </NavigationProvider>
                             </QueryJobsProvider>
                         </ConnectionEntityProvider>

@@ -1,5 +1,5 @@
 import type { JSX, Accessor } from "solid-js";
-import { createContext, createEffect, createMemo, createSignal, onMount, useContext } from "solid-js";
+import { createContext, createMemo, createSignal, onMount, useContext } from "solid-js";
 import type { Configuration } from "@src/entities/configuration/model/configuration";
 import { useLogger } from "@app/providers/logger";
 import { useConfigurationsService } from "@src/entities/configuration/api/configurations-service";
@@ -9,10 +9,7 @@ interface ConfigurationListStoreValue {
     configurationMap: Accessor<Map<string, Configuration>>;
     loading: Accessor<boolean>;
     error: Accessor<string | null>;
-    selectedIndex: Accessor<number>;
     refresh: () => Promise<void>;
-    moveSelection: (delta: number) => void;
-    selectIndex: (index: number) => void;
 }
 
 const ConfigurationListStoreContext = createContext<ConfigurationListStoreValue>();
@@ -27,7 +24,6 @@ export function ConfigurationListStoreProvider(props: ConfigurationListStoreProv
     const [configurations, setConfigurations] = createSignal<Configuration[]>([]);
     const [loading, setLoading] = createSignal(true);
     const [error, setError] = createSignal<string | null>(null);
-    const [selectedIndex, setSelectedIndex] = createSignal(0);
 
     const configurationMap = createMemo(() => {
         const map = new Map<string, Configuration>();
@@ -36,14 +32,6 @@ export function ConfigurationListStoreProvider(props: ConfigurationListStoreProv
         }
         return map;
     });
-
-    const clampIndex = (index: number) => {
-        const list = configurations();
-        if (!list.length) {
-            return 0;
-        }
-        return Math.max(0, Math.min(list.length - 1, index));
-    };
 
     let refreshPromise: Promise<void> | null = null;
     const refresh = async () => {
@@ -56,7 +44,6 @@ export function ConfigurationListStoreProvider(props: ConfigurationListStoreProv
             try {
                 const list = await service.listConfigurations();
                 setConfigurations(list);
-                setSelectedIndex((prev) => clampIndex(prev));
             } catch (err) {
                 const message = err instanceof Error ? err.message : String(err);
                 setError(message);
@@ -74,41 +61,12 @@ export function ConfigurationListStoreProvider(props: ConfigurationListStoreProv
         void refresh();
     });
 
-    createEffect(() => {
-        const list = configurations();
-        if (!list.length) {
-            setSelectedIndex(0);
-            return;
-        }
-        setSelectedIndex((prev) => clampIndex(prev));
-    });
-
-    const moveSelection = (delta: number) => {
-        const list = configurations();
-        if (!list.length) {
-            return;
-        }
-        setSelectedIndex((prev) => clampIndex(prev + delta));
-    };
-
-    const selectIndex = (index: number) => {
-        const list = configurations();
-        if (!list.length) {
-            setSelectedIndex(0);
-            return;
-        }
-        setSelectedIndex(clampIndex(index));
-    };
-
     const value: ConfigurationListStoreValue = {
         configurations,
         configurationMap,
         loading,
         error,
-        selectedIndex,
         refresh,
-        moveSelection,
-        selectIndex,
     };
 
     return (

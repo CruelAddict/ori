@@ -12,7 +12,6 @@ const DEFAULT_KEYS: readonly FuzzySearchKey<DialogSelectOption<unknown>>[] = [
     (option) => option.title,
     (option) => option.description ?? "",
     (option) => option.category ?? "",
-    (option) => option.footer ?? "",
     (option) => option.aliases?.join(" ") ?? "",
 ];
 
@@ -37,8 +36,7 @@ export function useDialogSelect<T>(params: UseDialogSelectParams<T>): DialogSele
 
     const selected = createMemo(() => filtered()[cursor()] ?? undefined);
 
-    const equals = params.equals ?? ((a: T, b: T) => a === b);
-    const selectedValue = params.selectedValue;
+    const selectedId = params.selectedId;
 
     createEffect(() => {
         const size = filtered().length;
@@ -60,10 +58,10 @@ export function useDialogSelect<T>(params: UseDialogSelectParams<T>): DialogSele
     });
 
     createEffect(() => {
-        if (!selectedValue) return;
-        const value = selectedValue();
-        if (value === undefined || value === null) return;
-        const index = filtered().findIndex((option) => equals(option.value, value));
+        if (!selectedId) return;
+        const target = selectedId();
+        if (!target) return;
+        const index = filtered().findIndex((option) => option.id === target);
         if (index === -1) return;
         setCursorIndex(index);
     });
@@ -102,10 +100,10 @@ export function useDialogSelect<T>(params: UseDialogSelectParams<T>): DialogSele
     } satisfies DialogSelectActions<T>;
 
     function isActive(option: DialogSelectOption<T>) {
-        if (!selectedValue) return false;
-        const current = selectedValue();
-        if (current === null || current === undefined) return false;
-        return equals(option.value, current);
+        if (!selectedId) return false;
+        const current = selectedId();
+        if (!current) return false;
+        return option.id === current;
     }
 
     return {
