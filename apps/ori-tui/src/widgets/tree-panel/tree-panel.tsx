@@ -75,7 +75,7 @@ export function TreePanel(props: TreePanelProps) {
         { pattern: "left", handler: () => pane.controller.collapseCurrentOrParent(), preventDefault: true },
         { pattern: "h", handler: () => pane.controller.collapseCurrentOrParent(), preventDefault: true },
         { pattern: "ctrl+h", handler: () => handleManualHorizontalScroll("left"), preventDefault: true },
-        { pattern: "ctrl+k", handler: () => handleManualHorizontalScroll("right"), preventDefault: true },
+        { pattern: "ctrl+l", handler: () => handleManualHorizontalScroll("right"), preventDefault: true },
     ];
 
     const enabled = () => pane.visible() && pane.isFocused();
