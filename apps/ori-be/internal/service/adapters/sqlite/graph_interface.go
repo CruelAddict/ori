@@ -61,10 +61,7 @@ func (a *Adapter) Hydrate(ctx context.Context, target *model.Node) ([]*model.Nod
 }
 
 func (a *Adapter) databaseDisplayName(connectionName, dbName, file string) string {
-	if file == "" {
-		return fmt.Sprintf("%s (%s)", dbName, connectionName)
-	}
-	return fmt.Sprintf("%s (%s)", dbName, file)
+	return dbName
 }
 
 func (a *Adapter) pragmaInt(ctx context.Context, schema, pragma string) (int64, error) {

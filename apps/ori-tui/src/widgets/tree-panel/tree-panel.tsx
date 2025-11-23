@@ -5,6 +5,7 @@ import { KeyScope, type KeyBinding } from "@src/core/services/key-scopes";
 import type { TreePaneViewModel } from "@src/features/tree-pane/use-tree-pane";
 import { useTheme } from "@app/providers/theme";
 import type { TreeRow } from "@entities/schema-tree";
+import { createTreeScrollManager } from "./tree-scroll";
 
 const TREE_SCOPE_ID = "connection-view.tree";
 const ROW_ID_PREFIX = "tree-row-";
@@ -21,18 +22,7 @@ export function TreePanel(props: TreePanelProps) {
     const isRowSelected = createSelector(selectedId);
     const { theme } = useTheme();
     const palette = theme;
-    let scrollRef: ScrollBoxRenderable | undefined;
-    const rowNodes = new Map<string, BoxRenderable>();
     const rowWidthCache = new WeakMap<TreeRow, number>();
-
-    const registerRowNode = (rowId: string, node: BoxRenderable | undefined) => {
-        if (!node) {
-            rowNodes.delete(rowId);
-            return;
-        }
-        rowNodes.set(rowId, node);
-    };
-
     const getRowWidth = (row: TreeRow) => {
         const cached = rowWidthCache.get(row);
         if (cached !== undefined) {
@@ -42,6 +32,7 @@ export function TreePanel(props: TreePanelProps) {
         rowWidthCache.set(row, width);
         return width;
     };
+    const treeScroll = createTreeScrollManager(getRowWidth);
 
     const [terminalWidth, setTerminalWidth] = createSignal(readTerminalWidth());
     const handleResize = () => setTerminalWidth(readTerminalWidth());
@@ -60,9 +51,8 @@ export function TreePanel(props: TreePanelProps) {
     };
 
     const handleManualHorizontalScroll = (direction: "left" | "right") => {
-        if (!scrollRef) return;
         const delta = direction === "left" ? -HORIZONTAL_SCROLL_STEP : HORIZONTAL_SCROLL_STEP;
-        scrollRef.scrollBy({ x: delta, y: 0 });
+        treeScroll.scrollBy({ x: delta, y: 0 });
     };
 
     const bindings: KeyBinding[] = [
@@ -80,14 +70,15 @@ export function TreePanel(props: TreePanelProps) {
 
     const enabled = () => pane.visible() && pane.isFocused();
 
+
     createEffect(() => {
-        const currentRows = rows();
-        const validIds = new Set(currentRows.map((row) => row.id));
-        for (const id of Array.from(rowNodes.keys())) {
-            if (!validIds.has(id)) {
-                rowNodes.delete(id);
-            }
-        }
+        treeScroll.syncRows(rows());
+    });
+
+    createEffect(() => {
+        if (!pane.visible()) return;
+        rows();
+        treeScroll.ensureRowVisible(pane.controller.selectedId());
     });
 
     createEffect(() => {
@@ -96,6 +87,7 @@ export function TreePanel(props: TreePanelProps) {
         terminalWidth();
         pane.isFocused();
         pane.controller.selectedId();
+        treeScroll.refreshOverflowState();
     });
 
     const paneWidthProps = () => {
@@ -137,17 +129,15 @@ export function TreePanel(props: TreePanelProps) {
                         </Show>
                         <Show when={!pane.loading() && !pane.error()}>
                             <scrollbox
-                                ref={(node: ScrollBoxRenderable | undefined) => {
-                                    scrollRef = node;
-                                }}
+                                ref={(node: ScrollBoxRenderable | undefined) => treeScroll.setScrollBox(node)}
                                 flexDirection="column"
                                 flexGrow={1}
                                 scrollbarOptions={{ visible: false }}
-                                horizontalScrollbarOptions={{ visible: false }}
+                                horizontalScrollbarOptions={{ visible: treeScroll.horizontalOverflow() }}
                                 scrollY={true}
                                 scrollX={true}
                             >
-                                <box flexDirection="column">
+                                <box flexDirection="column" width={treeScroll.contentWidth()} flexShrink={0} alignItems="flex-start">
                                     <For each={rows()}>
                                         {(row) => {
                                             const isSelected = () => isRowSelected(row.id);
@@ -165,7 +155,7 @@ export function TreePanel(props: TreePanelProps) {
                                                     paddingLeft={row.depth * 2}
                                                     width={getRowWidth(row)}
                                                     flexShrink={0}
-                                                    ref={(node: BoxRenderable | undefined) => registerRowNode(row.id, node)}
+                                                    ref={(node: BoxRenderable | undefined) => treeScroll.registerRowNode(row, node)}
                                                 >
                                                     <text fg={fg()} attributes={attrs()} wrapMode="none">
                                                         {isSelected() ? "> " : "  "}
