@@ -24,6 +24,7 @@ interface TreeScrollManager {
     ensureRowVisible(rowId: string | null): void;
     scrollBy(delta: ScrollDelta): void;
     contentWidth: () => number;
+    naturalContentWidth: () => number;
     setMinimumVisibleWidth(width: number): void;
     refreshOverflowState(): void;
     horizontalOverflow: () => boolean;
@@ -34,10 +35,10 @@ export function createTreeScrollManager(measureRowWidth: MeasureRowWidth): TreeS
     const depthStats = new Map<number, WidthEntry>();
     const rowWidths = new Map<string, RowMeta>();
     const [contentWidth, setContentWidth] = createSignal(MIN_CONTENT_WIDTH);
+    const [naturalWidth, setNaturalWidth] = createSignal(MIN_CONTENT_WIDTH);
     const [hasHorizontalOverflow, setHasHorizontalOverflow] = createSignal(false);
 
     let scrollBox: ScrollBoxRenderable | undefined;
-    let naturalContentWidth = MIN_CONTENT_WIDTH;
     let forcedMinContentWidth = MIN_CONTENT_WIDTH;
     let pendingWidthUpdate = false;
     let pendingEnsure = false;
@@ -153,7 +154,7 @@ export function createTreeScrollManager(measureRowWidth: MeasureRowWidth): TreeS
             for (const { width } of depthStats.values()) {
                 if (width > widest) widest = width;
             }
-            naturalContentWidth = widest;
+            setNaturalWidth(widest);
             applyContentWidth(Math.max(widest, forcedMinContentWidth));
         }, 0);
     };
@@ -162,7 +163,7 @@ export function createTreeScrollManager(measureRowWidth: MeasureRowWidth): TreeS
         const normalized = Math.max(width, MIN_CONTENT_WIDTH);
         if (normalized === forcedMinContentWidth) return;
         forcedMinContentWidth = normalized;
-        applyContentWidth(Math.max(naturalContentWidth, forcedMinContentWidth));
+        applyContentWidth(Math.max(naturalWidth(), forcedMinContentWidth));
     };
 
     const runEnsureVisibleTask = () => {
@@ -215,7 +216,7 @@ export function createTreeScrollManager(measureRowWidth: MeasureRowWidth): TreeS
         }
         const viewportWidth = scrollBox.viewport?.width ?? 0;
         lastMeasuredViewportWidth = viewportWidth;
-        const hasOverflow = naturalContentWidth > viewportWidth;
+        const hasOverflow = naturalWidth() > viewportWidth;
         setHasHorizontalOverflow(hasOverflow);
         return viewportWidth;
     };
@@ -251,6 +252,7 @@ export function createTreeScrollManager(measureRowWidth: MeasureRowWidth): TreeS
         ensureRowVisible,
         scrollBy,
         contentWidth,
+        naturalContentWidth: naturalWidth,
         setMinimumVisibleWidth,
         refreshOverflowState,
         horizontalOverflow: hasHorizontalOverflow,
