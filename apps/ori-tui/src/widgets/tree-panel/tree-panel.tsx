@@ -90,11 +90,30 @@ export function TreePanel(props: TreePanelProps) {
         treeScroll.refreshOverflowState();
     });
 
+    // hack: pane has to be resized for proper scrollbar thumb display (no idea if it's me or opentui)
+    const [maxWidthFocused, setMaxWidth] = createSignal("50%");
+    const [isOVFVisible, setOVFVisible] = createSignal(treeScroll.horizontalOverflow());
+    const oldOverflow = false;
+    createEffect(() => {
+        const overflow = treeScroll.horizontalOverflow();
+        setTimeout(() => {
+            if (overflow != treeScroll.horizontalOverflow()) {
+                return;
+            }
+            if (overflow && !oldOverflow) {
+                setMaxWidth(() => "55%");
+            } else if (oldOverflow && !overflow) {
+                setMaxWidth(() => "50%");
+            }
+            setTimeout(() => setOVFVisible(overflow), 500)
+        }, 2500)
+    });
+
     const paneWidthProps = () => {
         if (pane.isFocused()) {
             return {
                 width: "auto" as const,
-                maxWidth: "50%" as const,
+                maxWidth: maxWidthFocused() as `${number}%`,
                 minWidth: 40,
                 flexGrow: 1,
             };
@@ -133,7 +152,7 @@ export function TreePanel(props: TreePanelProps) {
                                 flexDirection="column"
                                 flexGrow={1}
                                 scrollbarOptions={{ visible: false }}
-                                horizontalScrollbarOptions={{ visible: treeScroll.horizontalOverflow() }}
+                                horizontalScrollbarOptions={{ visible: isOVFVisible() }}
                                 scrollY={true}
                                 scrollX={true}
                             >
