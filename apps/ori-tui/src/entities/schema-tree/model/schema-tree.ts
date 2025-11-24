@@ -108,9 +108,19 @@ export function useSchemaTree(snapshot: Accessor<GraphSnapshot | null>): SchemaT
             return;
         }
         const current = selectedId();
-        if (!current || !rowIndexMap().has(current)) {
+        if (!current) {
             setSelectedId(rows[0]!.id);
+            return;
         }
+        const rowIndex = rowIndexMap().get(current);
+        if (rowIndex !== undefined) {
+            return;
+        }
+        if (entityMap().has(current)) {
+            // Node still exists (maybe temporarily hidden), so keep selection as-is.
+            return;
+        }
+        setSelectedId(rows[0]!.id);
     });
 
     const ensureInitialChildren = (nodeId: string) => {
@@ -212,9 +222,11 @@ export function useSchemaTree(snapshot: Accessor<GraphSnapshot | null>): SchemaT
         const entity = entityMap().get(row.id);
         const firstChildId = entity?.childIds[0];
         if (!entity?.hasChildren || !firstChildId) return;
-        expandNode(row.id);
-        ensureInitialChildren(row.id);
-        selectNode(firstChildId);
+        batch(() => {
+            expandNode(row.id);
+            ensureInitialChildren(row.id);
+            selectNode(firstChildId);
+        });
     };
 
     const collapseCurrentOrParent = () => {

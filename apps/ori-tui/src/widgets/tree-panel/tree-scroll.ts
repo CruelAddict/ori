@@ -3,6 +3,7 @@ import type { BoxRenderable, ScrollBoxRenderable } from "@opentui/core";
 
 const MIN_CONTENT_WIDTH = 36;
 const MAX_OVERFLOW_REFRESH_ATTEMPTS = 5;
+const MAX_ENSURE_ATTEMPTS = 5;
 
 type WidthEntry = { id: string; width: number };
 type RowMeta = { depth: number; width: number };
@@ -46,6 +47,7 @@ export function createTreeScrollManager(measureRowWidth: MeasureRowWidth): TreeS
     let overflowRefreshAttempts = 0;
     let lastMeasuredViewportWidth = 0;
     let ensureTarget: string | null = null;
+    let ensureAttempts = 0;
 
     // Async width measurement batching so measuring never blocks UI
     const MEASURE_BATCH_SIZE = 200;
@@ -66,6 +68,9 @@ export function createTreeScrollManager(measureRowWidth: MeasureRowWidth): TreeS
             return;
         }
         rowNodes.set(rowId, node);
+        if (ensureTarget === rowId) {
+            scheduleEnsureTask();
+        }
     };
 
     const syncRows = (rows: readonly RowDescriptor[]) => {
@@ -106,10 +111,18 @@ export function createTreeScrollManager(measureRowWidth: MeasureRowWidth): TreeS
 
     const ensureRowVisible = (rowId: string | null) => {
         ensureTarget = rowId;
+        ensureAttempts = 0;
+        if (!rowId) {
+            return;
+        }
+        scheduleEnsureTask();
+    };
+
+    function scheduleEnsureTask() {
         if (pendingEnsure) return;
         pendingEnsure = true;
-        queueMicrotask(runEnsureVisibleTask);
-    };
+        setTimeout(runEnsureVisibleTask, 0);
+    }
 
     const scrollBy = (delta: ScrollDelta) => {
         scrollBox?.scrollBy(delta);
@@ -166,15 +179,30 @@ export function createTreeScrollManager(measureRowWidth: MeasureRowWidth): TreeS
         applyContentWidth(Math.max(naturalWidth(), forcedMinContentWidth));
     };
 
-    const runEnsureVisibleTask = () => {
+    function runEnsureVisibleTask() {
         pendingEnsure = false;
-        const targetId = ensureTarget;
-        ensureTarget = null;
-        if (!targetId || !scrollBox) return;
-        const node = rowNodes.get(targetId);
-        if (!node) return;
+        if (!ensureTarget || !scrollBox) {
+            ensureTarget = null;
+            ensureAttempts = 0;
+            return;
+        }
+        const node = rowNodes.get(ensureTarget);
+        if (!node) {
+            if (ensureAttempts >= MAX_ENSURE_ATTEMPTS) {
+                ensureTarget = null;
+                ensureAttempts = 0;
+                return;
+            }
+            ensureAttempts += 1;
+            scheduleEnsureTask();
+            return;
+        }
         const viewport = (scrollBox as any).viewport as BoxRenderable | undefined;
-        if (!viewport) return;
+        if (!viewport) {
+            ensureTarget = null;
+            ensureAttempts = 0;
+            return;
+        }
 
         let deltaY = 0;
         const nodeTop = node.y;
@@ -185,7 +213,9 @@ export function createTreeScrollManager(measureRowWidth: MeasureRowWidth): TreeS
         else if (nodeBottom > viewportBottom) deltaY = nodeBottom - viewportBottom;
 
         if (deltaY !== 0) scrollBox.scrollBy({ x: 0, y: deltaY });
-    };
+        ensureTarget = null;
+        ensureAttempts = 0;
+    }
 
     const applyContentWidth = (width: number) => {
         setContentWidth(width);
