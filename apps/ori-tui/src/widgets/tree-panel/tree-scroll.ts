@@ -1,6 +1,5 @@
 import { createSignal } from "solid-js";
 import type { BoxRenderable, ScrollBoxRenderable } from "@opentui/core";
-import type { TreeRow } from "@entities/schema-tree";
 
 const MIN_CONTENT_WIDTH = 36;
 const MAX_OVERFLOW_REFRESH_ATTEMPTS = 5;
@@ -10,12 +9,18 @@ type RowMeta = { depth: number; width: number };
 
 type ScrollDelta = { x: number; y: number };
 
-type MeasureRowWidth = (row: TreeRow) => number;
+// Minimal descriptor for width measurement and depth stats
+export interface RowDescriptor {
+    id: string;
+    depth: number;
+}
+
+type MeasureRowWidth = (row: RowDescriptor) => number;
 
 interface TreeScrollManager {
     setScrollBox(node: ScrollBoxRenderable | undefined): void;
-    registerRowNode(row: TreeRow, node: BoxRenderable | undefined): void;
-    syncRows(rows: readonly TreeRow[]): void;
+    registerRowNode(rowId: string, node: BoxRenderable | undefined): void;
+    syncRows(rows: readonly RowDescriptor[]): void;
     ensureRowVisible(rowId: string | null): void;
     scrollBy(delta: ScrollDelta): void;
     contentWidth: () => number;
@@ -39,6 +44,11 @@ export function createTreeScrollManager(measureRowWidth: MeasureRowWidth): TreeS
     let lastMeasuredViewportWidth = 0;
     let ensureTarget: string | null = null;
 
+    // Async width measurement batching so measuring never blocks UI
+    const MEASURE_BATCH_SIZE = 200;
+    let pendingMeasure: RowDescriptor[] = [];
+    let measureScheduled = false;
+
     const setScrollBox = (node: ScrollBoxRenderable | undefined) => {
         scrollBox = node;
         if (scrollBox) {
@@ -47,30 +57,48 @@ export function createTreeScrollManager(measureRowWidth: MeasureRowWidth): TreeS
         }
     };
 
-    const registerRowNode = (row: TreeRow, node: BoxRenderable | undefined) => {
+    const registerRowNode = (rowId: string, node: BoxRenderable | undefined) => {
         if (!node) {
-            rowNodes.delete(row.id);
+            rowNodes.delete(rowId);
             return;
         }
-        rowNodes.set(row.id, node);
+        rowNodes.set(rowId, node);
     };
 
-    const syncRows = (rows: readonly TreeRow[]) => {
+    const syncRows = (rows: readonly RowDescriptor[]) => {
         const presentIds = new Set<string>();
         for (const row of rows) {
             presentIds.add(row.id);
-            upsertRowWidth(row);
+            pendingMeasure.push(row);
         }
         const removed: string[] = [];
         for (const id of rowWidths.keys()) {
-            if (!presentIds.has(id)) {
-                removed.push(id);
-            }
+            if (!presentIds.has(id)) removed.push(id);
         }
-        for (const id of removed) {
-            removeRowWidth(id);
+        for (const id of removed) removeRowWidth(id);
+        scheduleMeasureBatch();
+    };
+
+    const scheduleMeasureBatch = () => {
+        if (measureScheduled) return;
+        measureScheduled = true;
+        setTimeout(runMeasureBatch, 0);
+    };
+
+    const runMeasureBatch = () => {
+        measureScheduled = false;
+        let remaining = MEASURE_BATCH_SIZE;
+        while (pendingMeasure.length && remaining > 0) {
+            const row = pendingMeasure.shift()!;
+            upsertRowWidth(row);
+            remaining -= 1;
         }
-        scheduleWidthRecalc();
+        if (pendingMeasure.length) {
+            measureScheduled = true;
+            setTimeout(runMeasureBatch, 0);
+        } else {
+            scheduleWidthRecalc();
+        }
     };
 
     const ensureRowVisible = (rowId: string | null) => {
@@ -84,7 +112,7 @@ export function createTreeScrollManager(measureRowWidth: MeasureRowWidth): TreeS
         scrollBox?.scrollBy(delta);
     };
 
-    const upsertRowWidth = (row: TreeRow) => {
+    const upsertRowWidth = (row: RowDescriptor) => {
         const width = measureRowWidth(row);
         const current = rowWidths.get(row.id);
         rowWidths.set(row.id, { depth: row.depth, width });
@@ -101,24 +129,17 @@ export function createTreeScrollManager(measureRowWidth: MeasureRowWidth): TreeS
         if (!meta) return;
         rowWidths.delete(rowId);
         const depthEntry = depthStats.get(meta.depth);
-        if (depthEntry?.id === rowId) {
-            recalcDepth(meta.depth);
-        }
+        if (depthEntry?.id === rowId) recalcDepth(meta.depth);
     };
 
     const recalcDepth = (depth: number) => {
         let best: WidthEntry | undefined;
         for (const [rowId, meta] of rowWidths.entries()) {
             if (meta.depth !== depth) continue;
-            if (!best || meta.width > best.width) {
-                best = { id: rowId, width: meta.width };
-            }
+            if (!best || meta.width > best.width) best = { id: rowId, width: meta.width };
         }
-        if (best) {
-            depthStats.set(depth, best);
-        } else {
-            depthStats.delete(depth);
-        }
+        if (best) depthStats.set(depth, best);
+        else depthStats.delete(depth);
     };
 
     const scheduleWidthRecalc = () => {
@@ -128,9 +149,7 @@ export function createTreeScrollManager(measureRowWidth: MeasureRowWidth): TreeS
             pendingWidthUpdate = false;
             let widest = MIN_CONTENT_WIDTH;
             for (const { width } of depthStats.values()) {
-                if (width > widest) {
-                    widest = width;
-                }
+                if (width > widest) widest = width;
             }
             setContentWidth(widest);
             applyContentWidth(widest);
@@ -152,15 +171,10 @@ export function createTreeScrollManager(measureRowWidth: MeasureRowWidth): TreeS
         const nodeBottom = node.y + node.height;
         const viewportTop = viewport.y;
         const viewportBottom = viewport.y + viewport.height;
-        if (nodeTop < viewportTop) {
-            deltaY = nodeTop - viewportTop;
-        } else if (nodeBottom > viewportBottom) {
-            deltaY = nodeBottom - viewportBottom;
-        }
+        if (nodeTop < viewportTop) deltaY = nodeTop - viewportTop;
+        else if (nodeBottom > viewportBottom) deltaY = nodeBottom - viewportBottom;
 
-        if (deltaY !== 0) {
-            scrollBox.scrollBy({ x: 0, y: deltaY });
-        }
+        if (deltaY !== 0) scrollBox.scrollBy({ x: 0, y: deltaY });
     };
 
     const applyContentWidth = (width: number) => {

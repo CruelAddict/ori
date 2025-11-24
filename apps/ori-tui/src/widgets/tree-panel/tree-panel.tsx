@@ -1,11 +1,10 @@
-import { For, Show, createEffect, createSelector, createSignal, onCleanup, onMount, type Accessor } from "solid-js";
+import { For, Show, createEffect, createMemo, createSelector, createSignal, onCleanup, onMount, type Accessor } from "solid-js";
 import { TextAttributes, type ScrollBoxRenderable } from "@opentui/core";
 import type { BoxRenderable } from "@opentui/core";
 import { KeyScope, type KeyBinding } from "@src/core/services/key-scopes";
 import type { TreePaneViewModel } from "@src/features/tree-pane/use-tree-pane";
 import { useTheme } from "@app/providers/theme";
-import type { TreeRow } from "@entities/schema-tree";
-import { createTreeScrollManager } from "./tree-scroll";
+import { createTreeScrollManager, type RowDescriptor } from "./tree-scroll";
 
 const TREE_SCOPE_ID = "connection-view.tree";
 const ROW_ID_PREFIX = "tree-row-";
@@ -17,19 +16,40 @@ export interface TreePanelProps {
 
 export function TreePanel(props: TreePanelProps) {
     const pane = props.viewModel;
-    const rows = pane.controller.rows;
+    const rootIds = pane.controller.rootIds;
+    const rows = pane.controller.visibleRows;
     const selectedId = pane.controller.selectedId;
     const isRowSelected = createSelector(selectedId);
     const { theme } = useTheme();
     const palette = theme;
-    const rowWidthCache = new WeakMap<TreeRow, number>();
-    const getRowWidth = (row: TreeRow) => {
-        const cached = rowWidthCache.get(row);
-        if (cached !== undefined) {
-            return cached;
-        }
+
+    // Width calc cache keyed by row id+depth; descriptor object identity isn't stable in recursive rendering
+    const rowWidthCache = new Map<string, number>();
+    const keyOf = (row: RowDescriptor) => {
+        const expanded = pane.controller.isExpanded(row.id) ? 1 : 0;
+        return `${row.id}@${row.depth}:${expanded}`;
+    };
+    const calculateRowWidth = (row: RowDescriptor) => {
+        const entity = pane.controller.getEntity(row.id);
+        const hasChildren = Boolean(entity?.hasChildren);
+        const isExpanded = pane.controller.isExpanded(row.id);
+        const glyph = hasChildren ? (isExpanded ? "[-]" : "[+]") : "   ";
+        const indicator = "> ";
+        const icon = entity?.icon ? `${entity.icon}` : "";
+        let width = row.depth * 2;
+        const baseLabel = entity?.label ?? "";
+        const base = `${indicator}${glyph} ${icon} ${baseLabel}`;
+        width += base.length;
+        if (entity?.description) width += 1 + entity.description.length;
+        if (entity?.badges) width += 1 + entity.badges.length;
+        return width;
+    };
+    const getRowWidth = (row: RowDescriptor) => {
+        const k = keyOf(row);
+        const cached = rowWidthCache.get(k);
+        if (cached !== undefined) return cached;
         const width = calculateRowWidth(row);
-        rowWidthCache.set(row, width);
+        rowWidthCache.set(k, width);
         return width;
     };
     const treeScroll = createTreeScrollManager(getRowWidth);
@@ -66,21 +86,25 @@ export function TreePanel(props: TreePanelProps) {
         { pattern: "h", handler: () => pane.controller.collapseCurrentOrParent(), preventDefault: true },
         { pattern: "ctrl+h", handler: () => handleManualHorizontalScroll("left"), preventDefault: true },
         { pattern: "ctrl+l", handler: () => handleManualHorizontalScroll("right"), preventDefault: true },
+        { pattern: "enter", handler: () => pane.controller.activateSelection(), preventDefault: true },
+        { pattern: "space", handler: () => pane.controller.activateSelection(), preventDefault: true },
     ];
 
     const enabled = () => pane.visible() && pane.isFocused();
 
-
+    // Sync scroll manager with the navigation rows; this doesn't trigger UI re-rendering itself
     createEffect(() => {
         treeScroll.syncRows(rows());
     });
 
+    // Keep selected row visible on updates
     createEffect(() => {
         if (!pane.visible()) return;
         rows();
         treeScroll.ensureRowVisible(pane.controller.selectedId());
     });
 
+    // Re-evaluate overflow when layout/visibility changes
     createEffect(() => {
         if (!pane.visible()) return;
         rows();
@@ -90,40 +114,77 @@ export function TreePanel(props: TreePanelProps) {
         treeScroll.refreshOverflowState();
     });
 
-    // hack: pane has to be resized for proper scrollbar thumb display (no idea if it's me or opentui)
-    const [maxWidthFocused, setMaxWidth] = createSignal("50%");
-    const [isOVFVisible, setOVFVisible] = createSignal(treeScroll.horizontalOverflow());
-    const oldOverflow = false;
-    createEffect(() => {
-        const overflow = treeScroll.horizontalOverflow();
-        setTimeout(() => {
-            if (overflow != treeScroll.horizontalOverflow()) {
-                return;
-            }
-            if (overflow && !oldOverflow) {
-                setMaxWidth(() => "55%");
-            } else if (oldOverflow && !overflow) {
-                setMaxWidth(() => "50%");
-            }
-            setTimeout(() => setOVFVisible(overflow), 500)
-        }, 2500)
-    });
-
     const paneWidthProps = () => {
         if (pane.isFocused()) {
             return {
                 width: "auto" as const,
-                maxWidth: maxWidthFocused() as `${number}%`,
-                minWidth: 40,
+                maxWidth: "50%" as `${number}%`,
+                minWidth: "50%" as `${number}%`,
                 flexGrow: 1,
             };
         }
-        return {
-            width: 40,
-            maxWidth: 40,
-            minWidth: 40,
-            flexGrow: 0,
+        return { width: 40, maxWidth: 40, minWidth: 40, flexGrow: 0 } as const;
+    };
+
+    interface TreeNodeProps { nodeId: string; depth: number }
+
+    const TreeNode = (nodeProps: TreeNodeProps) => {
+        const entity = createMemo(() => pane.controller.getEntity(nodeProps.nodeId));
+        const childIds = createMemo(() => pane.controller.getRenderableChildIds(nodeProps.nodeId));
+        const rowId = () => nodeProps.nodeId;
+        const isExpanded = () => pane.controller.isExpanded(nodeProps.nodeId);
+        const isSelected = () => isRowSelected(rowId());
+        const [childrenMounted, setChildrenMounted] = createSignal(false);
+        createEffect(() => { if (isExpanded()) setChildrenMounted(true); });
+        const fg = () => (isSelected() ? palette().primary : palette().text);
+        const attrs = () => (isSelected() ? TextAttributes.BOLD : TextAttributes.NONE);
+        const toggleGlyph = () => {
+            const details = entity();
+            if (!details?.hasChildren) return "   ";
+            return isExpanded() ? "[-]" : "[+]";
         };
+        const descriptor = createMemo<RowDescriptor>(() => ({ id: rowId(), depth: nodeProps.depth }));
+        return (
+            <Show when={entity()}>
+                {(detailsAccessor: Accessor<ReturnType<typeof entity>>) => {
+                    const details = () => detailsAccessor()!;
+                    return (
+                        <>
+                            <box
+                                id={rowElementId(rowId())}
+                                flexDirection="row"
+                                paddingLeft={nodeProps.depth * 2}
+                                width={getRowWidth(descriptor())}
+                                flexShrink={0}
+                                ref={(node: BoxRenderable | undefined) => treeScroll.registerRowNode(rowId(), node)}
+                            >
+                                <text fg={fg()} attributes={attrs()} wrapMode="none">
+                                    {isSelected() ? "> " : "  "}
+                                    {toggleGlyph()} {details().icon} {details().label}
+                                </text>
+                                {details().description && (
+                                    <text attributes={TextAttributes.DIM} fg={palette().textMuted} wrapMode="none">
+                                        {" "}
+                                        {details().description}
+                                    </text>
+                                )}
+                                {details().badges && (
+                                    <text fg={palette().accent} wrapMode="none">
+                                        {" "}
+                                        {details().badges}
+                                    </text>
+                                )}
+                            </box>
+                            <Show when={childrenMounted()}>
+                                <box flexDirection="column" visible={isExpanded()}>
+                                    <For each={childIds()}>{(childId) => (<TreeNode nodeId={childId} depth={nodeProps.depth + 1} />)}</For>
+                                </box>
+                            </Show>
+                        </>
+                    );
+                }}
+            </Show>
+        );
     };
 
     return (
@@ -152,54 +213,20 @@ export function TreePanel(props: TreePanelProps) {
                                 flexDirection="column"
                                 flexGrow={1}
                                 scrollbarOptions={{ visible: false }}
-                                horizontalScrollbarOptions={{ visible: isOVFVisible() }}
+                                horizontalScrollbarOptions={{ visible: treeScroll.horizontalOverflow() }}
                                 scrollY={true}
                                 scrollX={true}
                             >
                                 <box flexDirection="column" width={treeScroll.contentWidth()} flexShrink={0} alignItems="flex-start">
-                                    <For each={rows()}>
-                                        {(row) => {
-                                            const isSelected = () => isRowSelected(row.id);
-                                            const toggleGlyph = row.entity.hasChildren
-                                                ? row.isExpanded
-                                                    ? "[-]"
-                                                    : "[+]"
-                                                : "   ";
-                                            const fg = () => (isSelected() ? palette().primary : palette().text);
-                                            const attrs = () => (isSelected() ? TextAttributes.BOLD : TextAttributes.NONE);
-                                            return (
-                                                <box
-                                                    id={rowElementId(row.id)}
-                                                    flexDirection="row"
-                                                    paddingLeft={row.depth * 2}
-                                                    width={getRowWidth(row)}
-                                                    flexShrink={0}
-                                                    ref={(node: BoxRenderable | undefined) => treeScroll.registerRowNode(row, node)}
-                                                >
-                                                    <text fg={fg()} attributes={attrs()} wrapMode="none">
-                                                        {isSelected() ? "> " : "  "}
-                                                        {toggleGlyph} {row.entity.icon} {row.entity.label}
-                                                    </text>
-                                                    {row.entity.description && (
-                                                        <text attributes={TextAttributes.DIM} fg={palette().textMuted} wrapMode="none">
-                                                            {" "}
-                                                            {row.entity.description}
-                                                        </text>
-                                                    )}
-                                                    {row.entity.badges && (
-                                                        <text fg={palette().accent} wrapMode="none">
-                                                            {" "}
-                                                            {row.entity.badges}
-                                                        </text>
-                                                    )}
-                                                </box>
-                                            );
-                                        }}
-                                    </For>
-                                    <Show when={rows().length === 0}>
-                                        <text attributes={TextAttributes.DIM} fg={palette().textMuted}>
-                                            Graph is empty. Try refreshing later.
-                                        </text>
+                                    <Show
+                                        when={rootIds().length > 0}
+                                        fallback={
+                                            <text attributes={TextAttributes.DIM} fg={palette().textMuted}>
+                                                Graph is empty. Try refreshing later.
+                                            </text>
+                                        }
+                                    >
+                                        <For each={rootIds()}>{(id) => <TreeNode nodeId={id} depth={0} />}</For>
                                     </Show>
                                 </box>
                             </scrollbox>
@@ -215,26 +242,8 @@ function rowElementId(rowId: string) {
     return `${ROW_ID_PREFIX}${rowId}`;
 }
 
-function calculateRowWidth(row: TreeRow) {
-    const glyph = row.entity.hasChildren ? (row.isExpanded ? "[-]" : "[+]") : "   ";
-    const indicator = "> ";
-    const icon = row.entity.icon ? `${row.entity.icon}` : "";
-    let width = row.depth * 2;
-    const base = `${indicator}${glyph} ${icon} ${row.entity.label}`;
-    width += base.length;
-    if (row.entity.description) {
-        width += 1 + row.entity.description.length;
-    }
-    if (row.entity.badges) {
-        width += 1 + row.entity.badges.length;
-    }
-    return width;
-}
-
 function readTerminalWidth() {
-    if (typeof process === "undefined") {
-        return 0;
-    }
+    if (typeof process === "undefined") return 0;
     const columns = process.stdout?.columns;
     return columns ?? 0;
 }

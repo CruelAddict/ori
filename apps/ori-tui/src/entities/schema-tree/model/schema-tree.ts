@@ -1,27 +1,34 @@
-import { batch, createEffect, createMemo, createSignal, untrack } from "solid-js";
+import { batch, createEffect, createMemo, createSignal } from "solid-js";
 import type { Accessor } from "solid-js";
+import { createStore, produce } from "solid-js/store";
 import type { GraphSnapshot } from "../api/graph";
 import { buildNodeEntityMap, type NodeEntity } from "./node-entity";
 
-export interface TreeRow {
+const CHILD_BATCH_SIZE = 10;
+
+export interface VisibleRow {
     id: string;
-    depth: number;
-    entity: NodeEntity;
-    isExpanded: boolean;
     parentId?: string;
+    depth: number;
 }
 
 export interface SchemaTreeController {
-    rows: Accessor<TreeRow[]>;
+    rootIds: Accessor<string[]>;
+    visibleRows: Accessor<VisibleRow[]>;
     selectedId: Accessor<string | null>;
-    selectedRow: Accessor<TreeRow | null>;
+    selectedRow: Accessor<VisibleRow | null>;
     expandNode: (nodeId: string | null) => void;
     collapseNode: (nodeId: string | null) => void;
     moveSelection: (delta: number) => void;
     focusFirstChild: () => void;
     collapseCurrentOrParent: () => void;
     selectNode: (nodeId: string | null) => void;
-    getRowById: (nodeId: string | null) => TreeRow | null;
+    isExpanded: (nodeId: string | null) => boolean;
+    getEntity: (nodeId: string | null) => NodeEntity | undefined;
+    getVisibleChildIds: (nodeId: string) => string[];
+    // Returns currently loaded children (based on batching), independent of expanded state.
+    getRenderableChildIds: (nodeId: string) => string[];
+    activateSelection: () => void;
 }
 
 export function useSchemaTree(snapshot: Accessor<GraphSnapshot | null>): SchemaTreeController {
@@ -33,32 +40,25 @@ export function useSchemaTree(snapshot: Accessor<GraphSnapshot | null>): SchemaT
         return buildNodeEntityMap(snap.nodes);
     });
 
-    const [expandedNodes, setExpandedNodes] = createSignal<Set<string>>(new Set());
+    // Fine-grained per-node stores for expansion and loaded-children counts
+    const [expandedNodes, setExpandedNodes] = createStore<Record<string, true>>({});
+    const [visibleChildCounts, setVisibleChildCounts] = createStore<Record<string, number>>({});
     const [selectedId, setSelectedId] = createSignal<string | null>(null);
-    const [rows, setRows] = createSignal<TreeRow[]>([]);
 
-    createEffect(() => {
-        const snap = snapshot();
-        if (!snap) {
-            setRows([]);
-            setExpandedNodes(new Set<string>());
-            setSelectedId(null);
-            return;
-        }
-        const map = entityMap();
-        const preservedExpanded = new Set<string>();
-        const previous = untrack(() => expandedNodes());
-        for (const id of previous) {
-            if (map.has(id)) {
-                preservedExpanded.add(id);
-            }
-        }
-        setExpandedNodes(preservedExpanded);
-        setRows(buildRowsForSnapshot(snap, map, preservedExpanded));
-    });
+    const isNodeExpanded = (nodeId: string | null) => (nodeId ? Boolean(expandedNodes[nodeId]) : false);
+    const getVisibleCount = (nodeId: string) => visibleChildCounts[nodeId] ?? 0;
+
+    // Async auto-load queue
+    let autoLoadQueue = new Set<string>();
+    let autoLoadHandle: ReturnType<typeof setTimeout> | null = null;
+
+    const rootIds = createMemo(() => snapshot()?.rootIds ?? []);
+
+    // Derived flat rows for navigation/scroll. Rendering can be recursive and read helpers directly.
+    const visibleRows = createMemo(() => buildVisibleRows(rootIds(), entityMap(), isNodeExpanded, getVisibleCount));
 
     const rowIndexMap = createMemo(() => {
-        const list = rows();
+        const list = visibleRows();
         const map = new Map<string, number>();
         for (let index = 0; index < list.length; index += 1) {
             map.set(list[index]!.id, index);
@@ -66,114 +66,142 @@ export function useSchemaTree(snapshot: Accessor<GraphSnapshot | null>): SchemaT
         return map;
     });
 
-
     const selectedRow = createMemo(() => {
-        const currentId = selectedId();
-        if (!currentId) return null;
-        const index = rowIndexMap().get(currentId);
+        const id = selectedId();
+        if (!id) return null;
+        const index = rowIndexMap().get(id);
         if (index === undefined) return null;
-        return rows()[index] ?? null;
+        return visibleRows()[index] ?? null;
     });
 
-    const getRowById = (nodeId: string | null) => {
-        if (!nodeId) return null;
-        const index = rowIndexMap().get(nodeId);
-        if (index === undefined) return null;
-        return rows()[index] ?? null;
-    };
-
-
-    // llm generated, supposedly does its job
-    const expandNode = (nodeId: string | null) => {
-        if (!nodeId) return;
+    // Prune stale entries when snapshot changes
+    createEffect(() => {
         const map = entityMap();
-        const entity = map.get(nodeId);
-        if (!entity || !entity.hasChildren) {
-            return;
-        }
-        const currentExpanded = expandedNodes();
-        if (currentExpanded.has(nodeId)) {
-            return;
-        }
-        const nextExpanded = new Set(currentExpanded);
-        nextExpanded.add(nodeId);
+        setExpandedNodes(
+            produce((state) => {
+                for (const id of Object.keys(state)) {
+                    if (!map.has(id)) delete state[id];
+                }
+            }),
+        );
+        setVisibleChildCounts(
+            produce((counts) => {
+                for (const id of Object.keys(counts)) {
+                    if (!map.has(id)) delete counts[id];
+                }
+            }),
+        );
+    });
 
-        const currentRows = rows();
-        const index = rowIndexMap().get(nodeId);
-        if (index === undefined) {
-            const snap = snapshot();
-            if (!snap) {
-                return;
-            }
+    // Maintain a valid selection when graph/rows change
+    createEffect(() => {
+        const snap = snapshot();
+        if (!snap) {
             batch(() => {
-                setExpandedNodes(nextExpanded);
-                setRows(buildRowsForSnapshot(snap, map, nextExpanded));
+                setSelectedId(null);
             });
             return;
         }
-
-        const parentRow = currentRows[index]!;
-        const descendants = buildDescendantRows(entity, parentRow.depth + 1, map, nextExpanded);
-        const updatedRows = currentRows.slice();
-        updatedRows[index] = { ...parentRow, isExpanded: true };
-        if (descendants.length) {
-            updatedRows.splice(index + 1, 0, ...descendants);
+        const rows = visibleRows();
+        if (!rows.length) {
+            setSelectedId(null);
+            return;
         }
+        const current = selectedId();
+        if (!current || !rowIndexMap().has(current)) {
+            setSelectedId(rows[0]!.id);
+        }
+    });
 
-        batch(() => {
-            setExpandedNodes(nextExpanded);
-            setRows(updatedRows);
+    const ensureInitialChildren = (nodeId: string) => {
+        const entity = entityMap().get(nodeId);
+        if (!entity?.hasChildren) return;
+        const limit = Math.min(entity.childIds.length, CHILD_BATCH_SIZE);
+        setVisibleChildCounts(nodeId, (currentValue) => {
+            const current = currentValue ?? 0;
+            return current >= limit ? current : limit;
         });
     };
 
-    // llm generated, supposedly does its job
+    const scheduleAutoLoad = (nodeId: string) => {
+        const entity = entityMap().get(nodeId);
+        if (!entity?.hasChildren) return;
+        const current = getVisibleCount(nodeId);
+        if (current >= entity.childIds.length) return;
+        autoLoadQueue.add(nodeId);
+        if (autoLoadHandle === null) {
+            autoLoadHandle = setTimeout(runAutoLoadCycle, 0);
+        }
+    };
+
+    const runAutoLoadCycle = () => {
+        autoLoadHandle = null;
+        if (autoLoadQueue.size === 0) return;
+        const entities = entityMap();
+        const pending = new Set<string>();
+        for (const nodeId of autoLoadQueue) {
+            if (!isNodeExpanded(nodeId)) continue; // collapsed nodes drop out
+            const entity = entities.get(nodeId);
+            if (!entity?.childIds.length) continue;
+            const baseline = getVisibleCount(nodeId);
+            if (baseline >= entity.childIds.length) continue;
+            const target = Math.min(entity.childIds.length, baseline + CHILD_BATCH_SIZE);
+            if (target === baseline) continue;
+            setVisibleChildCounts(nodeId, target);
+            if (target < entity.childIds.length) pending.add(nodeId);
+        }
+        autoLoadQueue = pending;
+        if (autoLoadQueue.size) {
+            autoLoadHandle = setTimeout(runAutoLoadCycle, 0);
+        }
+    };
+
+    const expandNode = (nodeId: string | null) => {
+        if (!nodeId) return;
+        const entity = entityMap().get(nodeId);
+        if (!entity?.hasChildren) return;
+        if (isNodeExpanded(nodeId)) return;
+        setExpandedNodes(nodeId, true);
+        ensureInitialChildren(nodeId);
+        scheduleAutoLoad(nodeId);
+    };
+
     const collapseNode = (nodeId: string | null) => {
         if (!nodeId) return;
-        const currentRows = rows();
-        const index = rowIndexMap().get(nodeId);
-        if (index === undefined) {
-            return;
-        }
-        const row = currentRows[index]!;
-        if (!row.entity.hasChildren) {
-            return;
-        }
-        const removal = collectDescendantSegment(currentRows, index);
-        if (removal.count === 0 && !row.isExpanded) {
-            return;
-        }
-
-        const updatedRows = currentRows.slice();
-        updatedRows[index] = { ...row, isExpanded: false };
-        if (removal.count > 0) {
-            updatedRows.splice(index + 1, removal.count);
-        }
-
-        const nextExpanded = new Set(expandedNodes());
-        nextExpanded.delete(nodeId);
-        for (const id of removal.ids) {
-            nextExpanded.delete(id);
-        }
-
-        batch(() => {
-            setExpandedNodes(nextExpanded);
-            setRows(updatedRows);
-        });
+        if (!isNodeExpanded(nodeId)) return;
+        setExpandedNodes(
+            produce((state) => {
+                delete state[nodeId];
+            }),
+        );
+        // No need to change visibleChildCounts; we keep mounted counts for fast re-open
     };
 
-    const selectNode = (nodeId: string | null) => {
-        setSelectedId(nodeId);
+    const getVisibleChildIds = (nodeId: string) => {
+        if (!isNodeExpanded(nodeId)) return [];
+        const entity = entityMap().get(nodeId);
+        if (!entity) return [];
+        const count = getVisibleCount(nodeId);
+        if (count <= 0) return [];
+        return entity.childIds.slice(0, Math.min(count, entity.childIds.length));
     };
+
+    const getRenderableChildIds = (nodeId: string) => {
+        const entity = entityMap().get(nodeId);
+        if (!entity) return [];
+        const count = getVisibleCount(nodeId);
+        if (count <= 0) return [];
+        return entity.childIds.slice(0, Math.min(count, entity.childIds.length));
+    };
+
+    const selectNode = (nodeId: string | null) => setSelectedId(nodeId);
 
     const moveSelection = (delta: number) => {
-        const list = rows();
-        if (!list.length) {
-            return;
-        }
-        const currentId = selectedId();
-        const indexMap = rowIndexMap();
-        const currentIndex = currentId ? indexMap.get(currentId) ?? -1 : -1;
-        const baseIndex = currentIndex === -1 ? 0 : currentIndex;
+        const list = visibleRows();
+        if (!list.length) return;
+        const current = selectedId();
+        const index = current ? rowIndexMap().get(current) ?? -1 : -1;
+        const baseIndex = index === -1 ? 0 : index;
         const nextIndex = Math.max(0, Math.min(list.length - 1, baseIndex + delta));
         selectNode(list[nextIndex]?.id ?? null);
     };
@@ -181,19 +209,20 @@ export function useSchemaTree(snapshot: Accessor<GraphSnapshot | null>): SchemaT
     const focusFirstChild = () => {
         const row = selectedRow();
         if (!row) return;
-        const firstChildId = row.entity.childIds[0];
-        if (!firstChildId) {
-            return;
-        }
+        const entity = entityMap().get(row.id);
+        const firstChildId = entity?.childIds[0];
+        if (!entity?.hasChildren || !firstChildId) return;
         expandNode(row.id);
+        ensureInitialChildren(row.id);
         selectNode(firstChildId);
     };
 
     const collapseCurrentOrParent = () => {
         const row = selectedRow();
         if (!row) return;
-        const isExpanded = row.entity.hasChildren && expandedNodes().has(row.id);
-        if (isExpanded) {
+        const entity = entityMap().get(row.id);
+        const expanded = entity?.hasChildren && isNodeExpanded(row.id);
+        if (expanded) {
             collapseNode(row.id);
             return;
         }
@@ -203,36 +232,18 @@ export function useSchemaTree(snapshot: Accessor<GraphSnapshot | null>): SchemaT
         }
     };
 
-    createEffect(() => {
-        const snap = snapshot();
-        if (!snap) {
-            setExpandedNodes(new Set<string>());
-            setSelectedId(null);
-            return;
-        }
-        if (!snap.rootIds.length) {
-            setSelectedId(null);
-            return;
-        }
-        const current = selectedId();
-        if (!current) {
-            setSelectedId(snap.rootIds[0]);
-            return;
-        }
-        if (!rowIndexMap().has(current)) {
-            setSelectedId(snap.rootIds[0]);
-        }
-    });
-
-    createEffect(() => {
-        const list = rows();
-        if (!list.length) {
-            setSelectedId(null);
-        }
-    });
+    const activateSelection = () => {
+        const row = selectedRow();
+        if (!row) return;
+        const entity = entityMap().get(row.id);
+        if (!entity?.hasChildren) return;
+        if (isNodeExpanded(row.id)) collapseNode(row.id);
+        else expandNode(row.id);
+    };
 
     return {
-        rows,
+        rootIds,
+        visibleRows,
         selectedId,
         selectedRow,
         expandNode,
@@ -241,59 +252,50 @@ export function useSchemaTree(snapshot: Accessor<GraphSnapshot | null>): SchemaT
         focusFirstChild,
         collapseCurrentOrParent,
         selectNode,
-        getRowById,
+        isExpanded: (nodeId) => isNodeExpanded(nodeId),
+        getEntity: (nodeId) => (nodeId ? entityMap().get(nodeId) : undefined),
+        getVisibleChildIds,
+        getRenderableChildIds,
+        activateSelection,
     };
 }
 
-function buildRowsForSnapshot(
-    snapshot: GraphSnapshot,
+function buildVisibleRows(
+    rootIds: readonly string[],
     entities: Map<string, NodeEntity>,
-    expanded: Set<string>,
-): TreeRow[] {
-    const ordered: TreeRow[] = [];
-    for (const rootId of snapshot.rootIds) {
+    isExpanded: (id: string) => boolean,
+    getVisibleCount: (id: string) => number,
+): VisibleRow[] {
+    const rows: VisibleRow[] = [];
+    for (const rootId of rootIds) {
         const entity = entities.get(rootId);
         if (!entity) continue;
-        const isExpanded = entity.hasChildren && expanded.has(entity.id);
-        ordered.push({ id: entity.id, depth: 0, entity, isExpanded });
-        if (isExpanded) {
-            ordered.push(...buildDescendantRows(entity, 1, entities, expanded));
+        rows.push({ id: entity.id, depth: 0 });
+        if (entity.hasChildren && isExpanded(entity.id)) {
+            appendVisibleChildren(rows, entity.id, 1, entities, isExpanded, getVisibleCount);
         }
     }
-    return ordered;
+    return rows;
 }
 
-function buildDescendantRows(
-    parent: NodeEntity,
+function appendVisibleChildren(
+    list: VisibleRow[],
+    parentId: string,
     depth: number,
     entities: Map<string, NodeEntity>,
-    expanded: Set<string>,
-): TreeRow[] {
-    const list: TreeRow[] = [];
-    for (const childId of parent.childIds) {
-        const entity = entities.get(childId);
-        if (!entity) continue;
-        const isExpanded = entity.hasChildren && expanded.has(entity.id);
-        const row: TreeRow = { id: entity.id, depth, entity, isExpanded, parentId: parent.id };
-        list.push(row);
-        if (isExpanded) {
-            list.push(...buildDescendantRows(entity, depth + 1, entities, expanded));
+    isExpanded: (id: string) => boolean,
+    getVisibleCount: (id: string) => number,
+) {
+    const parent = entities.get(parentId);
+    if (!parent) return;
+    const visibleCount = Math.min(getVisibleCount(parentId), parent.childIds.length);
+    for (let index = 0; index < visibleCount; index += 1) {
+        const childId = parent.childIds[index]!;
+        const child = entities.get(childId);
+        if (!child) continue;
+        list.push({ id: child.id, depth, parentId });
+        if (child.hasChildren && isExpanded(child.id)) {
+            appendVisibleChildren(list, child.id, depth + 1, entities, isExpanded, getVisibleCount);
         }
     }
-    return list;
-}
-
-function collectDescendantSegment(list: TreeRow[], parentIndex: number) {
-    const parent = list[parentIndex];
-    if (!parent) {
-        return { count: 0, ids: [] as string[] };
-    }
-    const parentDepth = parent.depth;
-    const ids: string[] = [];
-    let cursor = parentIndex + 1;
-    while (cursor < list.length && list[cursor]!.depth > parentDepth) {
-        ids.push(list[cursor]!.id);
-        cursor += 1;
-    }
-    return { count: cursor - (parentIndex + 1), ids };
 }
