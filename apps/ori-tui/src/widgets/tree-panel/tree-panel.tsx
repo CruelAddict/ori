@@ -114,12 +114,16 @@ export function TreePanel(props: TreePanelProps) {
         treeScroll.refreshOverflowState();
     });
 
+    createEffect(() => {
+        treeScroll.setMinimumVisibleWidth(terminalWidth());
+    });
+
     const paneWidthProps = () => {
         if (pane.isFocused()) {
             return {
                 width: "auto" as const,
-                maxWidth: "50%" as `${number}%`,
-                minWidth: "50%" as `${number}%`,
+                maxWidth: "50%" as const,
+                minWidth: "50%" as const,
                 flexGrow: 1,
             };
         }
