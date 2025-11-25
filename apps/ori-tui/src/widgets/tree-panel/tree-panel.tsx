@@ -223,12 +223,13 @@ export function TreePanel(props: TreePanelProps) {
                 <box
                     flexDirection="column"
                     {...paneWidthProps()}
+                    height="100%"
                     flexShrink={0}
                     borderStyle="single"
                     borderColor={pane.isFocused() ? palette().primary : palette().border}
                     backgroundColor={palette().backgroundPanel}
                 >
-                    <box padding={1} flexDirection="column" flexGrow={1}>
+                    <box padding={1} flexDirection="column" flexGrow={1} height="100%">
                         <Show when={pane.loading()}>
                             <text fg={palette().text}>Loading schema graph...</text>
                         </Show>
@@ -242,6 +243,7 @@ export function TreePanel(props: TreePanelProps) {
                                 ref={(node: ScrollBoxRenderable | undefined) => treeScroll.setScrollBox(node)}
                                 flexDirection="column"
                                 flexGrow={1}
+                                height="100%"
                                 scrollbarOptions={{ visible: false }}
                                 horizontalScrollbarOptions={{ visible: treeScroll.horizontalOverflow() }}
                                 scrollY={true}
