@@ -1,10 +1,11 @@
 import { For, Show, createEffect, createMemo, createSelector, createSignal, onCleanup, onMount, type Accessor } from "solid-js";
-import { TextAttributes, type ScrollBoxRenderable } from "@opentui/core";
+import { TextAttributes } from "@opentui/core";
 import type { BoxRenderable } from "@opentui/core";
 import { KeyScope, type KeyBinding } from "@src/core/services/key-scopes";
 import type { TreePaneViewModel } from "@src/features/tree-pane/use-tree-pane";
 import { useTheme } from "@app/providers/theme";
-import { createTreeScrollManager, type RowDescriptor } from "./tree-scroll";
+import { TreeScrollbox, type RowDescriptor, type TreeScrollboxApi, useTreeScrollRegistration } from "./tree-scrollbox.tsx";
+import { MIN_CONTENT_WIDTH } from "./tree-scroll/row-metrics.ts";
 
 const TREE_SCOPE_ID = "connection-view.tree";
 const ROW_ID_PREFIX = "tree-row-";
@@ -55,7 +56,14 @@ export function TreePanel(props: TreePanelProps) {
         rowWidthCache.set(k, width);
         return width;
     };
-    const treeScroll = createTreeScrollManager(getRowWidth);
+    const [treeNaturalWidth, setTreeNaturalWidth] = createSignal(MIN_CONTENT_WIDTH);
+    let treeScrollboxApi: TreeScrollboxApi | null = null;
+    const handleScrollboxApi = (api?: TreeScrollboxApi) => {
+        treeScrollboxApi = api ?? null;
+    };
+    const handleNaturalWidthChange = (width: number) => {
+        setTreeNaturalWidth(width);
+    };
 
     const [terminalWidth, setTerminalWidth] = createSignal(readTerminalWidth());
     const formatPercent = (fraction: number) => `${Math.round(fraction * 100)}%` as `${number}%`;
@@ -84,7 +92,7 @@ export function TreePanel(props: TreePanelProps) {
 
     const handleManualHorizontalScroll = (direction: "left" | "right") => {
         const delta = direction === "left" ? -HORIZONTAL_SCROLL_STEP : HORIZONTAL_SCROLL_STEP;
-        treeScroll.scrollBy({ x: delta, y: 0 });
+        treeScrollboxApi?.scrollBy({ x: delta, y: 0 });
     };
 
     const bindings: KeyBinding[] = [
@@ -104,39 +112,13 @@ export function TreePanel(props: TreePanelProps) {
 
     const enabled = () => pane.visible() && pane.isFocused();
 
-    // Sync scroll manager with the navigation rows; this doesn't trigger UI re-rendering itself
-    createEffect(() => {
-        treeScroll.syncRows(rows());
-    });
-
-    // Keep selected row visible on updates
-    createEffect(() => {
-        if (!pane.visible()) return;
-        rows();
-        treeScroll.ensureRowVisible(pane.controller.selectedId());
-    });
-
-    // Re-evaluate overflow when layout/visibility changes
-    createEffect(() => {
-        if (!pane.visible()) return;
-        rows();
-        terminalWidth();
-        pane.isFocused();
-        pane.controller.selectedId();
-        treeScroll.refreshOverflowState();
-    });
-
-    createEffect(() => {
-        treeScroll.setMinimumVisibleWidth(terminalWidth());
-    });
-
     createEffect(() => {
         const terminal = terminalWidth();
         if (terminal <= 0) {
             setFocusedWidthFraction(MAX_FOCUSED_PERCENT);
             return;
         }
-        const naturalWidth = treeScroll.naturalContentWidth();
+        const naturalWidth = treeNaturalWidth();
         const ratio = Math.min(1, Math.max(0, naturalWidth / terminal));
         const baseFraction = MIN_FOCUSED_PERCENT + (MAX_FOCUSED_PERCENT - MIN_FOCUSED_PERCENT) * ratio;
         const minFractionFromColumns = MIN_FOCUSED_COLUMN_WIDTH / terminal;
@@ -159,6 +141,7 @@ export function TreePanel(props: TreePanelProps) {
     interface TreeNodeProps { nodeId: string; depth: number }
 
     const TreeNode = (nodeProps: TreeNodeProps) => {
+        const registerRowNode = useTreeScrollRegistration();
         const entity = createMemo(() => pane.controller.getEntity(nodeProps.nodeId));
         const childIds = createMemo(() => pane.controller.getRenderableChildIds(nodeProps.nodeId));
         const rowId = () => nodeProps.nodeId;
@@ -186,7 +169,7 @@ export function TreePanel(props: TreePanelProps) {
                                 paddingLeft={nodeProps.depth * 2}
                                 width={getRowWidth(descriptor())}
                                 flexShrink={0}
-                                ref={(node: BoxRenderable | undefined) => treeScroll.registerRowNode(rowId(), node)}
+                                ref={(node: BoxRenderable | undefined) => registerRowNode(rowId(), node)}
                             >
                                 <text fg={fg()} attributes={attrs()} wrapMode="none">
                                     {isSelected() ? "> " : "  "}
@@ -239,29 +222,26 @@ export function TreePanel(props: TreePanelProps) {
                             )}
                         </Show>
                         <Show when={!pane.loading() && !pane.error()}>
-                            <scrollbox
-                                ref={(node: ScrollBoxRenderable | undefined) => treeScroll.setScrollBox(node)}
-                                flexDirection="column"
-                                flexGrow={1}
-                                height="100%"
-                                scrollbarOptions={{ visible: false }}
-                                horizontalScrollbarOptions={{ visible: treeScroll.horizontalOverflow() }}
-                                scrollY={true}
-                                scrollX={true}
+                            <TreeScrollbox
+                                rows={rows}
+                                measureRowWidth={getRowWidth}
+                                selectedRowId={selectedId}
+                                terminalWidth={terminalWidth}
+                                isFocused={pane.isFocused}
+                                onApiReady={handleScrollboxApi}
+                                onNaturalWidthChange={handleNaturalWidthChange}
                             >
-                                <box flexDirection="column" width={treeScroll.contentWidth()} flexShrink={0} alignItems="flex-start">
-                                    <Show
-                                        when={rootIds().length > 0}
-                                        fallback={
-                                            <text attributes={TextAttributes.DIM} fg={palette().textMuted}>
-                                                Graph is empty. Try refreshing later.
-                                            </text>
-                                        }
-                                    >
-                                        <For each={rootIds()}>{(id) => <TreeNode nodeId={id} depth={0} />}</For>
-                                    </Show>
-                                </box>
-                            </scrollbox>
+                                <Show
+                                    when={rootIds().length > 0}
+                                    fallback={
+                                        <text attributes={TextAttributes.DIM} fg={palette().textMuted}>
+                                            Graph is empty. Try refreshing later.
+                                        </text>
+                                    }
+                                >
+                                    <For each={rootIds()}>{(id) => <TreeNode nodeId={id} depth={0} />}</For>
+                                </Show>
+                            </TreeScrollbox>
                         </Show>
                     </box>
                 </box>
