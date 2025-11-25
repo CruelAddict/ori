@@ -49,17 +49,36 @@ export function createTreeScrollManager(measureRowWidth: MeasureRowWidth): TreeS
     let lastMeasuredViewportWidth = 0;
     let ensureTarget: string | null = null;
     let ensureAttempts = 0;
+    let pendingHorizontalReset = false;
 
     // Async width measurement batching so measuring never blocks UI
     const MEASURE_BATCH_SIZE = 200;
     let pendingMeasure: RowDescriptor[] = [];
     let measureScheduled = false;
 
+    const tryResetHorizontalScroll = () => {
+        if (!scrollBox) return false;
+        const viewportWidth = scrollBox.viewport?.width ?? 0;
+        if (viewportWidth === 0) return false;
+        if (scrollBox.scrollLeft === 0) return true;
+        scrollBox.scrollLeft = 0;
+        return true;
+    };
+
+    const scheduleHorizontalReset = () => {
+        pendingHorizontalReset = !tryResetHorizontalScroll();
+    };
+
     const setScrollBox = (node: ScrollBoxRenderable | undefined) => {
         scrollBox = node;
-        if (scrollBox) {
-            applyContentWidth(contentWidth());
-            refreshOverflowState();
+        if (!scrollBox) {
+            pendingHorizontalReset = false;
+            return;
+        }
+        applyContentWidth(contentWidth());
+        refreshOverflowState();
+        if (pendingHorizontalReset) {
+            scheduleHorizontalReset();
         }
     };
 
@@ -251,8 +270,13 @@ export function createTreeScrollManager(measureRowWidth: MeasureRowWidth): TreeS
         }
         const viewportWidth = scrollBox.viewport?.width ?? 0;
         lastMeasuredViewportWidth = viewportWidth;
+        const previousOverflow = hasHorizontalOverflow();
         const hasOverflow = naturalWidth() > viewportWidth;
         setHasHorizontalOverflow(hasOverflow);
+        if (!hasOverflow) {
+            if (previousOverflow) scheduleHorizontalReset();
+            else if (pendingHorizontalReset) scheduleHorizontalReset();
+        }
         return viewportWidth;
     };
 
