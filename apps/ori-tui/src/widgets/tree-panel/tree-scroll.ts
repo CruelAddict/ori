@@ -35,6 +35,7 @@ export function createTreeScrollManager(measureRowWidth: MeasureRowWidth): TreeS
     const rowNodes = new Map<string, BoxRenderable>();
     const depthStats = new Map<number, WidthEntry>();
     const rowWidths = new Map<string, RowMeta>();
+    const activeRowIds = new Set<string>();
     const [contentWidth, setContentWidth] = createSignal(MIN_CONTENT_WIDTH);
     const [naturalWidth, setNaturalWidth] = createSignal(MIN_CONTENT_WIDTH);
     const [hasHorizontalOverflow, setHasHorizontalOverflow] = createSignal(false);
@@ -75,8 +76,10 @@ export function createTreeScrollManager(measureRowWidth: MeasureRowWidth): TreeS
 
     const syncRows = (rows: readonly RowDescriptor[]) => {
         const presentIds = new Set<string>();
+        activeRowIds.clear();
         for (const row of rows) {
             presentIds.add(row.id);
+            activeRowIds.add(row.id);
             pendingMeasure.push(row);
         }
         const removed: string[] = [];
@@ -98,6 +101,7 @@ export function createTreeScrollManager(measureRowWidth: MeasureRowWidth): TreeS
         let remaining = MEASURE_BATCH_SIZE;
         while (pendingMeasure.length && remaining > 0) {
             const row = pendingMeasure.shift()!;
+            if (!activeRowIds.has(row.id)) continue;
             upsertRowWidth(row);
             remaining -= 1;
         }
@@ -146,6 +150,7 @@ export function createTreeScrollManager(measureRowWidth: MeasureRowWidth): TreeS
         rowWidths.delete(rowId);
         const depthEntry = depthStats.get(meta.depth);
         if (depthEntry?.id === rowId) recalcDepth(meta.depth);
+        scheduleWidthRecalc();
     };
 
     const recalcDepth = (depth: number) => {
