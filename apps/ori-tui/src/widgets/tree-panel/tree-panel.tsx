@@ -226,7 +226,6 @@ export function TreePanel(props: TreePanelProps) {
                                 rows={rows}
                                 measureRowWidth={getRowWidth}
                                 selectedRowId={selectedId}
-                                terminalWidth={terminalWidth}
                                 isFocused={pane.isFocused}
                                 onApiReady={handleScrollboxApi}
                                 onNaturalWidthChange={handleNaturalWidthChange}

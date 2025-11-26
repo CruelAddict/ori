@@ -1,6 +1,7 @@
 import { createSignal } from "solid-js";
 
 export const MIN_CONTENT_WIDTH = 36;
+const clampContentWidth = (width: number) => Math.max(width, MIN_CONTENT_WIDTH);
 
 export type RowDescriptor = {
     id: string;
@@ -15,7 +16,6 @@ type RowMeta = { depth: number; width: number };
 
 export interface RowMetricsService {
     syncRows(rows: readonly RowDescriptor[]): void;
-    setMinimumVisibleWidth(width: number): void;
     contentWidth: () => number;
     naturalWidth: () => number;
     dispose(): void;
@@ -30,7 +30,7 @@ export function createRowMetrics(measureRowWidth: MeasureRowWidth, onWidthUpdate
     const [contentWidth, setContentWidth] = createSignal(MIN_CONTENT_WIDTH);
     const [naturalWidth, setNaturalWidth] = createSignal(MIN_CONTENT_WIDTH);
 
-    let forcedMinContentWidth = MIN_CONTENT_WIDTH;
+    let viewportWidth = clampContentWidth(readTerminalWidth());
     let pendingMeasure: RowDescriptor[] = [];
     let measureHandle: ReturnType<typeof setTimeout> | null = null;
     let widthRecalcHandle: ReturnType<typeof setTimeout> | null = null;
@@ -50,12 +50,6 @@ export function createRowMetrics(measureRowWidth: MeasureRowWidth, onWidthUpdate
         scheduleMeasureBatch();
     };
 
-    const setMinimumVisibleWidth = (width: number) => {
-        const normalized = Math.max(width, MIN_CONTENT_WIDTH);
-        if (normalized === forcedMinContentWidth) return;
-        forcedMinContentWidth = normalized;
-        emitWidthChange(naturalWidth());
-    };
 
     const scheduleMeasureBatch = () => {
         if (measureHandle) return;
@@ -124,12 +118,23 @@ export function createRowMetrics(measureRowWidth: MeasureRowWidth, onWidthUpdate
 
     const emitWidthChange = (widest: number) => {
         setNaturalWidth(widest);
-        const applied = Math.max(widest, forcedMinContentWidth);
+        const applied = Math.max(widest, viewportWidth);
         setContentWidth(applied);
         onWidthUpdate(applied);
     };
 
+    const handleViewportResize = () => {
+        const normalized = clampContentWidth(readTerminalWidth());
+        if (normalized === viewportWidth) return;
+        viewportWidth = normalized;
+        emitWidthChange(naturalWidth());
+    };
+
+    const detachViewportResize = attachViewportResizeListener(handleViewportResize);
+    emitWidthChange(naturalWidth());
+
     const dispose = () => {
+        detachViewportResize();
         if (measureHandle) {
             clearTimeout(measureHandle);
             measureHandle = null;
@@ -146,9 +151,23 @@ export function createRowMetrics(measureRowWidth: MeasureRowWidth, onWidthUpdate
 
     return {
         syncRows,
-        setMinimumVisibleWidth,
         contentWidth,
         naturalWidth,
         dispose,
+    };
+}
+
+function readTerminalWidth() {
+    if (typeof process === "undefined") return 0;
+    const columns = process.stdout?.columns;
+    return columns ?? 0;
+}
+
+function attachViewportResizeListener(handler: () => void) {
+    if (typeof process === "undefined") return () => {};
+    const stdout = process.stdout;
+    stdout?.on?.("resize", handler);
+    return () => {
+        stdout?.off?.("resize", handler);
     };
 }
