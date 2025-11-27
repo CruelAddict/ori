@@ -1,10 +1,11 @@
 import type { Accessor } from "solid-js";
-import { createContext, createEffect, createMemo, onCleanup, useContext } from "solid-js";
+import { createContext, createMemo, onCleanup, useContext } from "solid-js";
 import { createStore } from "solid-js/store";
 import type { Configuration } from "@src/entities/configuration/model/configuration";
 import type { ConnectResult } from "@src/shared/lib/configurations-client";
 import { useOriClient } from "@app/providers/client";
 import { useLogger } from "@app/providers/logger";
+import { useEventStream } from "@app/providers/events";
 import { useConfigurations } from "@src/entities/configuration/model/configuration-list-store";
 import { CONNECTION_STATE_EVENT, type ServerEvent } from "@src/lib/events";
 
@@ -37,6 +38,7 @@ export const ConnectionStateContext = createContext<ConnectionStateContextValue>
 export function createConnectionStateContextValue(): ConnectionStateContextValue {
     const client = useOriClient();
     const logger = useLogger();
+    const eventStream = useEventStream();
     const { configurationMap } = useConfigurations();
 
     const [state, setState] = createStore<ConnectionStateStore>({
@@ -263,10 +265,8 @@ export function createConnectionStateContextValue(): ConnectionStateContextValue
     };
 
 
-    createEffect(() => {
-        const dispose = client.openEventStream(handleServerEvent);
-        onCleanup(() => dispose());
-    });
+    const unsubscribe = eventStream.subscribe(handleServerEvent);
+    onCleanup(() => unsubscribe());
 
     const recordsAccessor: Accessor<Record<string, ConnectionRecord>> = () => state.records;
 

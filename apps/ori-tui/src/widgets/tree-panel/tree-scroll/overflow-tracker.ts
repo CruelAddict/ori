@@ -1,5 +1,6 @@
 import { createSignal } from "solid-js";
 import type { ScrollBoxRenderable } from "@opentui/core";
+import { useLogger } from "@app/providers/logger";
 
 export interface OverflowTrackerOptions {
     getNaturalWidth: () => number;
@@ -15,6 +16,9 @@ export interface OverflowTracker {
 }
 
 export function createOverflowTracker(options: OverflowTrackerOptions): OverflowTracker {
+    const logger = useLogger();
+    logger.debug({ options }, "Creating overflow tracker");
+
     const [hasHorizontalOverflow, setHasHorizontalOverflow] = createSignal(false);
 
     let scrollBox: ScrollBoxRenderable | undefined;
@@ -22,15 +26,20 @@ export function createOverflowTracker(options: OverflowTrackerOptions): Overflow
 
     // Deferred measurement — waits for layout to stabilize on next tick
     const scheduleMeasurement = () => {
+        logger.debug({ hasMeasureHandle: !!measureHandle }, "scheduleMeasurement() called");
         if (measureHandle) return;
+        logger.debug("Setting up measurement timeout");
         measureHandle = setTimeout(() => {
+            logger.debug("Measurement timeout triggered");
             measureHandle = null;
             measure();
         }, 0);
     };
 
     const measure = () => {
+        logger.debug({ scrollBox: !!scrollBox }, "measure() called");
         if (!scrollBox) {
+            logger.debug("No scrollBox, resetting overflow state");
             setHasHorizontalOverflow(false);
             return;
         }
@@ -40,20 +49,34 @@ export function createOverflowTracker(options: OverflowTrackerOptions): Overflow
         const previousOverflow = hasHorizontalOverflow();
         const hasOverflow = naturalWidth > viewportWidth;
 
-        setHasHorizontalOverflow(hasOverflow);
+        logger.debug({
+            viewportWidth,
+            naturalWidth,
+            hasOverflow,
+            previousOverflow,
+            hasPendingReset: options.hasPendingHorizontalReset()
+        }, "Overflow measurement result");
+
+        if (hasOverflow != previousOverflow) {
+            setHasHorizontalOverflow(hasOverflow);
+        }
 
         if (!hasOverflow && (previousOverflow || options.hasPendingHorizontalReset())) {
+            logger.debug({ previousOverflow, hasPendingReset: options.hasPendingHorizontalReset() }, "Requesting horizontal reset");
             options.requestHorizontalReset();
         }
     };
 
     const refresh = () => {
+        logger.debug("refresh() called");
         scheduleMeasurement();
     };
 
     const setScrollBox = (node: ScrollBoxRenderable | undefined) => {
+        logger.debug({ node: !!node, previousScrollBox: !!scrollBox }, "setScrollBox() called");
         scrollBox = node;
         if (!scrollBox) {
+            logger.debug("ScrollBox cleared, cleaning up and resetting state");
             if (measureHandle) {
                 clearTimeout(measureHandle);
                 measureHandle = null;
@@ -61,20 +84,25 @@ export function createOverflowTracker(options: OverflowTrackerOptions): Overflow
             setHasHorizontalOverflow(false);
             return;
         }
+        logger.debug("ScrollBox set, scheduling measurement");
         scheduleMeasurement();
     };
 
     const dispose = () => {
+        logger.debug({ hasMeasureHandle: !!measureHandle }, "dispose() called");
         if (measureHandle) {
             clearTimeout(measureHandle);
             measureHandle = null;
         }
     };
 
-    return {
+    const tracker = {
         refresh,
         horizontalOverflow: hasHorizontalOverflow,
         setScrollBox,
         dispose,
     };
+
+    logger.debug("Overflow tracker created and returned");
+    return tracker;
 }

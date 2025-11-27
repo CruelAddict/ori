@@ -207,9 +207,13 @@ class HttpOriClient implements OriClient {
             },
             (message) => {
                 try {
+                    this.options.logger.debug({ event: message.event }, "http-client: decoding SSE message");
                     const event = decodeServerEvent(message);
                     if (event) {
+                        this.options.logger.debug({ eventType: event.type }, "http-client: decoded event, invoking callback");
                         onEvent(event);
+                    } else {
+                        this.options.logger.debug({ event: message.event }, "http-client: decodeServerEvent returned null");
                     }
                 } catch (err) {
                     this.options.logger.error({ err }, "failed to decode SSE payload");
@@ -275,9 +279,13 @@ class UnixSocketOriClient implements OriClient {
             },
             (message) => {
                 try {
+                    this.options.logger.debug({ event: message.event }, "unix-client: decoding SSE message");
                     const event = decodeServerEvent(message);
                     if (event) {
+                        this.options.logger.debug({ eventType: event.type }, "unix-client: decoded event, invoking callback");
                         onEvent(event);
+                    } else {
+                        this.options.logger.debug({ event: message.event }, "unix-client: decodeServerEvent returned null");
                     }
                 } catch (err) {
                     this.options.logger.error({ err }, "failed to decode SSE payload");

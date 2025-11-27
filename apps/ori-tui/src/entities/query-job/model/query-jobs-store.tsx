@@ -84,8 +84,13 @@ export function QueryJobsStoreProvider(props: QueryJobsStoreProviderProps) {
 
     const handleQueryJobCompleted = async (event: QueryJobCompletedEvent) => {
         const { jobId, configurationName, status, error, message, stored, durationMs } = event.payload;
+        logger.debug({ jobId, configurationName, status, stored }, "query-jobs-store: received job completed event");
         const currentJob = state.jobsByConfiguration[configurationName];
         if (!currentJob || currentJob.jobId !== jobId) {
+            logger.debug(
+                { jobId, configurationName, currentJobId: currentJob?.jobId },
+                "query-jobs-store: ignoring event - job mismatch or no current job"
+            );
             return;
         }
 

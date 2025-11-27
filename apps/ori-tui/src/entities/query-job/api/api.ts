@@ -1,8 +1,9 @@
 import type { JSX } from "solid-js";
-import { createComponent, createContext, createEffect, onCleanup, useContext } from "solid-js";
+import { createComponent, createContext, onCleanup, useContext } from "solid-js";
 import type { QueryExecResult, QueryResultView } from "@src/lib/configurations-client";
 import { useOriClient } from "@app/providers/client";
 import { useLogger } from "@app/providers/logger";
+import { useEventStream } from "@app/providers/events";
 import { QUERY_JOB_COMPLETED_EVENT, type QueryJobCompletedEvent, type ServerEvent } from "@src/lib/events";
 
 export interface QueryJobsApi {
@@ -20,6 +21,7 @@ export interface QueryJobsApiProviderProps {
 export function QueryJobsApiProvider(props: QueryJobsApiProviderProps) {
     const client = useOriClient();
     const logger = useLogger();
+    const eventStream = useEventStream();
     const listeners = new Set<(event: QueryJobCompletedEvent) => void>();
 
     const executeQuery = async (configurationName: string, query: string) => {
@@ -54,16 +56,16 @@ export function QueryJobsApiProvider(props: QueryJobsApiProviderProps) {
     };
 
     const handleServerEvent = (event: ServerEvent) => {
+        logger.debug({ eventType: event.type }, "query-jobs-api: received event");
         if (event.type !== QUERY_JOB_COMPLETED_EVENT) {
             return;
         }
+        logger.debug({ jobId: event.payload.jobId, status: event.payload.status }, "query-jobs-api: emitting job completed");
         emit(event);
     };
 
-    createEffect(() => {
-        const dispose = client.openEventStream(handleServerEvent);
-        onCleanup(() => dispose());
-    });
+    const unsubscribe = eventStream.subscribe(handleServerEvent);
+    onCleanup(() => unsubscribe());
 
     const api: QueryJobsApi = {
         executeQuery,

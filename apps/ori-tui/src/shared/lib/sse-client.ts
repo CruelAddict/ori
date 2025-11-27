@@ -102,6 +102,8 @@ export function createSSEStream(options: SSEClientOptions, onMessage: (msg: SSEM
                     continue;
                 }
                 if (line.startsWith(":")) {
+                    // Comment line (heartbeat/connected)
+                    logger?.debug({ comment: line.slice(1).trim() }, "sse: received comment");
                     continue;
                 }
                 if (line.startsWith("data:")) {
@@ -121,9 +123,11 @@ export function createSSEStream(options: SSEClientOptions, onMessage: (msg: SSEM
                 return;
             }
             message.data = dataLines.join("\n");
+            logger?.debug({ event: message.event, dataLength: message.data.length }, "sse: dispatching message");
             onMessage(message);
         };
 
+        logger?.debug("sse: connecting...");
         const req = transport.request(requestOptions, (res) => {
             if (res.statusCode && res.statusCode >= 300) {
                 logger?.warn({ statusCode: res.statusCode }, "sse endpoint returned non-200 status");
@@ -132,13 +136,17 @@ export function createSSEStream(options: SSEClientOptions, onMessage: (msg: SSEM
                 return;
             }
 
+            logger?.debug({ statusCode: res.statusCode }, "sse: connected successfully");
             retryDelay = options.retry?.initialDelayMs ?? DEFAULT_INITIAL_DELAY;
             res.setEncoding("utf8");
             res.on("data", (chunk: string) => {
                 buffer += chunk;
                 processBuffer();
             });
-            res.on("end", scheduleReconnect);
+            res.on("end", () => {
+                logger?.debug("sse: connection ended, scheduling reconnect");
+                scheduleReconnect();
+            });
             res.on("error", (err) => {
                 logger?.error({ err }, "sse stream error");
                 scheduleReconnect();

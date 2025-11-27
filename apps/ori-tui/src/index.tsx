@@ -4,6 +4,7 @@ import { createLogger } from "@src/lib/logger";
 import { parseArgs } from "@src/utils/args";
 import { LoggerProvider } from "@app/providers/logger";
 import { ClientProvider } from "@app/providers/client";
+import { EventStreamProvider } from "@app/providers/events";
 import { ConnectionEntityProvider } from "@src/entities/connection/providers/connection-entity-provider";
 import { NavigationProvider } from "@app/providers/navigation";
 import { OverlayProvider, useOverlayManager } from "@app/providers/overlay";
@@ -128,21 +129,23 @@ export function main() {
                         socketPath,
                     }}
                 >
-                    <ConfigurationEntityProvider>
-                        <ConnectionEntityProvider>
-                            <QueryJobsProvider>
-                                <NavigationProvider>
-                                    <OverlayProvider>
-                                        <KeymapProvider>
-                                            <ThemeProvider defaultTheme={themeArg}>
-                                                <App />
-                                            </ThemeProvider>
-                                        </KeymapProvider>
-                                    </OverlayProvider>
-                                </NavigationProvider>
-                            </QueryJobsProvider>
-                        </ConnectionEntityProvider>
-                    </ConfigurationEntityProvider>
+                    <EventStreamProvider>
+                        <ConfigurationEntityProvider>
+                            <ConnectionEntityProvider>
+                                <QueryJobsProvider>
+                                    <NavigationProvider>
+                                        <OverlayProvider>
+                                            <KeymapProvider>
+                                                <ThemeProvider defaultTheme={themeArg}>
+                                                    <App />
+                                                </ThemeProvider>
+                                            </KeymapProvider>
+                                        </OverlayProvider>
+                                    </NavigationProvider>
+                                </QueryJobsProvider>
+                            </ConnectionEntityProvider>
+                        </ConfigurationEntityProvider>
+                    </EventStreamProvider>
                 </ClientProvider>
             </LoggerProvider>
         ),
