@@ -1,6 +1,6 @@
 import { createSignal } from "solid-js";
 
-export const MIN_CONTENT_WIDTH = 36;
+export const MIN_CONTENT_WIDTH = 20;
 const clampContentWidth = (width: number) => Math.max(width, MIN_CONTENT_WIDTH);
 
 export type RowDescriptor = {
@@ -164,7 +164,7 @@ function readTerminalWidth() {
 }
 
 function attachViewportResizeListener(handler: () => void) {
-    if (typeof process === "undefined") return () => {};
+    if (typeof process === "undefined") return () => { };
     const stdout = process.stdout;
     stdout?.on?.("resize", handler);
     return () => {
