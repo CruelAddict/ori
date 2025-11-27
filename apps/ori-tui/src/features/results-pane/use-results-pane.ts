@@ -32,7 +32,7 @@ export function useResultsPane(options: UseResultsPaneOptions): ResultsPaneViewM
 
     createEffect(() => {
         const job = options.job();
-        if (job?.status === "success" && job.result) {
+        if (job?.result || job?.error) {
             setVisible(true);
         }
     });
