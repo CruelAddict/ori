@@ -208,11 +208,15 @@ export function TreePanel(props: TreePanelProps) {
                     {...paneWidthProps()}
                     height="100%"
                     flexShrink={0}
-                    borderStyle="single"
-                    borderColor={pane.isFocused() ? palette().primary : palette().border}
-                    backgroundColor={palette().backgroundPanel}
                 >
-                    <box padding={1} flexDirection="column" flexGrow={1} height="100%">
+                    <box
+                        padding={1}
+                        flexDirection="column"
+                        flexGrow={1}
+                        height="100%"
+                        border={["right"]}
+                        borderColor={palette().backgroundElement}
+                    >
                         <Show when={pane.loading()}>
                             <text fg={palette().text}>Loading schema graph...</text>
                         </Show>

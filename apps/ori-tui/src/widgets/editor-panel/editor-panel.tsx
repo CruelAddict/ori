@@ -48,9 +48,6 @@ export function EditorPanel(props: EditorPanelProps) {
         <KeyScope id={EDITOR_SCOPE_ID} bindings={bindings} enabled={pane.isFocused}>
             <box
                 flexDirection="column"
-                flexGrow={1}
-                borderStyle="single"
-                borderColor={pane.isFocused() ? palette().primary : props.borderColor?.(pane.isFocused()) ?? palette().border}
             >
                 <box flexDirection="column" flexGrow={1} padding={1}>
                     <textarea

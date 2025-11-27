@@ -93,36 +93,33 @@ export function ConnectionViewPage(props: ConnectionViewPageProps) {
 
     return (
         <KeyScope id="connection-view" bindings={screenKeyBindings}>
-            <box flexDirection="column" flexGrow={1} padding={1} backgroundColor={palette().background}>
+            <box flexDirection="column" flexGrow={1} backgroundColor={palette().background}>
                 <text attributes={TextAttributes.BOLD} fg={palette().text}>
                     Connection
                 </text>
-                <text attributes={TextAttributes.DIM} fg={palette().textMuted}>
+                <text attributes={TextAttributes.DIM} fg={palette().text}>
                     {vm.title()}
                 </text>
-                <box height={1} />
 
                 <box flexDirection="row" flexGrow={1}>
                     <TreePanel viewModel={vm.treePane} />
 
-                    <box flexDirection="column" flexGrow={1} marginLeft={vm.treePane.visible() ? 1 : 0}>
+                    <box flexDirection="column" flexGrow={1} marginLeft={vm.treePane.visible() ? 1 : 0} justifyContent="space-between">
                         <EditorPanel
                             viewModel={vm.editorPane}
                             borderColor={(focused) => (focused ? palette().primary : palette().border)}
                         />
                         <Show when={vm.resultsPane.visible()}>
-                            <>
-                                <box height={1} />
-                                <ResultsPanel viewModel={vm.resultsPane} />
-                            </>
+                            <ResultsPanel viewModel={vm.resultsPane} />
                         </Show>
                     </box>
                 </box>
 
-                <box height={1} />
-                <text attributes={TextAttributes.DIM} fg={palette().textMuted}>
-                    {vm.helpText}
-                </text>
+                <box height={1} minWidth={"100%"}>
+                    <text attributes={TextAttributes.DIM} fg={palette().textMuted}>
+                        {vm.helpText}
+                    </text>
+                </box>
             </box>
         </KeyScope>
     );
