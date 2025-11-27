@@ -204,6 +204,12 @@ func (s *Server) handleEventsRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Disable write deadline for SSE
+	rc := http.NewResponseController(w)
+	if err := rc.SetWriteDeadline(time.Time{}); err != nil {
+		slog.Warn("failed to disable write deadline for SSE", slog.Any("err", err))
+	}
+
 	w.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
