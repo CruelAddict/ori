@@ -52,6 +52,8 @@ export function ResultsPanel(props: ResultsPanelProps) {
                 <box
                     flexDirection="column"
                     flexGrow={1}
+                    border={["top"]}
+                    borderColor={palette().backgroundElement}
                 >
                     <box flexDirection="column" paddingLeft={1} paddingTop={1} paddingRight={1} flexShrink={0}>
                         <text attributes={TextAttributes.BOLD} fg={palette().text}>
