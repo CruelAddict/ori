@@ -1,10 +1,10 @@
 import { For, Show, createEffect, createMemo, createSelector, createSignal, onCleanup, onMount, type Accessor } from "solid-js";
 import { TextAttributes } from "@opentui/core";
-import type { BoxRenderable } from "@opentui/core";
 import { KeyScope, type KeyBinding } from "@src/core/services/key-scopes";
 import type { TreePaneViewModel } from "@src/features/tree-pane/use-tree-pane";
 import { useTheme } from "@app/providers/theme";
-import { TreeScrollbox, type RowDescriptor, type TreeScrollboxApi, useTreeScrollRegistration } from "./tree-scrollbox.tsx";
+import { TreeScrollbox, type RowDescriptor, type TreeScrollboxApi } from "./tree-scrollbox.tsx";
+import { TreeNode } from "./tree-node.tsx";
 import { MIN_CONTENT_WIDTH } from "./tree-scroll/row-metrics.ts";
 
 const TREE_SCOPE_ID = "connection-view.tree";
@@ -138,69 +138,7 @@ export function TreePanel(props: TreePanelProps) {
         return { width: MIN_FOCUSED_COLUMN_WIDTH, maxWidth: MIN_FOCUSED_COLUMN_WIDTH, minWidth: MIN_FOCUSED_COLUMN_WIDTH, flexGrow: 0 } as const;
     };
 
-    interface TreeNodeProps { nodeId: string; depth: number; isFocused: Accessor<boolean>; }
-
-    const TreeNode = (nodeProps: TreeNodeProps) => {
-        const registerRowNode = useTreeScrollRegistration();
-        const entity = createMemo(() => pane.controller.getEntity(nodeProps.nodeId));
-        const childIds = createMemo(() => pane.controller.getRenderableChildIds(nodeProps.nodeId));
-        const rowId = () => nodeProps.nodeId;
-        const isExpanded = () => pane.controller.isExpanded(nodeProps.nodeId);
-        const isSelected = () => isRowSelected(rowId());
-        const [childrenMounted, setChildrenMounted] = createSignal(false);
-        createEffect(() => { if (isExpanded()) setChildrenMounted(true); });
-        const fg = () => (isSelected() && nodeProps.isFocused() ? palette().background : palette().text);
-        const bg = () => (isSelected() && nodeProps.isFocused() ? palette().primary : undefined);
-        const attrs = () => (isSelected() ? TextAttributes.BOLD : TextAttributes.NONE);
-        const toggleGlyph = () => {
-            const details = entity();
-            if (!details?.hasChildren) return "   ";
-            return isExpanded() ? "[-]" : "[+]";
-        };
-        const descriptor = createMemo<RowDescriptor>(() => ({ id: rowId(), depth: nodeProps.depth }));
-        return (
-            <Show when={entity()}>
-                {(detailsAccessor: Accessor<ReturnType<typeof entity>>) => {
-                    const details = () => detailsAccessor()!;
-                    return (
-                        <>
-                            <box
-                                id={rowElementId(rowId())}
-                                flexDirection="row"
-                                paddingLeft={nodeProps.depth * 2}
-                                minWidth={"100%"}
-                                flexShrink={0}
-                                ref={(node: BoxRenderable | undefined) => registerRowNode(rowId(), node)}
-                                backgroundColor={bg()}
-                            >
-                                <text fg={fg()} attributes={attrs()} wrapMode="none" bg={bg()} >
-                                    {isSelected() ? "> " : "  "}
-                                    {toggleGlyph()} {details().icon} {details().label}
-                                </text>
-                                {details().description && (
-                                    <text attributes={TextAttributes.DIM} fg={palette().textMuted} wrapMode="none">
-                                        {" "}
-                                        {details().description}
-                                    </text>
-                                )}
-                                {details().badges && (
-                                    <text fg={palette().accent} wrapMode="none">
-                                        {" "}
-                                        {details().badges}
-                                    </text>
-                                )}
-                            </box>
-                            <Show when={childrenMounted()}>
-                                <box flexDirection="column" visible={isExpanded()}>
-                                    <For each={childIds()}>{(childId) => (<TreeNode nodeId={childId} depth={nodeProps.depth + 1} isFocused={nodeProps.isFocused} />)}</For>
-                                </box>
-                            </Show>
-                        </>
-                    );
-                }}
-            </Show>
-        );
-    };
+    
 
     return (
         <Show when={pane.visible()}>
@@ -244,7 +182,7 @@ export function TreePanel(props: TreePanelProps) {
                                         </text>
                                     }
                                 >
-                                    <For each={rootIds()}>{(id) => <TreeNode nodeId={id} depth={0} isFocused={pane.isFocused} />}</For>
+                                    <For each={rootIds()}>{(id) => <TreeNode nodeId={id} depth={0} isFocused={pane.isFocused} pane={pane} />}</For>
                                 </Show>
                             </TreeScrollbox>
                         </Show>
