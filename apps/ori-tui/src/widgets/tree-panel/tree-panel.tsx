@@ -138,7 +138,7 @@ export function TreePanel(props: TreePanelProps) {
         return { width: MIN_FOCUSED_COLUMN_WIDTH, maxWidth: MIN_FOCUSED_COLUMN_WIDTH, minWidth: MIN_FOCUSED_COLUMN_WIDTH, flexGrow: 0 } as const;
     };
 
-    interface TreeNodeProps { nodeId: string; depth: number }
+    interface TreeNodeProps { nodeId: string; depth: number; isFocused: Accessor<boolean>; }
 
     const TreeNode = (nodeProps: TreeNodeProps) => {
         const registerRowNode = useTreeScrollRegistration();
@@ -149,7 +149,8 @@ export function TreePanel(props: TreePanelProps) {
         const isSelected = () => isRowSelected(rowId());
         const [childrenMounted, setChildrenMounted] = createSignal(false);
         createEffect(() => { if (isExpanded()) setChildrenMounted(true); });
-        const fg = () => (isSelected() ? palette().primary : palette().text);
+        const fg = () => (isSelected() && nodeProps.isFocused() ? palette().background : palette().text);
+        const bg = () => (isSelected() && nodeProps.isFocused() ? palette().primary : undefined);
         const attrs = () => (isSelected() ? TextAttributes.BOLD : TextAttributes.NONE);
         const toggleGlyph = () => {
             const details = entity();
@@ -167,11 +168,12 @@ export function TreePanel(props: TreePanelProps) {
                                 id={rowElementId(rowId())}
                                 flexDirection="row"
                                 paddingLeft={nodeProps.depth * 2}
-                                width={getRowWidth(descriptor())}
+                                minWidth={"100%"}
                                 flexShrink={0}
                                 ref={(node: BoxRenderable | undefined) => registerRowNode(rowId(), node)}
+                                backgroundColor={bg()}
                             >
-                                <text fg={fg()} attributes={attrs()} wrapMode="none">
+                                <text fg={fg()} attributes={attrs()} wrapMode="none" bg={bg()} >
                                     {isSelected() ? "> " : "  "}
                                     {toggleGlyph()} {details().icon} {details().label}
                                 </text>
@@ -190,7 +192,7 @@ export function TreePanel(props: TreePanelProps) {
                             </box>
                             <Show when={childrenMounted()}>
                                 <box flexDirection="column" visible={isExpanded()}>
-                                    <For each={childIds()}>{(childId) => (<TreeNode nodeId={childId} depth={nodeProps.depth + 1} />)}</For>
+                                    <For each={childIds()}>{(childId) => (<TreeNode nodeId={childId} depth={nodeProps.depth + 1} isFocused={nodeProps.isFocused} />)}</For>
                                 </box>
                             </Show>
                         </>
@@ -242,7 +244,7 @@ export function TreePanel(props: TreePanelProps) {
                                         </text>
                                     }
                                 >
-                                    <For each={rootIds()}>{(id) => <TreeNode nodeId={id} depth={0} />}</For>
+                                    <For each={rootIds()}>{(id) => <TreeNode nodeId={id} depth={0} isFocused={pane.isFocused} />}</For>
                                 </Show>
                             </TreeScrollbox>
                         </Show>
