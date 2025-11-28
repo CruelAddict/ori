@@ -21,8 +21,7 @@ export interface RowMetricsService {
     dispose(): void;
 }
 
-const MAX_TIMEOUT_BATCH = 200;
-
+// the reason this file exists is that opentui can't properly handle scrollbar with changing content & viewport width
 export function createRowMetrics(measureRowWidth: MeasureRowWidth, onWidthUpdate: WidthChangeHandler): RowMetricsService {
     const rowWidths = new Map<string, RowMeta>();
     const depthStats = new Map<number, WidthEntry>();
@@ -31,8 +30,6 @@ export function createRowMetrics(measureRowWidth: MeasureRowWidth, onWidthUpdate
     const [naturalWidth, setNaturalWidth] = createSignal(MIN_CONTENT_WIDTH);
 
     let viewportWidth = clampContentWidth(readTerminalWidth());
-    let pendingMeasure: RowDescriptor[] = [];
-    let measureHandle: ReturnType<typeof setTimeout> | null = null;
     let widthRecalcHandle: ReturnType<typeof setTimeout> | null = null;
     let pendingWidthUpdate = false;
 
@@ -41,7 +38,7 @@ export function createRowMetrics(measureRowWidth: MeasureRowWidth, onWidthUpdate
         for (const row of rows) {
             activeRowIds.add(row.id);
             if (!rowWidths.has(row.id)) {
-                pendingMeasure.push(row);
+                upsertRowWidth(row);
             }
         }
         const removed: string[] = [];
@@ -49,30 +46,7 @@ export function createRowMetrics(measureRowWidth: MeasureRowWidth, onWidthUpdate
             if (!activeRowIds.has(id)) removed.push(id);
         }
         for (const id of removed) removeRowWidth(id);
-        if (pendingMeasure.length > 0) {
-            scheduleMeasureBatch();
-        }
-    };
-
-
-    const scheduleMeasureBatch = () => {
-        if (measureHandle) return;
-        measureHandle = setTimeout(() => {
-            measureHandle = null;
-            runMeasureBatch();
-        }, 0);
-    };
-
-    const runMeasureBatch = () => {
-        let remaining = MAX_TIMEOUT_BATCH;
-        while (pendingMeasure.length && remaining > 0) {
-            const row = pendingMeasure.shift()!;
-            if (!activeRowIds.has(row.id)) continue;
-            upsertRowWidth(row);
-            remaining -= 1;
-        }
-        if (pendingMeasure.length) scheduleMeasureBatch();
-        else scheduleWidthRecalc();
+        scheduleWidthRecalc();
     };
 
     const upsertRowWidth = (row: RowDescriptor) => {
@@ -139,15 +113,10 @@ export function createRowMetrics(measureRowWidth: MeasureRowWidth, onWidthUpdate
 
     const dispose = () => {
         detachViewportResize();
-        if (measureHandle) {
-            clearTimeout(measureHandle);
-            measureHandle = null;
-        }
         if (widthRecalcHandle) {
             clearTimeout(widthRecalcHandle);
             widthRecalcHandle = null;
         }
-        pendingMeasure = [];
         activeRowIds.clear();
         rowWidths.clear();
         depthStats.clear();
