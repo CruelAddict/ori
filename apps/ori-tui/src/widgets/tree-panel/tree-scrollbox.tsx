@@ -52,7 +52,6 @@ function useTreeOverflowTracker(options: OverflowTrackerHookOptions) {
     createEffect(() => {
         options.rows();
         options.isFocused();
-        options.selectedRowId();
         tracker.refresh();
     });
     onCleanup(() => tracker.dispose());

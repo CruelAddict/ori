@@ -129,9 +129,8 @@ export function TreePanel(props: TreePanelProps) {
     const paneWidthProps = () => {
         if (pane.isFocused()) {
             return {
-                width: "auto" as const,
+                width: treeNaturalWidth() + 5,
                 maxWidth: focusedWidthPercent(),
-                minWidth: focusedMinWidth(),
                 flexGrow: 1,
             };
         }
@@ -182,7 +181,7 @@ export function TreePanel(props: TreePanelProps) {
                                         </text>
                                     }
                                 >
-                                    <For each={rootIds()}>{(id) => <TreeNode nodeId={id} depth={0} isFocused={pane.isFocused} pane={pane} />}</For>
+                                    <For each={rootIds()}>{(id) => <TreeNode nodeId={id} depth={0} isFocused={pane.isFocused} pane={pane} isRowSelected={isRowSelected} />}</For>
                                 </Show>
                             </TreeScrollbox>
                         </Show>

@@ -10,6 +10,7 @@ interface TreeNodeProps {
     depth: number;
     isFocused: Accessor<boolean>;
     pane: TreePaneViewModel;
+    isRowSelected: (key: string) => boolean;
 }
 
 export function TreeNode(props: TreeNodeProps) {
@@ -21,7 +22,7 @@ export function TreeNode(props: TreeNodeProps) {
     const childIds = createMemo(() => props.pane.controller.getRenderableChildIds(props.nodeId));
     const rowId = () => props.nodeId;
     const isExpanded = () => props.pane.controller.isExpanded(props.nodeId);
-    const isSelected = () => props.pane.controller.selectedId() === rowId();
+    const isSelected = () => props.isRowSelected(props.nodeId);
     const [childrenMounted, setChildrenMounted] = createSignal(false);
 
     createEffect(() => {
@@ -79,6 +80,7 @@ export function TreeNode(props: TreeNodeProps) {
                                             depth={props.depth + 1}
                                             isFocused={props.isFocused}
                                             pane={props.pane}
+                                            isRowSelected={props.isRowSelected}
                                         />
                                     )}
                                 </For>

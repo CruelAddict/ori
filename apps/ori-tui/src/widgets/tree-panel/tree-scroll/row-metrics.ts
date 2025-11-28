@@ -40,14 +40,18 @@ export function createRowMetrics(measureRowWidth: MeasureRowWidth, onWidthUpdate
         activeRowIds.clear();
         for (const row of rows) {
             activeRowIds.add(row.id);
-            pendingMeasure.push(row);
+            if (!rowWidths.has(row.id)) {
+                pendingMeasure.push(row);
+            }
         }
         const removed: string[] = [];
         for (const id of rowWidths.keys()) {
             if (!activeRowIds.has(id)) removed.push(id);
         }
         for (const id of removed) removeRowWidth(id);
-        scheduleMeasureBatch();
+        if (pendingMeasure.length > 0) {
+            scheduleMeasureBatch();
+        }
     };
 
 
