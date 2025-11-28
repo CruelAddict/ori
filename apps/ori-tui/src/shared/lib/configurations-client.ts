@@ -172,8 +172,11 @@ class HttpOriClient implements OriClient {
         if (nodeIDs && nodeIDs.length > 0) {
             params.nodeIDs = nodeIDs;
         }
+        this.options.logger.debug({ configuration: configurationName, nodeCount: nodeIDs?.length ?? 0 }, "getNodes RPC request");
         const result = await this.rpc.request("getNodes", params);
-        return extractNodes(result);
+        const nodes = extractNodes(result);
+        this.options.logger.debug({ configuration: configurationName, resultCount: nodes.length }, "getNodes RPC response");
+        return nodes;
     }
 
     async queryExec(configurationName: string, query: string, params?: any): Promise<QueryExecResult> {
@@ -245,8 +248,11 @@ class UnixSocketOriClient implements OriClient {
         if (nodeIDs && nodeIDs.length > 0) {
             params.nodeIDs = nodeIDs;
         }
+        this.options.logger.debug({ configuration: configurationName, nodeCount: nodeIDs?.length ?? 0 }, "getNodes RPC request");
         const result = await this.rpc.request("getNodes", params);
-        return extractNodes(result);
+        const nodes = extractNodes(result);
+        this.options.logger.debug({ configuration: configurationName, resultCount: nodes.length }, "getNodes RPC response");
+        return nodes;
     }
 
     async queryExec(configurationName: string, query: string, params?: any): Promise<QueryExecResult> {

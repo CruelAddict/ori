@@ -13,10 +13,13 @@ export async function loadFullGraph(
     configurationName: string,
     logger?: Logger
 ): Promise<GraphSnapshot> {
+    logger?.debug({ configuration: configurationName }, "schema load starting");
     const nodes = new Map<string, Node>();
     const queue = new Set<string>();
 
+    logger?.debug({ configuration: configurationName }, "fetching root nodes");
     const rootNodes = await client.getNodes(configurationName);
+    logger?.debug({ configuration: configurationName, rootCount: rootNodes.length }, "fetched root nodes");
     for (const node of rootNodes) {
         nodes.set(node.id, node);
         enqueueEdges(node, queue, nodes);
@@ -29,7 +32,9 @@ export async function loadFullGraph(
         }
 
         try {
+            logger?.debug({ configuration: configurationName, batchSize: batch.length, queueRemaining: queue.size }, "fetching node batch");
             const fetched = await client.getNodes(configurationName, batch);
+            logger?.debug({ configuration: configurationName, fetchedCount: fetched.length }, "fetched node batch");
             for (const node of fetched) {
                 nodes.set(node.id, node);
                 enqueueEdges(node, queue, nodes);
@@ -40,10 +45,12 @@ export async function loadFullGraph(
         }
     }
 
-    return {
+    const result = {
         nodes,
         rootIds: rootNodes.map((node) => node.id),
     };
+    logger?.debug({ configuration: configurationName, totalNodes: nodes.size, rootCount: result.rootIds.length }, "schema load completed");
+    return result;
 }
 
 function enqueueEdges(node: Node, queue: Set<string>, knownNodes: Map<string, Node>) {

@@ -22,7 +22,9 @@ export function useGraphSnapshot(configurationName: Accessor<string | null>): Gr
             if (!name) {
                 return null;
             }
+            logger.debug({ configuration: name }, "graph snapshot fetch triggered");
             const snapshot = await loadFullGraph(client, name, logger);
+            logger.debug({ configuration: name, hasSnapshot: !!snapshot }, "graph snapshot fetch completed");
             return snapshot;
         }
     );
@@ -38,8 +40,8 @@ export function useGraphSnapshot(configurationName: Accessor<string | null>): Gr
     createEffect(() => {
         const err = resource.error;
         const name = configurationName();
-        if (err && name) {
-            logger.error({ err, configuration: name }, "failed to load graph snapshot");
+        if (err) {
+            logger.error({ err, configuration: name }, "graph snapshot load failed");
         }
     });
 
