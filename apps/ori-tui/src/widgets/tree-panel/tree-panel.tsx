@@ -3,12 +3,11 @@ import { TextAttributes } from "@opentui/core";
 import { KeyScope, type KeyBinding } from "@src/core/services/key-scopes";
 import type { TreePaneViewModel } from "@src/features/tree-pane/use-tree-pane";
 import { useTheme } from "@app/providers/theme";
-import { TreeScrollbox, type RowDescriptor, type TreeScrollboxApi } from "./tree-scrollbox.tsx";
-import { TreeNode } from "./tree-node.tsx";
+import { TreeScrollbox, type TreeScrollboxApi } from "./tree-scrollbox.tsx";
+import { TreeNode, createTreeNodeMetrics } from "./tree-node.tsx";
 import { MIN_CONTENT_WIDTH } from "./tree-scroll/row-metrics.ts";
 
 const TREE_SCOPE_ID = "connection-view.tree";
-const ROW_ID_PREFIX = "tree-row-";
 const HORIZONTAL_SCROLL_STEP = 6;
 const MIN_FOCUSED_COLUMN_WIDTH = 50;
 const MIN_FOCUSED_PERCENT = 0.2;
@@ -27,35 +26,10 @@ export function TreePanel(props: TreePanelProps) {
     const { theme } = useTheme();
     const palette = theme;
 
-    // Width calc cache keyed by row id+depth; descriptor object identity isn't stable in recursive rendering
-    const rowWidthCache = new Map<string, number>();
-    const keyOf = (row: RowDescriptor) => {
-        const expanded = pane.controller.isExpanded(row.id) ? 1 : 0;
-        return `${row.id}@${row.depth}:${expanded}`;
-    };
-    const calculateRowWidth = (row: RowDescriptor) => {
-        const entity = pane.controller.getEntity(row.id);
-        const hasChildren = Boolean(entity?.hasChildren);
-        const isExpanded = pane.controller.isExpanded(row.id);
-        const glyph = hasChildren ? (isExpanded ? "[-]" : "[+]") : "   ";
-        const indicator = "> ";
-        const icon = entity?.icon ? `${entity.icon}` : "";
-        let width = row.depth * 2;
-        const baseLabel = entity?.label ?? "";
-        const base = `${indicator}${glyph} ${icon} ${baseLabel}`;
-        width += base.length;
-        if (entity?.description) width += 1 + entity.description.length;
-        if (entity?.badges) width += 1 + entity.badges.length;
-        return width;
-    };
-    const getRowWidth = (row: RowDescriptor) => {
-        const k = keyOf(row);
-        const cached = rowWidthCache.get(k);
-        if (cached !== undefined) return cached;
-        const width = calculateRowWidth(row);
-        rowWidthCache.set(k, width);
-        return width;
-    };
+    const measureRowWidth = createTreeNodeMetrics({
+        getEntity: pane.controller.getEntity,
+        isExpanded: pane.controller.isExpanded,
+    });
     const [treeNaturalWidth, setTreeNaturalWidth] = createSignal(MIN_CONTENT_WIDTH);
     let treeScrollboxApi: TreeScrollboxApi | null = null;
     const handleScrollboxApi = (api?: TreeScrollboxApi) => {
@@ -167,7 +141,7 @@ export function TreePanel(props: TreePanelProps) {
                         <Show when={!pane.loading() && !pane.error()}>
                             <TreeScrollbox
                                 rows={rows}
-                                measureRowWidth={getRowWidth}
+                                measureRowWidth={measureRowWidth}
                                 selectedRowId={selectedId}
                                 isFocused={pane.isFocused}
                                 onApiReady={handleScrollboxApi}
@@ -192,9 +166,7 @@ export function TreePanel(props: TreePanelProps) {
     );
 }
 
-function rowElementId(rowId: string) {
-    return `${ROW_ID_PREFIX}${rowId}`;
-}
+
 
 function readTerminalWidth() {
     if (typeof process === "undefined") return 0;

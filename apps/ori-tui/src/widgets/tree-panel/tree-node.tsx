@@ -1,7 +1,7 @@
 import { For, Show, createEffect, createMemo, createSignal, type Accessor } from "solid-js";
 import { TextAttributes } from "@opentui/core";
 import type { BoxRenderable } from "@opentui/core";
-import { useTreeScrollRegistration } from "./tree-scrollbox.tsx";
+import { useTreeScrollRegistration, type RowDescriptor } from "./tree-scrollbox.tsx";
 import type { TreePaneViewModel } from "@src/features/tree-pane/use-tree-pane";
 import { useTheme } from "@app/providers/theme";
 
@@ -96,4 +96,36 @@ export function TreeNode(props: TreeNodeProps) {
 function rowElementId(rowId: string) {
     const ROW_ID_PREFIX = "tree-row-";
     return `${ROW_ID_PREFIX}${rowId}`;
+}
+
+interface TreeNodeMetricsOptions {
+    getEntity: (id: string) => { label: string; icon?: string; description?: string; badges?: string; hasChildren: boolean } | undefined;
+    isExpanded: (id: string) => boolean;
+}
+
+export function createTreeNodeMetrics(options: TreeNodeMetricsOptions) {
+    const { getEntity, isExpanded } = options;
+    const cache = new Map<string, number>();
+
+    return (row: RowDescriptor): number => {
+        const expanded = isExpanded(row.id) ? 1 : 0;
+        const key = `${row.id}@${row.depth}:${expanded}`;
+
+        const cached = cache.get(key);
+        if (cached !== undefined) return cached;
+
+        const entity = getEntity(row.id);
+        const hasChildren = Boolean(entity?.hasChildren);
+        const glyph = hasChildren ? (expanded ? "[-]" : "[+]") : "   ";
+        const indicator = "> ";
+        const icon = entity?.icon ? `${entity.icon}` : "";
+        let width = row.depth * 2;
+        const base = `${indicator}${glyph} ${icon} ${entity?.label ?? ""}`;
+        width += base.length;
+        if (entity?.description) width += 1 + entity.description.length;
+        if (entity?.badges) width += 1 + entity.badges.length;
+
+        cache.set(key, width);
+        return width;
+    };
 }
