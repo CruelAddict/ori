@@ -10,7 +10,7 @@ import { MIN_CONTENT_WIDTH } from "./tree-scroll/row-metrics.ts";
 const TREE_SCOPE_ID = "connection-view.tree";
 const ROW_ID_PREFIX = "tree-row-";
 const HORIZONTAL_SCROLL_STEP = 6;
-const MIN_FOCUSED_COLUMN_WIDTH = 40;
+const MIN_FOCUSED_COLUMN_WIDTH = 50;
 const MIN_FOCUSED_PERCENT = 0.2;
 const MAX_FOCUSED_PERCENT = 0.5;
 
@@ -138,7 +138,7 @@ export function TreePanel(props: TreePanelProps) {
         return { width: MIN_FOCUSED_COLUMN_WIDTH, maxWidth: MIN_FOCUSED_COLUMN_WIDTH, minWidth: MIN_FOCUSED_COLUMN_WIDTH, flexGrow: 0 } as const;
     };
 
-    
+
 
     return (
         <Show when={pane.visible()}>
