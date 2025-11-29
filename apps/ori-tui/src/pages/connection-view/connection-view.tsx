@@ -94,10 +94,7 @@ export function ConnectionViewPage(props: ConnectionViewPageProps) {
     return (
         <KeyScope id="connection-view" bindings={screenKeyBindings}>
             <box flexDirection="column" flexGrow={1} backgroundColor={palette().background}>
-                <text attributes={TextAttributes.BOLD} fg={palette().text}>
-                    Connection
-                </text>
-                <text attributes={TextAttributes.DIM} fg={palette().text}>
+                <text fg={palette().accent} marginTop={1} marginLeft={3}>
                     {vm.title()}
                 </text>
 
@@ -107,7 +104,6 @@ export function ConnectionViewPage(props: ConnectionViewPageProps) {
                     <box flexDirection="column" flexGrow={1} marginLeft={vm.treePane.visible() ? 1 : 0} justifyContent="space-between">
                         <EditorPanel
                             viewModel={vm.editorPane}
-                            borderColor={(focused) => (focused ? palette().primary : palette().border)}
                         />
                         <Show when={vm.resultsPane.visible()}>
                             <ResultsPanel viewModel={vm.resultsPane} />

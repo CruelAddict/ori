@@ -54,7 +54,7 @@ export function TreeNode(props: TreeNodeProps) {
                             ref={(node: BoxRenderable | undefined) => registerRowNode(rowId(), node)}
                             backgroundColor={bg()}
                         >
-                            <text fg={fg()} attributes={attrs()} wrapMode="none" bg={bg()} >
+                            <text fg={fg()} wrapMode="none" bg={bg()} >
                                 {isSelected() ? "> " : "  "}
                                 {toggleGlyph()} {details().icon} {details().label}
                             </text>

@@ -8,7 +8,6 @@ const EDITOR_SCOPE_ID = "connection-view.editor";
 
 export interface EditorPanelProps {
     viewModel: EditorPaneViewModel;
-    borderColor?: (focused: boolean) => string;
 }
 
 export function EditorPanel(props: EditorPanelProps) {
@@ -59,6 +58,7 @@ export function EditorPanel(props: EditorPanelProps) {
                         focusedTextColor={palette().editorText}
                         backgroundColor={palette().background}
                         focusedBackgroundColor={palette().background}
+                        cursorColor={palette().primary}
                         minHeight={3}
                         maxHeight={12}
                         onContentChange={handleChange}

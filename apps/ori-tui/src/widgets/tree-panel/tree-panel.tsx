@@ -43,11 +43,6 @@ export function TreePanel(props: TreePanelProps) {
     const formatPercent = (fraction: number) => `${Math.round(fraction * 100)}%` as `${number}%`;
     const [focusedWidthFraction, setFocusedWidthFraction] = createSignal(MAX_FOCUSED_PERCENT);
     const focusedWidthPercent = createMemo(() => formatPercent(focusedWidthFraction()));
-    const focusedMinWidth = createMemo(() => {
-        const terminal = terminalWidth();
-        if (terminal <= 0) return MIN_FOCUSED_COLUMN_WIDTH;
-        return Math.max(MIN_FOCUSED_COLUMN_WIDTH, Math.floor(focusedWidthFraction() * terminal));
-    });
     const handleResize = () => setTerminalWidth(readTerminalWidth());
 
 
