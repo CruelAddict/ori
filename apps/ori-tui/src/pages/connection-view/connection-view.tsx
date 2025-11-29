@@ -5,6 +5,7 @@ import { useConnectionView } from "@src/features/connection/view/use-connection-
 import { TreePanel } from "@src/widgets/tree-panel/tree-panel";
 import { EditorPanel } from "@src/widgets/editor-panel/editor-panel";
 import { ResultsPanel } from "@src/widgets/results-panel/results-panel";
+import { WelcomePane } from "@src/widgets/welcome-pane/welcome-pane";
 import { useTheme } from "@app/providers/theme";
 
 export interface ConnectionViewPageProps {
@@ -96,6 +97,12 @@ export function ConnectionViewPage(props: ConnectionViewPageProps) {
             },
             preventDefault: true,
         },
+        {
+            pattern: "q",
+            handler: vm.actions.openEditor,
+            when: () => !vm.editorOpen(),
+            preventDefault: true,
+        },
     ];
 
     return (
@@ -109,9 +116,11 @@ export function ConnectionViewPage(props: ConnectionViewPageProps) {
                     <TreePanel viewModel={vm.treePane} />
 
                     <box flexDirection="column" flexGrow={1} marginLeft={vm.treePane.visible() ? 1 : 0} justifyContent="space-between">
-                        <EditorPanel
-                            viewModel={vm.editorPane}
-                        />
+                        <Show when={vm.editorOpen()} fallback={<WelcomePane />}>
+                            <EditorPanel
+                                viewModel={vm.editorPane}
+                            />
+                        </Show>
                         <Show when={vm.resultsPane.visible()}>
                             <ResultsPanel viewModel={vm.resultsPane} />
                         </Show>
@@ -120,7 +129,7 @@ export function ConnectionViewPage(props: ConnectionViewPageProps) {
 
                 <box height={1} minWidth={"100%"}>
                     <text attributes={TextAttributes.DIM} fg={palette().textMuted}>
-                        {vm.helpText}
+                        {vm.helpText()}
                     </text>
                 </box>
             </box>
