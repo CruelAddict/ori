@@ -1,5 +1,5 @@
-import { TextAttributes } from "@opentui/core";
-import { For } from "solid-js";
+import { RGBA, Text, TextAttributes } from "@opentui/core";
+import { createMemo, For } from "solid-js";
 import { useTheme } from "@app/providers/theme";
 
 interface CommandRowProps {
@@ -22,9 +22,11 @@ export function WelcomePane() {
             alignItems="center"
             justifyContent="center"
         >
-            <text attributes={TextAttributes.BOLD} fg={palette().accent} paddingBottom={1}>
-                welcome to ori
-            </text>
+
+            <box flexDirection="row" justifyContent="center" alignItems="flex-end" width={"100%"}>
+                <ascii_font text="ORI" font="tiny" fg={RGBA.fromHex(palette().text)} />
+                <text attributes={TextAttributes.DIM} marginLeft={2}>v0.0.1</text>
+            </box>
             <box height={2} />
             <box
                 flexDirection="column"
@@ -36,7 +38,7 @@ export function WelcomePane() {
             >
                 <For each={commands}>{(command) => <CommandRow {...command} />}</For>
             </box>
-            <box height={2} />
+            <box height={8} />
         </box>
     );
 }
