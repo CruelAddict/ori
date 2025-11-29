@@ -22,6 +22,8 @@ export function EditorPanel(props: EditorPanelProps) {
     createEffect(() => {
         if (pane.isFocused() && textarea) {
             textarea.focus();
+        } else {
+            textarea?.blur()
         }
     });
 
@@ -55,8 +57,8 @@ export function EditorPanel(props: EditorPanelProps) {
                         placeholder={`Type to begin... (Enter inserts newline, Ctrl+X then Enter executes)`}
                         textColor={palette().editorText}
                         focusedTextColor={palette().editorText}
-                        backgroundColor={palette().editorBackground}
-                        focusedBackgroundColor={palette().editorBackgroundFocused}
+                        backgroundColor={palette().background}
+                        focusedBackgroundColor={palette().background}
                         minHeight={3}
                         maxHeight={12}
                         onContentChange={handleChange}
