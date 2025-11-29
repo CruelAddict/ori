@@ -35,10 +35,12 @@ export interface ConnectionViewModel {
     actions: ConnectionViewActions;
 }
 
+const DEFAULT_PANE: FocusPane = "tree";
+
 export function useConnectionView(options: UseConnectionViewOptions): ConnectionViewModel {
     const configuration = useConfigurationByName(options.configurationName);
     const title = createMemo(() => configuration()?.name ?? options.configurationName());
-    const [focusedPane, setFocusedPane] = createSignal<FocusPane>("editor");
+    const [focusedPane, setFocusedPane] = createSignal<FocusPane>(DEFAULT_PANE);
 
     const focusTree = () => setFocusedPane("tree");
     const focusEditor = () => setFocusedPane("editor");
@@ -52,7 +54,7 @@ export function useConnectionView(options: UseConnectionViewOptions): Connection
 
     const treePane = useTreePane({
         configurationName: options.configurationName,
-        focus: createFocusController("tree", () => setFocusedPane("editor")),
+        focus: createFocusController("tree", () => setFocusedPane(DEFAULT_PANE)),
     });
 
     const editorPane = useEditorPane({
@@ -62,7 +64,7 @@ export function useConnectionView(options: UseConnectionViewOptions): Connection
 
     const resultsPane = useResultsPane({
         job: editorPane.currentJob,
-        focus: createFocusController("results", () => setFocusedPane("editor")),
+        focus: createFocusController("results", () => setFocusedPane(DEFAULT_PANE)),
     });
 
     const moveFocusLeft = () => {
