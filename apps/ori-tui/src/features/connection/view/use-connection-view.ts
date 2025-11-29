@@ -100,7 +100,7 @@ export function useConnectionView(options: UseConnectionViewOptions): Connection
     };
 
     const helpText =
-        "ctrl+e: toggle tree | ctrl+r: toggle results |  ctrl+x h/j/k/l: move focus | ctrl+x enter: execute";
+        "ctrl+s: save | ctrl+e: toggle tree | ctrl+r: toggle results | ctrl+x h/j/k/l: move focus | ctrl+x enter: execute";
 
     return {
         title,

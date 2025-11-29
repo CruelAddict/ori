@@ -89,6 +89,13 @@ export function ConnectionViewPage(props: ConnectionViewPageProps) {
             },
             preventDefault: true,
         },
+        {
+            pattern: "ctrl+s",
+            handler: () => {
+                vm.editorPane.saveQuery();
+            },
+            preventDefault: true,
+        },
     ];
 
     return (
