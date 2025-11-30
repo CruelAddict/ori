@@ -20,7 +20,7 @@ export type Node = {
     id: string;
     type: string;
     name: string;
-    attributes: Record<string, any>;
+    attributes: Record<string, unknown>;
     edges: Record<string, NodeEdge>;
 };
 
@@ -37,7 +37,7 @@ export type QueryColumn = {
 
 export type QueryResultView = {
     columns: QueryColumn[];
-    rows: any[][];
+    rows: unknown[][];
     rowCount: number;
     truncated: boolean;
 };
@@ -46,7 +46,7 @@ export type OriClient = {
     listConfigurations(): Promise<Configuration[]>;
     connect(configurationName: string): Promise<ConnectResult>;
     getNodes(configurationName: string, nodeIDs?: string[]): Promise<Node[]>;
-    queryExec(configurationName: string, query: string, params?: any): Promise<QueryExecResult>;
+    queryExec(configurationName: string, query: string, params?: Record<string, unknown>): Promise<QueryExecResult>;
     queryGetResult(jobId: string, limit?: number, offset?: number): Promise<QueryResultView>;
     openEventStream(onEvent: (event: ServerEvent) => void): () => void;
 };
@@ -98,7 +98,7 @@ const STUB_CONFIGURATIONS: Configuration[] = [
 class JsonRpcClient {
     constructor(private readonly transport: JsonRpcTransportOptions) {}
 
-    async request(method: string, params: Record<string, any> = {}): Promise<any> {
+    async request(method: string, params: Record<string, unknown> = {}): Promise<unknown> {
         const payload = JSON.stringify({ jsonrpc: "2.0", method, params, id: Date.now() });
         return new Promise((resolve, reject) => {
             const headers = {
@@ -170,8 +170,9 @@ class HttpOriClient implements OriClient {
     }
 
     async getNodes(configurationName: string, nodeIDs?: string[]): Promise<Node[]> {
-        const params: Record<string, any> = { configurationName };
-        if (nodeIDs && nodeIDs.length > 0) {
+        const params: Record<string, unknown> = { configurationName };
+
+        if ((nodeIDs?.length ?? 0) > 0) {
             params.nodeIDs = nodeIDs;
         }
         this.options.logger.debug(
@@ -187,8 +188,12 @@ class HttpOriClient implements OriClient {
         return nodes;
     }
 
-    async queryExec(configurationName: string, query: string, params?: any): Promise<QueryExecResult> {
-        const requestParams: Record<string, any> = { configurationName, query };
+    async queryExec(
+        configurationName: string,
+        query: string,
+        params?: Record<string, unknown>,
+    ): Promise<QueryExecResult> {
+        const requestParams: Record<string, unknown> = { configurationName, query };
         if (params !== undefined) {
             requestParams.params = params;
         }
@@ -197,7 +202,7 @@ class HttpOriClient implements OriClient {
     }
 
     async queryGetResult(jobId: string, limit?: number, offset?: number): Promise<QueryResultView> {
-        const requestParams: Record<string, any> = { jobId };
+        const requestParams: Record<string, unknown> = { jobId };
         if (limit !== undefined) {
             requestParams.limit = limit;
         }
@@ -218,18 +223,18 @@ class HttpOriClient implements OriClient {
             },
             (message) => {
                 try {
-                    this.options.logger.debug({ event: message.event }, "http-client: decoding SSE message");
+                    this.options.logger.debug({ event: message.event }, "unix-client: decoding SSE message");
                     const event = decodeServerEvent(message);
                     if (event) {
                         this.options.logger.debug(
                             { eventType: event.type },
-                            "http-client: decoded event, invoking callback",
+                            "unix-client: decoded event, invoking callback",
                         );
                         onEvent(event);
                     } else {
                         this.options.logger.debug(
                             { event: message.event },
-                            "http-client: decodeServerEvent returned null",
+                            "unix-client: decodeServerEvent returned null",
                         );
                     }
                 } catch (err) {
@@ -258,8 +263,8 @@ class UnixSocketOriClient implements OriClient {
     }
 
     async getNodes(configurationName: string, nodeIDs?: string[]): Promise<Node[]> {
-        const params: Record<string, any> = { configurationName };
-        if (nodeIDs && nodeIDs.length > 0) {
+        const params: Record<string, unknown> = { configurationName };
+        if ((nodeIDs?.length ?? 0) > 0) {
             params.nodeIDs = nodeIDs;
         }
         this.options.logger.debug(
@@ -275,8 +280,12 @@ class UnixSocketOriClient implements OriClient {
         return nodes;
     }
 
-    async queryExec(configurationName: string, query: string, params?: any): Promise<QueryExecResult> {
-        const requestParams: Record<string, any> = { configurationName, query };
+    async queryExec(
+        configurationName: string,
+        query: string,
+        params?: Record<string, unknown>,
+    ): Promise<QueryExecResult> {
+        const requestParams: Record<string, unknown> = { configurationName, query };
         if (params !== undefined) {
             requestParams.params = params;
         }
@@ -285,7 +294,7 @@ class UnixSocketOriClient implements OriClient {
     }
 
     async queryGetResult(jobId: string, limit?: number, offset?: number): Promise<QueryResultView> {
-        const requestParams: Record<string, any> = { jobId };
+        const requestParams: Record<string, unknown> = { jobId };
         if (limit !== undefined) {
             requestParams.limit = limit;
         }
@@ -393,41 +402,57 @@ export function createOriClient(options: CreateClientOptions): OriClient {
     return new HttpOriClient({ host, port, logger: options.logger });
 }
 
-function extractConfigurations(result: any): Configuration[] {
-    if (Array.isArray(result?.configurations)) {
-        return result.configurations;
+function extractConfigurations(result: unknown): Configuration[] {
+    const payload = (result ?? {}) as { configurations?: unknown; connections?: unknown };
+    if (Array.isArray(payload.configurations)) {
+        return payload.configurations as Configuration[];
     }
-    if (Array.isArray(result?.connections)) {
-        return result.connections;
+    if (Array.isArray(payload.connections)) {
+        return payload.connections as Configuration[];
     }
     return [];
 }
 
-function extractConnectResult(result: any): ConnectResult {
+function extractConnectResult(result: unknown): ConnectResult {
+    const payload = (result ?? {}) as { result?: ConnectResult["result"]; userMessage?: string };
     return {
-        result: result?.result ?? "fail",
-        userMessage: result?.userMessage ?? undefined,
+        result: payload.result ?? "fail",
+        userMessage: payload.userMessage ?? undefined,
     };
 }
 
-function extractNodes(result: any): Node[] {
-    return Array.isArray(result?.nodes) ? (result.nodes as Node[]) : [];
+function extractNodes(result: unknown): Node[] {
+    const payload = (result ?? {}) as { nodes?: unknown };
+    return Array.isArray(payload.nodes) ? (payload.nodes as Node[]) : [];
 }
 
-function extractQueryExecResult(result: any): QueryExecResult {
+function extractQueryExecResult(result: unknown): QueryExecResult {
+    const payload = (result ?? {}) as {
+        jobId?: string;
+        jobID?: string;
+        status?: QueryExecResult["status"];
+        message?: string;
+    };
     return {
-        jobId: result?.jobId ?? result?.jobID ?? "",
-        status: result?.status ?? "failed",
-        message: result?.message ?? undefined,
+        jobId: payload.jobId ?? payload.jobID ?? "",
+        status: payload.status ?? "failed",
+        message: payload.message ?? undefined,
     };
 }
 
-function extractQueryResultView(result: any): QueryResultView {
+function extractQueryResultView(result: unknown): QueryResultView {
+    const payload = (result ?? {}) as {
+        columns?: unknown;
+        rows?: unknown;
+        rowCount?: number;
+        row_count?: number;
+        truncated?: boolean;
+    };
     return {
-        columns: Array.isArray(result?.columns) ? result.columns : [],
-        rows: Array.isArray(result?.rows) ? result.rows : [],
-        rowCount: result?.rowCount ?? result?.row_count ?? 0,
-        truncated: result?.truncated ?? false,
+        columns: Array.isArray(payload.columns) ? (payload.columns as QueryColumn[]) : [],
+        rows: Array.isArray(payload.rows) ? (payload.rows as unknown[][]) : [],
+        rowCount: payload.rowCount ?? payload.row_count ?? 0,
+        truncated: payload.truncated ?? false,
     };
 }
 

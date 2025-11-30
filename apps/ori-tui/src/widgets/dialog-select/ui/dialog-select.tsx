@@ -35,7 +35,6 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
     });
     const placeholder = props.placeholder ?? "Type to search";
     const emptyMessage = props.emptyMessage ?? "No results found";
-    const _hints = () => props.hints ?? [];
     const maxHeight = () => props.maxHeight ?? 16;
 
     let inputRef: InputRenderable | undefined;
@@ -43,55 +42,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
 
     const grouped = createMemo(() => groupByCategory(vm.filtered()));
 
-    const bindings = createMemo<KeyBinding[]>(() => {
-        const base: KeyBinding[] = [
-            {
-                pattern: "escape",
-                preventDefault: true,
-                handler: () => props.onCancel?.(),
-            },
-            {
-                pattern: "up",
-                preventDefault: true,
-                handler: () => vm.actions.move(-1),
-            },
-            {
-                pattern: "ctrl+p",
-                preventDefault: true,
-                handler: () => vm.actions.move(-1),
-            },
-            {
-                pattern: "down",
-                preventDefault: true,
-                handler: () => vm.actions.move(1),
-            },
-            {
-                pattern: "ctrl+n",
-                preventDefault: true,
-                handler: () => vm.actions.move(1),
-            },
-            {
-                pattern: "pageup",
-                preventDefault: true,
-                handler: () => vm.actions.movePage(-1),
-            },
-            {
-                pattern: "pagedown",
-                preventDefault: true,
-                handler: () => vm.actions.movePage(1),
-            },
-            {
-                pattern: "return",
-                preventDefault: true,
-                handler: () => {
-                    const option = vm.actions.select();
-                    if (option) props.onSelect?.(option);
-                },
-            },
-        ];
-        const extras = props.extraKeyBindings?.() ?? [];
-        return [...base, ...extras];
-    });
+    const bindings = useDialogBindings(vm, props);
 
     onMount(() => {
         queueMicrotask(() => inputRef?.focus());
@@ -100,12 +51,12 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
     createEffect(() => {
         vm.filter();
         if (!scrollRef) return;
-        (scrollRef as any)?.scrollTo?.(0);
+        (scrollRef as ScrollBoxWithScrollTo).scrollTo?.(0);
     });
 
     createEffect(() => {
         vm.cursor();
-        ensureVisible(scrollRef, vm);
+        ensureVisible(scrollRef as ScrollTreeNode | undefined, vm);
     });
 
     createEffect(() => {
@@ -223,7 +174,68 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
     );
 }
 
+function useDialogBindings<T>(vm: DialogSelectViewModel<T>, props: DialogSelectProps<T>) {
+    return createMemo<KeyBinding[]>(() => {
+        const base: KeyBinding[] = [
+            {
+                pattern: "escape",
+                preventDefault: true,
+                handler: () => props.onCancel?.(),
+            },
+            {
+                pattern: "up",
+                preventDefault: true,
+                handler: () => vm.actions.move(-1),
+            },
+            {
+                pattern: "ctrl+p",
+                preventDefault: true,
+                handler: () => vm.actions.move(-1),
+            },
+            {
+                pattern: "down",
+                preventDefault: true,
+                handler: () => vm.actions.move(1),
+            },
+            {
+                pattern: "ctrl+n",
+                preventDefault: true,
+                handler: () => vm.actions.move(1),
+            },
+            {
+                pattern: "pageup",
+                preventDefault: true,
+                handler: () => vm.actions.movePage(-1),
+            },
+            {
+                pattern: "pagedown",
+                preventDefault: true,
+                handler: () => vm.actions.movePage(1),
+            },
+            {
+                pattern: "return",
+                preventDefault: true,
+                handler: () => {
+                    const option = vm.actions.select();
+                    if (option) props.onSelect?.(option);
+                },
+            },
+        ];
+        const extras = props.extraKeyBindings?.() ?? [];
+        return [...base, ...extras];
+    });
+}
+
 type ThemeAccessor = ReturnType<typeof useTheme>["theme"];
+type ScrollBoxWithScrollTo = ScrollBoxRenderable & { scrollTo?: (position: number) => void };
+type RenderTreeNode = {
+    id?: string;
+    y?: number;
+    height?: number;
+    scrollBy?: (offset: number) => void;
+    getChildren?: () => RenderTreeNode[];
+};
+type ScrollTreeNode = ScrollBoxRenderable & RenderTreeNode;
 
 function OptionRow<T>(props: {
     option: DialogSelectOption<T>;
@@ -236,12 +248,15 @@ function OptionRow<T>(props: {
     const isCursor = createMemo(() => optionIndex() === props.vm.cursor());
     const isActiveOption = createMemo(() => props.vm.isActive(option));
 
-    const handleSelect = () => {
-        props.onSelect?.(option);
+    const fgColor = () => {
+        if (isCursor()) {
+            return props.palette().background;
+        }
+        if (isActiveOption()) {
+            return props.palette().primary;
+        }
+        return props.palette().text;
     };
-
-    const fgColor = () =>
-        isCursor() ? props.palette().background : isActiveOption() ? props.palette().primary : props.palette().text;
 
     return (
         <box
@@ -250,14 +265,6 @@ function OptionRow<T>(props: {
             paddingLeft={2}
             paddingRight={1}
             backgroundColor={isCursor() ? props.palette().primary : undefined}
-            onMouseOver={() => {
-                const idx = optionIndex();
-                if (idx >= 0) props.vm.actions.setCursor(idx);
-            }}
-            onMouseUp={() => {
-                props.vm.actions.setCursor(optionIndex());
-                handleSelect();
-            }}
             gap={1}
         >
             <text
@@ -267,11 +274,16 @@ function OptionRow<T>(props: {
                 wrapMode="none"
             >
                 {truncate(option.title, 50)}
-                <Show when={option.description}>
-                    <span style={{ fg: isCursor() ? props.palette().background : props.palette().textMuted }}>
-                        {" "}
-                        {truncate(option.description!, 60)}
-                    </span>
+                <Show
+                    when={option.description}
+                    keyed
+                >
+                    {(description: string) => (
+                        <span style={{ fg: isCursor() ? props.palette().background : props.palette().textMuted }}>
+                            {" "}
+                            {truncate(description, 60)}
+                        </span>
+                    )}
                 </Show>
             </text>
             <Show when={option.badge}>
@@ -307,7 +319,7 @@ function groupByCategory<T>(options: readonly DialogSelectOption<T>[]) {
     return Array.from(map.entries());
 }
 
-function ensureVisible<T>(scroll: ScrollBoxRenderable | undefined, vm: DialogSelectViewModel<T>) {
+function ensureVisible<T>(scroll: ScrollTreeNode | undefined, vm: DialogSelectViewModel<T>) {
     if (!scroll) return;
     const current = vm.selected();
     if (!current) return;
@@ -316,7 +328,7 @@ function ensureVisible<T>(scroll: ScrollBoxRenderable | undefined, vm: DialogSel
     const id = `dialog-option-${index}`;
 
     const target = findChildById(scroll, id);
-    if (!target) return;
+    if (!target || target.y === undefined) return;
 
     const offset = target.y - scroll.y;
     if (offset < 0) {
@@ -326,9 +338,10 @@ function ensureVisible<T>(scroll: ScrollBoxRenderable | undefined, vm: DialogSel
     }
 }
 
-function findChildById(node: any, id: string): any {
+function findChildById(node: RenderTreeNode | undefined, id: string): RenderTreeNode | undefined {
+    if (!node) return undefined;
     if (node.id === id) return node;
-    const children = ((node as any)?.getChildren?.() ?? []) as any[];
+    const children = node.getChildren?.() ?? [];
     for (const child of children) {
         const found = findChildById(child, id);
         if (found) return found;

@@ -7,7 +7,7 @@ import { useConfigurations } from "@src/entities/configuration/model/configurati
 import type { ConnectResult } from "@src/shared/lib/configurations-client";
 import type { Accessor } from "solid-js";
 import { createContext, createMemo, onCleanup, useContext } from "solid-js";
-import { createStore } from "solid-js/store";
+import { createStore, type SetStoreFunction } from "solid-js/store";
 
 export type ConnectionLifecycle = "idle" | "requesting" | "waiting" | "connected" | "failed";
 
@@ -22,6 +22,10 @@ export type ConnectionRecord = {
 type ConnectionStateStore = {
     records: Record<string, ConnectionRecord>;
 };
+
+type RecordRecipe = (current: ConnectionRecord) => ConnectionRecord;
+type SetRecordOptions = { configuration?: Configuration };
+type SetRecordFn = (configurationName: string, recipe: RecordRecipe, options?: SetRecordOptions) => void;
 
 type ConnectionActions = {
     connect(configuration: Configuration): Promise<void>;
@@ -45,22 +49,63 @@ export function createConnectionStateContextValue(): ConnectionStateContextValue
         records: {},
     });
 
-    const getRecord = (configurationName: string) => state.records[configurationName];
+    const recordStore = createRecordStore({
+        state,
+        setState,
+        logger,
+        configurationMap,
+    });
+
+    const handleConnectResult = createConnectResultHandler({
+        logger,
+        setRecord: recordStore.setRecord,
+    });
+
+    const connect = createConnectAction({
+        client,
+        logger,
+        setRecord: recordStore.setRecord,
+        handleConnectResult,
+    });
+
+    const handleServerEvent = createServerEventHandler({
+        logger,
+        resolveConfiguration: recordStore.resolveConfiguration,
+        setRecord: recordStore.setRecord,
+        state,
+    });
+
+    const unsubscribe = eventStream.subscribe(handleServerEvent);
+    onCleanup(() => unsubscribe());
+
+    return {
+        records: recordStore.recordsAccessor,
+        getRecord: recordStore.getRecord,
+        connect,
+        clear: recordStore.clear,
+    };
+}
+
+type RecordStoreDeps = {
+    state: ConnectionStateStore;
+    setState: SetStoreFunction<ConnectionStateStore>;
+    logger: ReturnType<typeof useLogger>;
+    configurationMap: Accessor<Map<string, Configuration>>;
+};
+
+function createRecordStore(deps: RecordStoreDeps) {
+    const getRecord = (configurationName: string) => deps.state.records[configurationName];
 
     const resolveConfiguration = (configurationName: string): Configuration | undefined => {
-        return state.records[configurationName]?.configuration ?? configurationMap().get(configurationName);
+        return getRecord(configurationName)?.configuration ?? deps.configurationMap().get(configurationName);
     };
 
-    const setRecord = (
-        configurationName: string,
-        recipe: (current: ConnectionRecord) => ConnectionRecord,
-        options?: { configuration?: Configuration },
-    ) => {
-        setState("records", configurationName, (current) => {
+    const setRecord: SetRecordFn = (configurationName, recipe, options) => {
+        deps.setState("records", configurationName, (current) => {
             const configuration =
                 current?.configuration ?? options?.configuration ?? resolveConfiguration(configurationName);
             if (!configuration) {
-                logger.warn(
+                deps.logger.warn(
                     { configuration: configurationName },
                     "connection state update skipped for unknown configuration",
                 );
@@ -78,14 +123,33 @@ export function createConnectionStateContextValue(): ConnectionStateContextValue
     };
 
     const clear = (configurationName: string) => {
-        setState("records", (records) => {
+        deps.setState("records", (records) => {
             const next = { ...records };
             delete next[configurationName];
             return next;
         });
     };
 
-    const handleConnectResult = (configurationName: string, configuration: Configuration, result: ConnectResult) => {
+    const recordsAccessor: Accessor<Record<string, ConnectionRecord>> = () => deps.state.records;
+
+    return {
+        getRecord,
+        resolveConfiguration,
+        setRecord,
+        clear,
+        recordsAccessor,
+    };
+}
+
+type ConnectResultHandler = (configurationName: string, configuration: Configuration, result: ConnectResult) => void;
+
+type ConnectResultHandlerDeps = {
+    logger: ReturnType<typeof useLogger>;
+    setRecord: SetRecordFn;
+};
+
+function createConnectResultHandler({ logger, setRecord }: ConnectResultHandlerDeps): ConnectResultHandler {
+    return (configurationName, configuration, result) => {
         logger.debug({ configuration: configurationName, result: result.result }, "connect RPC result");
         if (result.result === "success") {
             setRecord(
@@ -102,7 +166,6 @@ export function createConnectionStateContextValue(): ConnectionStateContextValue
             );
             return;
         }
-
         if (result.result === "fail") {
             setRecord(
                 configurationName,
@@ -118,7 +181,6 @@ export function createConnectionStateContextValue(): ConnectionStateContextValue
             );
             return;
         }
-
         setRecord(
             configurationName,
             (current) => {
@@ -145,8 +207,17 @@ export function createConnectionStateContextValue(): ConnectionStateContextValue
             { configuration },
         );
     };
+}
 
-    const connect = async (configuration: Configuration) => {
+type ConnectActionDeps = {
+    client: ReturnType<typeof useOriClient>;
+    logger: ReturnType<typeof useLogger>;
+    setRecord: SetRecordFn;
+    handleConnectResult: ConnectResultHandler;
+};
+
+function createConnectAction({ client, logger, setRecord, handleConnectResult }: ConnectActionDeps) {
+    return async (configuration: Configuration) => {
         const { name } = configuration;
         setRecord(
             name,
@@ -179,8 +250,17 @@ export function createConnectionStateContextValue(): ConnectionStateContextValue
             );
         }
     };
+}
 
-    const handleServerEvent = (event: ServerEvent) => {
+type ServerEventHandlerDeps = {
+    logger: ReturnType<typeof useLogger>;
+    resolveConfiguration: (configurationName: string) => Configuration | undefined;
+    setRecord: SetRecordFn;
+    state: ConnectionStateStore;
+};
+
+function createServerEventHandler({ logger, resolveConfiguration, setRecord, state }: ServerEventHandlerDeps) {
+    return (event: ServerEvent) => {
         if (event.type !== CONNECTION_STATE_EVENT) {
             return;
         }
@@ -258,18 +338,6 @@ export function createConnectionStateContextValue(): ConnectionStateContextValue
                 { configuration },
             );
         }
-    };
-
-    const unsubscribe = eventStream.subscribe(handleServerEvent);
-    onCleanup(() => unsubscribe());
-
-    const recordsAccessor: Accessor<Record<string, ConnectionRecord>> = () => state.records;
-
-    return {
-        records: recordsAccessor,
-        getRecord,
-        connect,
-        clear,
     };
 }
 

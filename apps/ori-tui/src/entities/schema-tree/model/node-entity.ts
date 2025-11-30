@@ -104,9 +104,18 @@ function edgeBadges(edge: NodeEdge): string | undefined {
         return undefined;
     }
     const suffix = count === 1 ? "item" : "items";
-    const truncatedMarker = edge.truncated ? "+" : "";
-    const baseCount = count > 0 ? `${count}${truncatedMarker}` : truncatedMarker ? "+" : "0";
+    const baseCount = formatEdgeCount(count, edge.truncated);
     return `${baseCount} ${suffix}`.trim();
+}
+
+function formatEdgeCount(count: number, truncated: boolean): string {
+    if (count > 0) {
+        return truncated ? `${count}+` : String(count);
+    }
+    if (truncated) {
+        return "+";
+    }
+    return "0";
 }
 
 function iconForNode(node: Node): string {

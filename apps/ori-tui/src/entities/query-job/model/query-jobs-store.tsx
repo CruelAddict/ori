@@ -117,9 +117,10 @@ export function QueryJobsStoreProvider(props: QueryJobsStoreProviderProps) {
             return;
         }
 
+        const nextStatus = resolveCompletedStatus(status);
         setState("jobsByConfiguration", configurationName, {
             ...currentJob,
-            status: status === "success" ? "success" : status === "canceled" ? "canceled" : "failed",
+            status: nextStatus,
             error: error || message,
             durationMs,
         });
@@ -140,6 +141,16 @@ export function QueryJobsStoreProvider(props: QueryJobsStoreProviderProps) {
     };
 
     return <QueryJobsContext.Provider value={value}>{props.children}</QueryJobsContext.Provider>;
+}
+
+function resolveCompletedStatus(status: string): QueryJob["status"] {
+    if (status === "success") {
+        return "success";
+    }
+    if (status === "canceled") {
+        return "canceled";
+    }
+    return "failed";
 }
 
 export function useQueryJobs(): QueryJobsContextValue {

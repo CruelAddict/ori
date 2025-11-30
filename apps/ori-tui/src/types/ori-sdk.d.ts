@@ -1,4 +1,4 @@
 declare module "ori-sdk" {
-    const OriSDK: any;
+    const OriSDK: unknown;
     export default OriSDK;
 }

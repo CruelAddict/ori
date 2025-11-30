@@ -1,6 +1,7 @@
 import { useTheme } from "@app/providers/theme";
 import type { BoxRenderable } from "@opentui/core";
 import { TextAttributes } from "@opentui/core";
+import type { NodeEntity } from "@src/entities/schema-tree/model/node-entity";
 import type { TreePaneViewModel } from "@src/features/tree-pane/use-tree-pane";
 import { type Accessor, createEffect, createMemo, createSignal, For, Show } from "solid-js";
 import { type RowDescriptor, useTreeScrollRegistration } from "./tree-scrollbox.tsx";
@@ -31,7 +32,6 @@ export function TreeNode(props: TreeNodeProps) {
 
     const fg = () => (isSelected() && props.isFocused() ? palette().background : palette().text);
     const bg = () => (isSelected() && props.isFocused() ? palette().primary : undefined);
-    const _attrs = () => (isSelected() ? TextAttributes.BOLD : TextAttributes.NONE);
 
     const toggleGlyph = () => {
         const details = entity();
@@ -40,69 +40,69 @@ export function TreeNode(props: TreeNodeProps) {
     };
 
     return (
-        <Show when={entity()}>
-            {(detailsAccessor: Accessor<ReturnType<typeof entity>>) => {
-                const details = () => detailsAccessor()!;
-                return (
-                    <>
-                        <box
-                            id={rowElementId(rowId())}
-                            flexDirection="row"
-                            paddingLeft={props.depth * 2}
-                            minWidth={"100%"}
-                            flexShrink={0}
-                            ref={(node: BoxRenderable | undefined) => registerRowNode(rowId(), node)}
-                            backgroundColor={bg()}
+        <Show
+            when={entity()}
+            keyed
+        >
+            {(details: NodeEntity) => (
+                <>
+                    <box
+                        id={rowElementId(rowId())}
+                        flexDirection="row"
+                        paddingLeft={props.depth * 2}
+                        minWidth={"100%"}
+                        flexShrink={0}
+                        ref={(node: BoxRenderable | undefined) => registerRowNode(rowId(), node)}
+                        backgroundColor={bg()}
+                    >
+                        <text
+                            fg={fg()}
+                            wrapMode="none"
+                            bg={bg()}
                         >
+                            {isSelected() ? "> " : "  "}
+                            {toggleGlyph()} {details.icon} {details.label}
+                        </text>
+                        {details.description && (
                             <text
-                                fg={fg()}
+                                attributes={TextAttributes.DIM}
+                                fg={palette().textMuted}
                                 wrapMode="none"
-                                bg={bg()}
                             >
-                                {isSelected() ? "> " : "  "}
-                                {toggleGlyph()} {details().icon} {details().label}
+                                {" "}
+                                {details.description}
                             </text>
-                            {details().description && (
-                                <text
-                                    attributes={TextAttributes.DIM}
-                                    fg={palette().textMuted}
-                                    wrapMode="none"
-                                >
-                                    {" "}
-                                    {details().description}
-                                </text>
-                            )}
-                            {details().badges && (
-                                <text
-                                    fg={palette().accent}
-                                    wrapMode="none"
-                                >
-                                    {" "}
-                                    {details().badges}
-                                </text>
-                            )}
-                        </box>
-                        <Show when={childrenMounted()}>
-                            <box
-                                flexDirection="column"
-                                visible={isExpanded()}
+                        )}
+                        {details.badges && (
+                            <text
+                                fg={palette().accent}
+                                wrapMode="none"
                             >
-                                <For each={childIds()}>
-                                    {(childId) => (
-                                        <TreeNode
-                                            nodeId={childId}
-                                            depth={props.depth + 1}
-                                            isFocused={props.isFocused}
-                                            pane={props.pane}
-                                            isRowSelected={props.isRowSelected}
-                                        />
-                                    )}
-                                </For>
-                            </box>
-                        </Show>
-                    </>
-                );
-            }}
+                                {" "}
+                                {details.badges}
+                            </text>
+                        )}
+                    </box>
+                    <Show when={childrenMounted()}>
+                        <box
+                            flexDirection="column"
+                            visible={isExpanded()}
+                        >
+                            <For each={childIds()}>
+                                {(childId) => (
+                                    <TreeNode
+                                        nodeId={childId}
+                                        depth={props.depth + 1}
+                                        isFocused={props.isFocused}
+                                        pane={props.pane}
+                                        isRowSelected={props.isRowSelected}
+                                    />
+                                )}
+                            </For>
+                        </box>
+                    </Show>
+                </>
+            )}
         </Show>
     );
 }
@@ -132,7 +132,10 @@ export function createTreeNodeMetrics(options: TreeNodeMetricsOptions) {
 
         const entity = getEntity(row.id);
         const hasChildren = Boolean(entity?.hasChildren);
-        const glyph = hasChildren ? (expanded ? "[-]" : "[+]") : "   ";
+        let glyph = "   ";
+        if (hasChildren) {
+            glyph = expanded ? "[-]" : "[+]";
+        }
         const indicator = "> ";
         const icon = entity?.icon ? `${entity.icon}` : "";
         let width = row.depth * 2;

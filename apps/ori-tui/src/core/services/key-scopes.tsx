@@ -1,6 +1,6 @@
 import type { KeyEvent } from "@opentui/core";
 import { useKeyboard } from "@opentui/solid";
-import { Keybind, type KeyboardEventLike, useKeybind } from "@shared/lib/keybind";
+import { Keybind, type KeyboardEventLike, type ParsedKeybind, useKeybind } from "@shared/lib/keybind";
 import { type KeyBinding, KeyScopeStore } from "@src/core/stores/key-scopes";
 import type { Accessor, JSX, ParentComponent } from "solid-js";
 import { createContext, createUniqueId, onCleanup, useContext } from "solid-js";
@@ -14,6 +14,8 @@ type ParentScopeContextValue = {
     layer: number;
 };
 
+type DispatchTargetScopes = ReturnType<KeyScopeStore["getDispatchPlan"]>["primary"];
+
 const KeymapRuntimeContext = createContext<KeymapRuntime>();
 const ParentScopeContext = createContext<ParentScopeContextValue>({ id: null, layer: 0 });
 
@@ -24,54 +26,8 @@ export type KeymapProviderProps = {
 export const KeymapProvider: ParentComponent<KeymapProviderProps> = (props) => {
     const store = new KeyScopeStore();
     const parser = useKeybind();
-    let awaitingLeader = false;
 
-    useKeyboard((evt: KeyEvent) => {
-        const parsed = parser.parse(evt as KeyboardEventLike);
-
-        if (!awaitingLeader && parsed.ctrl && parsed.name === "x") {
-            awaitingLeader = true;
-            evt.preventDefault?.();
-            return;
-        }
-
-        const mode: "normal" | "leader" = awaitingLeader ? "leader" : "normal";
-        const plan = store.getDispatchPlan();
-
-        const dispatchScopes = (scopes: typeof plan.primary) => {
-            for (const scope of scopes) {
-                const bindings = scope.getBindings();
-                for (const binding of bindings) {
-                    const bindingMode = binding.mode ?? "normal";
-                    if (bindingMode !== mode) {
-                        continue;
-                    }
-                    if (binding.when && !binding.when()) {
-                        continue;
-                    }
-                    if (!Keybind.match(binding.pattern, parsed)) {
-                        continue;
-                    }
-                    if (binding.preventDefault || awaitingLeader) {
-                        evt.preventDefault?.();
-                    }
-                    binding.handler(evt);
-                    awaitingLeader = false;
-                    return true;
-                }
-            }
-            return false;
-        };
-
-        if (!dispatchScopes(plan.primary)) {
-            dispatchScopes(plan.system);
-        }
-
-        if (awaitingLeader) {
-            evt.preventDefault?.();
-            awaitingLeader = false;
-        }
-    });
+    useKeyboard(createKeyboardHandler(store, parser));
 
     const runtime: KeymapRuntime = { store };
 
@@ -118,6 +74,73 @@ export function KeyScope(props: KeyScopeProps) {
     onCleanup(() => handle.dispose());
 
     return <ParentScopeContext.Provider value={{ id: handle.id, layer }}>{props.children}</ParentScopeContext.Provider>;
+}
+
+type DispatchScopesInput = {
+    scopes: DispatchTargetScopes;
+    parsed: ParsedKeybind;
+    mode: "normal" | "leader";
+    evt: KeyEvent;
+    awaitingLeader: boolean;
+};
+
+function createKeyboardHandler(store: KeyScopeStore, parser: ReturnType<typeof useKeybind>): (evt: KeyEvent) => void {
+    let awaitingLeader = false;
+
+    return (evt: KeyEvent) => {
+        const parsed = parser.parse(evt as KeyboardEventLike);
+        if (shouldAwaitLeader(parsed, awaitingLeader)) {
+            awaitingLeader = true;
+            evt.preventDefault?.();
+            return;
+        }
+
+        const mode: "normal" | "leader" = awaitingLeader ? "leader" : "normal";
+        const plan = store.getDispatchPlan();
+
+        if (dispatchScopes({ scopes: plan.primary, parsed, mode, evt, awaitingLeader })) {
+            awaitingLeader = false;
+            return;
+        }
+
+        if (dispatchScopes({ scopes: plan.system, parsed, mode, evt, awaitingLeader })) {
+            awaitingLeader = false;
+            return;
+        }
+
+        if (awaitingLeader) {
+            evt.preventDefault?.();
+            awaitingLeader = false;
+        }
+    };
+}
+
+function dispatchScopes({ scopes, parsed, mode, evt, awaitingLeader }: DispatchScopesInput): boolean {
+    for (const scope of scopes) {
+        const bindings = scope.getBindings();
+        for (const binding of bindings) {
+            const bindingMode = binding.mode ?? "normal";
+            if (bindingMode !== mode) {
+                continue;
+            }
+            if (binding.when && !binding.when()) {
+                continue;
+            }
+            if (!Keybind.match(binding.pattern, parsed)) {
+                continue;
+            }
+            if (binding.preventDefault || awaitingLeader) {
+                evt.preventDefault?.();
+            }
+            binding.handler(evt);
+            return true;
+        }
+    }
+    return false;
+}
+
+function shouldAwaitLeader(parsed: ParsedKeybind, awaitingLeader: boolean): boolean {
+    return !awaitingLeader && parsed.ctrl && parsed.name === "x";
 }
 
 function useKeymapRuntime(): KeymapRuntime {

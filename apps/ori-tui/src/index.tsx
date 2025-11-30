@@ -121,7 +121,7 @@ export function main() {
     const logger = createLogger("ori-tui", logLevel);
     logger.info({ host, port, mode, socketPath, theme: themeArg }, "tui started");
 
-    render(
+    void render(
         () => (
             <LoggerProvider logger={logger}>
                 <ClientProvider

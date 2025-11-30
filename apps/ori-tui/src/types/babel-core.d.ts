@@ -1,8 +1,8 @@
 declare module "@babel/core" {
-    export function transformAsync(code: string, options?: any): Promise<any>;
+    export function transformAsync(code: string, options?: unknown): Promise<unknown>;
     const babel: {
         transformAsync: typeof transformAsync;
-        [key: string]: any;
+        [key: string]: unknown;
     };
     export default babel;
 }

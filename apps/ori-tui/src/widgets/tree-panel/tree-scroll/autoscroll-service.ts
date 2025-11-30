@@ -1,6 +1,8 @@
 import type { BoxRenderable, ScrollBoxRenderable } from "@opentui/core";
 import type { ScrollDelta } from "./types.ts";
 
+type ScrollBoxWithViewport = ScrollBoxRenderable & { viewport?: BoxRenderable };
+
 const MAX_ENSURE_ATTEMPTS = 5;
 
 export type AutoscrollService = {
@@ -85,7 +87,7 @@ export function createAutoscrollService(): AutoscrollService {
             scheduleEnsureTask();
             return;
         }
-        const viewport = (scrollBox as any).viewport as BoxRenderable | undefined;
+        const viewport = (scrollBox as ScrollBoxWithViewport).viewport;
         if (!viewport) {
             ensureTarget = null;
             ensureAttempts = 0;
