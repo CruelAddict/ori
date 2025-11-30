@@ -12,10 +12,10 @@ import (
 	"syscall"
 
 	"github.com/crueladdict/ori/apps/ori-server/internal/events"
+	postgresadapter "github.com/crueladdict/ori/apps/ori-server/internal/infrastructure/database/postgres"
+	sqliteadapter "github.com/crueladdict/ori/apps/ori-server/internal/infrastructure/database/sqlite"
 	"github.com/crueladdict/ori/apps/ori-server/internal/rpc"
 	"github.com/crueladdict/ori/apps/ori-server/internal/service"
-	postgresadapter "github.com/crueladdict/ori/apps/ori-server/internal/service/adapters/postgres"
-	sqliteadapter "github.com/crueladdict/ori/apps/ori-server/internal/service/adapters/sqlite"
 )
 
 const (

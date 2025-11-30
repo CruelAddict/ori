@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/crueladdict/ori/apps/ori-server/internal/model"
+	"github.com/crueladdict/ori/apps/ori-server/internal/pkg/stringutil"
 )
 
 type relationInfo struct {
@@ -31,12 +32,12 @@ func (a *Adapter) tableNodeID(connectionName, schemaName, tableName, relType str
 	if relType == "VIEW" {
 		nodeType = "view"
 	}
-	return slug("postgres", connectionName, nodeType, schemaName, tableName)
+	return stringutil.Slug("postgres", connectionName, nodeType, schemaName, tableName)
 }
 
 // columnNodeID generates a unique ID for a column node
 func (a *Adapter) columnNodeID(connectionName, schemaName, tableName, columnName string) string {
-	return slug("postgres", connectionName, "column", schemaName, tableName, columnName)
+	return stringutil.Slug("postgres", connectionName, "column", schemaName, tableName, columnName)
 }
 
 // fetchRelations retrieves tables or views from a schema

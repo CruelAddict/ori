@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/crueladdict/ori/apps/ori-server/internal/model"
+	"github.com/crueladdict/ori/apps/ori-server/internal/pkg/stringutil"
 )
 
 // Bootstrap returns root nodes for the connection graph
@@ -65,14 +66,14 @@ func (a *Adapter) databaseDisplayName(connectionName, dbName, file string) strin
 }
 
 func (a *Adapter) pragmaInt(ctx context.Context, schema, pragma string) (int64, error) {
-	query := fmt.Sprintf(`PRAGMA "%s".%s`, escapeIdentifier(schema), pragma)
+	query := fmt.Sprintf(`PRAGMA "%s".%s`, stringutil.EscapeIdentifier(schema), pragma)
 	var value int64
 	err := a.db.QueryRowContext(ctx, query).Scan(&value)
 	return value, err
 }
 
 func (a *Adapter) pragmaText(ctx context.Context, schema, pragma string) (string, error) {
-	query := fmt.Sprintf(`PRAGMA "%s".%s`, escapeIdentifier(schema), pragma)
+	query := fmt.Sprintf(`PRAGMA "%s".%s`, stringutil.EscapeIdentifier(schema), pragma)
 	var value string
 	err := a.db.QueryRowContext(ctx, query).Scan(&value)
 	return value, err

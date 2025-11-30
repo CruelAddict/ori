@@ -7,6 +7,7 @@ import (
 	"sort"
 
 	"github.com/crueladdict/ori/apps/ori-server/internal/model"
+	"github.com/crueladdict/ori/apps/ori-server/internal/pkg/stringutil"
 )
 
 type foreignKeyGroup struct {
@@ -20,7 +21,7 @@ type foreignKeyGroup struct {
 }
 
 func (a *Adapter) constraintNodeID(connectionName, dbName, tableName, label string) string {
-	return slug("sqlite", connectionName, "constraint", dbName, tableName, label)
+	return stringutil.Slug("sqlite", connectionName, "constraint", dbName, tableName, label)
 }
 
 func (a *Adapter) buildConstraintNodes(ctx context.Context, dbName, tableName string, cols []columnInfo) ([]*model.Node, model.EdgeList, error) {
@@ -67,7 +68,7 @@ type uniqueIndex struct {
 }
 
 func (a *Adapter) readUniqueIndexes(ctx context.Context, schema, table string) ([]uniqueIndex, error) {
-	query := fmt.Sprintf(`PRAGMA "%s".index_list(%s)`, escapeIdentifier(schema), quoteLiteral(table))
+	query := fmt.Sprintf(`PRAGMA "%s".index_list(%s)`, stringutil.EscapeIdentifier(schema), stringutil.QuoteLiteral(table))
 	rows, err := a.db.QueryContext(ctx, query)
 	if err != nil {
 		return nil, err
@@ -97,7 +98,7 @@ func (a *Adapter) readUniqueIndexes(ctx context.Context, schema, table string) (
 }
 
 func (a *Adapter) readIndexColumns(ctx context.Context, schema, indexName string) ([]string, error) {
-	query := fmt.Sprintf(`PRAGMA "%s".index_info(%s)`, escapeIdentifier(schema), quoteLiteral(indexName))
+	query := fmt.Sprintf(`PRAGMA "%s".index_info(%s)`, stringutil.EscapeIdentifier(schema), stringutil.QuoteLiteral(indexName))
 	rows, err := a.db.QueryContext(ctx, query)
 	if err != nil {
 		return nil, err
@@ -126,7 +127,7 @@ func (a *Adapter) readIndexColumns(ctx context.Context, schema, indexName string
 }
 
 func (a *Adapter) readForeignKeys(ctx context.Context, schema, table string) ([]foreignKeyGroup, error) {
-	query := fmt.Sprintf(`PRAGMA "%s".foreign_key_list(%s)`, escapeIdentifier(schema), quoteLiteral(table))
+	query := fmt.Sprintf(`PRAGMA "%s".foreign_key_list(%s)`, stringutil.EscapeIdentifier(schema), stringutil.QuoteLiteral(table))
 	rows, err := a.db.QueryContext(ctx, query)
 	if err != nil {
 		return nil, err
@@ -210,7 +211,7 @@ func (a *Adapter) uniqueConstraintNode(dbName, table string, idx uniqueIndex) *m
 		"database":       dbName,
 		"table":          table,
 		"constraintType": "UNIQUE",
-		"columns":        copyStrings(idx.Columns),
+		"columns":        stringutil.CopyStrings(idx.Columns),
 		"indexName":      idx.Name,
 	}
 	return &model.Node{
@@ -229,9 +230,9 @@ func (a *Adapter) foreignKeyNode(dbName, table string, fk foreignKeyGroup) *mode
 		"database":          dbName,
 		"table":             table,
 		"constraintType":    "FOREIGN KEY",
-		"columns":           copyStrings(fk.Columns),
+		"columns":           stringutil.CopyStrings(fk.Columns),
 		"referencedTable":   fk.ReferencedTable,
-		"referencedColumns": copyStrings(fk.ReferencedColumns),
+		"referencedColumns": stringutil.CopyStrings(fk.ReferencedColumns),
 		"onUpdate":          fk.OnUpdate,
 		"onDelete":          fk.OnDelete,
 		"match":             fk.Match,

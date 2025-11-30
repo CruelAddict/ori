@@ -5,11 +5,12 @@ import (
 	"fmt"
 
 	"github.com/crueladdict/ori/apps/ori-server/internal/model"
+	"github.com/crueladdict/ori/apps/ori-server/internal/pkg/stringutil"
 )
 
 // schemaNodeID generates a unique ID for a schema node
 func (a *Adapter) schemaNodeID(connectionName, schemaName string) string {
-	return slug("postgres", connectionName, "schema", schemaName)
+	return stringutil.Slug("postgres", connectionName, "schema", schemaName)
 }
 
 // listSchemas returns all non-system schemas in the database

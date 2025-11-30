@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/crueladdict/ori/apps/ori-server/internal/model"
+	"github.com/crueladdict/ori/apps/ori-server/internal/pkg/stringutil"
 )
 
 type databaseEntry struct {
@@ -15,7 +16,7 @@ type databaseEntry struct {
 }
 
 func (a *Adapter) databaseNodeID(connectionName, dbName string) string {
-	return slug("sqlite", connectionName, "database", dbName)
+	return stringutil.Slug("sqlite", connectionName, "database", dbName)
 }
 
 func (a *Adapter) listDatabases(ctx context.Context) ([]databaseEntry, error) {

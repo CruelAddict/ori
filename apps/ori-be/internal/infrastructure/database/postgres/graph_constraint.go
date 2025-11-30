@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/crueladdict/ori/apps/ori-server/internal/model"
+	"github.com/crueladdict/ori/apps/ori-server/internal/pkg/stringutil"
 )
 
 type constraintInfo struct {
@@ -23,7 +24,7 @@ type constraintInfo struct {
 
 // constraintNodeID generates a unique ID for a constraint node
 func (a *Adapter) constraintNodeID(connectionName, schemaName, tableName, constraintName string) string {
-	return slug("postgres", connectionName, "constraint", schemaName, tableName, constraintName)
+	return stringutil.Slug("postgres", connectionName, "constraint", schemaName, tableName, constraintName)
 }
 
 // buildConstraintNodes discovers and creates nodes for table constraints
@@ -212,18 +213,18 @@ func (a *Adapter) buildConstraintNode(schemaName, tableName string, c constraint
 
 	switch c.Type {
 	case "PRIMARY KEY":
-		attrs["columns"] = copyStrings(c.Columns)
+		attrs["columns"] = stringutil.CopyStrings(c.Columns)
 		displayName = fmt.Sprintf("PRIMARY KEY (%s)", strings.Join(c.Columns, ", "))
 
 	case "UNIQUE":
-		attrs["columns"] = copyStrings(c.Columns)
+		attrs["columns"] = stringutil.CopyStrings(c.Columns)
 		displayName = fmt.Sprintf("UNIQUE (%s)", strings.Join(c.Columns, ", "))
 
 	case "FOREIGN KEY":
-		attrs["columns"] = copyStrings(c.Columns)
+		attrs["columns"] = stringutil.CopyStrings(c.Columns)
 		attrs["referencedSchema"] = c.RefSchema
 		attrs["referencedTable"] = c.RefTable
-		attrs["referencedColumns"] = copyStrings(c.RefColumns)
+		attrs["referencedColumns"] = stringutil.CopyStrings(c.RefColumns)
 		if c.UpdateRule != "" {
 			attrs["onUpdate"] = c.UpdateRule
 		}

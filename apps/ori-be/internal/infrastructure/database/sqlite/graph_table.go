@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/crueladdict/ori/apps/ori-server/internal/model"
+	"github.com/crueladdict/ori/apps/ori-server/internal/pkg/stringutil"
 )
 
 type relationInfo struct {
@@ -24,11 +25,11 @@ type columnInfo struct {
 }
 
 func (a *Adapter) tableNodeID(connectionName, dbName, tableName, relType string) string {
-	return slug("sqlite", connectionName, relType, dbName, tableName)
+	return stringutil.Slug("sqlite", connectionName, relType, dbName, tableName)
 }
 
 func (a *Adapter) columnNodeID(connectionName, dbName, tableName, columnName string) string {
-	return slug("sqlite", connectionName, "column", dbName, tableName, columnName)
+	return stringutil.Slug("sqlite", connectionName, "column", dbName, tableName, columnName)
 }
 
 func (a *Adapter) hydrateTable(ctx context.Context, target *model.Node) ([]*model.Node, error) {
@@ -62,7 +63,7 @@ func (a *Adapter) hydrateTable(ctx context.Context, target *model.Node) ([]*mode
 
 func (a *Adapter) fetchRelations(ctx context.Context, schema, relType string) ([]relationInfo, error) {
 	query := fmt.Sprintf(`SELECT name, type, COALESCE(sql, '') as sql FROM "%s".sqlite_master WHERE type = %s AND name NOT LIKE 'sqlite_%%' ORDER BY name`,
-		escapeIdentifier(schema), quoteLiteral(relType))
+		stringutil.EscapeIdentifier(schema), stringutil.QuoteLiteral(relType))
 	rows, err := a.db.QueryContext(ctx, query)
 	if err != nil {
 		return nil, err
@@ -104,7 +105,7 @@ func (a *Adapter) buildRelationNode(dbName string, rel relationInfo) *model.Node
 }
 
 func (a *Adapter) readTableColumns(ctx context.Context, schema, table string) ([]columnInfo, error) {
-	query := fmt.Sprintf(`PRAGMA "%s".table_info(%s)`, escapeIdentifier(schema), quoteLiteral(table))
+	query := fmt.Sprintf(`PRAGMA "%s".table_info(%s)`, stringutil.EscapeIdentifier(schema), stringutil.QuoteLiteral(table))
 	rows, err := a.db.QueryContext(ctx, query)
 	if err != nil {
 		return nil, err

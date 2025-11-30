@@ -10,9 +10,9 @@ import (
 	"time"
 
 	"github.com/crueladdict/ori/apps/ori-server/internal/events"
+	sqliteadapter "github.com/crueladdict/ori/apps/ori-server/internal/infrastructure/database/sqlite"
 	"github.com/crueladdict/ori/apps/ori-server/internal/rpc"
 	"github.com/crueladdict/ori/apps/ori-server/internal/service"
-	sqliteadapter "github.com/crueladdict/ori/apps/ori-server/internal/service/adapters/sqlite"
 	orisdk "github.com/crueladdict/ori/libs/sdk/go"
 )
 

@@ -7,8 +7,8 @@ import (
 
 	orisdk "github.com/crueladdict/ori/libs/sdk/go"
 
+	"github.com/crueladdict/ori/apps/ori-server/internal/infrastructure/storage"
 	"github.com/crueladdict/ori/apps/ori-server/internal/model"
-	"github.com/crueladdict/ori/apps/ori-server/internal/storage"
 )
 
 type ConfigService struct {

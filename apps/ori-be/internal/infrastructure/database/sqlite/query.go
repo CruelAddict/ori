@@ -1,10 +1,11 @@
-package postgres
+package sqlite
 
 import (
 	"context"
 	"database/sql"
 	"fmt"
 
+	"github.com/crueladdict/ori/apps/ori-server/internal/pkg/sqlutil"
 	"github.com/crueladdict/ori/apps/ori-server/internal/service"
 )
 
@@ -14,24 +15,33 @@ func (a *Adapter) ExecuteQuery(ctx context.Context, query string, params any, op
 		return nil, fmt.Errorf("database not connected")
 	}
 
-	// Check if it's a SELECT query or other statement
-	isSelect := isSelectQuery(query)
+	// Prepare the query if we have parameters
+	var stmt *sql.Stmt
+	var err error
 
-	if isSelect {
-		return a.executeSelect(ctx, query, params, options)
+	if params != nil {
+		stmt, err = a.db.PrepareContext(ctx, query)
+		if err != nil {
+			return nil, fmt.Errorf("failed to prepare query: %w", err)
+		}
+		defer stmt.Close()
 	}
-	return a.executeStatement(ctx, query, params)
+
+	// Check if it's a SELECT query or other statement
+	if sqlutil.IsSQLSelectQuery(query) {
+		return a.executeSelect(ctx, stmt, query, params, options)
+	}
+	return a.executeStatement(ctx, stmt, query, params)
 }
 
 // executeSelect executes a SELECT query
-func (a *Adapter) executeSelect(ctx context.Context, query string, params any, options *service.QueryExecOptions) (*service.QueryResult, error) {
+func (a *Adapter) executeSelect(ctx context.Context, stmt *sql.Stmt, query string, params any, options *service.QueryExecOptions) (*service.QueryResult, error) {
 	var rows *sql.Rows
 	var err error
 
-	// Execute the query with parameters
-	args := toArgs(params)
-	if len(args) > 0 {
-		rows, err = a.db.QueryContext(ctx, query, args...)
+	// Execute the query
+	if stmt != nil {
+		rows, err = queryWithParams(ctx, stmt, params)
 	} else {
 		rows, err = a.db.QueryContext(ctx, query)
 	}
@@ -118,14 +128,13 @@ func (a *Adapter) executeSelect(ctx context.Context, query string, params any, o
 }
 
 // executeStatement executes a non-SELECT statement (INSERT, UPDATE, DELETE, etc.)
-func (a *Adapter) executeStatement(ctx context.Context, query string, params any) (*service.QueryResult, error) {
+func (a *Adapter) executeStatement(ctx context.Context, stmt *sql.Stmt, query string, params any) (*service.QueryResult, error) {
 	var result sql.Result
 	var err error
 
-	// Execute the statement with parameters
-	args := toArgs(params)
-	if len(args) > 0 {
-		result, err = a.db.ExecContext(ctx, query, args...)
+	// Execute the statement
+	if stmt != nil {
+		result, err = execWithParams(ctx, stmt, params)
 	} else {
 		result, err = a.db.ExecContext(ctx, query)
 	}
@@ -141,38 +150,32 @@ func (a *Adapter) executeStatement(ctx context.Context, query string, params any
 	}, nil
 }
 
-// isSelectQuery checks if a query is a SELECT statement
-func isSelectQuery(query string) bool {
-	for i := range len(query) {
-		ch := query[i]
-		if ch == ' ' || ch == '\t' || ch == '\n' || ch == '\r' {
-			continue
-		}
-		return len(query) >= i+6 &&
-			(query[i] == 's' || query[i] == 'S') &&
-			(query[i+1] == 'e' || query[i+1] == 'E') &&
-			(query[i+2] == 'l' || query[i+2] == 'L') &&
-			(query[i+3] == 'e' || query[i+3] == 'E') &&
-			(query[i+4] == 'c' || query[i+4] == 'C') &&
-			(query[i+5] == 't' || query[i+5] == 'T')
+// queryWithParams executes a query with parameters
+func queryWithParams(ctx context.Context, stmt *sql.Stmt, params any) (*sql.Rows, error) {
+	switch p := params.(type) {
+	case map[string]any:
+		// Named parameters - not supported yet for prepared statements
+		return nil, fmt.Errorf("named parameters not yet supported in prepared statements")
+	case []any:
+		// Positional parameters
+		return stmt.QueryContext(ctx, p...)
+	default:
+		// No parameters or unsupported type
+		return stmt.QueryContext(ctx)
 	}
-	return false
 }
 
-// toArgs converts params to a slice of arguments for the query
-// PostgreSQL uses $1, $2, etc. for parameters, and pgx handles this natively
-func toArgs(params any) []any {
-	if params == nil {
-		return nil
-	}
+// execWithParams executes a statement with parameters
+func execWithParams(ctx context.Context, stmt *sql.Stmt, params any) (sql.Result, error) {
 	switch p := params.(type) {
-	case []any:
-		return p
 	case map[string]any:
-		// For named parameters, we'd need to rewrite the query
-		// For now, return empty - queries should use positional params
-		return nil
+		// Named parameters - not supported yet
+		return nil, fmt.Errorf("named parameters not yet supported in prepared statements")
+	case []any:
+		// Positional parameters
+		return stmt.ExecContext(ctx, p...)
 	default:
-		return nil
+		// No parameters or unsupported type
+		return stmt.ExecContext(ctx)
 	}
 }
