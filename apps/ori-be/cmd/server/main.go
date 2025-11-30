@@ -14,6 +14,7 @@ import (
 	"github.com/crueladdict/ori/apps/ori-server/internal/events"
 	"github.com/crueladdict/ori/apps/ori-server/internal/rpc"
 	"github.com/crueladdict/ori/apps/ori-server/internal/service"
+	postgresadapter "github.com/crueladdict/ori/apps/ori-server/internal/service/adapters/postgres"
 	sqliteadapter "github.com/crueladdict/ori/apps/ori-server/internal/service/adapters/sqlite"
 )
 
@@ -80,6 +81,8 @@ func main() {
 	eventHub := events.NewHub()
 	connectionService := service.NewConnectionService(configService, eventHub)
 	connectionService.RegisterAdapter("sqlite", sqliteadapter.NewAdapter)
+	connectionService.RegisterAdapter("postgresql", postgresadapter.NewAdapter)
+	connectionService.RegisterAdapter("postgres", postgresadapter.NewAdapter)
 
 	nodeService := service.NewNodeService(configService, connectionService)
 	queryService := service.NewQueryService(connectionService, eventHub, ctx)

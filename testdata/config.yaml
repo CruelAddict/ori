@@ -8,15 +8,15 @@ connections:
     password:
       type: "plain_text"
       key: "testpassword123"
-  - name: "production-postgres"
+  - name: "local-postgres"
     type: "postgresql"
-    host: "db.example.com"
-    port: 5432
-    database: "proddb"
-    username: "produser"
+    host: "localhost"
+    port: 5433
+    database: "testdb"
+    username: "testuser"
     password:
       type: "plain_text"
-      key: "prodpassword456"
+      key: "testpassword123"
   - name: "local-sqlite"
     type: "sqlite"
     database: "./sqlite/simple.db"
