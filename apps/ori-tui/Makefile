@@ -1,4 +1,4 @@
-.PHONY: build clean install dev
+.PHONY: build clean install dev lint lint-fix
 
 BINARY_NAME=ori-tui
 BIN_DIR=bin
@@ -22,3 +22,9 @@ install: build
 	@echo "Installing $(BINARY_NAME) to /usr/local/bin/..."
 	@sudo cp $(BIN_DIR)/$(BINARY_NAME) /usr/local/bin/
 	@echo "Installation complete"
+
+lint:
+	@bunx biome check --reporter summary
+
+lint-fix:
+	@bunx biome check --write

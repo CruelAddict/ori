@@ -1,18 +1,18 @@
-import { batch, createEffect, createMemo, createSignal } from "solid-js";
 import type { Accessor } from "solid-js";
+import { batch, createEffect, createMemo, createSignal } from "solid-js";
 import { createStore, produce } from "solid-js/store";
 import type { GraphSnapshot } from "../api/graph";
 import { buildNodeEntityMap, type NodeEntity } from "./node-entity";
 
 const CHILD_BATCH_SIZE = 10;
 
-export interface VisibleRow {
+export type VisibleRow = {
     id: string;
     parentId?: string;
     depth: number;
-}
+};
 
-export interface SchemaTreeController {
+export type SchemaTreeController = {
     rootIds: Accessor<string[]>;
     visibleRows: Accessor<VisibleRow[]>;
     selectedId: Accessor<string | null>;
@@ -29,7 +29,7 @@ export interface SchemaTreeController {
     // Returns currently loaded children (based on batching), independent of expanded state.
     getRenderableChildIds: (nodeId: string) => string[];
     activateSelection: () => void;
-}
+};
 
 export function useSchemaTree(snapshot: Accessor<GraphSnapshot | null>): SchemaTreeController {
     const entityMap = createMemo(() => {
@@ -61,7 +61,7 @@ export function useSchemaTree(snapshot: Accessor<GraphSnapshot | null>): SchemaT
         const list = visibleRows();
         const map = new Map<string, number>();
         for (let index = 0; index < list.length; index += 1) {
-            map.set(list[index]!.id, index);
+            map.set(list[index]?.id, index);
         }
         return map;
     });
@@ -109,7 +109,7 @@ export function useSchemaTree(snapshot: Accessor<GraphSnapshot | null>): SchemaT
         }
         const current = selectedId();
         if (!current) {
-            setSelectedId(rows[0]!.id);
+            setSelectedId(rows[0]?.id);
             return;
         }
         const rowIndex = rowIndexMap().get(current);
@@ -120,7 +120,7 @@ export function useSchemaTree(snapshot: Accessor<GraphSnapshot | null>): SchemaT
             // Node still exists (maybe temporarily hidden), so keep selection as-is.
             return;
         }
-        setSelectedId(rows[0]!.id);
+        setSelectedId(rows[0]?.id);
     });
 
     const ensureInitialChildren = (nodeId: string) => {
@@ -210,7 +210,7 @@ export function useSchemaTree(snapshot: Accessor<GraphSnapshot | null>): SchemaT
         const list = visibleRows();
         if (!list.length) return;
         const current = selectedId();
-        const index = current ? rowIndexMap().get(current) ?? -1 : -1;
+        const index = current ? (rowIndexMap().get(current) ?? -1) : -1;
         const baseIndex = index === -1 ? 0 : index;
         const nextIndex = Math.max(0, Math.min(list.length - 1, baseIndex + delta));
         selectNode(list[nextIndex]?.id ?? null);

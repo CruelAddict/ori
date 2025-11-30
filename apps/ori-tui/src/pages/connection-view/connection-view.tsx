@@ -1,17 +1,17 @@
+import { useTheme } from "@app/providers/theme";
 import { TextAttributes } from "@opentui/core";
-import { Show } from "solid-js";
-import { KeyScope, type KeyBinding } from "@src/core/services/key-scopes";
+import { type KeyBinding, KeyScope } from "@src/core/services/key-scopes";
 import { useConnectionView } from "@src/features/connection/view/use-connection-view";
-import { TreePanel } from "@src/widgets/tree-panel/tree-panel";
 import { EditorPanel } from "@src/widgets/editor-panel/editor-panel";
 import { ResultsPanel } from "@src/widgets/results-panel/results-panel";
+import { TreePanel } from "@src/widgets/tree-panel/tree-panel";
 import { WelcomePane } from "@src/widgets/welcome-pane/welcome-pane";
-import { useTheme } from "@app/providers/theme";
+import { Show } from "solid-js";
 
-export interface ConnectionViewPageProps {
+export type ConnectionViewPageProps = {
     configurationName: string;
     onBack: () => void;
-}
+};
 
 export function ConnectionViewPage(props: ConnectionViewPageProps) {
     const vm = useConnectionView({
@@ -106,20 +106,40 @@ export function ConnectionViewPage(props: ConnectionViewPageProps) {
     ];
 
     return (
-        <KeyScope id="connection-view" bindings={screenKeyBindings}>
-            <box flexDirection="column" flexGrow={1} backgroundColor={palette().background}>
-                <text fg={palette().accent} marginTop={1} marginLeft={3}>
+        <KeyScope
+            id="connection-view"
+            bindings={screenKeyBindings}
+        >
+            <box
+                flexDirection="column"
+                flexGrow={1}
+                backgroundColor={palette().background}
+            >
+                <text
+                    fg={palette().accent}
+                    marginTop={1}
+                    marginLeft={3}
+                >
                     {vm.title()}
                 </text>
 
-                <box flexDirection="row" flexGrow={1}>
+                <box
+                    flexDirection="row"
+                    flexGrow={1}
+                >
                     <TreePanel viewModel={vm.treePane} />
 
-                    <box flexDirection="column" flexGrow={1} marginLeft={vm.treePane.visible() ? 1 : 0} justifyContent="space-between">
-                        <Show when={vm.editorOpen()} fallback={<WelcomePane />}>
-                            <EditorPanel
-                                viewModel={vm.editorPane}
-                            />
+                    <box
+                        flexDirection="column"
+                        flexGrow={1}
+                        marginLeft={vm.treePane.visible() ? 1 : 0}
+                        justifyContent="space-between"
+                    >
+                        <Show
+                            when={vm.editorOpen()}
+                            fallback={<WelcomePane />}
+                        >
+                            <EditorPanel viewModel={vm.editorPane} />
                         </Show>
                         <Show when={vm.resultsPane.visible()}>
                             <ResultsPanel viewModel={vm.resultsPane} />
@@ -127,8 +147,14 @@ export function ConnectionViewPage(props: ConnectionViewPageProps) {
                     </box>
                 </box>
 
-                <box height={1} minWidth={"100%"}>
-                    <text attributes={TextAttributes.DIM} fg={palette().textMuted}>
+                <box
+                    height={1}
+                    minWidth={"100%"}
+                >
+                    <text
+                        attributes={TextAttributes.DIM}
+                        fg={palette().textMuted}
+                    >
                         {vm.helpText()}
                     </text>
                 </box>

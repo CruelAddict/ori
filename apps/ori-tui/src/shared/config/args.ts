@@ -1,13 +1,13 @@
 import type { ClientMode } from "@shared/lib/configurations-client";
 import type { LogLevel } from "@shared/lib/logger";
 
-export interface ParsedArgs {
+export type ParsedArgs = {
     serverAddress: string;
     socketPath?: string;
     mode: ClientMode;
     logLevel: LogLevel;
     theme?: string;
-}
+};
 
 export function parseArgs(args: string[]): ParsedArgs {
     let serverAddress = "localhost:8080";
@@ -60,7 +60,6 @@ export function parseArgs(args: string[]): ParsedArgs {
 
         if (arg === "--sdk") {
             mode = "sdk";
-            continue;
         }
     }
 

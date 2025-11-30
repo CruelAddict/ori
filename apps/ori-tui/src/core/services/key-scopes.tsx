@@ -1,25 +1,25 @@
-import type { JSX, Accessor, ParentComponent } from "solid-js";
-import { createContext, createUniqueId, onCleanup, useContext } from "solid-js";
-import { useKeyboard } from "@opentui/solid";
 import type { KeyEvent } from "@opentui/core";
-import { KeyScopeStore, type KeyBinding } from "@src/core/stores/key-scopes";
+import { useKeyboard } from "@opentui/solid";
 import { Keybind, type KeyboardEventLike, useKeybind } from "@shared/lib/keybind";
+import { type KeyBinding, KeyScopeStore } from "@src/core/stores/key-scopes";
+import type { Accessor, JSX, ParentComponent } from "solid-js";
+import { createContext, createUniqueId, onCleanup, useContext } from "solid-js";
 
-interface KeymapRuntime {
+type KeymapRuntime = {
     store: KeyScopeStore;
-}
+};
 
-interface ParentScopeContextValue {
+type ParentScopeContextValue = {
     id: string | null;
     layer: number;
-}
+};
 
 const KeymapRuntimeContext = createContext<KeymapRuntime>();
 const ParentScopeContext = createContext<ParentScopeContextValue>({ id: null, layer: 0 });
 
-export interface KeymapProviderProps {
+export type KeymapProviderProps = {
     children: JSX.Element;
-}
+};
 
 export const KeymapProvider: ParentComponent<KeymapProviderProps> = (props) => {
     const store = new KeyScopeStore();
@@ -82,14 +82,14 @@ export const KeymapProvider: ParentComponent<KeymapProviderProps> = (props) => {
     );
 };
 
-export interface KeyScopeProps {
+export type KeyScopeProps = {
     id?: string;
     bindings: KeyBinding[] | Accessor<KeyBinding[]>;
     enabled?: boolean | (() => boolean);
     priority?: number;
     layer?: number;
     children?: JSX.Element;
-}
+};
 
 export function KeyScope(props: KeyScopeProps) {
     const runtime = useKeymapRuntime();
@@ -103,7 +103,7 @@ export function KeyScope(props: KeyScopeProps) {
         ? bindingsProp
         : () => bindingsProp;
     const enabledAccessor = () =>
-        typeof props.enabled === "function" ? (props.enabled as () => boolean)() : props.enabled ?? true;
+        typeof props.enabled === "function" ? (props.enabled as () => boolean)() : (props.enabled ?? true);
     const layer = props.layer ?? inheritedLayer ?? 0;
 
     const handle = runtime.store.registerScope({
@@ -117,11 +117,7 @@ export function KeyScope(props: KeyScopeProps) {
 
     onCleanup(() => handle.dispose());
 
-    return (
-        <ParentScopeContext.Provider value={{ id: handle.id, layer }}>
-            {props.children}
-        </ParentScopeContext.Provider>
-    );
+    return <ParentScopeContext.Provider value={{ id: handle.id, layer }}>{props.children}</ParentScopeContext.Provider>;
 }
 
 function useKeymapRuntime(): KeymapRuntime {

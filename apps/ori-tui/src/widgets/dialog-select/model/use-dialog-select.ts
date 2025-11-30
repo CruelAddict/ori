@@ -1,11 +1,11 @@
-import { type Accessor, createEffect, createMemo, createSignal } from "solid-js";
-import { fuzzyFilter, type FuzzySearchKey } from "@shared/lib/fuzzy";
+import { type FuzzySearchKey, fuzzyFilter } from "@shared/lib/fuzzy";
 import type {
     DialogSelectActions,
     DialogSelectOption,
     DialogSelectViewModel,
     UseDialogSelectParams,
 } from "@widgets/dialog-select/types";
+import { createEffect, createMemo, createSignal } from "solid-js";
 
 const DEFAULT_KEYS: readonly FuzzySearchKey<DialogSelectOption<unknown>>[] = [
     (option) => option.title,

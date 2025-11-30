@@ -1,16 +1,16 @@
-import { createEffect, createMemo, createResource } from "solid-js";
-import type { Accessor } from "solid-js";
-import type { GraphSnapshot } from "../api/graph";
-import { loadFullGraph } from "../api/graph";
 import { useOriClient } from "@app/providers/client";
 import { useLogger } from "@app/providers/logger";
+import type { Accessor } from "solid-js";
+import { createEffect, createMemo, createResource } from "solid-js";
+import type { GraphSnapshot } from "../api/graph";
+import { loadFullGraph } from "../api/graph";
 
-interface GraphSnapshotControls {
+type GraphSnapshotControls = {
     snapshot: Accessor<GraphSnapshot | null>;
     loading: Accessor<boolean>;
     error: Accessor<string | null>;
     refresh: () => Promise<GraphSnapshot | null | undefined>;
-}
+};
 
 export function useGraphSnapshot(configurationName: Accessor<string | null>): GraphSnapshotControls {
     const client = useOriClient();
@@ -26,7 +26,7 @@ export function useGraphSnapshot(configurationName: Accessor<string | null>): Gr
             const snapshot = await loadFullGraph(client, name, logger);
             logger.debug({ configuration: name, hasSnapshot: !!snapshot }, "graph snapshot fetch completed");
             return snapshot;
-        }
+        },
     );
 
     const snapshot = createMemo(() => resource() ?? null);

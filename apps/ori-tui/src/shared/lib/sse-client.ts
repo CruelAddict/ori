@@ -2,13 +2,13 @@ import http from "node:http";
 import https from "node:https";
 import type { Logger } from "pino";
 
-export interface SSEMessage {
+export type SSEMessage = {
     event?: string;
     data: string;
     id?: string;
-}
+};
 
-export interface SSEClientOptions {
+export type SSEClientOptions = {
     host?: string;
     port?: number;
     path?: string;
@@ -20,7 +20,7 @@ export interface SSEClientOptions {
         maxDelayMs?: number;
     };
     logger?: Logger;
-}
+};
 
 export type SSEDisposer = () => void;
 

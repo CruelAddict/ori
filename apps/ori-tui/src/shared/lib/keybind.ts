@@ -1,12 +1,12 @@
 import type { KeyEvent } from "@opentui/core";
 
-export interface ParsedKeybind {
+export type ParsedKeybind = {
     name?: string;
     ctrl: boolean;
     meta: boolean;
     shift: boolean;
     alt: boolean;
-}
+};
 
 export type KeyboardEventLike = Pick<KeyEvent, "name" | "ctrl" | "meta" | "shift"> & {
     alt?: boolean;

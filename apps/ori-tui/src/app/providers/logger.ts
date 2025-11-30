@@ -1,13 +1,13 @@
+import type { Logger } from "pino";
 import type { JSX } from "solid-js";
 import { createComponent, createContext, useContext } from "solid-js";
-import type { Logger } from "pino";
 
 const LoggerContext = createContext<Logger>();
 
-export interface LoggerProviderProps {
+export type LoggerProviderProps = {
     logger: Logger;
     children: JSX.Element;
-}
+};
 
 export function LoggerProvider(props: LoggerProviderProps) {
     return createComponent(LoggerContext.Provider, {

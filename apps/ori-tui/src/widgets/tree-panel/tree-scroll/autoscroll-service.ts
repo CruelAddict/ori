@@ -3,7 +3,7 @@ import type { ScrollDelta } from "./types.ts";
 
 const MAX_ENSURE_ATTEMPTS = 5;
 
-export interface AutoscrollService {
+export type AutoscrollService = {
     setScrollBox(node: ScrollBoxRenderable | undefined): void;
     registerRowNode(rowId: string, node: BoxRenderable | undefined): void;
     ensureRowVisible(rowId: string | null): void;
@@ -11,7 +11,7 @@ export interface AutoscrollService {
     requestHorizontalReset(): void;
     hasPendingHorizontalReset(): boolean;
     dispose(): void;
-}
+};
 
 export function createAutoscrollService(): AutoscrollService {
     const rowNodes = new Map<string, BoxRenderable>();

@@ -1,13 +1,13 @@
 import fuzzysort, { type KeysOptions } from "fuzzysort";
 
-export type FuzzySearchKey<T> = keyof T & string | ((item: T) => string | null | undefined);
+export type FuzzySearchKey<T> = (keyof T & string) | ((item: T) => string | null | undefined);
 
-export interface FuzzySearchOptions<T> {
+export type FuzzySearchOptions<T> = {
     keys?: FuzzySearchKey<T>[];
     limit?: number;
     threshold?: number;
     scoreFn?: KeysOptions<T>["scoreFn"];
-}
+};
 
 export function fuzzyFilter<T>(query: string, items: readonly T[], options: FuzzySearchOptions<T> = {}): T[] {
     const limit = options.limit ?? items.length;

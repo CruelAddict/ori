@@ -1,14 +1,14 @@
-import { Show, createEffect } from "solid-js";
-import { KeyScope, type KeyBinding } from "@src/core/services/key-scopes";
-import type { EditorPaneViewModel } from "@src/features/editor-pane/use-editor-pane";
-import type { TextareaRenderable } from "@opentui/core";
 import { useTheme } from "@app/providers/theme";
+import type { TextareaRenderable } from "@opentui/core";
+import { type KeyBinding, KeyScope } from "@src/core/services/key-scopes";
+import type { EditorPaneViewModel } from "@src/features/editor-pane/use-editor-pane";
+import { createEffect, Show } from "solid-js";
 
 const EDITOR_SCOPE_ID = "connection-view.editor";
 
-export interface EditorPanelProps {
+export type EditorPanelProps = {
     viewModel: EditorPaneViewModel;
-}
+};
 
 export function EditorPanel(props: EditorPanelProps) {
     const pane = props.viewModel;
@@ -22,7 +22,7 @@ export function EditorPanel(props: EditorPanelProps) {
         if (pane.isFocused() && textarea) {
             textarea.focus();
         } else {
-            textarea?.blur()
+            textarea?.blur();
         }
     });
 
@@ -46,13 +46,21 @@ export function EditorPanel(props: EditorPanelProps) {
     };
 
     return (
-        <KeyScope id={EDITOR_SCOPE_ID} bindings={bindings} enabled={pane.isFocused}>
-            <box
-                flexDirection="column"
-            >
-                <box flexDirection="column" flexGrow={1} padding={1}>
+        <KeyScope
+            id={EDITOR_SCOPE_ID}
+            bindings={bindings}
+            enabled={pane.isFocused}
+        >
+            <box flexDirection="column">
+                <box
+                    flexDirection="column"
+                    flexGrow={1}
+                    padding={1}
+                >
                     <textarea
-                        ref={(renderable: TextareaRenderable | undefined) => (textarea = renderable)}
+                        ref={(renderable: TextareaRenderable | undefined) => {
+                            textarea = renderable;
+                        }}
                         placeholder={`Type to begin... (Enter inserts newline, Ctrl+X then Enter executes)`}
                         textColor={palette().editorText}
                         focusedTextColor={palette().editorText}
@@ -63,9 +71,7 @@ export function EditorPanel(props: EditorPanelProps) {
                         maxHeight={12}
                         onContentChange={handleChange}
                         onSubmit={handleSubmit}
-                        keyBindings={[
-                            { name: "return", action: "newline" },
-                        ]}
+                        keyBindings={[{ name: "return", action: "newline" }]}
                     />
                     <Show when={pane.isExecuting()}>
                         <box paddingTop={1}>

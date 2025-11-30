@@ -1,27 +1,27 @@
-import { createSignal, type Accessor, type Component } from "solid-js";
+import { type Accessor, type Component, createSignal } from "solid-js";
 
-export interface OverlayComponentProps {
+export type OverlayComponentProps = {
     close: () => void;
-}
+};
 
-export interface OverlayEntry {
+export type OverlayEntry = {
     id: string;
     render: Component<OverlayComponentProps>;
     zIndex: number;
-}
+};
 
-export interface OverlayOptions {
+export type OverlayOptions = {
     id?: string;
     render: Component<OverlayComponentProps>;
     zIndex?: number;
-}
+};
 
-export interface OverlayManager {
+export type OverlayManager = {
     overlays: Accessor<OverlayEntry[]>;
     show(options: OverlayOptions): string;
     dismiss(id: string): void;
     dismissAll(): void;
-}
+};
 
 export function createOverlayManager(): OverlayManager {
     const [overlays, setOverlays] = createSignal<OverlayEntry[]>([]);

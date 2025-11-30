@@ -1,32 +1,32 @@
+import { useOriClient } from "@app/providers/client";
+import { useEventStream } from "@app/providers/events";
+import { useLogger } from "@app/providers/logger";
+import { CONNECTION_STATE_EVENT, type ServerEvent } from "@shared/lib/events";
+import type { Configuration } from "@src/entities/configuration/model/configuration";
+import { useConfigurations } from "@src/entities/configuration/model/configuration-list-store";
+import type { ConnectResult } from "@src/shared/lib/configurations-client";
 import type { Accessor } from "solid-js";
 import { createContext, createMemo, onCleanup, useContext } from "solid-js";
 import { createStore } from "solid-js/store";
-import type { Configuration } from "@src/entities/configuration/model/configuration";
-import type { ConnectResult } from "@src/shared/lib/configurations-client";
-import { useOriClient } from "@app/providers/client";
-import { useLogger } from "@app/providers/logger";
-import { useEventStream } from "@app/providers/events";
-import { useConfigurations } from "@src/entities/configuration/model/configuration-list-store";
-import { CONNECTION_STATE_EVENT, type ServerEvent } from "@shared/lib/events";
 
 export type ConnectionLifecycle = "idle" | "requesting" | "waiting" | "connected" | "failed";
 
-export interface ConnectionRecord {
+export type ConnectionRecord = {
     configuration: Configuration;
     status: ConnectionLifecycle;
     message?: string;
     error?: string;
     lastUpdated: number;
-}
+};
 
-interface ConnectionStateStore {
+type ConnectionStateStore = {
     records: Record<string, ConnectionRecord>;
-}
+};
 
-interface ConnectionActions {
+type ConnectionActions = {
     connect(configuration: Configuration): Promise<void>;
     clear(configurationName: string): void;
-}
+};
 
 interface ConnectionStateContextValue extends ConnectionActions {
     records: Accessor<Record<string, ConnectionRecord>>;
@@ -54,7 +54,7 @@ export function createConnectionStateContextValue(): ConnectionStateContextValue
     const setRecord = (
         configurationName: string,
         recipe: (current: ConnectionRecord) => ConnectionRecord,
-        options?: { configuration?: Configuration }
+        options?: { configuration?: Configuration },
     ) => {
         setState("records", configurationName, (current) => {
             const configuration =
@@ -62,12 +62,13 @@ export function createConnectionStateContextValue(): ConnectionStateContextValue
             if (!configuration) {
                 logger.warn(
                     { configuration: configurationName },
-                    "connection state update skipped for unknown configuration"
+                    "connection state update skipped for unknown configuration",
                 );
                 return current;
             }
             const base =
-                current ?? ({
+                current ??
+                ({
                     configuration,
                     status: "idle",
                     lastUpdated: Date.now(),
@@ -84,11 +85,7 @@ export function createConnectionStateContextValue(): ConnectionStateContextValue
         });
     };
 
-    const handleConnectResult = (
-        configurationName: string,
-        configuration: Configuration,
-        result: ConnectResult
-    ) => {
+    const handleConnectResult = (configurationName: string, configuration: Configuration, result: ConnectResult) => {
         logger.debug({ configuration: configurationName, result: result.result }, "connect RPC result");
         if (result.result === "success") {
             setRecord(
@@ -101,7 +98,7 @@ export function createConnectionStateContextValue(): ConnectionStateContextValue
                     error: undefined,
                     lastUpdated: Date.now(),
                 }),
-                { configuration }
+                { configuration },
             );
             return;
         }
@@ -117,7 +114,7 @@ export function createConnectionStateContextValue(): ConnectionStateContextValue
                     error: result.userMessage,
                     lastUpdated: Date.now(),
                 }),
-                { configuration }
+                { configuration },
             );
             return;
         }
@@ -128,13 +125,13 @@ export function createConnectionStateContextValue(): ConnectionStateContextValue
                 if (current.status === "connected") {
                     logger.debug(
                         { configuration: configurationName },
-                        "connect RPC result ignored because connection already connected"
+                        "connect RPC result ignored because connection already connected",
                     );
                     return current;
                 }
                 logger.debug(
                     { configuration: configurationName },
-                    "connect RPC indicates pending connection; marking waiting"
+                    "connect RPC indicates pending connection; marking waiting",
                 );
                 return {
                     ...current,
@@ -145,10 +142,9 @@ export function createConnectionStateContextValue(): ConnectionStateContextValue
                     lastUpdated: Date.now(),
                 } satisfies ConnectionRecord;
             },
-            { configuration }
+            { configuration },
         );
     };
-
 
     const connect = async (configuration: Configuration) => {
         const { name } = configuration;
@@ -162,7 +158,7 @@ export function createConnectionStateContextValue(): ConnectionStateContextValue
                 error: undefined,
                 lastUpdated: Date.now(),
             }),
-            { configuration }
+            { configuration },
         );
         try {
             const result = await client.connect(name);
@@ -179,7 +175,7 @@ export function createConnectionStateContextValue(): ConnectionStateContextValue
                     error: err instanceof Error ? err.message : String(err),
                     lastUpdated: Date.now(),
                 }),
-                { configuration }
+                { configuration },
             );
         }
     };
@@ -196,13 +192,13 @@ export function createConnectionStateContextValue(): ConnectionStateContextValue
                 lifecycle,
                 previousStatus: previous?.status,
             },
-            "connection lifecycle event received"
+            "connection lifecycle event received",
         );
         const configuration = resolveConfiguration(configurationName);
         if (!configuration) {
             logger.warn(
                 { configuration: configurationName, lifecycle },
-                "received connection lifecycle event for unknown configuration"
+                "received connection lifecycle event for unknown configuration",
             );
             return;
         }
@@ -218,7 +214,7 @@ export function createConnectionStateContextValue(): ConnectionStateContextValue
                     error: undefined,
                     lastUpdated: Date.now(),
                 }),
-                { configuration }
+                { configuration },
             );
             return;
         }
@@ -234,7 +230,7 @@ export function createConnectionStateContextValue(): ConnectionStateContextValue
                     error: error ?? message,
                     lastUpdated: Date.now(),
                 }),
-                { configuration }
+                { configuration },
             );
             return;
         }
@@ -245,7 +241,7 @@ export function createConnectionStateContextValue(): ConnectionStateContextValue
                     if (current.status === "connected") {
                         logger.debug(
                             { configuration: configurationName },
-                            "ignoring connecting event for already connected configuration"
+                            "ignoring connecting event for already connected configuration",
                         );
                         return current;
                     }
@@ -259,11 +255,10 @@ export function createConnectionStateContextValue(): ConnectionStateContextValue
                         lastUpdated: Date.now(),
                     } satisfies ConnectionRecord;
                 },
-                { configuration }
+                { configuration },
             );
         }
     };
-
 
     const unsubscribe = eventStream.subscribe(handleServerEvent);
     onCleanup(() => unsubscribe());

@@ -1,6 +1,6 @@
 import type { KeyEvent } from "@opentui/core";
 
-export interface KeyBinding {
+export type KeyBinding = {
     pattern: string;
     handler: (event: KeyEvent) => void;
     description?: string;
@@ -8,33 +8,33 @@ export interface KeyBinding {
     preventDefault?: boolean;
     priority?: number;
     mode?: "normal" | "leader";
-}
+};
 
 export const SYSTEM_LAYER = Number.POSITIVE_INFINITY;
 
-export interface RegisterScopeOptions {
+export type RegisterScopeOptions = {
     id: string;
     parentId?: string | null;
     priority?: number;
     layer: number;
     getBindings: () => KeyBinding[];
     isEnabled: () => boolean;
-}
+};
 
 interface ScopeEntry extends RegisterScopeOptions {
     depth: number;
     order: number;
 }
 
-export interface DispatchPlan {
+export type DispatchPlan = {
     primary: ScopeEntry[];
     system: ScopeEntry[];
-}
+};
 
-export interface ScopeHandle {
+export type ScopeHandle = {
     id: string;
     dispose(): void;
-}
+};
 
 export class KeyScopeStore {
     private scopes = new Map<string, ScopeEntry>();

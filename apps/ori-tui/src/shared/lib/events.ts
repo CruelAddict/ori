@@ -2,20 +2,20 @@ import type { SSEMessage } from "@shared/lib/sse-client";
 
 export type ConnectionState = "connecting" | "connected" | "failed";
 
-export interface ConnectionStatePayload {
+export type ConnectionStatePayload = {
     configurationName: string;
     state: ConnectionState;
     message?: string;
     error?: string;
-}
+};
 
-export interface ConnectionStateEvent {
+export type ConnectionStateEvent = {
     type: "connection.state";
     payload: ConnectionStatePayload;
     id?: string;
-}
+};
 
-export interface QueryJobCompletedPayload {
+export type QueryJobCompletedPayload = {
     jobId: string;
     configurationName: string;
     status: string;
@@ -24,13 +24,13 @@ export interface QueryJobCompletedPayload {
     error?: string;
     message?: string;
     stored: boolean;
-}
+};
 
-export interface QueryJobCompletedEvent {
+export type QueryJobCompletedEvent = {
     type: "query.job.completed";
     payload: QueryJobCompletedPayload;
     id?: string;
-}
+};
 
 export type ServerEvent = ConnectionStateEvent | QueryJobCompletedEvent;
 

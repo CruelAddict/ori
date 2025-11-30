@@ -1,14 +1,11 @@
-import { createEffect, createMemo, createSignal } from "solid-js";
 import type { OverlayComponentProps } from "@app/overlay/overlay-store";
-import { DialogSelect, type DialogSelectOption } from "@widgets/dialog-select";
-import type { Configuration } from "@src/entities/configuration/model/configuration";
-import { useConfigurationListStore } from "@src/entities/configuration/model/configuration-list-store";
-import {
-    useConnectionState,
-    type ConnectionRecord,
-} from "@src/entities/connection/model/connection-state";
 import { useRouteNavigation } from "@app/routes/router";
 import { connectionRoute } from "@app/routes/types";
+import type { Configuration } from "@src/entities/configuration/model/configuration";
+import { useConfigurationListStore } from "@src/entities/configuration/model/configuration-list-store";
+import { type ConnectionRecord, useConnectionState } from "@src/entities/connection/model/connection-state";
+import { DialogSelect, type DialogSelectOption } from "@widgets/dialog-select";
+import { createEffect, createMemo, createSignal } from "solid-js";
 
 function formatConfigurationDetails(configuration: Configuration) {
     return `${configuration.type}`;

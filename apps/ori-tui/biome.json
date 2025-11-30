@@ -1,0 +1,105 @@
+{
+    "$schema": "https://biomejs.dev/schemas/2.3.8/schema.json",
+    "root": true,
+    "files": {
+        "includes": ["src/**/*.{ts,tsx,js,jsx}", "build.ts", "test-fetch.js"],
+        "ignoreUnknown": true
+    },
+    "vcs": {
+        "enabled": true,
+        "clientKind": "git",
+        "useIgnoreFile": true
+    },
+    "formatter": {
+        "indentStyle": "space",
+        "indentWidth": 4,
+        "lineWidth": 120,
+        "lineEnding": "lf"
+    },
+    "javascript": {
+        "formatter": {
+            "indentStyle": "space",
+            "indentWidth": 4,
+            "lineWidth": 120,
+            "quoteStyle": "double",
+            "jsxQuoteStyle": "double",
+            "trailingCommas": "all",
+            "semicolons": "always",
+            "attributePosition": "multiline"
+        }
+    },
+    "linter": {
+        "enabled": true,
+        "rules": {
+            "recommended": true,
+            "a11y": "warn",
+            "complexity": {
+                "noExcessiveLinesPerFunction": {
+                    "level": "warn",
+                    "options": {
+                        "maxLines": 120,
+                        "skipBlankLines": true
+                    }
+                },
+                "noExcessiveCognitiveComplexity": {
+                    "level": "warn",
+                    "options": {
+                        "maxAllowedComplexity": 25
+                    }
+                }
+            },
+            "correctness": {
+                "noUnusedImports": "error",
+                "noUnusedVariables": "warn",
+                "noUndeclaredDependencies": "off",
+                "noInvalidUseBeforeDeclaration": "error",
+                "noVoidElementsWithChildren": "error"
+            },
+            "nursery": {
+                "recommended": true,
+                "noFloatingPromises": "warn",
+                "noUnresolvedImports": "off",
+                "noImportCycles": "warn",
+                "noMisusedPromises": "warn",
+                "noUnnecessaryConditions": "warn"
+            },
+            "performance": {
+                "noAccumulatingSpread": "warn",
+                "noDynamicNamespaceImportAccess": "warn"
+            },
+            "style": {
+                "noNestedTernary": "warn",
+                "noInferrableTypes": "warn",
+                "useConsistentTypeDefinitions": {
+                    "level": "warn",
+                    "options": {
+                        "style": "type"
+                    }
+                },
+                "useImportType": "warn",
+                "useExportType": "warn"
+            },
+            "suspicious": {
+                "noConsole": "warn",
+                "noExplicitAny": "warn",
+                "noShadowRestrictedNames": "error"
+            }
+        },
+        "domains": {
+            "project": "recommended",
+            "solid": "recommended"
+        }
+    },
+    "overrides": [
+        {
+            "includes": ["build.ts", "test-fetch.js"],
+            "linter": {
+                "rules": {
+                    "suspicious": {
+                        "noConsole": "off"
+                    }
+                }
+            }
+        }
+    ]
+}

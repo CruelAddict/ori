@@ -1,17 +1,17 @@
-import { For, Show, createEffect, createMemo, createSignal, type Accessor } from "solid-js";
-import { TextAttributes } from "@opentui/core";
-import type { BoxRenderable } from "@opentui/core";
-import { useTreeScrollRegistration, type RowDescriptor } from "./tree-scrollbox.tsx";
-import type { TreePaneViewModel } from "@src/features/tree-pane/use-tree-pane";
 import { useTheme } from "@app/providers/theme";
+import type { BoxRenderable } from "@opentui/core";
+import { TextAttributes } from "@opentui/core";
+import type { TreePaneViewModel } from "@src/features/tree-pane/use-tree-pane";
+import { type Accessor, createEffect, createMemo, createSignal, For, Show } from "solid-js";
+import { type RowDescriptor, useTreeScrollRegistration } from "./tree-scrollbox.tsx";
 
-interface TreeNodeProps {
+type TreeNodeProps = {
     nodeId: string;
     depth: number;
     isFocused: Accessor<boolean>;
     pane: TreePaneViewModel;
     isRowSelected: (key: string) => boolean;
-}
+};
 
 export function TreeNode(props: TreeNodeProps) {
     const registerRowNode = useTreeScrollRegistration();
@@ -31,7 +31,7 @@ export function TreeNode(props: TreeNodeProps) {
 
     const fg = () => (isSelected() && props.isFocused() ? palette().background : palette().text);
     const bg = () => (isSelected() && props.isFocused() ? palette().primary : undefined);
-    const attrs = () => (isSelected() ? TextAttributes.BOLD : TextAttributes.NONE);
+    const _attrs = () => (isSelected() ? TextAttributes.BOLD : TextAttributes.NONE);
 
     const toggleGlyph = () => {
         const details = entity();
@@ -54,25 +54,39 @@ export function TreeNode(props: TreeNodeProps) {
                             ref={(node: BoxRenderable | undefined) => registerRowNode(rowId(), node)}
                             backgroundColor={bg()}
                         >
-                            <text fg={fg()} wrapMode="none" bg={bg()} >
+                            <text
+                                fg={fg()}
+                                wrapMode="none"
+                                bg={bg()}
+                            >
                                 {isSelected() ? "> " : "  "}
                                 {toggleGlyph()} {details().icon} {details().label}
                             </text>
                             {details().description && (
-                                <text attributes={TextAttributes.DIM} fg={palette().textMuted} wrapMode="none">
+                                <text
+                                    attributes={TextAttributes.DIM}
+                                    fg={palette().textMuted}
+                                    wrapMode="none"
+                                >
                                     {" "}
                                     {details().description}
                                 </text>
                             )}
                             {details().badges && (
-                                <text fg={palette().accent} wrapMode="none">
+                                <text
+                                    fg={palette().accent}
+                                    wrapMode="none"
+                                >
                                     {" "}
                                     {details().badges}
                                 </text>
                             )}
                         </box>
                         <Show when={childrenMounted()}>
-                            <box flexDirection="column" visible={isExpanded()}>
+                            <box
+                                flexDirection="column"
+                                visible={isExpanded()}
+                            >
                                 <For each={childIds()}>
                                     {(childId) => (
                                         <TreeNode
@@ -98,10 +112,12 @@ function rowElementId(rowId: string) {
     return `${ROW_ID_PREFIX}${rowId}`;
 }
 
-interface TreeNodeMetricsOptions {
-    getEntity: (id: string) => { label: string; icon?: string; description?: string; badges?: string; hasChildren: boolean } | undefined;
+type TreeNodeMetricsOptions = {
+    getEntity: (
+        id: string,
+    ) => { label: string; icon?: string; description?: string; badges?: string; hasChildren: boolean } | undefined;
     isExpanded: (id: string) => boolean;
-}
+};
 
 export function createTreeNodeMetrics(options: TreeNodeMetricsOptions) {
     const { getEntity, isExpanded } = options;

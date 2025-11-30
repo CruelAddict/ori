@@ -1,13 +1,13 @@
 export type RouteLocation = WelcomeRoute | ConnectionRoute;
 
-export interface WelcomeRoute {
+export type WelcomeRoute = {
     type: "welcome";
-}
+};
 
-export interface ConnectionRoute {
+export type ConnectionRoute = {
     type: "connection";
     configurationName: string;
-}
+};
 
 export const ROOT_ROUTE: WelcomeRoute = { type: "welcome" };
 

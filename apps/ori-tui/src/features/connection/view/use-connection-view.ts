@@ -1,19 +1,19 @@
-import { createMemo, createSignal } from "solid-js";
-import type { Accessor } from "solid-js";
 import { useConfigurationByName } from "@src/entities/configuration/model/configuration-list-store";
 import type { PaneFocusController } from "@src/features/connection/view/pane-types";
-import { useTreePane, type TreePaneViewModel } from "@src/features/tree-pane/use-tree-pane";
-import { useEditorPane, type EditorPaneViewModel } from "@src/features/editor-pane/use-editor-pane";
-import { useResultsPane, type ResultsPaneViewModel } from "@src/features/results-pane/use-results-pane";
+import { type EditorPaneViewModel, useEditorPane } from "@src/features/editor-pane/use-editor-pane";
+import { type ResultsPaneViewModel, useResultsPane } from "@src/features/results-pane/use-results-pane";
+import { type TreePaneViewModel, useTreePane } from "@src/features/tree-pane/use-tree-pane";
+import type { Accessor } from "solid-js";
+import { createMemo, createSignal } from "solid-js";
 
 export type FocusPane = "tree" | "editor" | "results";
 
-export interface UseConnectionViewOptions {
+export type UseConnectionViewOptions = {
     configurationName: Accessor<string>;
     onBack: () => void;
-}
+};
 
-export interface ConnectionViewActions {
+export type ConnectionViewActions = {
     toggleTreeVisible: () => void;
     toggleResultsVisible: () => void;
     onQueryChange: (text: string) => void;
@@ -25,9 +25,9 @@ export interface ConnectionViewActions {
     moveFocusDown: () => void;
     openEditor: () => void;
     exit: () => void;
-}
+};
 
-export interface ConnectionViewModel {
+export type ConnectionViewModel = {
     title: Accessor<string>;
     helpText: Accessor<string>;
     editorOpen: Accessor<boolean>;
@@ -35,7 +35,7 @@ export interface ConnectionViewModel {
     editorPane: EditorPaneViewModel;
     resultsPane: ResultsPaneViewModel;
     actions: ConnectionViewActions;
-}
+};
 
 const DEFAULT_PANE: FocusPane = "tree";
 

@@ -1,6 +1,6 @@
 import fs from "node:fs";
-import path from "node:path";
 import os from "node:os";
+import path from "node:path";
 
 const CONFIG_DIR = process.env.XDG_CONFIG_HOME ?? path.join(os.homedir(), ".config");
 const APP_DIR = path.join(CONFIG_DIR, "ori-tui");

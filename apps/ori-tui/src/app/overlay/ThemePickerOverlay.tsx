@@ -1,7 +1,7 @@
-import { createMemo, onCleanup } from "solid-js";
 import type { OverlayComponentProps } from "@app/overlay/overlay-store";
 import { useTheme } from "@app/providers/theme";
 import { DialogSelect, type DialogSelectOption } from "@widgets/dialog-select";
+import { createMemo, onCleanup } from "solid-js";
 
 export function ThemePickerOverlay(props: OverlayComponentProps) {
     const { availableThemes, selectedTheme, setTheme } = useTheme();
@@ -12,7 +12,7 @@ export function ThemePickerOverlay(props: OverlayComponentProps) {
             id: entry.name,
             title: entry.label,
             value: entry.name,
-        }))
+        })),
     );
 
     let previewTimeout: ReturnType<typeof setTimeout> | undefined;

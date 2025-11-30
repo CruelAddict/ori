@@ -1,20 +1,20 @@
+import type { ServerEvent } from "@shared/lib/events";
 import type { JSX } from "solid-js";
 import { createContext, createEffect, onCleanup, useContext } from "solid-js";
 import { useOriClient } from "./client";
 import { useLogger } from "./logger";
-import type { ServerEvent } from "@shared/lib/events";
 
 type EventListener = (event: ServerEvent) => void;
 
-export interface EventStreamContextValue {
+export type EventStreamContextValue = {
     subscribe(listener: EventListener): () => void;
-}
+};
 
 const EventStreamContext = createContext<EventStreamContextValue>();
 
-export interface EventStreamProviderProps {
+export type EventStreamProviderProps = {
     children: JSX.Element;
-}
+};
 
 export function EventStreamProvider(props: EventStreamProviderProps) {
     const client = useOriClient();
@@ -55,11 +55,7 @@ export function EventStreamProvider(props: EventStreamProviderProps) {
 
     const value: EventStreamContextValue = { subscribe };
 
-    return (
-        <EventStreamContext.Provider value={value}>
-            {props.children}
-        </EventStreamContext.Provider>
-    );
+    return <EventStreamContext.Provider value={value}>{props.children}</EventStreamContext.Provider>;
 }
 
 export function useEventStream(): EventStreamContextValue {

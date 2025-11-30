@@ -1,11 +1,21 @@
-import { For, Show, createEffect, createMemo, createSelector, createSignal, onCleanup, onMount, type Accessor } from "solid-js";
-import { TextAttributes } from "@opentui/core";
-import { KeyScope, type KeyBinding } from "@src/core/services/key-scopes";
-import type { TreePaneViewModel } from "@src/features/tree-pane/use-tree-pane";
 import { useTheme } from "@app/providers/theme";
-import { TreeScrollbox, type TreeScrollboxApi } from "./tree-scrollbox.tsx";
-import { TreeNode, createTreeNodeMetrics } from "./tree-node.tsx";
+import { TextAttributes } from "@opentui/core";
+import { type KeyBinding, KeyScope } from "@src/core/services/key-scopes";
+import type { TreePaneViewModel } from "@src/features/tree-pane/use-tree-pane";
+import {
+    type Accessor,
+    createEffect,
+    createMemo,
+    createSelector,
+    createSignal,
+    For,
+    onCleanup,
+    onMount,
+    Show,
+} from "solid-js";
+import { createTreeNodeMetrics, TreeNode } from "./tree-node.tsx";
 import { MIN_CONTENT_WIDTH } from "./tree-scroll/row-metrics.ts";
+import { TreeScrollbox, type TreeScrollboxApi } from "./tree-scrollbox.tsx";
 
 const TREE_SCOPE_ID = "connection-view.tree";
 const HORIZONTAL_SCROLL_STEP = 6;
@@ -13,9 +23,9 @@ const MIN_FOCUSED_COLUMN_WIDTH = 50;
 const MIN_FOCUSED_PERCENT = 0.2;
 const MAX_FOCUSED_PERCENT = 0.5;
 
-export interface TreePanelProps {
+export type TreePanelProps = {
     viewModel: TreePaneViewModel;
-}
+};
 
 export function TreePanel(props: TreePanelProps) {
     const pane = props.viewModel;
@@ -44,7 +54,6 @@ export function TreePanel(props: TreePanelProps) {
     const [focusedWidthFraction, setFocusedWidthFraction] = createSignal(MAX_FOCUSED_PERCENT);
     const focusedWidthPercent = createMemo(() => formatPercent(focusedWidthFraction()));
     const handleResize = () => setTerminalWidth(readTerminalWidth());
-
 
     onMount(() => {
         handleResize();
@@ -103,14 +112,21 @@ export function TreePanel(props: TreePanelProps) {
                 flexGrow: 1,
             };
         }
-        return { width: MIN_FOCUSED_COLUMN_WIDTH, maxWidth: MIN_FOCUSED_COLUMN_WIDTH, minWidth: MIN_FOCUSED_COLUMN_WIDTH, flexGrow: 0 } as const;
+        return {
+            width: MIN_FOCUSED_COLUMN_WIDTH,
+            maxWidth: MIN_FOCUSED_COLUMN_WIDTH,
+            minWidth: MIN_FOCUSED_COLUMN_WIDTH,
+            flexGrow: 0,
+        } as const;
     };
-
-
 
     return (
         <Show when={pane.visible()}>
-            <KeyScope id={TREE_SCOPE_ID} bindings={bindings} enabled={enabled}>
+            <KeyScope
+                id={TREE_SCOPE_ID}
+                bindings={bindings}
+                enabled={enabled}
+            >
                 <box
                     flexDirection="column"
                     {...paneWidthProps()}
@@ -145,12 +161,25 @@ export function TreePanel(props: TreePanelProps) {
                                 <Show
                                     when={rootIds().length > 0}
                                     fallback={
-                                        <text attributes={TextAttributes.DIM} fg={palette().textMuted}>
+                                        <text
+                                            attributes={TextAttributes.DIM}
+                                            fg={palette().textMuted}
+                                        >
                                             Graph is empty. Try refreshing later.
                                         </text>
                                     }
                                 >
-                                    <For each={rootIds()}>{(id) => <TreeNode nodeId={id} depth={0} isFocused={pane.isFocused} pane={pane} isRowSelected={isRowSelected} />}</For>
+                                    <For each={rootIds()}>
+                                        {(id) => (
+                                            <TreeNode
+                                                nodeId={id}
+                                                depth={0}
+                                                isFocused={pane.isFocused}
+                                                pane={pane}
+                                                isRowSelected={isRowSelected}
+                                            />
+                                        )}
+                                    </For>
                                 </Show>
                             </TreeScrollbox>
                         </Show>
@@ -160,8 +189,6 @@ export function TreePanel(props: TreePanelProps) {
         </Show>
     );
 }
-
-
 
 function readTerminalWidth() {
     if (typeof process === "undefined") return 0;

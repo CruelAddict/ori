@@ -1,17 +1,17 @@
+import { useOriClient } from "@app/providers/client";
+import type { Configuration } from "@src/entities/configuration/model/configuration";
 import type { JSX } from "solid-js";
 import { createContext, useContext } from "solid-js";
-import type { Configuration } from "@src/entities/configuration/model/configuration";
-import { useOriClient } from "@app/providers/client";
 
-export interface ConfigurationsService {
+export type ConfigurationsService = {
     listConfigurations(): Promise<Configuration[]>;
-}
+};
 
 const ConfigurationsServiceContext = createContext<ConfigurationsService>();
 
-export interface ConfigurationsServiceProviderProps {
+export type ConfigurationsServiceProviderProps = {
     children: JSX.Element;
-}
+};
 
 export function ConfigurationsServiceProvider(props: ConfigurationsServiceProviderProps) {
     const client = useOriClient();
@@ -20,9 +20,7 @@ export function ConfigurationsServiceProvider(props: ConfigurationsServiceProvid
     };
 
     return (
-        <ConfigurationsServiceContext.Provider value={service}>
-            {props.children}
-        </ConfigurationsServiceContext.Provider>
+        <ConfigurationsServiceContext.Provider value={service}>{props.children}</ConfigurationsServiceContext.Provider>
     );
 }
 

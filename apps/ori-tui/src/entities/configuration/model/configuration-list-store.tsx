@@ -1,22 +1,22 @@
-import type { JSX, Accessor } from "solid-js";
-import { createContext, createMemo, createSignal, onMount, useContext } from "solid-js";
-import type { Configuration } from "@src/entities/configuration/model/configuration";
 import { useLogger } from "@app/providers/logger";
 import { useConfigurationsService } from "@src/entities/configuration/api/configurations-service";
+import type { Configuration } from "@src/entities/configuration/model/configuration";
+import type { Accessor, JSX } from "solid-js";
+import { createContext, createMemo, createSignal, onMount, useContext } from "solid-js";
 
-interface ConfigurationListStoreValue {
+type ConfigurationListStoreValue = {
     configurations: Accessor<Configuration[]>;
     configurationMap: Accessor<Map<string, Configuration>>;
     loading: Accessor<boolean>;
     error: Accessor<string | null>;
     refresh: () => Promise<void>;
-}
+};
 
 const ConfigurationListStoreContext = createContext<ConfigurationListStoreValue>();
 
-export interface ConfigurationListStoreProviderProps {
+export type ConfigurationListStoreProviderProps = {
     children: JSX.Element;
-}
+};
 
 export function ConfigurationListStoreProvider(props: ConfigurationListStoreProviderProps) {
     const service = useConfigurationsService();
@@ -70,9 +70,7 @@ export function ConfigurationListStoreProvider(props: ConfigurationListStoreProv
     };
 
     return (
-        <ConfigurationListStoreContext.Provider value={value}>
-            {props.children}
-        </ConfigurationListStoreContext.Provider>
+        <ConfigurationListStoreContext.Provider value={value}>{props.children}</ConfigurationListStoreContext.Provider>
     );
 }
 

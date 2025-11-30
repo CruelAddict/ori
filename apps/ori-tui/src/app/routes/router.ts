@@ -1,13 +1,13 @@
-import type { Accessor } from "solid-js";
 import { useNavigation } from "@app/providers/navigation";
+import type { Accessor } from "solid-js";
 import type { RouteLocation } from "./types";
 
-export interface RouteNavigationActions {
+export type RouteNavigationActions = {
     pop(): void;
     reset(pages?: RouteLocation[]): void;
     push(page: RouteLocation): void;
     replace(page: RouteLocation): void;
-}
+};
 
 export interface RouteNavigation extends RouteNavigationActions {
     stack: Accessor<RouteLocation[]>;

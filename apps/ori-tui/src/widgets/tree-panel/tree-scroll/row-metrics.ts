@@ -14,15 +14,18 @@ type WidthChangeHandler = (contentWidth: number) => void;
 type WidthEntry = { id: string; width: number };
 type RowMeta = { depth: number; width: number };
 
-export interface RowMetricsService {
+export type RowMetricsService = {
     syncRows(rows: readonly RowDescriptor[]): void;
     contentWidth: () => number;
     naturalWidth: () => number;
     dispose(): void;
-}
+};
 
 // the reason this file exists is that opentui can't properly handle scrollbar with changing content & viewport width
-export function createRowMetrics(measureRowWidth: MeasureRowWidth, onWidthUpdate: WidthChangeHandler): RowMetricsService {
+export function createRowMetrics(
+    measureRowWidth: MeasureRowWidth,
+    onWidthUpdate: WidthChangeHandler,
+): RowMetricsService {
     const rowWidths = new Map<string, RowMeta>();
     const depthStats = new Map<number, WidthEntry>();
     const activeRowIds = new Set<string>();
@@ -137,7 +140,7 @@ function readTerminalWidth() {
 }
 
 function attachViewportResizeListener(handler: () => void) {
-    if (typeof process === "undefined") return () => { };
+    if (typeof process === "undefined") return () => {};
     const stdout = process.stdout;
     stdout?.on?.("resize", handler);
     return () => {

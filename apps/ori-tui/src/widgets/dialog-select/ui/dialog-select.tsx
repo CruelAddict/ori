@@ -1,17 +1,12 @@
-import { TextAttributes, type InputRenderable, type ScrollBoxRenderable } from "@opentui/core";
-import { For, Show, createEffect, createMemo, onMount } from "solid-js";
-import type { Accessor } from "solid-js";
-import { KeyScope, type KeyBinding } from "@src/core/services/key-scopes";
 import { useTheme } from "@app/providers/theme";
+import { type InputRenderable, type ScrollBoxRenderable, TextAttributes } from "@opentui/core";
+import { type KeyBinding, KeyScope } from "@src/core/services/key-scopes";
 import { useDialogSelect } from "@widgets/dialog-select";
-import type {
-    DialogSelectHint,
-    DialogSelectOption,
-    DialogSelectViewModel,
-} from "@widgets/dialog-select/types";
+import type { DialogSelectHint, DialogSelectOption, DialogSelectViewModel } from "@widgets/dialog-select/types";
+import type { Accessor } from "solid-js";
+import { createEffect, createMemo, For, onMount, Show } from "solid-js";
 
-
-export interface DialogSelectProps<T> {
+export type DialogSelectProps<T> = {
     title: string;
     options: Accessor<readonly DialogSelectOption<T>[]>;
     description?: string;
@@ -28,7 +23,7 @@ export interface DialogSelectProps<T> {
     onCancel?: () => void;
     onFilterChange?: (value: string) => void;
     onHighlightChange?: (option: DialogSelectOption<T> | undefined) => void;
-}
+};
 
 export function DialogSelect<T>(props: DialogSelectProps<T>) {
     const { theme } = useTheme();
@@ -40,7 +35,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
     });
     const placeholder = props.placeholder ?? "Type to search";
     const emptyMessage = props.emptyMessage ?? "No results found";
-    const hints = () => props.hints ?? [];
+    const _hints = () => props.hints ?? [];
     const maxHeight = () => props.maxHeight ?? 16;
 
     let inputRef: InputRenderable | undefined;
@@ -118,7 +113,10 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
     });
 
     return (
-        <KeyScope id={props.scopeId} bindings={bindings}>
+        <KeyScope
+            id={props.scopeId}
+            bindings={bindings}
+        >
             <box
                 flexDirection="column"
                 width={props.width ?? 100}
@@ -129,20 +127,42 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
                 paddingBottom={1}
                 backgroundColor={palette().backgroundPanel}
             >
-                <box flexDirection="row" justifyContent="space-between" paddingLeft={2} paddingRight={3}>
-                    <text fg={palette().text} attributes={TextAttributes.BOLD} wrapMode="none">
+                <box
+                    flexDirection="row"
+                    justifyContent="space-between"
+                    paddingLeft={2}
+                    paddingRight={3}
+                >
+                    <text
+                        fg={palette().text}
+                        attributes={TextAttributes.BOLD}
+                        wrapMode="none"
+                    >
                         {props.title}
                     </text>
-                    <text fg={palette().textMuted} paddingTop={1}>esc</text>
+                    <text
+                        fg={palette().textMuted}
+                        paddingTop={1}
+                    >
+                        esc
+                    </text>
                 </box>
                 <Show when={props.description}>
-                    <box paddingLeft={2} marginBottom={1}>
+                    <box
+                        paddingLeft={2}
+                        marginBottom={1}
+                    >
                         <text fg={palette().textMuted}>{props.description}</text>
                     </box>
                 </Show>
-                <box paddingBottom={2} paddingLeft={2}>
+                <box
+                    paddingBottom={2}
+                    paddingLeft={2}
+                >
                     <input
-                        ref={(el) => (inputRef = el)}
+                        ref={(el) => {
+                            inputRef = el;
+                        }}
                         value={vm.filter()}
                         placeholder={placeholder}
                         cursorColor={palette().primary}
@@ -155,18 +175,29 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
                     />
                 </box>
                 <scrollbox
-                    ref={(node: ScrollBoxRenderable) => (scrollRef = node)}
+                    ref={(node: ScrollBoxRenderable) => {
+                        scrollRef = node;
+                    }}
                     maxHeight={maxHeight()}
                     scrollbarOptions={{ visible: false }}
                 >
                     <box flexDirection="column">
-                        <Show when={grouped().length > 0} fallback={<EmptyState message={emptyMessage} />}>
+                        <Show
+                            when={grouped().length > 0}
+                            fallback={<EmptyState message={emptyMessage} />}
+                        >
                             <For each={grouped()}>
                                 {([category, options], groupIndex) => (
                                     <box flexDirection="column">
                                         <Show when={category}>
-                                            <box paddingBottom={0} paddingTop={groupIndex() > 0 ? 1 : 0}>
-                                                <text fg={palette().accent} attributes={TextAttributes.BOLD}>
+                                            <box
+                                                paddingBottom={0}
+                                                paddingTop={groupIndex() > 0 ? 1 : 0}
+                                            >
+                                                <text
+                                                    fg={palette().accent}
+                                                    attributes={TextAttributes.BOLD}
+                                                >
                                                     {category}
                                                 </text>
                                             </box>
@@ -229,7 +260,12 @@ function OptionRow<T>(props: {
             }}
             gap={1}
         >
-            <text flexGrow={1} fg={fgColor()} attributes={isCursor() ? TextAttributes.BOLD : undefined} wrapMode="none">
+            <text
+                flexGrow={1}
+                fg={fgColor()}
+                attributes={isCursor() ? TextAttributes.BOLD : undefined}
+                wrapMode="none"
+            >
                 {truncate(option.title, 50)}
                 <Show when={option.description}>
                     <span style={{ fg: isCursor() ? props.palette().background : props.palette().textMuted }}>
@@ -239,7 +275,10 @@ function OptionRow<T>(props: {
                 </Show>
             </text>
             <Show when={option.badge}>
-                <text fg={isCursor() ? props.palette().background : props.palette().textMuted} attributes={TextAttributes.BOLD}>
+                <text
+                    fg={isCursor() ? props.palette().background : props.palette().textMuted}
+                    attributes={TextAttributes.BOLD}
+                >
                     {option.badge}
                 </text>
             </Show>
@@ -263,11 +302,10 @@ function groupByCategory<T>(options: readonly DialogSelectOption<T>[]) {
         if (!map.has(key)) {
             map.set(key, []);
         }
-        map.get(key)!.push(option);
+        map.get(key)?.push(option);
     }
     return Array.from(map.entries());
 }
-
 
 function ensureVisible<T>(scroll: ScrollBoxRenderable | undefined, vm: DialogSelectViewModel<T>) {
     if (!scroll) return;

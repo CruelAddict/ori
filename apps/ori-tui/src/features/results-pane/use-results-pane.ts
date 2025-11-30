@@ -1,19 +1,19 @@
-import { createEffect, createSignal } from "solid-js";
-import type { Accessor } from "solid-js";
-import type { PaneFocusController } from "@src/features/connection/view/pane-types";
 import type { QueryJob } from "@src/entities/query-job/providers/query-jobs-provider";
+import type { PaneFocusController } from "@src/features/connection/view/pane-types";
+import type { Accessor } from "solid-js";
+import { createEffect, createSignal } from "solid-js";
 
-export interface ResultsPaneViewModel {
+export type ResultsPaneViewModel = {
     visible: Accessor<boolean>;
     isFocused: Accessor<boolean>;
     job: Accessor<QueryJob | undefined>;
     toggleVisible: () => void;
-}
+};
 
-interface UseResultsPaneOptions {
+type UseResultsPaneOptions = {
     job: Accessor<QueryJob | undefined>;
     focus: PaneFocusController;
-}
+};
 
 export function useResultsPane(options: UseResultsPaneOptions): ResultsPaneViewModel {
     const [visible, setVisible] = createSignal(false);

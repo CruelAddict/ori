@@ -1,80 +1,80 @@
 import http from "node:http";
-import type { Logger } from "pino";
 import type { Configuration } from "@shared/lib/configuration";
-import { createSSEStream } from "@shared/lib/sse-client";
 import { decodeServerEvent, type ServerEvent } from "@shared/lib/events";
+import { createSSEStream } from "@shared/lib/sse-client";
+import type { Logger } from "pino";
 
 export type ClientMode = "sdk" | "stub";
 
-export interface ConnectResult {
+export type ConnectResult = {
     result: "success" | "fail" | "connecting";
     userMessage?: string;
-}
+};
 
-export interface NodeEdge {
+export type NodeEdge = {
     items: string[];
     truncated: boolean;
-}
+};
 
-export interface Node {
+export type Node = {
     id: string;
     type: string;
     name: string;
     attributes: Record<string, any>;
     edges: Record<string, NodeEdge>;
-}
+};
 
-export interface QueryExecResult {
+export type QueryExecResult = {
     jobId: string;
     status: "running" | "failed";
     message?: string;
-}
+};
 
-export interface QueryColumn {
+export type QueryColumn = {
     name: string;
     type: string;
-}
+};
 
-export interface QueryResultView {
+export type QueryResultView = {
     columns: QueryColumn[];
     rows: any[][];
     rowCount: number;
     truncated: boolean;
-}
+};
 
-export interface OriClient {
+export type OriClient = {
     listConfigurations(): Promise<Configuration[]>;
     connect(configurationName: string): Promise<ConnectResult>;
     getNodes(configurationName: string, nodeIDs?: string[]): Promise<Node[]>;
     queryExec(configurationName: string, query: string, params?: any): Promise<QueryExecResult>;
     queryGetResult(jobId: string, limit?: number, offset?: number): Promise<QueryResultView>;
     openEventStream(onEvent: (event: ServerEvent) => void): () => void;
-}
+};
 
-export interface CreateClientOptions {
+export type CreateClientOptions = {
     mode: ClientMode;
     host?: string;
     port?: number;
     socketPath?: string;
     logger: Logger;
-}
+};
 
-interface HttpClientOptions {
+type HttpClientOptions = {
     host: string;
     port: number;
     logger: Logger;
-}
+};
 
-interface UnixClientOptions {
+type UnixClientOptions = {
     socketPath: string;
     logger: Logger;
-}
+};
 
-interface JsonRpcTransportOptions {
+type JsonRpcTransportOptions = {
     host?: string;
     port?: number;
     socketPath?: string;
-}
+};
 
 const STUB_CONFIGURATIONS: Configuration[] = [
     {
@@ -125,7 +125,9 @@ class JsonRpcClient {
                 res.on("end", () => {
                     const body = Buffer.concat(chunks).toString("utf-8");
                     if (res.statusCode && res.statusCode >= 300) {
-                        reject(new Error(`RPC HTTP ${res.statusCode}: ${body || res.statusMessage || "unknown error"}`));
+                        reject(
+                            new Error(`RPC HTTP ${res.statusCode}: ${body || res.statusMessage || "unknown error"}`),
+                        );
                         return;
                     }
 
@@ -172,10 +174,16 @@ class HttpOriClient implements OriClient {
         if (nodeIDs && nodeIDs.length > 0) {
             params.nodeIDs = nodeIDs;
         }
-        this.options.logger.debug({ configuration: configurationName, nodeCount: nodeIDs?.length ?? 0 }, "getNodes RPC request");
+        this.options.logger.debug(
+            { configuration: configurationName, nodeCount: nodeIDs?.length ?? 0 },
+            "getNodes RPC request",
+        );
         const result = await this.rpc.request("getNodes", params);
         const nodes = extractNodes(result);
-        this.options.logger.debug({ configuration: configurationName, resultCount: nodes.length }, "getNodes RPC response");
+        this.options.logger.debug(
+            { configuration: configurationName, resultCount: nodes.length },
+            "getNodes RPC response",
+        );
         return nodes;
     }
 
@@ -213,15 +221,21 @@ class HttpOriClient implements OriClient {
                     this.options.logger.debug({ event: message.event }, "http-client: decoding SSE message");
                     const event = decodeServerEvent(message);
                     if (event) {
-                        this.options.logger.debug({ eventType: event.type }, "http-client: decoded event, invoking callback");
+                        this.options.logger.debug(
+                            { eventType: event.type },
+                            "http-client: decoded event, invoking callback",
+                        );
                         onEvent(event);
                     } else {
-                        this.options.logger.debug({ event: message.event }, "http-client: decodeServerEvent returned null");
+                        this.options.logger.debug(
+                            { event: message.event },
+                            "http-client: decodeServerEvent returned null",
+                        );
                     }
                 } catch (err) {
                     this.options.logger.error({ err }, "failed to decode SSE payload");
                 }
-            }
+            },
         );
     }
 }
@@ -248,10 +262,16 @@ class UnixSocketOriClient implements OriClient {
         if (nodeIDs && nodeIDs.length > 0) {
             params.nodeIDs = nodeIDs;
         }
-        this.options.logger.debug({ configuration: configurationName, nodeCount: nodeIDs?.length ?? 0 }, "getNodes RPC request");
+        this.options.logger.debug(
+            { configuration: configurationName, nodeCount: nodeIDs?.length ?? 0 },
+            "getNodes RPC request",
+        );
         const result = await this.rpc.request("getNodes", params);
         const nodes = extractNodes(result);
-        this.options.logger.debug({ configuration: configurationName, resultCount: nodes.length }, "getNodes RPC response");
+        this.options.logger.debug(
+            { configuration: configurationName, resultCount: nodes.length },
+            "getNodes RPC response",
+        );
         return nodes;
     }
 
@@ -288,15 +308,21 @@ class UnixSocketOriClient implements OriClient {
                     this.options.logger.debug({ event: message.event }, "unix-client: decoding SSE message");
                     const event = decodeServerEvent(message);
                     if (event) {
-                        this.options.logger.debug({ eventType: event.type }, "unix-client: decoded event, invoking callback");
+                        this.options.logger.debug(
+                            { eventType: event.type },
+                            "unix-client: decoded event, invoking callback",
+                        );
                         onEvent(event);
                     } else {
-                        this.options.logger.debug({ event: message.event }, "unix-client: decodeServerEvent returned null");
+                        this.options.logger.debug(
+                            { event: message.event },
+                            "unix-client: decodeServerEvent returned null",
+                        );
                     }
                 } catch (err) {
                     this.options.logger.error({ err }, "failed to decode SSE payload");
                 }
-            }
+            },
         );
     }
 }
@@ -326,7 +352,7 @@ class StubOriClient implements OriClient {
         return nodes;
     }
 
-    async queryExec(configurationName: string, query: string): Promise<QueryExecResult> {
+    async queryExec(_configurationName: string, _query: string): Promise<QueryExecResult> {
         return {
             jobId: "stub-job-123",
             status: "running",

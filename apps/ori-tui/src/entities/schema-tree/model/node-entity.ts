@@ -2,7 +2,7 @@ import type { Node, NodeEdge } from "@shared/lib/configurations-client";
 
 export type NodeEntity = SnapshotNodeEntity | EdgeNodeEntity;
 
-interface BaseNodeEntity {
+type BaseNodeEntity = {
     id: string;
     kind: "node" | "edge";
     label: string;
@@ -11,7 +11,7 @@ interface BaseNodeEntity {
     badges?: string;
     childIds: string[];
     hasChildren: boolean;
-}
+};
 
 // SnapshotNodeEntity represents a node that represents an actual node
 // from a snapshot that we retrieved from backend

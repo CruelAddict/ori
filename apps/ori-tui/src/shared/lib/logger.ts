@@ -1,8 +1,8 @@
-import pino from "pino";
-import type { Logger } from "pino";
 import fs from "node:fs";
-import path from "node:path";
 import os from "node:os";
+import path from "node:path";
+import type { Logger } from "pino";
+import pino from "pino";
 
 export type LogLevel = "debug" | "info" | "warn" | "error";
 
@@ -21,7 +21,7 @@ export function createLogger(app: string, level: LogLevel = "warn"): Logger {
                 maybe.reopen();
             }
         });
-    } catch { }
+    } catch {}
 
     const logger = pino(
         {
@@ -35,14 +35,14 @@ export function createLogger(app: string, level: LogLevel = "warn"): Logger {
                 },
             },
         },
-        destination
+        destination,
     );
 
     return logger;
 }
 
 function defaultLogDir(): string {
-    const xdg = process.env["XDG_STATE_HOME"];
+    const xdg = process.env.XDG_STATE_HOME;
     if (xdg && xdg.length > 0) {
         return path.join(xdg, "ori");
     }

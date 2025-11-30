@@ -1,23 +1,23 @@
-import type { JSX } from "solid-js";
-import { createContext, createComponent, useContext } from "solid-js";
-import type { OriClient, CreateClientOptions, ClientMode } from "@shared/lib/configurations-client";
+import type { ClientMode, CreateClientOptions, OriClient } from "@shared/lib/configurations-client";
 import { createOriClient } from "@shared/lib/configurations-client";
+import type { JSX } from "solid-js";
+import { createComponent, createContext, useContext } from "solid-js";
 import { useLogger } from "./logger";
 
-interface ClientContextValue {
+type ClientContextValue = {
     client: OriClient;
     mode: ClientMode;
     host?: string;
     port?: number;
     socketPath?: string;
-}
+};
 
 const ClientContext = createContext<ClientContextValue>();
 
-export interface ClientProviderProps {
+export type ClientProviderProps = {
     options: Omit<CreateClientOptions, "logger">;
     children: JSX.Element;
-}
+};
 
 export function ClientProvider(props: ClientProviderProps) {
     const logger = useLogger();

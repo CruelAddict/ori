@@ -1,24 +1,24 @@
-import { createContext, createEffect, onCleanup, useContext, type Accessor, type ParentProps } from "solid-js";
 import type { BoxRenderable, ScrollBoxRenderable } from "@opentui/core";
+import { type Accessor, createContext, createEffect, onCleanup, type ParentProps, useContext } from "solid-js";
 import { createAutoscrollService } from "./tree-scroll/autoscroll-service.ts";
 import { createOverflowTracker } from "./tree-scroll/overflow-tracker.ts";
 import { createRowMetrics, type MeasureRowWidth, type RowDescriptor } from "./tree-scroll/row-metrics.ts";
 import type { ScrollDelta } from "./tree-scroll/types.ts";
 
-interface TreeScrollboxContextValue {
+type TreeScrollboxContextValue = {
     registerRowNode: (rowId: string, node: BoxRenderable | undefined) => void;
-}
+};
 
 const TreeScrollboxContext = createContext<TreeScrollboxContextValue | null>(null);
 
-interface OverflowTrackerHookOptions {
+type OverflowTrackerHookOptions = {
     rows: Accessor<readonly RowDescriptor[]>;
     isFocused: Accessor<boolean>;
     selectedRowId: Accessor<string | null>;
     getNaturalWidth: () => number;
     requestHorizontalReset: () => void;
     hasPendingHorizontalReset: () => boolean;
-}
+};
 
 function useTreeRowMetrics(
     rows: Accessor<readonly RowDescriptor[]>,
@@ -64,9 +64,9 @@ export function useTreeScrollRegistration() {
     return ctx.registerRowNode;
 }
 
-export interface TreeScrollboxApi {
+export type TreeScrollboxApi = {
     scrollBy(delta: ScrollDelta): void;
-}
+};
 
 interface TreeScrollboxProps extends ParentProps {
     rows: Accessor<readonly RowDescriptor[]>;
@@ -142,7 +142,12 @@ export function TreeScrollbox(props: TreeScrollboxProps) {
             scrollX={true}
         >
             <TreeScrollboxContext.Provider value={contextValue}>
-                <box flexDirection="column" width={rowMetrics.contentWidth()} flexShrink={0} alignItems="flex-start">
+                <box
+                    flexDirection="column"
+                    width={rowMetrics.contentWidth()}
+                    flexShrink={0}
+                    alignItems="flex-start"
+                >
                     {props.children}
                 </box>
             </TreeScrollboxContext.Provider>

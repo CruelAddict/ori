@@ -1,9 +1,10 @@
 #!/usr/bin/env bun
+
 // @ts-nocheck
 
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import solidPlugin from "./node_modules/@opentui/solid/scripts/solid-plugin";
-import path from "path";
-import { fileURLToPath } from "url";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -16,17 +17,22 @@ import pkg from "./package.json";
 const versionLabel = pkg?.version ? ` v${pkg.version}` : "";
 console.log(`Building ori-tui${versionLabel}...`);
 
-const target = `bun-${process.platform}-${process.arch}` as any;
+type BunBuildConfig = Parameters<typeof Bun.build>[0];
+type CompileOptions = NonNullable<BunBuildConfig["compile"]>;
 
-await Bun.build({
-  tsconfig: "./tsconfig.json",
-  plugins: [solidPlugin],
-  compile: {
-    target,
-    outfile: "bin/ori-tui",
-  },
-  entrypoints: ["./src/index.tsx"],
-  minify: false, // Keep readable for debugging
-} as any);
+const target = `bun-${process.platform}-${process.arch}` as CompileOptions["target"];
+
+const buildConfig: BunBuildConfig = {
+    tsconfig: "./tsconfig.json",
+    plugins: [solidPlugin],
+    compile: {
+        target,
+        outfile: "bin/ori-tui",
+    },
+    entrypoints: ["./src/index.tsx"],
+    minify: false, // Keep readable for debugging
+};
+
+await Bun.build(buildConfig);
 
 console.log("✓ Build complete: bin/ori-tui");

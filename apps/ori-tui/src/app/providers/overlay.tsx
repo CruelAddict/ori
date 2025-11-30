@@ -1,6 +1,6 @@
-import { createContext, useContext, type JSX } from "solid-js";
 import type { OverlayManager } from "@app/overlay/overlay-store";
 import { createOverlayManager } from "@app/overlay/overlay-store";
+import { createContext, type JSX, useContext } from "solid-js";
 
 const OverlayContext = createContext<OverlayManager>();
 

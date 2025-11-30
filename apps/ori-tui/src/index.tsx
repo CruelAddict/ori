@@ -1,25 +1,25 @@
-import { createEffect, createSignal } from "solid-js";
-import { render } from "@opentui/solid";
-import { createLogger } from "@shared/lib/logger";
-import { parseArgs } from "@src/utils/args";
-import { LoggerProvider } from "@app/providers/logger";
+import { ConfigurationPickerOverlay } from "@app/overlay/ConfigurationPickerOverlay";
+import { OverlayHost } from "@app/overlay/OverlayHost";
+import type { OverlayManager } from "@app/overlay/overlay-store";
+import { ThemePickerOverlay } from "@app/overlay/ThemePickerOverlay";
 import { ClientProvider } from "@app/providers/client";
 import { EventStreamProvider } from "@app/providers/events";
-import { ConnectionEntityProvider } from "@src/entities/connection/providers/connection-entity-provider";
+import { LoggerProvider } from "@app/providers/logger";
 import { NavigationProvider } from "@app/providers/navigation";
 import { OverlayProvider, useOverlayManager } from "@app/providers/overlay";
-import type { OverlayManager } from "@app/overlay/overlay-store";
-import { OverlayHost } from "@app/overlay/OverlayHost";
-import { ConfigurationPickerOverlay } from "@app/overlay/ConfigurationPickerOverlay";
-import { QueryJobsProvider } from "@src/entities/query-job/providers/query-jobs-provider";
-import { KeymapProvider, KeyScope, SYSTEM_LAYER } from "@src/core/services/key-scopes";
-import { ConfigurationEntityProvider } from "@src/entities/configuration/providers/configuration-entity-provider";
+import { ThemeProvider, useTheme } from "@app/providers/theme";
 import { RouteOutlet } from "@app/routes/RouteOutlet";
 import { useRouteNavigation } from "@app/routes/router";
-import { ThemeProvider, useTheme } from "@app/providers/theme";
-import { ThemePickerOverlay } from "@app/overlay/ThemePickerOverlay";
+import { render } from "@opentui/solid";
+import { createLogger } from "@shared/lib/logger";
+import { KeymapProvider, KeyScope, SYSTEM_LAYER } from "@src/core/services/key-scopes";
+import { ConfigurationEntityProvider } from "@src/entities/configuration/providers/configuration-entity-provider";
+import { ConnectionEntityProvider } from "@src/entities/connection/providers/connection-entity-provider";
+import { QueryJobsProvider } from "@src/entities/query-job/providers/query-jobs-provider";
+import { parseArgs } from "@src/utils/args";
+import { createEffect, createSignal } from "solid-js";
 
-const AUTO_OPEN_WELCOME_PICKER = process.env["ORI_AUTO_OPEN_PICKER"] !== "0";
+const AUTO_OPEN_WELCOME_PICKER = process.env.ORI_AUTO_OPEN_PICKER !== "0";
 
 function openConfigurationPicker(overlays: OverlayManager) {
     setTimeout(() => {
@@ -49,7 +49,11 @@ function App() {
     });
 
     return (
-        <box flexDirection="column" flexGrow={1} backgroundColor={palette().background}>
+        <box
+            flexDirection="column"
+            flexGrow={1}
+            backgroundColor={palette().background}
+        >
             <GlobalHotkeys />
             <RouteOutlet />
             <OverlayHost />
@@ -107,7 +111,6 @@ function GlobalHotkeys() {
     );
 }
 
-
 export function main() {
     const args = process.argv.slice(2);
     const { serverAddress, socketPath, mode, logLevel, theme: themeArg } = parseArgs(args);
@@ -149,7 +152,7 @@ export function main() {
                 </ClientProvider>
             </LoggerProvider>
         ),
-        { exitOnCtrlC: false }
+        { exitOnCtrlC: false },
     );
 }
 

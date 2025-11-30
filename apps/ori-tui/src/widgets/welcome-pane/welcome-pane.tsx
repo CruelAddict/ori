@@ -1,11 +1,11 @@
-import { RGBA, Text, TextAttributes } from "@opentui/core";
-import { createMemo, For } from "solid-js";
 import { useTheme } from "@app/providers/theme";
+import { RGBA, TextAttributes } from "@opentui/core";
+import { For } from "solid-js";
 
-interface CommandRowProps {
+type CommandRowProps = {
     shortcut: string;
     label: string;
-}
+};
 
 export function WelcomePane() {
     const { theme } = useTheme();
@@ -22,10 +22,23 @@ export function WelcomePane() {
             alignItems="center"
             justifyContent="center"
         >
-
-            <box flexDirection="row" justifyContent="center" alignItems="flex-end" width={"100%"}>
-                <ascii_font text="ORI" font="tiny" fg={RGBA.fromHex(palette().text)} />
-                <text attributes={TextAttributes.DIM} marginLeft={2}>v0.0.1</text>
+            <box
+                flexDirection="row"
+                justifyContent="center"
+                alignItems="flex-end"
+                width={"100%"}
+            >
+                <ascii_font
+                    text="ORI"
+                    font="tiny"
+                    fg={RGBA.fromHex(palette().text)}
+                />
+                <text
+                    attributes={TextAttributes.DIM}
+                    marginLeft={2}
+                >
+                    v0.0.1
+                </text>
             </box>
             <box height={2} />
             <box
@@ -47,11 +60,14 @@ function CommandRow(props: CommandRowProps) {
     const { theme } = useTheme();
     const palette = theme;
     return (
-        <box flexDirection="row" justifyContent="space-between" width="100%" paddingBottom={1}>
+        <box
+            flexDirection="row"
+            justifyContent="space-between"
+            width="100%"
+            paddingBottom={1}
+        >
             <text fg={palette().text}>{props.label}</text>
-            <text fg={palette().accent}>
-                {props.shortcut}
-            </text>
+            <text fg={palette().accent}>{props.shortcut}</text>
         </box>
     );
 }

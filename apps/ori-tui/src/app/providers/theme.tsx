@@ -1,20 +1,27 @@
-import { type Accessor, type JSX, createContext, createMemo, createSignal, useContext } from "solid-js";
-import { DEFAULT_THEME_NAME, THEME_OPTIONS, type Theme, type ThemeName, normalizeThemeName, resolveTheme } from "@app/theme";
+import {
+    DEFAULT_THEME_NAME,
+    normalizeThemeName,
+    resolveTheme,
+    THEME_OPTIONS,
+    type Theme,
+    type ThemeName,
+} from "@app/theme";
 import { readStoredTheme, writeStoredTheme } from "@app/theme/storage";
+import { type Accessor, createContext, createMemo, createSignal, type JSX, useContext } from "solid-js";
 
-interface ThemeContextValue {
+type ThemeContextValue = {
     theme: Accessor<Theme>;
     availableThemes: { name: ThemeName; label: string }[];
     selectedTheme: Accessor<ThemeName>;
     setTheme: (name: string) => void;
-}
+};
 
 const ThemeContext = createContext<ThemeContextValue>();
 
-export interface ThemeProviderProps {
+export type ThemeProviderProps = {
     children: JSX.Element;
     defaultTheme?: string;
-}
+};
 
 export function ThemeProvider(props: ThemeProviderProps) {
     const storedTheme = readStoredTheme();

@@ -1,12 +1,11 @@
-import { TextAttributes } from "@opentui/core";
-import { For, Show, createMemo } from "solid-js";
 import { useTheme } from "@app/providers/theme";
-import { useClientInfo } from "@app/providers/client";
+import { TextAttributes } from "@opentui/core";
+import { createMemo, For } from "solid-js";
 
-interface CommandRowProps {
+type CommandRowProps = {
     shortcut: string;
     label: string;
-}
+};
 
 export function WelcomePage() {
     const { theme } = useTheme();
@@ -15,7 +14,7 @@ export function WelcomePage() {
     const commands: CommandRowProps[] = [{ shortcut: "ctrl+x c", label: "choose db" }];
 
     const label = createMemo(() => {
-        return ""
+        return "";
     });
 
     return (
@@ -27,7 +26,11 @@ export function WelcomePage() {
             alignItems="center"
             justifyContent="center"
         >
-            <text attributes={TextAttributes.BOLD} fg={palette().text} paddingBottom={1}>
+            <text
+                attributes={TextAttributes.BOLD}
+                fg={palette().text}
+                paddingBottom={1}
+            >
                 welcome to ori
             </text>
             <text fg={palette().textMuted}>{label()}</text>
@@ -51,9 +54,17 @@ function CommandRow(props: CommandRowProps) {
     const { theme } = useTheme();
     const palette = theme;
     return (
-        <box flexDirection="row" justifyContent="space-between" width="100%" paddingBottom={1}>
+        <box
+            flexDirection="row"
+            justifyContent="space-between"
+            width="100%"
+            paddingBottom={1}
+        >
             <text fg={palette().text}>{props.label}</text>
-            <text fg={palette().primary} attributes={TextAttributes.BOLD}>
+            <text
+                fg={palette().primary}
+                attributes={TextAttributes.BOLD}
+            >
                 {props.shortcut}
             </text>
         </box>

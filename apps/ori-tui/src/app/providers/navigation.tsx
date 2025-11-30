@@ -1,6 +1,6 @@
-import { createContext, useContext, type JSX } from "solid-js";
 import type { NavigationStore } from "@app/navigation/navigation-store";
 import { createNavigationStore } from "@app/navigation/navigation-store";
+import { createContext, type JSX, useContext } from "solid-js";
 
 const NavigationContext = createContext<NavigationStore>();
 

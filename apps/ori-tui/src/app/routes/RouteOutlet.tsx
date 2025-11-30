@@ -1,8 +1,8 @@
-import { Show } from "solid-js";
-import { WelcomePage } from "@pages/welcome/welcome-page";
 import { ConnectionViewPage } from "@pages/connection-view/connection-view";
-import type { ConnectionRoute } from "./types";
+import { WelcomePage } from "@pages/welcome/welcome-page";
+import { Show } from "solid-js";
 import { useRouteNavigation } from "./router";
+import type { ConnectionRoute } from "./types";
 
 export function RouteOutlet() {
     const navigation = useRouteNavigation();
@@ -14,9 +14,16 @@ export function RouteOutlet() {
     };
 
     return (
-        <Show when={activeConnectionRoute()} keyed fallback={<WelcomePage />}>
+        <Show
+            when={activeConnectionRoute()}
+            keyed
+            fallback={<WelcomePage />}
+        >
             {(route: ConnectionRoute) => (
-                <ConnectionViewPage configurationName={route.configurationName} onBack={navigation.pop} />
+                <ConnectionViewPage
+                    configurationName={route.configurationName}
+                    onBack={navigation.pop}
+                />
             )}
         </Show>
     );

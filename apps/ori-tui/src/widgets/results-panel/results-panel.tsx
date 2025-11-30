@@ -1,14 +1,14 @@
-import { For, Show, createMemo } from "solid-js";
-import { TextAttributes } from "@opentui/core";
-import { KeyScope, type KeyBinding } from "@src/core/services/key-scopes";
-import type { ResultsPaneViewModel } from "@src/features/results-pane/use-results-pane";
 import { useTheme } from "@app/providers/theme";
+import { TextAttributes } from "@opentui/core";
+import { type KeyBinding, KeyScope } from "@src/core/services/key-scopes";
+import type { ResultsPaneViewModel } from "@src/features/results-pane/use-results-pane";
+import { createMemo, For, Show } from "solid-js";
 
 const RESULTS_SCOPE_ID = "connection-view.results";
 
-export interface ResultsPanelProps {
+export type ResultsPanelProps = {
     viewModel: ResultsPaneViewModel;
-}
+};
 
 export function ResultsPanel(props: ResultsPanelProps) {
     const pane = props.viewModel;
@@ -41,28 +41,44 @@ export function ResultsPanel(props: ResultsPanelProps) {
     const formatCell = (value: unknown, width: number): string => {
         const str = value === null || value === undefined ? "NULL" : String(value);
         if (str.length > width) {
-            return str.slice(0, width - 3) + "...";
+            return `${str.slice(0, width - 3)}...`;
         }
         return str.padEnd(width, " ");
     };
 
     return (
         <Show when={pane.visible()}>
-            <KeyScope id={RESULTS_SCOPE_ID} bindings={bindings} enabled={enabled}>
+            <KeyScope
+                id={RESULTS_SCOPE_ID}
+                bindings={bindings}
+                enabled={enabled}
+            >
                 <box
                     flexDirection="column"
                     flexGrow={1}
                     border={["top"]}
                     borderColor={palette().backgroundElement}
                 >
-                    <box flexDirection="column" paddingLeft={1} paddingTop={1} paddingRight={1} flexShrink={0}>
-                        <text attributes={TextAttributes.BOLD} fg={palette().text}>
+                    <box
+                        flexDirection="column"
+                        paddingLeft={1}
+                        paddingTop={1}
+                        paddingRight={1}
+                        flexShrink={0}
+                    >
+                        <text
+                            attributes={TextAttributes.BOLD}
+                            fg={palette().text}
+                        >
                             Query Results
                         </text>
                         <box height={1} />
 
                         <Show when={!job()}>
-                            <text attributes={TextAttributes.DIM} fg={palette().textMuted}>
+                            <text
+                                attributes={TextAttributes.DIM}
+                                fg={palette().textMuted}
+                            >
                                 No query executed yet
                             </text>
                         </Show>
@@ -81,14 +97,20 @@ export function ResultsPanel(props: ResultsPanelProps) {
                         <Show when={hasResults()}>
                             <box flexDirection="column">
                                 <box flexDirection="row">
-                                    <For each={job()!.result!.columns}>
+                                    <For each={job()?.result?.columns}>
                                         {(column, index) => (
                                             <>
-                                                <text attributes={TextAttributes.BOLD} fg={palette().primary}>
+                                                <text
+                                                    attributes={TextAttributes.BOLD}
+                                                    fg={palette().primary}
+                                                >
                                                     {formatCell(column.name, maxColWidths()[index()])}
                                                 </text>
-                                                <Show when={index() < job()!.result!.columns.length - 1}>
-                                                    <text attributes={TextAttributes.DIM} fg={palette().textMuted}>
+                                                <Show when={index() < job()?.result?.columns.length - 1}>
+                                                    <text
+                                                        attributes={TextAttributes.DIM}
+                                                        fg={palette().textMuted}
+                                                    >
                                                         {" | "}
                                                     </text>
                                                 </Show>
@@ -97,14 +119,20 @@ export function ResultsPanel(props: ResultsPanelProps) {
                                     </For>
                                 </box>
                                 <box flexDirection="row">
-                                    <For each={job()!.result!.columns}>
+                                    <For each={job()?.result?.columns}>
                                         {(_, index) => (
                                             <>
-                                                <text attributes={TextAttributes.DIM} fg={palette().textMuted}>
+                                                <text
+                                                    attributes={TextAttributes.DIM}
+                                                    fg={palette().textMuted}
+                                                >
                                                     {"-".repeat(maxColWidths()[index()])}
                                                 </text>
-                                                <Show when={index() < job()!.result!.columns.length - 1}>
-                                                    <text attributes={TextAttributes.DIM} fg={palette().textMuted}>
+                                                <Show when={index() < job()?.result?.columns.length - 1}>
+                                                    <text
+                                                        attributes={TextAttributes.DIM}
+                                                        fg={palette().textMuted}
+                                                    >
                                                         {" | "}
                                                     </text>
                                                 </Show>
@@ -112,7 +140,7 @@ export function ResultsPanel(props: ResultsPanelProps) {
                                         )}
                                     </For>
                                 </box>
-                                <For each={job()!.result!.rows}>
+                                <For each={job()?.result?.rows}>
                                     {(row) => (
                                         <box flexDirection="row">
                                             <For each={row}>
@@ -122,7 +150,10 @@ export function ResultsPanel(props: ResultsPanelProps) {
                                                             {formatCell(cell, maxColWidths()[index()])}
                                                         </text>
                                                         <Show when={index() < row.length - 1}>
-                                                            <text attributes={TextAttributes.DIM} fg={palette().textMuted}>
+                                                            <text
+                                                                attributes={TextAttributes.DIM}
+                                                                fg={palette().textMuted}
+                                                            >
                                                                 {" | "}
                                                             </text>
                                                         </Show>
@@ -133,18 +164,24 @@ export function ResultsPanel(props: ResultsPanelProps) {
                                     )}
                                 </For>
                                 <box height={1} />
-                                <text attributes={TextAttributes.DIM} fg={palette().textMuted}>
-                                    {job()!.result!.rowCount} row{job()!.result!.rowCount !== 1 ? "s" : ""}
-                                    {job()!.result!.truncated ? " (truncated)" : ""}
-                                    {job()!.durationMs ? ` • ${job()!.durationMs}ms` : ""}
+                                <text
+                                    attributes={TextAttributes.DIM}
+                                    fg={palette().textMuted}
+                                >
+                                    {job()?.result?.rowCount} row{job()?.result?.rowCount !== 1 ? "s" : ""}
+                                    {job()?.result?.truncated ? " (truncated)" : ""}
+                                    {job()?.durationMs ? ` • ${job()?.durationMs}ms` : ""}
                                 </text>
                             </box>
                         </Show>
 
                         <Show when={job()?.status === "success" && !hasResults()}>
-                            <text attributes={TextAttributes.DIM} fg={palette().textMuted}>
+                            <text
+                                attributes={TextAttributes.DIM}
+                                fg={palette().textMuted}
+                            >
                                 Query completed successfully with no results
-                                {job()!.durationMs ? ` (${job()!.durationMs}ms)` : ""}
+                                {job()?.durationMs ? ` (${job()?.durationMs}ms)` : ""}
                             </text>
                         </Show>
                     </box>

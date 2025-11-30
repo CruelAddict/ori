@@ -1,12 +1,12 @@
-import type { JSX, Accessor } from "solid-js";
-import { createContext, useContext, onCleanup } from "solid-js";
-import { createStore } from "solid-js/store";
-import type { QueryResultView } from "@shared/lib/configurations-client";
 import { useLogger } from "@app/providers/logger";
-import { type QueryJobCompletedEvent } from "@shared/lib/events";
+import type { QueryResultView } from "@shared/lib/configurations-client";
+import type { QueryJobCompletedEvent } from "@shared/lib/events";
 import { useQueryJobsApi } from "@src/entities/query-job/api/api";
+import type { Accessor, JSX } from "solid-js";
+import { createContext, onCleanup, useContext } from "solid-js";
+import { createStore } from "solid-js/store";
 
-export interface QueryJob {
+export type QueryJob = {
     jobId: string;
     configurationName: string;
     query: string;
@@ -15,18 +15,18 @@ export interface QueryJob {
     error?: string;
     message?: string;
     durationMs?: number;
-}
+};
 
-interface QueryJobsStoreState {
+type QueryJobsStoreState = {
     jobsByConfiguration: Record<string, QueryJob | undefined>;
     queryTextByConfiguration: Record<string, string>;
-}
+};
 
-interface QueryJobsActions {
+type QueryJobsActions = {
     setQueryText(configurationName: string, text: string): void;
     executeQuery(configurationName: string, query: string): Promise<void>;
     clearQuery(configurationName: string): void;
-}
+};
 
 export interface QueryJobsContextValue extends QueryJobsActions {
     getJob: (configurationName: string) => QueryJob | undefined;
@@ -35,9 +35,9 @@ export interface QueryJobsContextValue extends QueryJobsActions {
 
 const QueryJobsContext = createContext<QueryJobsContextValue>();
 
-export interface QueryJobsStoreProviderProps {
+export type QueryJobsStoreProviderProps = {
     children: JSX.Element;
-}
+};
 
 export function QueryJobsStoreProvider(props: QueryJobsStoreProviderProps) {
     const api = useQueryJobsApi();
@@ -69,7 +69,10 @@ export function QueryJobsStoreProvider(props: QueryJobsStoreProviderProps) {
             });
 
             if (execResult.status === "failed") {
-                logger.error({ jobId: execResult.jobId, message: execResult.message }, "query execution failed immediately");
+                logger.error(
+                    { jobId: execResult.jobId, message: execResult.message },
+                    "query execution failed immediately",
+                );
             }
         } catch (err) {
             setState("jobsByConfiguration", configurationName, {
@@ -89,7 +92,7 @@ export function QueryJobsStoreProvider(props: QueryJobsStoreProviderProps) {
         if (!currentJob || currentJob.jobId !== jobId) {
             logger.debug(
                 { jobId, configurationName, currentJobId: currentJob?.jobId },
-                "query-jobs-store: ignoring event - job mismatch or no current job"
+                "query-jobs-store: ignoring event - job mismatch or no current job",
             );
             return;
         }
@@ -136,11 +139,7 @@ export function QueryJobsStoreProvider(props: QueryJobsStoreProviderProps) {
         clearQuery,
     };
 
-    return (
-        <QueryJobsContext.Provider value={value}>
-            {props.children}
-        </QueryJobsContext.Provider>
-    );
+    return <QueryJobsContext.Provider value={value}>{props.children}</QueryJobsContext.Provider>;
 }
 
 export function useQueryJobs(): QueryJobsContextValue {

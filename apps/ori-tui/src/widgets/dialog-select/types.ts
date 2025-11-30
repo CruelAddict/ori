@@ -1,7 +1,7 @@
-import type { Accessor } from "solid-js";
 import type { FuzzySearchKey } from "@shared/lib/fuzzy";
+import type { Accessor } from "solid-js";
 
-export interface DialogSelectOption<T> {
+export type DialogSelectOption<T> = {
     id: string;
     title: string;
     value: T;
@@ -10,27 +10,27 @@ export interface DialogSelectOption<T> {
     badge?: string;
     aliases?: string[];
     disabled?: boolean;
-}
+};
 
-export interface UseDialogSelectParams<T> {
+export type UseDialogSelectParams<T> = {
     options: Accessor<readonly DialogSelectOption<T>[]>;
     limit?: number;
     pageSize?: number;
     initialFilter?: string;
     selectedId?: Accessor<string | null | undefined>;
     keys?: readonly FuzzySearchKey<DialogSelectOption<T>>[];
-}
+};
 
-export interface DialogSelectActions<T> {
+export type DialogSelectActions<T> = {
     setFilter: (value: string) => void;
     move: (delta: number) => void;
     movePage: (delta: number) => void;
     setCursor: (index: number) => void;
     select: (index?: number) => DialogSelectOption<T> | undefined;
     reset: () => void;
-}
+};
 
-export interface DialogSelectViewModel<T> {
+export type DialogSelectViewModel<T> = {
     options: Accessor<readonly DialogSelectOption<T>[]>;
     filtered: Accessor<readonly DialogSelectOption<T>[]>;
     filter: Accessor<string>;
@@ -41,9 +41,9 @@ export interface DialogSelectViewModel<T> {
     limit: number;
     pageSize: number;
     keys: readonly FuzzySearchKey<DialogSelectOption<T>>[];
-}
+};
 
-export interface DialogSelectHint {
+export type DialogSelectHint = {
     label: string;
     description: string;
-}
+};

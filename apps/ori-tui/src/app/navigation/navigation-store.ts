@@ -1,7 +1,7 @@
-import { createMemo, createSignal, type Accessor } from "solid-js";
 import { ROOT_ROUTE, type RouteLocation } from "@app/routes/types";
+import { type Accessor, createMemo, createSignal } from "solid-js";
 
-export interface NavigationStore {
+export type NavigationStore = {
     stack: Accessor<RouteLocation[]>;
     current: Accessor<RouteLocation>;
     depth: Accessor<number>;
@@ -9,7 +9,7 @@ export interface NavigationStore {
     pop(): void;
     replace(page: RouteLocation): void;
     reset(pages?: RouteLocation[]): void;
-}
+};
 
 export function createNavigationStore(): NavigationStore {
     const [stack, setStack] = createSignal<RouteLocation[]>([ROOT_ROUTE]);

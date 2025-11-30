@@ -1,10 +1,10 @@
-import { createMemo, onMount } from "solid-js";
-import type { Accessor } from "solid-js";
+import { type QueryJob, useQueryJobs } from "@src/entities/query-job/providers/query-jobs-provider";
 import type { PaneFocusController } from "@src/features/connection/view/pane-types";
-import { useQueryJobs, type QueryJob } from "@src/entities/query-job/providers/query-jobs-provider";
 import { readConsoleQuery, writeConsoleQuery } from "@src/features/query-storage/query-storage";
+import type { Accessor } from "solid-js";
+import { createMemo, onMount } from "solid-js";
 
-export interface EditorPaneViewModel {
+export type EditorPaneViewModel = {
     queryText: Accessor<string>;
     currentJob: Accessor<QueryJob | undefined>;
     isExecuting: Accessor<boolean>;
@@ -12,12 +12,12 @@ export interface EditorPaneViewModel {
     executeQuery: () => Promise<void>;
     saveQuery: () => boolean;
     isFocused: Accessor<boolean>;
-}
+};
 
-interface UseEditorPaneOptions {
+type UseEditorPaneOptions = {
     configurationName: Accessor<string>;
     focus: PaneFocusController;
-}
+};
 
 export function useEditorPane(options: UseEditorPaneOptions): EditorPaneViewModel {
     const queryJobs = useQueryJobs();

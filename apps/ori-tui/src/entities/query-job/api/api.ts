@@ -1,22 +1,22 @@
+import { useOriClient } from "@app/providers/client";
+import { useEventStream } from "@app/providers/events";
+import { useLogger } from "@app/providers/logger";
+import type { QueryExecResult, QueryResultView } from "@shared/lib/configurations-client";
+import { QUERY_JOB_COMPLETED_EVENT, type QueryJobCompletedEvent, type ServerEvent } from "@shared/lib/events";
 import type { JSX } from "solid-js";
 import { createComponent, createContext, onCleanup, useContext } from "solid-js";
-import type { QueryExecResult, QueryResultView } from "@shared/lib/configurations-client";
-import { useOriClient } from "@app/providers/client";
-import { useLogger } from "@app/providers/logger";
-import { useEventStream } from "@app/providers/events";
-import { QUERY_JOB_COMPLETED_EVENT, type QueryJobCompletedEvent, type ServerEvent } from "@shared/lib/events";
 
-export interface QueryJobsApi {
+export type QueryJobsApi = {
     executeQuery(configurationName: string, query: string): Promise<QueryExecResult>;
     fetchQueryResult(jobId: string): Promise<QueryResultView>;
     onJobCompleted(listener: (event: QueryJobCompletedEvent) => void): () => void;
-}
+};
 
 const QueryJobsApiContext = createContext<QueryJobsApi>();
 
-export interface QueryJobsApiProviderProps {
+export type QueryJobsApiProviderProps = {
     children: JSX.Element;
-}
+};
 
 export function QueryJobsApiProvider(props: QueryJobsApiProviderProps) {
     const client = useOriClient();
@@ -60,7 +60,10 @@ export function QueryJobsApiProvider(props: QueryJobsApiProviderProps) {
         if (event.type !== QUERY_JOB_COMPLETED_EVENT) {
             return;
         }
-        logger.debug({ jobId: event.payload.jobId, status: event.payload.status }, "query-jobs-api: emitting job completed");
+        logger.debug(
+            { jobId: event.payload.jobId, status: event.payload.status },
+            "query-jobs-api: emitting job completed",
+        );
         emit(event);
     };
 

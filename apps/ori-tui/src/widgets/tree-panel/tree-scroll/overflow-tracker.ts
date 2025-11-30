@@ -1,19 +1,19 @@
-import { createSignal } from "solid-js";
-import type { ScrollBoxRenderable } from "@opentui/core";
 import { useLogger } from "@app/providers/logger";
+import type { ScrollBoxRenderable } from "@opentui/core";
+import { createSignal } from "solid-js";
 
-export interface OverflowTrackerOptions {
+export type OverflowTrackerOptions = {
     getNaturalWidth: () => number;
     requestHorizontalReset: () => void;
     hasPendingHorizontalReset: () => boolean;
-}
+};
 
-export interface OverflowTracker {
+export type OverflowTracker = {
     refresh(): void;
     horizontalOverflow: () => boolean;
     setScrollBox(node: ScrollBoxRenderable | undefined): void;
     dispose(): void;
-}
+};
 
 export function createOverflowTracker(options: OverflowTrackerOptions): OverflowTracker {
     const logger = useLogger();
@@ -49,20 +49,26 @@ export function createOverflowTracker(options: OverflowTrackerOptions): Overflow
         const previousOverflow = hasHorizontalOverflow();
         const hasOverflow = naturalWidth > viewportWidth;
 
-        logger.debug({
-            viewportWidth,
-            naturalWidth,
-            hasOverflow,
-            previousOverflow,
-            hasPendingReset: options.hasPendingHorizontalReset()
-        }, "Overflow measurement result");
+        logger.debug(
+            {
+                viewportWidth,
+                naturalWidth,
+                hasOverflow,
+                previousOverflow,
+                hasPendingReset: options.hasPendingHorizontalReset(),
+            },
+            "Overflow measurement result",
+        );
 
-        if (hasOverflow != previousOverflow) {
+        if (hasOverflow !== previousOverflow) {
             setHasHorizontalOverflow(hasOverflow);
         }
 
         if (!hasOverflow && (previousOverflow || options.hasPendingHorizontalReset())) {
-            logger.debug({ previousOverflow, hasPendingReset: options.hasPendingHorizontalReset() }, "Requesting horizontal reset");
+            logger.debug(
+                { previousOverflow, hasPendingReset: options.hasPendingHorizontalReset() },
+                "Requesting horizontal reset",
+            );
             options.requestHorizontalReset();
         }
     };

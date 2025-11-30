@@ -1,9 +1,9 @@
-import { createSignal } from "solid-js";
-import type { Accessor } from "solid-js";
-import { useGraphSnapshot, useSchemaTree, type SchemaTreeController } from "@entities/schema-tree";
+import { type SchemaTreeController, useGraphSnapshot, useSchemaTree } from "@entities/schema-tree";
 import type { PaneFocusController } from "@src/features/connection/view/pane-types";
+import type { Accessor } from "solid-js";
+import { createSignal } from "solid-js";
 
-export interface TreePaneViewModel {
+export type TreePaneViewModel = {
     controller: SchemaTreeController;
     visible: Accessor<boolean>;
     isFocused: Accessor<boolean>;
@@ -11,12 +11,12 @@ export interface TreePaneViewModel {
     error: Accessor<string | null>;
     toggleVisible: () => void;
     refreshGraph: () => Promise<void>;
-}
+};
 
-interface UseTreePaneOptions {
+type UseTreePaneOptions = {
     configurationName: Accessor<string>;
     focus: PaneFocusController;
-}
+};
 
 export function useTreePane(options: UseTreePaneOptions): TreePaneViewModel {
     const { snapshot, loading, error, refresh } = useGraphSnapshot(options.configurationName);
