@@ -1,6 +1,6 @@
 import { createEffect, createSignal } from "solid-js";
 import { render } from "@opentui/solid";
-import { createLogger } from "@src/lib/logger";
+import { createLogger } from "@shared/lib/logger";
 import { parseArgs } from "@src/utils/args";
 import { LoggerProvider } from "@app/providers/logger";
 import { ClientProvider } from "@app/providers/client";

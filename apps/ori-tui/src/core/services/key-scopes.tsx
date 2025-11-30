@@ -3,7 +3,7 @@ import { createContext, createUniqueId, onCleanup, useContext } from "solid-js";
 import { useKeyboard } from "@opentui/solid";
 import type { KeyEvent } from "@opentui/core";
 import { KeyScopeStore, type KeyBinding } from "@src/core/stores/key-scopes";
-import { Keybind, type KeyboardEventLike, useKeybind } from "@src/lib/keybind";
+import { Keybind, type KeyboardEventLike, useKeybind } from "@shared/lib/keybind";
 
 interface KeymapRuntime {
     store: KeyScopeStore;

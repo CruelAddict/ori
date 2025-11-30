@@ -2,7 +2,7 @@ import type { JSX } from "solid-js";
 import { createContext, createEffect, onCleanup, useContext } from "solid-js";
 import { useOriClient } from "./client";
 import { useLogger } from "./logger";
-import type { ServerEvent } from "@src/lib/events";
+import type { ServerEvent } from "@shared/lib/events";
 
 type EventListener = (event: ServerEvent) => void;
 

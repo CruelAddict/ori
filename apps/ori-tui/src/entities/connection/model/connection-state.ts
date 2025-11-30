@@ -7,7 +7,7 @@ import { useOriClient } from "@app/providers/client";
 import { useLogger } from "@app/providers/logger";
 import { useEventStream } from "@app/providers/events";
 import { useConfigurations } from "@src/entities/configuration/model/configuration-list-store";
-import { CONNECTION_STATE_EVENT, type ServerEvent } from "@src/lib/events";
+import { CONNECTION_STATE_EVENT, type ServerEvent } from "@shared/lib/events";
 
 export type ConnectionLifecycle = "idle" | "requesting" | "waiting" | "connected" | "failed";
 

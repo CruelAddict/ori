@@ -1,10 +1,10 @@
 import type { JSX } from "solid-js";
 import { createComponent, createContext, onCleanup, useContext } from "solid-js";
-import type { QueryExecResult, QueryResultView } from "@src/lib/configurations-client";
+import type { QueryExecResult, QueryResultView } from "@shared/lib/configurations-client";
 import { useOriClient } from "@app/providers/client";
 import { useLogger } from "@app/providers/logger";
 import { useEventStream } from "@app/providers/events";
-import { QUERY_JOB_COMPLETED_EVENT, type QueryJobCompletedEvent, type ServerEvent } from "@src/lib/events";
+import { QUERY_JOB_COMPLETED_EVENT, type QueryJobCompletedEvent, type ServerEvent } from "@shared/lib/events";
 
 export interface QueryJobsApi {
     executeQuery(configurationName: string, query: string): Promise<QueryExecResult>;
