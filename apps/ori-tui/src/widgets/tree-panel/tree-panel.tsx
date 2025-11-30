@@ -22,6 +22,7 @@ const HORIZONTAL_SCROLL_STEP = 6;
 const MIN_FOCUSED_COLUMN_WIDTH = 50;
 const MIN_FOCUSED_PERCENT = 0.2;
 const MAX_FOCUSED_PERCENT = 0.5;
+const FOCUSED_WIDTH_PADDING = 5;
 
 export type TreePanelProps = {
     viewModel: TreePaneViewModel;
@@ -50,10 +51,17 @@ export function TreePanel(props: TreePanelProps) {
     };
 
     const [terminalWidth, setTerminalWidth] = createSignal(readTerminalWidth());
-    const formatPercent = (fraction: number) => `${Math.round(fraction * 100)}%` as `${number}%`;
-    const [focusedWidthFraction, setFocusedWidthFraction] = createSignal(MAX_FOCUSED_PERCENT);
-    const focusedWidthPercent = createMemo(() => formatPercent(focusedWidthFraction()));
     const handleResize = () => setTerminalWidth(readTerminalWidth());
+
+    const focusedPaneWidth = createMemo(() => {
+        const natural = treeNaturalWidth() + FOCUSED_WIDTH_PADDING;
+        const terminal = terminalWidth();
+        if (terminal <= 0) return natural;
+        const minWidth = Math.max(MIN_FOCUSED_COLUMN_WIDTH, terminal * MIN_FOCUSED_PERCENT);
+        const maxWidth = Math.max(minWidth, terminal * MAX_FOCUSED_PERCENT);
+        const bounded = Math.min(natural, maxWidth);
+        return Math.floor(Math.max(minWidth, bounded));
+    });
 
     onMount(() => {
         handleResize();
@@ -90,33 +98,23 @@ export function TreePanel(props: TreePanelProps) {
 
     const enabled = () => pane.visible() && pane.isFocused();
 
-    createEffect(() => {
-        const terminal = terminalWidth();
-        if (terminal <= 0) {
-            setFocusedWidthFraction(MAX_FOCUSED_PERCENT);
-            return;
-        }
-        const naturalWidth = treeNaturalWidth();
-        const ratio = Math.min(1, Math.max(0, naturalWidth / terminal));
-        const baseFraction = MIN_FOCUSED_PERCENT + (MAX_FOCUSED_PERCENT - MIN_FOCUSED_PERCENT) * ratio;
-        const minFractionFromColumns = MIN_FOCUSED_COLUMN_WIDTH / terminal;
-        const nextFraction = Math.max(MIN_FOCUSED_PERCENT, baseFraction, minFractionFromColumns);
-        setFocusedWidthFraction(Math.min(MAX_FOCUSED_PERCENT, nextFraction));
-    });
-
     const paneWidthProps = () => {
         if (pane.isFocused()) {
+            const width = focusedPaneWidth();
             return {
-                width: treeNaturalWidth() + 5,
-                maxWidth: focusedWidthPercent(),
-                flexGrow: 1,
-            };
+                width,
+                minWidth: width,
+                maxWidth: width,
+                flexGrow: 0,
+                flexShrink: 0,
+            } as const;
         }
         return {
             width: MIN_FOCUSED_COLUMN_WIDTH,
             maxWidth: MIN_FOCUSED_COLUMN_WIDTH,
             minWidth: MIN_FOCUSED_COLUMN_WIDTH,
             flexGrow: 0,
+            flexShrink: 0,
         } as const;
     };
 
