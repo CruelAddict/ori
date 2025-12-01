@@ -57,7 +57,9 @@ func (a *Adapter) fetchRelations(ctx context.Context, schemaName, relType string
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch relations: %w", err)
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close()
+	}()
 
 	var results []relationInfo
 	for rows.Next() {
@@ -151,7 +153,9 @@ func (a *Adapter) readTableColumns(ctx context.Context, schemaName, tableName st
 	if err != nil {
 		return nil, fmt.Errorf("failed to read columns: %w", err)
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close()
+	}()
 
 	var columns []columnInfo
 	for rows.Next() {

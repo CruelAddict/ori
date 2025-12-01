@@ -116,7 +116,9 @@ func (a *Adapter) readConstraints(ctx context.Context, schemaName, tableName str
 	if err != nil {
 		return nil, fmt.Errorf("failed to read constraints: %w", err)
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close()
+	}()
 
 	var constraints []constraintInfo
 	for rows.Next() {
@@ -181,7 +183,9 @@ func (a *Adapter) readCheckConstraints(ctx context.Context, schemaName, tableNam
 	if err != nil {
 		return nil, fmt.Errorf("failed to read check constraints: %w", err)
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close()
+	}()
 
 	var constraints []constraintInfo
 	for rows.Next() {

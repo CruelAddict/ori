@@ -68,7 +68,9 @@ func (a *Adapter) fetchRelations(ctx context.Context, schema, relType string) ([
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close()
+	}()
 
 	var results []relationInfo
 	for rows.Next() {
@@ -110,7 +112,9 @@ func (a *Adapter) readTableColumns(ctx context.Context, schema, table string) ([
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close()
+	}()
 
 	var columns []columnInfo
 	for rows.Next() {

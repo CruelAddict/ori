@@ -24,7 +24,9 @@ func (a *Adapter) listDatabases(ctx context.Context) ([]databaseEntry, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close()
+	}()
 
 	var entries []databaseEntry
 	for rows.Next() {

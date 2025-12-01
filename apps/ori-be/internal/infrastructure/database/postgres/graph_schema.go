@@ -27,7 +27,9 @@ func (a *Adapter) listSchemas(ctx context.Context) ([]string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to list schemas: %w", err)
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close()
+	}()
 
 	var schemas []string
 	for rows.Next() {

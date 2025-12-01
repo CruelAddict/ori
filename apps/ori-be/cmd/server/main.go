@@ -31,6 +31,10 @@ var (
 )
 
 func main() {
+	os.Exit(run())
+}
+
+func run() int {
 	// Parse command-line flags
 	configPath := flag.String("config", DefaultConfigPath, "Path to configuration file")
 	port := flag.Int("port", DefaultPort, "Port to listen on (TCP, optional)")
@@ -57,26 +61,26 @@ func main() {
 		}
 	}()
 
-	// Set up parent death monitoring via pipe (file descriptor 3)
-	// If parent process dies, the pipe will close and we exit
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	var parentDone <-chan struct{}
 	if !*standalone {
-		go monitorParentAlive()
+		ch := make(chan struct{})
+		parentDone = ch
+		go monitorParentAlive(ch, cancel)
 	} else {
 		slog.Info("standalone mode: parent monitor disabled")
 	}
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 
 	configService := service.NewConfigService(*configPath)
 
 	slog.Info("loading configuration", slog.String("path", *configPath))
 	if err := configService.LoadConfig(); err != nil {
 		slog.Error("failed to load configuration", slog.Any("err", err))
-		os.Exit(1)
-	} else {
-		slog.Info("configuration loaded")
+		return 1
 	}
+	slog.Info("configuration loaded")
 
 	eventHub := events.NewHub()
 	connectionService := service.NewConnectionService(configService, eventHub)
@@ -97,21 +101,25 @@ func main() {
 		server, err = httpapi.NewUnixServer(ctx, handler, eventHub, *socketPath)
 		if err != nil {
 			slog.Error("failed to create unix socket server", slog.Any("err", err))
-			os.Exit(1)
+			return 1
 		}
 		slog.Info("server started", slog.String("transport", "unix"), slog.String("socket", *socketPath))
 	} else {
 		server, err = httpapi.NewServer(ctx, handler, eventHub, *port)
 		if err != nil {
 			slog.Error("failed to create TCP server", slog.Any("err", err))
-			os.Exit(1)
+			return 1
 		}
 		slog.Info("server started", slog.String("transport", "tcp"), slog.Int("port", *port))
 	}
 
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-	<-quit
+	select {
+	case <-quit:
+	case <-parentDone:
+		slog.Warn("parent process died, shutting down")
+	}
 
 	slog.Info("shutting down")
 
@@ -120,21 +128,21 @@ func main() {
 
 	if err := server.Shutdown(); err != nil {
 		slog.Error("server forced to shutdown", slog.Any("err", err))
-		os.Exit(1)
+		return 1
 	}
 
-	cancel()
 	if err := server.Wait(); err != nil {
 		slog.Warn("server wait error", slog.Any("err", err))
 	}
 
 	slog.Info("server stopped")
+	return 0
 }
 
 // monitorParentAlive monitors if the parent process is still alive
 // by reading from file descriptor 3 (a pipe passed by the parent).
-// When the parent dies, the pipe closes and this function exits the process.
-func monitorParentAlive() {
+// When the parent dies, the pipe closes and this function signals shutdown.
+func monitorParentAlive(done chan<- struct{}, cancel context.CancelFunc) {
 	// File descriptor 3 is the read end of a pipe from parent
 	// (fd 0=stdin, 1=stdout, 2=stderr, 3=parent pipe)
 	pipe := os.NewFile(3, "parent-pipe")
@@ -148,9 +156,9 @@ func monitorParentAlive() {
 	buf := make([]byte, 1)
 	_, err := pipe.Read(buf)
 	if err != nil {
-		// Parent died (pipe closed), exit immediately
-		slog.Warn("parent process died, exiting")
-		os.Exit(0)
+		// Parent died (pipe closed), request graceful shutdown
+		cancel()
+		close(done)
 	}
 }
 

@@ -24,7 +24,9 @@ func (a *Adapter) ExecuteQuery(ctx context.Context, query string, params any, op
 		if err != nil {
 			return nil, fmt.Errorf("failed to prepare query: %w", err)
 		}
-		defer stmt.Close()
+		defer func() {
+			_ = stmt.Close()
+		}()
 	}
 
 	// Check if it's a SELECT query or other statement
@@ -48,7 +50,9 @@ func (a *Adapter) executeSelect(ctx context.Context, stmt *sql.Stmt, query strin
 	if err != nil {
 		return nil, fmt.Errorf("query execution failed: %w", err)
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close()
+	}()
 
 	// Get column information
 	columns, err := rows.Columns()
@@ -97,9 +101,7 @@ func (a *Adapter) executeSelect(ctx context.Context, stmt *sql.Stmt, query strin
 
 		// Create a copy of the row data
 		rowCopy := make([]any, len(rowData))
-		for i, val := range rowData {
-			rowCopy[i] = val
-		}
+		copy(rowCopy, rowData)
 
 		allRows = append(allRows, rowCopy)
 		rowCount++

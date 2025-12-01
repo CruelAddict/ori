@@ -37,7 +37,9 @@ func (a *Adapter) executeSelect(ctx context.Context, query string, params any, o
 	if err != nil {
 		return nil, fmt.Errorf("query execution failed: %w", err)
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close()
+	}()
 
 	// Get column information
 	columns, err := rows.Columns()
@@ -86,9 +88,7 @@ func (a *Adapter) executeSelect(ctx context.Context, query string, params any, o
 
 		// Create a copy of the row data
 		rowCopy := make([]any, len(rowData))
-		for i, val := range rowData {
-			rowCopy[i] = val
-		}
+		copy(rowCopy, rowData)
 
 		allRows = append(allRows, rowCopy)
 		rowCount++

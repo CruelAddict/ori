@@ -11,7 +11,9 @@ import (
 )
 
 func decodeJSON(body io.ReadCloser, dest interface{}) error {
-	defer body.Close()
+	defer func() {
+		_ = body.Close()
+	}()
 
 	decoder := json.NewDecoder(body)
 	decoder.DisallowUnknownFields()

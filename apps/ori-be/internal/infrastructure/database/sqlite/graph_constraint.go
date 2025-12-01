@@ -73,7 +73,9 @@ func (a *Adapter) readUniqueIndexes(ctx context.Context, schema, table string) (
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close()
+	}()
 
 	var indexes []uniqueIndex
 	for rows.Next() {
@@ -103,7 +105,9 @@ func (a *Adapter) readIndexColumns(ctx context.Context, schema, indexName string
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close()
+	}()
 
 	type entry struct {
 		seq  int
@@ -132,7 +136,9 @@ func (a *Adapter) readForeignKeys(ctx context.Context, schema, table string) ([]
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close()
+	}()
 
 	groups := map[int]*foreignKeyGroup{}
 	for rows.Next() {

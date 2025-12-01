@@ -25,6 +25,11 @@ linters:
     - unconvert
     - revive
     - gocritic
+  settings:
+    revive:
+      rules:
+        - name: exported
+          disabled: true
 
 issues:
   max-issues-per-linter: 0

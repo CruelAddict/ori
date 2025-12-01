@@ -295,7 +295,9 @@ func ensureSampleData(t *testing.T, dbPath string) {
 	if err != nil {
 		t.Fatalf("failed to open sqlite db: %v", err)
 	}
-	defer db.Close()
+	defer func() {
+		_ = db.Close()
+	}()
 
 	statements := []string{
 		`CREATE TABLE IF NOT EXISTS authors (
@@ -325,13 +327,17 @@ func copyFile(src, dst string) error {
 	if err != nil {
 		return err
 	}
-	defer in.Close()
+	defer func() {
+		_ = in.Close()
+	}()
 
 	out, err := os.Create(dst)
 	if err != nil {
 		return err
 	}
-	defer out.Close()
+	defer func() {
+		_ = out.Close()
+	}()
 
 	if _, err := io.Copy(out, in); err != nil {
 		return err
