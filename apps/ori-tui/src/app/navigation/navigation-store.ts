@@ -14,8 +14,24 @@ export type NavigationStore = {
 export function createNavigationStore(): NavigationStore {
     const [stack, setStack] = createSignal<RouteLocation[]>([ROOT_ROUTE]);
 
+    const findConnectionIndex = (pages: RouteLocation[], name: string) =>
+        pages.findIndex((route) => route.type === "connection" && route.configurationName === name);
+
     const push = (page: RouteLocation) => {
-        setStack((prev) => [...prev, page]);
+        setStack((prev) => {
+            if (page.type !== "connection") {
+                return [...prev, page];
+            }
+            const index = findConnectionIndex(prev, page.configurationName);
+            if (index === -1) {
+                return [...prev, page];
+            }
+            const existing = prev[index];
+            const next = [...prev];
+            next.splice(index, 1);
+            next.push(existing);
+            return next;
+        });
     };
 
     const pop = () => {
@@ -32,7 +48,21 @@ export function createNavigationStore(): NavigationStore {
             if (!prev.length) {
                 return [page];
             }
-            return [...prev.slice(0, -1), page];
+            if (page.type !== "connection") {
+                return [...prev.slice(0, -1), page];
+            }
+            const index = findConnectionIndex(prev, page.configurationName);
+            if (index === -1) {
+                return [...prev.slice(0, -1), page];
+            }
+            if (index === prev.length - 1) {
+                return prev;
+            }
+            const next = [...prev];
+            const existing = next[index];
+            next.splice(index, 1);
+            next[next.length - 1] = existing;
+            return next;
         });
     };
 

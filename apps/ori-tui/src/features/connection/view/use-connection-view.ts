@@ -10,7 +10,6 @@ export type FocusPane = "tree" | "editor" | "results";
 
 export type UseConnectionViewOptions = {
     configurationName: Accessor<string>;
-    onBack: () => void;
 };
 
 export type ConnectionViewActions = {
@@ -24,7 +23,8 @@ export type ConnectionViewActions = {
     moveFocusUp: () => void;
     moveFocusDown: () => void;
     openEditor: () => void;
-    exit: () => void;
+    focusTree: () => void;
+    focusEditor: () => void;
 };
 
 export type ConnectionViewModel = {
@@ -44,10 +44,21 @@ export function useConnectionView(options: UseConnectionViewOptions): Connection
     const title = createMemo(() => configuration()?.name ?? options.configurationName());
     const [focusedPane, setFocusedPane] = createSignal<FocusPane>(DEFAULT_PANE);
     const [editorOpen, setEditorOpen] = createSignal(false);
+    let previousFocusedPane: FocusPane = DEFAULT_PANE;
 
-    const focusTree = () => setFocusedPane("tree");
-    const focusEditor = () => setFocusedPane("editor");
-    const focusResults = () => setFocusedPane("results");
+    const focusPane = (pane: FocusPane) => {
+        setFocusedPane((current) => {
+            if (current === pane) {
+                return current;
+            }
+            previousFocusedPane = current;
+            return pane;
+        });
+    };
+
+    const focusTree = () => focusPane("tree");
+    const focusEditor = () => focusPane("editor");
+    const focusResults = () => focusPane("results");
 
     const openEditor = () => {
         setEditorOpen(true);
@@ -56,24 +67,36 @@ export function useConnectionView(options: UseConnectionViewOptions): Connection
 
     const createFocusController = (pane: FocusPane, fallback?: () => void): PaneFocusController => ({
         isFocused: () => focusedPane() === pane,
-        focusSelf: () => setFocusedPane(pane),
+        focusSelf: () => focusPane(pane),
         focusFallback: fallback,
     });
 
     const treePane = useTreePane({
         configurationName: options.configurationName,
-        focus: createFocusController("tree", () => setFocusedPane(DEFAULT_PANE)),
+        focus: createFocusController("tree", () => focusPane(DEFAULT_PANE)),
     });
 
     const editorPane = useEditorPane({
         configurationName: options.configurationName,
         focus: createFocusController("editor"),
+        unfocus: restorePreviousPaneFocus,
     });
 
     const resultsPane = useResultsPane({
         job: editorPane.currentJob,
-        focus: createFocusController("results", () => setFocusedPane(DEFAULT_PANE)),
+        focus: createFocusController("results", () => focusPane(DEFAULT_PANE)),
     });
+
+    function restorePreviousPaneFocus() {
+        if (focusedPane() !== "editor") {
+            return;
+        }
+        if (previousFocusedPane === "results" && resultsPane.visible()) {
+            focusResults();
+            return;
+        }
+        focusTree();
+    }
 
     const hasResults = () => {
         const job = editorPane.currentJob();
@@ -117,15 +140,11 @@ export function useConnectionView(options: UseConnectionViewOptions): Connection
         resultsPane.toggleVisible();
     };
 
-    const exit = () => {
-        options.onBack();
-    };
-
     const helpText = createMemo(() => {
         if (!editorOpen()) {
             return "q: open query console | ctrl+e: toggle tree";
         }
-        return "ctrl+s: save | ctrl+e: toggle tree | ctrl+r: toggle results | ctrl+x h/j/k/l: move focus | ctrl+x enter: execute";
+        return "q: focus tree | ctrl+s: save | ctrl+e: toggle tree | ctrl+r: toggle results | ctrl+x h/j/k/l: move focus | ctrl+x enter: execute";
     });
 
     return {
@@ -146,7 +165,8 @@ export function useConnectionView(options: UseConnectionViewOptions): Connection
             moveFocusUp,
             moveFocusDown,
             openEditor,
-            exit,
+            focusTree,
+            focusEditor,
         },
     };
 }

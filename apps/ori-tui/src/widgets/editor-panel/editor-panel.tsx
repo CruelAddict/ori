@@ -16,7 +16,15 @@ export function EditorPanel(props: EditorPanelProps) {
     const { theme } = useTheme();
     const palette = theme;
 
-    const bindings: KeyBinding[] = [];
+    const bindings: KeyBinding[] = [
+        {
+            pattern: "escape",
+            handler: () => {
+                pane.unfocus();
+            },
+            preventDefault: true,
+        },
+    ];
 
     createEffect(() => {
         if (pane.isFocused() && textarea) {

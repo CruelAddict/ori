@@ -10,34 +10,16 @@ import { Show } from "solid-js";
 
 export type ConnectionViewPageProps = {
     configurationName: string;
-    onBack: () => void;
 };
 
 export function ConnectionViewPage(props: ConnectionViewPageProps) {
     const vm = useConnectionView({
         configurationName: () => props.configurationName,
-        onBack: props.onBack,
     });
     const { theme } = useTheme();
     const palette = theme;
 
     const screenKeyBindings: KeyBinding[] = [
-        {
-            pattern: "escape",
-            handler: vm.actions.exit,
-            preventDefault: true,
-        },
-        {
-            pattern: "backspace",
-            handler: vm.actions.exit,
-            when: () => !vm.editorPane.isFocused(),
-            preventDefault: true,
-        },
-        {
-            pattern: "ctrl+[",
-            handler: vm.actions.exit,
-            preventDefault: true,
-        },
         {
             pattern: "ctrl+e",
             handler: vm.actions.toggleTreeVisible,
@@ -99,8 +81,13 @@ export function ConnectionViewPage(props: ConnectionViewPageProps) {
         },
         {
             pattern: "q",
-            handler: vm.actions.openEditor,
-            when: () => !vm.editorOpen(),
+            handler: () => {
+                if (!vm.editorOpen()) {
+                    vm.actions.openEditor();
+                    return;
+                }
+                vm.actions.focusEditor();
+            },
             preventDefault: true,
         },
     ];
