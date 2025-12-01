@@ -1,0 +1,374 @@
+openapi: 3.0.3
+info:
+  title: Ori HTTP Contract
+  description: REST API contract for Ori runtime, replacing the legacy JSON-RPC surface.
+  version: 0.1.0
+servers:
+  - url: http://localhost:8080
+    description: Default development server
+paths:
+  /health:
+    get:
+      summary: Health probe
+      operationId: getHealth
+      responses:
+        '200':
+          description: Backend is ready to accept requests
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: ok
+        default:
+          $ref: '#/components/responses/ErrorResponse'
+  /configurations:
+    get:
+      summary: List saved connection configurations
+      operationId: listConfigurations
+      responses:
+        '200':
+          description: Collection of saved configurations
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConfigurationsResponse'
+        default:
+          $ref: '#/components/responses/ErrorResponse'
+  /connections:
+    post:
+      summary: Start (or refresh) a connection session for a configuration
+      operationId: startConnection
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConnectionRequest'
+      responses:
+        '201':
+          description: Connection attempt accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConnectionResult'
+        '404':
+          description: Configuration not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorPayload'
+        '409':
+          description: Connection is already in progress and cannot be restarted yet
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorPayload'
+        default:
+          $ref: '#/components/responses/ErrorResponse'
+  /configurations/{configurationName}/nodes:
+    get:
+      summary: Fetch schema nodes for a configuration
+      operationId: getNodes
+      parameters:
+        - name: configurationName
+          in: path
+          required: true
+          description: Name of the configuration to inspect
+          schema:
+            type: string
+        - name: nodeId
+          in: query
+          required: false
+          description: Optional repeated parameter limiting the nodes returned
+          schema:
+            type: array
+            items:
+              type: string
+          style: form
+          explode: true
+      responses:
+        '200':
+          description: Matching schema nodes
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NodesResponse'
+        '404':
+          description: Configuration not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorPayload'
+        default:
+          $ref: '#/components/responses/ErrorResponse'
+  /queries:
+    post:
+      summary: Execute a SQL query asynchronously
+      operationId: execQuery
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QueryExecRequest'
+      responses:
+        '202':
+          description: Query accepted and job created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QueryExecResponse'
+        '404':
+          description: Configuration not found or no active connection
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorPayload'
+        default:
+          $ref: '#/components/responses/ErrorResponse'
+  /queries/{jobId}/result:
+    get:
+      summary: Retrieve a previously stored query result view
+      operationId: getQueryResult
+      parameters:
+        - name: jobId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+      responses:
+        '200':
+          description: Result view for the job
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QueryResultResponse'
+        '404':
+          description: Job not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorPayload'
+        default:
+          $ref: '#/components/responses/ErrorResponse'
+  /events:
+    get:
+      summary: Subscribe to server-sent events for connection and query notifications
+      operationId: streamEvents
+      responses:
+        '200':
+          description: Stream of events in SSE format
+          content:
+            text/event-stream:
+              schema:
+                type: string
+        default:
+          $ref: '#/components/responses/ErrorResponse'
+components:
+  responses:
+    ErrorResponse:
+      description: Generic error payload
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorPayload'
+  schemas:
+    PasswordConfig:
+      type: object
+      properties:
+        type:
+          type: string
+        key:
+          type: string
+      required:
+        - type
+        - key
+    Configuration:
+      type: object
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+        host:
+          type: string
+          nullable: true
+        port:
+          type: integer
+          nullable: true
+        database:
+          type: string
+        username:
+          type: string
+          nullable: true
+        password:
+          $ref: '#/components/schemas/PasswordConfig'
+      required:
+        - name
+        - type
+        - database
+    ConfigurationsResponse:
+      type: object
+      properties:
+        connections:
+          type: array
+          items:
+            $ref: '#/components/schemas/Configuration'
+      required:
+        - connections
+    ConnectionRequest:
+      type: object
+      properties:
+        configurationName:
+          type: string
+      required:
+        - configurationName
+    ConnectionResult:
+      type: object
+      properties:
+        result:
+          type: string
+          enum: [success, fail, connecting]
+        userMessage:
+          type: string
+          nullable: true
+      required:
+        - result
+    NodeEdge:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            type: string
+        truncated:
+          type: boolean
+      required:
+        - items
+        - truncated
+    Node:
+      type: object
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+        name:
+          type: string
+        attributes:
+          type: object
+          additionalProperties: {}
+        edges:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/NodeEdge'
+      required:
+        - id
+        - type
+        - name
+        - attributes
+        - edges
+    NodesResponse:
+      type: object
+      properties:
+        nodes:
+          type: array
+          items:
+            $ref: '#/components/schemas/Node'
+      required:
+        - nodes
+    QueryExecOptions:
+      type: object
+      properties:
+        maxRows:
+          type: integer
+          minimum: 1
+      additionalProperties: false
+    QueryExecRequest:
+      type: object
+      properties:
+        configurationName:
+          type: string
+        query:
+          type: string
+        params:
+          oneOf:
+            - type: object
+              additionalProperties: {}
+            - type: array
+              items: {}
+        options:
+          $ref: '#/components/schemas/QueryExecOptions'
+      required:
+        - configurationName
+        - query
+    QueryExecResponse:
+      type: object
+      properties:
+        jobId:
+          type: string
+        status:
+          type: string
+          enum: [running, failed]
+        message:
+          type: string
+          nullable: true
+      required:
+        - jobId
+        - status
+    QueryResultColumn:
+      type: object
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+      required:
+        - name
+        - type
+    QueryResultResponse:
+      type: object
+      properties:
+        columns:
+          type: array
+          items:
+            $ref: '#/components/schemas/QueryResultColumn'
+        rows:
+          type: array
+          items:
+            type: array
+            items: {}
+        rowCount:
+          type: integer
+        truncated:
+          type: boolean
+      required:
+        - columns
+        - rows
+        - rowCount
+        - truncated
+    ErrorPayload:
+      type: object
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        details:
+          type: object
+          additionalProperties: {}
+      required:
+        - code
+        - message

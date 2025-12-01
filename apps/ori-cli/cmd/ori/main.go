@@ -183,7 +183,7 @@ func healthcheckUnix(socketPath string, timeout time.Duration) bool {
 		},
 	}
 	client := &http.Client{Transport: tr, Timeout: timeout}
-	resp, err := client.Get("http://unix/healthcheck")
+	resp, err := client.Get("http://unix/health")
 	if err != nil {
 		return false
 	}

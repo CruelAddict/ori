@@ -61,7 +61,7 @@ func (qs *QueryService) Exec(configurationName, query string, params interface{}
 	// Check if connection is available
 	handle, ok := qs.connectionService.GetConnection(configurationName)
 	if !ok || handle == nil || handle.Adapter == nil {
-		return nil, fmt.Errorf("connection '%s' is not available", configurationName)
+		return nil, fmt.Errorf("%w: %s", ErrConnectionUnavailable, configurationName)
 	}
 
 	// Create job

@@ -5,8 +5,6 @@ import (
 	"path/filepath"
 	"sync"
 
-	orisdk "github.com/crueladdict/ori/libs/sdk/go"
-
 	"github.com/crueladdict/ori/apps/ori-server/internal/infrastructure/storage"
 	"github.com/crueladdict/ori/apps/ori-server/internal/model"
 )
@@ -40,7 +38,7 @@ func (cs *ConfigService) ReloadConfig() error {
 	return cs.LoadConfig()
 }
 
-func (cs *ConfigService) ListConfigurations() (*orisdk.ConfigurationsResult, error) {
+func (cs *ConfigService) ListConfigurations() ([]model.Configuration, error) {
 	cs.mu.RLock()
 	defer cs.mu.RUnlock()
 
@@ -48,7 +46,10 @@ func (cs *ConfigService) ListConfigurations() (*orisdk.ConfigurationsResult, err
 		return nil, fmt.Errorf("configuration not loaded")
 	}
 
-	return cs.config.ToSDK(), nil
+	configs := make([]model.Configuration, len(cs.config.Configurations))
+	copy(configs, cs.config.Configurations)
+
+	return configs, nil
 }
 
 func (cs *ConfigService) ByName(name string) (*model.Configuration, error) {

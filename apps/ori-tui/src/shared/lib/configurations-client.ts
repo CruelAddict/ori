@@ -1,7 +1,22 @@
-import http from "node:http";
 import type { Configuration } from "@shared/lib/configuration";
 import { decodeServerEvent, type ServerEvent } from "@shared/lib/events";
-import { createSSEStream } from "@shared/lib/sse-client";
+import { createSSEStream, type SSEMessage } from "@shared/lib/sse-client";
+import axios, { type AxiosInstance } from "axios";
+import {
+    type ConfigurationsResponse,
+    type ConnectionResult as ContractConnectionResult,
+    type Node as ContractNode,
+    type NodeEdge as ContractNodeEdge,
+    type ErrorPayload,
+    type NodesResponse,
+    OpenAPI,
+    type OpenAPIConfig,
+    type QueryExecRequest,
+    type QueryExecResponse,
+    type QueryResultResponse,
+} from "contract";
+import type { ApiRequestOptions } from "contract/core/ApiRequestOptions";
+import { request as contractRequest } from "contract/core/request";
 import type { Logger } from "pino";
 
 export type ClientMode = "sdk" | "stub";
@@ -70,122 +85,51 @@ type UnixClientOptions = {
     logger: Logger;
 };
 
-type JsonRpcTransportOptions = {
-    host?: string;
-    port?: number;
-    socketPath?: string;
-};
+class RestOriClient implements OriClient {
+    private readonly apiConfig: OpenAPIConfig;
+    private readonly httpClient: AxiosInstance;
 
-const STUB_CONFIGURATIONS: Configuration[] = [
-    {
-        name: "Local Demo",
-        type: "sqlite",
-        host: "127.0.0.1",
-        port: 0,
-        database: "demo.db",
-        username: "demo",
-    },
-    {
-        name: "Analytics Warehouse",
-        type: "postgres",
-        host: "warehouse.local",
-        port: 5432,
-        database: "analytics",
-        username: "analyst",
-    },
-];
-
-class JsonRpcClient {
-    constructor(private readonly transport: JsonRpcTransportOptions) {}
-
-    async request(method: string, params: Record<string, unknown> = {}): Promise<unknown> {
-        const payload = JSON.stringify({ jsonrpc: "2.0", method, params, id: Date.now() });
-        return new Promise((resolve, reject) => {
-            const headers = {
-                "Content-Type": "application/json",
-                "Content-Length": Buffer.byteLength(payload),
-            };
-
-            const requestOptions: http.RequestOptions = {
-                method: "POST",
-                path: "/rpc",
-                headers,
-            };
-
-            if (this.transport.socketPath) {
-                requestOptions.socketPath = this.transport.socketPath;
-            } else {
-                requestOptions.host = this.transport.host ?? "localhost";
-                requestOptions.port = this.transport.port ?? 8080;
-            }
-
-            const req = http.request(requestOptions, (res) => {
-                const chunks: Buffer[] = [];
-                res.on("data", (chunk) => chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)));
-                res.on("end", () => {
-                    const body = Buffer.concat(chunks).toString("utf-8");
-                    if (res.statusCode && res.statusCode >= 300) {
-                        reject(
-                            new Error(`RPC HTTP ${res.statusCode}: ${body || res.statusMessage || "unknown error"}`),
-                        );
-                        return;
-                    }
-
-                    try {
-                        const parsed = body ? JSON.parse(body) : {};
-                        if (parsed.error) {
-                            reject(new Error(parsed.error?.message ?? "RPC error"));
-                            return;
-                        }
-                        resolve(parsed.result);
-                    } catch (err) {
-                        reject(err);
-                    }
-                });
-                res.on("error", reject);
-            });
-
-            req.on("error", reject);
-            req.write(payload);
-            req.end();
-        });
-    }
-}
-
-class HttpOriClient implements OriClient {
-    private readonly rpc: JsonRpcClient;
-
-    constructor(private readonly options: HttpClientOptions) {
-        this.rpc = new JsonRpcClient({ host: options.host, port: options.port });
+    constructor(private readonly options: HttpClientOptions | UnixClientOptions) {
+        this.apiConfig = this.createApiConfig();
+        this.httpClient = this.createHttpClient();
     }
 
     async listConfigurations(): Promise<Configuration[]> {
-        const result = await this.rpc.request("listConfigurations");
-        return extractConfigurations(result);
+        const payload = await this.send<ConfigurationsResponse>({
+            method: "GET",
+            url: "/configurations",
+        });
+        return payload.connections.map((conn: ConfigurationsResponse["connections"][number]) => ({
+            name: conn.name,
+            type: conn.type,
+            host: conn.host ?? "",
+            port: conn.port ?? 0,
+            database: conn.database,
+            username: conn.username ?? "",
+        }));
     }
 
     async connect(configurationName: string): Promise<ConnectResult> {
-        const result = await this.rpc.request("connect", { configurationName });
-        return extractConnectResult(result);
+        const payload = await this.send<ContractConnectionResult>({
+            method: "POST",
+            url: "/connections",
+            body: { configurationName },
+            mediaType: "application/json",
+        });
+        return {
+            result: payload.result,
+            userMessage: payload.userMessage ?? undefined,
+        };
     }
 
     async getNodes(configurationName: string, nodeIDs?: string[]): Promise<Node[]> {
-        const params: Record<string, unknown> = { configurationName };
-
-        if ((nodeIDs?.length ?? 0) > 0) {
-            params.nodeIDs = nodeIDs;
-        }
-        this.options.logger.debug(
-            { configuration: configurationName, nodeCount: nodeIDs?.length ?? 0 },
-            "getNodes RPC request",
-        );
-        const result = await this.rpc.request("getNodes", params);
-        const nodes = extractNodes(result);
-        this.options.logger.debug(
-            { configuration: configurationName, resultCount: nodes.length },
-            "getNodes RPC response",
-        );
-        return nodes;
+        const payload = await this.send<NodesResponse>({
+            method: "GET",
+            url: "/configurations/{configurationName}/nodes",
+            path: { configurationName },
+            query: { nodeId: nodeIDs },
+        });
+        return payload.nodes.map(mapNode);
     }
 
     async queryExec(
@@ -193,27 +137,52 @@ class HttpOriClient implements OriClient {
         query: string,
         params?: Record<string, unknown>,
     ): Promise<QueryExecResult> {
-        const requestParams: Record<string, unknown> = { configurationName, query };
+        const request: QueryExecRequest = { configurationName, query };
         if (params !== undefined) {
-            requestParams.params = params;
+            request.params = params;
         }
-        const result = await this.rpc.request("query.exec", requestParams);
-        return extractQueryExecResult(result);
+        const payload = await this.send<QueryExecResponse>({
+            method: "POST",
+            url: "/queries",
+            body: request,
+            mediaType: "application/json",
+        });
+        return {
+            jobId: payload.jobId,
+            status: payload.status,
+            message: payload.message ?? undefined,
+        };
     }
 
     async queryGetResult(jobId: string, limit?: number, offset?: number): Promise<QueryResultView> {
-        const requestParams: Record<string, unknown> = { jobId };
-        if (limit !== undefined) {
-            requestParams.limit = limit;
-        }
-        if (offset !== undefined) {
-            requestParams.offset = offset;
-        }
-        const result = await this.rpc.request("query.getResult", requestParams);
-        return extractQueryResultView(result);
+        const payload = await this.send<QueryResultResponse>({
+            method: "GET",
+            url: "/queries/{jobId}/result",
+            path: { jobId },
+            query: { limit, offset },
+        });
+        return {
+            columns: payload.columns.map((col: QueryResultResponse["columns"][number]) => ({
+                name: col.name,
+                type: col.type,
+            })),
+            rows: payload.rows,
+            rowCount: payload.rowCount,
+            truncated: payload.truncated,
+        };
     }
 
     openEventStream(onEvent: (event: ServerEvent) => void): () => void {
+        if (isUnixOptions(this.options)) {
+            return createSSEStream(
+                {
+                    socketPath: this.options.socketPath,
+                    path: "/events",
+                    logger: this.options.logger,
+                },
+                (message) => this.dispatchEvent(message, onEvent),
+            );
+        }
         return createSSEStream(
             {
                 host: this.options.host,
@@ -221,118 +190,55 @@ class HttpOriClient implements OriClient {
                 path: "/events",
                 logger: this.options.logger,
             },
-            (message) => {
-                try {
-                    this.options.logger.debug({ event: message.event }, "unix-client: decoding SSE message");
-                    const event = decodeServerEvent(message);
-                    if (event) {
-                        this.options.logger.debug(
-                            { eventType: event.type },
-                            "unix-client: decoded event, invoking callback",
-                        );
-                        onEvent(event);
-                    } else {
-                        this.options.logger.debug(
-                            { event: message.event },
-                            "unix-client: decodeServerEvent returned null",
-                        );
-                    }
-                } catch (err) {
-                    this.options.logger.error({ err }, "failed to decode SSE payload");
-                }
-            },
+            (message) => this.dispatchEvent(message, onEvent),
         );
     }
-}
 
-class UnixSocketOriClient implements OriClient {
-    private readonly rpc: JsonRpcClient;
-
-    constructor(private readonly options: UnixClientOptions) {
-        this.rpc = new JsonRpcClient({ socketPath: options.socketPath });
-    }
-
-    async listConfigurations(): Promise<Configuration[]> {
-        const result = await this.rpc.request("listConfigurations");
-        return extractConfigurations(result);
-    }
-
-    async connect(configurationName: string): Promise<ConnectResult> {
-        const result = await this.rpc.request("connect", { configurationName });
-        return extractConnectResult(result);
-    }
-
-    async getNodes(configurationName: string, nodeIDs?: string[]): Promise<Node[]> {
-        const params: Record<string, unknown> = { configurationName };
-        if ((nodeIDs?.length ?? 0) > 0) {
-            params.nodeIDs = nodeIDs;
+    private dispatchEvent(message: SSEMessage, onEvent: (event: ServerEvent) => void) {
+        try {
+            const event = decodeServerEvent(message);
+            if (event) {
+                onEvent(event);
+            }
+        } catch (err) {
+            this.options.logger.error({ err }, "failed to decode SSE payload");
         }
-        this.options.logger.debug(
-            { configuration: configurationName, nodeCount: nodeIDs?.length ?? 0 },
-            "getNodes RPC request",
-        );
-        const result = await this.rpc.request("getNodes", params);
-        const nodes = extractNodes(result);
-        this.options.logger.debug(
-            { configuration: configurationName, resultCount: nodes.length },
-            "getNodes RPC response",
-        );
-        return nodes;
     }
 
-    async queryExec(
-        configurationName: string,
-        query: string,
-        params?: Record<string, unknown>,
-    ): Promise<QueryExecResult> {
-        const requestParams: Record<string, unknown> = { configurationName, query };
-        if (params !== undefined) {
-            requestParams.params = params;
-        }
-        const result = await this.rpc.request("query.exec", requestParams);
-        return extractQueryExecResult(result);
+    private createApiConfig(): OpenAPIConfig {
+        const baseConfig: OpenAPIConfig = { ...OpenAPI };
+        baseConfig.BASE = this.buildBaseURL();
+        baseConfig.WITH_CREDENTIALS = false;
+        return baseConfig;
     }
 
-    async queryGetResult(jobId: string, limit?: number, offset?: number): Promise<QueryResultView> {
-        const requestParams: Record<string, unknown> = { jobId };
-        if (limit !== undefined) {
-            requestParams.limit = limit;
+    private createHttpClient(): AxiosInstance {
+        const client = axios.create({
+            baseURL: this.apiConfig.BASE,
+        });
+        if (isUnixOptions(this.options)) {
+            (client.defaults as typeof client.defaults & { socketPath?: string }).socketPath = this.options.socketPath;
         }
-        if (offset !== undefined) {
-            requestParams.offset = offset;
-        }
-        const result = await this.rpc.request("query.getResult", requestParams);
-        return extractQueryResultView(result);
+        return client;
     }
 
-    openEventStream(onEvent: (event: ServerEvent) => void): () => void {
-        return createSSEStream(
-            {
-                socketPath: this.options.socketPath,
-                path: "/events",
-                logger: this.options.logger,
-            },
-            (message) => {
-                try {
-                    this.options.logger.debug({ event: message.event }, "unix-client: decoding SSE message");
-                    const event = decodeServerEvent(message);
-                    if (event) {
-                        this.options.logger.debug(
-                            { eventType: event.type },
-                            "unix-client: decoded event, invoking callback",
-                        );
-                        onEvent(event);
-                    } else {
-                        this.options.logger.debug(
-                            { event: message.event },
-                            "unix-client: decodeServerEvent returned null",
-                        );
-                    }
-                } catch (err) {
-                    this.options.logger.error({ err }, "failed to decode SSE payload");
-                }
-            },
-        );
+    private buildBaseURL(): string {
+        if (isUnixOptions(this.options)) {
+            return "http://unix";
+        }
+        return `http://${this.options.host}:${this.options.port}`;
+    }
+
+    private async send<T>(options: ApiRequestOptions): Promise<T> {
+        const result = await contractRequest<T | ErrorPayload>(this.apiConfig, options, this.httpClient);
+        return this.unwrap<T>(result);
+    }
+
+    private unwrap<T>(result: T | ErrorPayload): T {
+        if (isErrorPayload(result)) {
+            throw new Error(result.message ?? "request failed");
+        }
+        return result;
     }
 }
 
@@ -388,71 +294,64 @@ class StubOriClient implements OriClient {
     }
 }
 
+const STUB_CONFIGURATIONS: Configuration[] = [
+    {
+        name: "Local Demo",
+        type: "sqlite",
+        host: "127.0.0.1",
+        port: 0,
+        database: "demo.db",
+        username: "demo",
+    },
+    {
+        name: "Analytics Warehouse",
+        type: "postgres",
+        host: "warehouse.local",
+        port: 5432,
+        database: "analytics",
+        username: "analyst",
+    },
+];
+
 export function createOriClient(options: CreateClientOptions): OriClient {
     if (options.mode === "stub") {
         return new StubOriClient();
     }
 
     if (options.socketPath) {
-        return new UnixSocketOriClient({ socketPath: options.socketPath, logger: options.logger });
+        return new RestOriClient({ socketPath: options.socketPath, logger: options.logger });
     }
 
     const host = options.host ?? "localhost";
     const port = options.port ?? 8080;
-    return new HttpOriClient({ host, port, logger: options.logger });
+    return new RestOriClient({ host, port, logger: options.logger });
 }
 
-function extractConfigurations(result: unknown): Configuration[] {
-    const payload = (result ?? {}) as { configurations?: unknown; connections?: unknown };
-    if (Array.isArray(payload.configurations)) {
-        return payload.configurations as Configuration[];
+function isUnixOptions(options: HttpClientOptions | UnixClientOptions): options is UnixClientOptions {
+    return (options as UnixClientOptions).socketPath !== undefined;
+}
+
+function isErrorPayload(value: unknown): value is ErrorPayload {
+    return typeof value === "object" && value !== null && "code" in value;
+}
+
+function mapNode(node: ContractNode): Node {
+    const edges: Record<string, NodeEdge> = {};
+    if (node.edges) {
+        const contractEdges = Object.entries(node.edges) as Array<[string, ContractNodeEdge]>;
+        for (const [kind, edge] of contractEdges) {
+            edges[kind] = {
+                items: edge.items ?? [],
+                truncated: edge.truncated ?? false,
+            };
+        }
     }
-    if (Array.isArray(payload.connections)) {
-        return payload.connections as Configuration[];
-    }
-    return [];
-}
-
-function extractConnectResult(result: unknown): ConnectResult {
-    const payload = (result ?? {}) as { result?: ConnectResult["result"]; userMessage?: string };
     return {
-        result: payload.result ?? "fail",
-        userMessage: payload.userMessage ?? undefined,
-    };
-}
-
-function extractNodes(result: unknown): Node[] {
-    const payload = (result ?? {}) as { nodes?: unknown };
-    return Array.isArray(payload.nodes) ? (payload.nodes as Node[]) : [];
-}
-
-function extractQueryExecResult(result: unknown): QueryExecResult {
-    const payload = (result ?? {}) as {
-        jobId?: string;
-        jobID?: string;
-        status?: QueryExecResult["status"];
-        message?: string;
-    };
-    return {
-        jobId: payload.jobId ?? payload.jobID ?? "",
-        status: payload.status ?? "failed",
-        message: payload.message ?? undefined,
-    };
-}
-
-function extractQueryResultView(result: unknown): QueryResultView {
-    const payload = (result ?? {}) as {
-        columns?: unknown;
-        rows?: unknown;
-        rowCount?: number;
-        row_count?: number;
-        truncated?: boolean;
-    };
-    return {
-        columns: Array.isArray(payload.columns) ? (payload.columns as QueryColumn[]) : [],
-        rows: Array.isArray(payload.rows) ? (payload.rows as unknown[][]) : [],
-        rowCount: payload.rowCount ?? payload.row_count ?? 0,
-        truncated: payload.truncated ?? false,
+        id: node.id,
+        type: node.type,
+        name: node.name,
+        attributes: node.attributes ?? {},
+        edges,
     };
 }
 

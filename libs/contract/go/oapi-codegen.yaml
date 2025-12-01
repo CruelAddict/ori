@@ -1,0 +1,5 @@
+package: contract
+output: contract.gen.go
+generate:
+  - models
+  - client

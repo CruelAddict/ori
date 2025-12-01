@@ -1,0 +1,64 @@
+package httpapi
+
+import (
+	"errors"
+	"net/http"
+	"strings"
+
+	dto "github.com/crueladdict/ori/libs/contract/go"
+
+	"github.com/crueladdict/ori/apps/ori-server/internal/service"
+)
+
+func (h *Handler) execQuery(w http.ResponseWriter, r *http.Request) {
+	var payload dto.QueryExecRequest
+	if err := decodeJSON(r.Body, &payload); err != nil {
+		respondError(w, http.StatusBadRequest, "invalid_body", err.Error(), nil)
+		return
+	}
+
+	if strings.TrimSpace(payload.ConfigurationName) == "" {
+		respondError(w, http.StatusBadRequest, "missing_configuration", "configurationName is required", nil)
+		return
+	}
+	if strings.TrimSpace(payload.Query) == "" {
+		respondError(w, http.StatusBadRequest, "missing_query", "query is required", nil)
+		return
+	}
+
+	var params interface{}
+	if payload.Params != nil {
+		if obj, err := payload.Params.AsQueryExecRequestParams0(); err == nil {
+			params = obj
+		} else if arr, err := payload.Params.AsQueryExecRequestParams1(); err == nil {
+			params = arr
+		} else {
+			respondError(w, http.StatusBadRequest, "invalid_params", "params must be an object or array", nil)
+			return
+		}
+	}
+
+	var options *service.QueryExecOptions
+	if payload.Options != nil {
+		options = &service.QueryExecOptions{}
+		if payload.Options.MaxRows != nil {
+			options.MaxRows = *payload.Options.MaxRows
+		}
+	}
+
+	job, err := h.queries.Exec(payload.ConfigurationName, payload.Query, params, options)
+	if err != nil {
+		switch {
+		case errors.Is(err, service.ErrConnectionUnavailable):
+			respondError(w, http.StatusConflict, "connection_not_ready", err.Error(), nil)
+		default:
+			respondError(w, http.StatusInternalServerError, "query_exec_failed", err.Error(), nil)
+		}
+		return
+	}
+
+	respondJSON(w, http.StatusAccepted, dto.QueryExecResponse{
+		JobId:  job.ID,
+		Status: dto.Running,
+	})
+}

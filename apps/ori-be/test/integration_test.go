@@ -3,21 +3,24 @@ package server_test
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"io"
+	"net"
+	"net/http"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/crueladdict/ori/apps/ori-server/internal/events"
+	httpapi "github.com/crueladdict/ori/apps/ori-server/internal/httpapi"
 	sqliteadapter "github.com/crueladdict/ori/apps/ori-server/internal/infrastructure/database/sqlite"
-	"github.com/crueladdict/ori/apps/ori-server/internal/rpc"
 	"github.com/crueladdict/ori/apps/ori-server/internal/service"
-	orisdk "github.com/crueladdict/ori/libs/sdk/go"
+	dto "github.com/crueladdict/ori/libs/contract/go"
 )
 
 func TestListConfigurationsAndConnectSQLiteOverUDS(t *testing.T) {
-	// Setup: Use a temp copy of the fixtures so tests don't mutate the repo files
+	ctx := context.Background()
 	fixtureConfigPath, err := filepath.Abs("../../../testdata/config.yaml")
 	if err != nil {
 		t.Fatalf("Failed to resolve test config path: %v", err)
@@ -41,126 +44,110 @@ func TestListConfigurationsAndConnectSQLiteOverUDS(t *testing.T) {
 	ensureSampleData(t, tempDBPath)
 
 	configService := service.NewConfigService(tempConfigPath)
-
-	// Load config at startup
 	if err := configService.LoadConfig(); err != nil {
 		t.Fatalf("Failed to load config: %v", err)
 	}
 
-	ctx := context.Background()
 	eventHub := events.NewHub()
 	connectionService := service.NewConnectionService(configService, eventHub)
 	connectionService.RegisterAdapter("sqlite", sqliteadapter.NewAdapter)
 	nodeService := service.NewNodeService(configService, connectionService)
 	queryService := service.NewQueryService(connectionService, eventHub, ctx)
-	handler := rpc.NewHandler(configService, connectionService, nodeService, queryService)
+	handler := httpapi.NewHandler(configService, connectionService, nodeService, queryService)
 
-	// Start server over Unix domain socket
-	sockPath := filepath.Join(os.TempDir(), "ori-be-test.sock")
+	sockPath := unixSocketPath("ori-be")
 	_ = os.Remove(sockPath)
-	srv, err := rpc.NewUnixServer(ctx, handler, eventHub, sockPath)
+	srv, err := httpapi.NewUnixServer(ctx, handler, eventHub, sockPath)
 	if err != nil {
 		t.Fatalf("Failed to create unix server: %v", err)
 	}
-	defer func() {
+	t.Cleanup(func() {
 		_ = srv.Shutdown()
-	}()
+	})
 
-	// Give server time to start
-	time.Sleep(100 * time.Millisecond)
+	client := newContractClient(t, sockPath)
 
-	// Client over UDS
-	client := orisdk.NewClientUnix(sockPath)
-
-	// listConfigurations should work over UDS
-	resp, err := client.ListConfigurations()
+	listResp, err := client.ListConfigurationsWithResponse(ctx)
 	if err != nil {
 		t.Fatalf("ListConfigurations failed: %v", err)
 	}
-	if resp == nil {
-		t.Fatal("Response is nil")
-	}
-	if len(resp.Connections) == 0 {
-		t.Fatalf("Expected at least 1 connection, got 0")
+	if listResp.JSON200 == nil || len(listResp.JSON200.Connections) == 0 {
+		t.Fatalf("expected at least one configuration")
 	}
 
-	// Connect to sqlite entry, first call should be connecting
-	cres, err := client.Connect("local-sqlite")
-	if err != nil {
-		t.Fatalf("Connect (first) failed: %v", err)
-	}
-	if cres.Result != "connecting" {
-		t.Fatalf("Expected result 'connecting', got '%s'", cres.Result)
-	}
-
-	// Wait up to 2s for background connect to succeed
+	connectReq := dto.StartConnectionJSONRequestBody{ConfigurationName: "local-sqlite"}
+	var connectionReady bool
 	deadline := time.Now().Add(2 * time.Second)
-	connected := false
 	for time.Now().Before(deadline) {
-		cres2, err2 := client.Connect("local-sqlite")
-		if err2 != nil {
-			t.Fatalf("Connect (second) failed: %v", err2)
+		resp, err := client.StartConnectionWithResponse(ctx, connectReq)
+		if err != nil {
+			t.Fatalf("Connect failed: %v", err)
 		}
-		if cres2.Result == "success" {
-			connected = true
+		if resp.JSON201 == nil {
+			t.Fatalf("expected 201 payload, got status %d", resp.StatusCode())
+		}
+		if resp.JSON201.Result == dto.Success {
+			connectionReady = true
 			break
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
-	if !connected {
-		t.Fatalf("Connect did not reach success within timeout")
+	if !connectionReady {
+		t.Fatalf("connection did not reach success within timeout")
 	}
 
-	nodesResp, err := client.GetNodes("local-sqlite")
+	rootResp, err := client.GetNodesWithResponse(ctx, "local-sqlite", nil)
 	if err != nil {
-		t.Fatalf("getNodes (root) failed: %v", err)
+		t.Fatalf("getNodes root failed: %v", err)
 	}
-	if len(nodesResp.Nodes) == 0 {
+	if rootResp.JSON200 == nil || len(rootResp.JSON200.Nodes) == 0 {
 		t.Fatalf("expected at least one root node")
 	}
-	rootNode := nodesResp.Nodes[0]
+	rootNode := rootResp.JSON200.Nodes[0]
 	if rootNode.Type != "database" {
 		t.Fatalf("expected database node, got %s", rootNode.Type)
 	}
-	tablesAtRoot, ok := rootNode.Edges["tables"]
-	if !ok || len(tablesAtRoot.Items) == 0 {
-		t.Fatalf("expected hydrated root node with tables edge")
-	}
-
-	dbResp, err := client.GetNodes("local-sqlite", rootNode.ID)
-	if err != nil {
-		t.Fatalf("getNodes (database) failed: %v", err)
-	}
-	if len(dbResp.Nodes) != 1 {
-		t.Fatalf("expected 1 node, got %d", len(dbResp.Nodes))
-	}
-	dbNode := dbResp.Nodes[0]
-	tablesEdge, ok := dbNode.Edges["tables"]
+	tablesEdge, ok := rootNode.Edges["tables"]
 	if !ok || len(tablesEdge.Items) == 0 {
-		t.Fatalf("expected tables edge with entries")
+		t.Fatalf("expected tables edge on root node")
 	}
-	tableID := tablesEdge.Items[0]
 
-	tableResp, err := client.GetNodes("local-sqlite", tableID)
+	dbIDs := []string{rootNode.Id}
+	dbParams := &dto.GetNodesParams{NodeId: &dbIDs}
+	dbResp, err := client.GetNodesWithResponse(ctx, "local-sqlite", dbParams)
 	if err != nil {
-		t.Fatalf("getNodes (table) failed: %v", err)
+		t.Fatalf("getNodes database failed: %v", err)
 	}
-	if len(tableResp.Nodes) != 1 {
-		t.Fatalf("expected 1 table node, got %d", len(tableResp.Nodes))
+	if dbResp.JSON200 == nil || len(dbResp.JSON200.Nodes) != 1 {
+		t.Fatalf("expected single database node")
 	}
-	tableNode := tableResp.Nodes[0]
-	columnsEdge, ok := tableNode.Edges["columns"]
-	if !ok || len(columnsEdge.Items) == 0 {
+	dbNode := dbResp.JSON200.Nodes[0]
+	tablesAtDB, ok := dbNode.Edges["tables"]
+	if !ok || len(tablesAtDB.Items) == 0 {
+		t.Fatalf("expected tables edge at database node")
+	}
+	tableID := tablesAtDB.Items[0]
+
+	tableIDs := []string{tableID}
+	tableParams := &dto.GetNodesParams{NodeId: &tableIDs}
+	tableResp, err := client.GetNodesWithResponse(ctx, "local-sqlite", tableParams)
+	if err != nil {
+		t.Fatalf("getNodes table failed: %v", err)
+	}
+	if tableResp.JSON200 == nil || len(tableResp.JSON200.Nodes) != 1 {
+		t.Fatalf("expected single table node")
+	}
+	tNode := tableResp.JSON200.Nodes[0]
+	if edge, ok := tNode.Edges["columns"]; !ok || len(edge.Items) == 0 {
 		t.Fatalf("expected at least one column edge")
 	}
-	constraintsEdge, ok := tableNode.Edges["constraints"]
-	if !ok || len(constraintsEdge.Items) == 0 {
+	if edge, ok := tNode.Edges["constraints"]; !ok || len(edge.Items) == 0 {
 		t.Fatalf("expected at least one constraint edge")
 	}
 }
 
 func TestQueryExecAndGetResult(t *testing.T) {
-	// Setup: Use a temp copy of the fixtures so tests don't mutate the repo files
+	ctx := context.Background()
 	fixtureConfigPath, err := filepath.Abs("../../../testdata/config.yaml")
 	if err != nil {
 		t.Fatalf("Failed to resolve test config path: %v", err)
@@ -184,149 +171,122 @@ func TestQueryExecAndGetResult(t *testing.T) {
 	ensureSampleData(t, tempDBPath)
 
 	configService := service.NewConfigService(tempConfigPath)
-
-	// Load config at startup
 	if err := configService.LoadConfig(); err != nil {
 		t.Fatalf("Failed to load config: %v", err)
 	}
 
-	ctx := context.Background()
 	eventHub := events.NewHub()
 	connectionService := service.NewConnectionService(configService, eventHub)
 	connectionService.RegisterAdapter("sqlite", sqliteadapter.NewAdapter)
 	nodeService := service.NewNodeService(configService, connectionService)
 	queryService := service.NewQueryService(connectionService, eventHub, ctx)
-	handler := rpc.NewHandler(configService, connectionService, nodeService, queryService)
+	handler := httpapi.NewHandler(configService, connectionService, nodeService, queryService)
 
-	// Start server over Unix domain socket
-	sockPath := filepath.Join(os.TempDir(), "ori-be-test-query.sock")
+	sockPath := unixSocketPath("ori-be-query")
 	_ = os.Remove(sockPath)
-	srv, err := rpc.NewUnixServer(ctx, handler, eventHub, sockPath)
+	srv, err := httpapi.NewUnixServer(ctx, handler, eventHub, sockPath)
 	if err != nil {
 		t.Fatalf("Failed to create unix server: %v", err)
 	}
-	defer func() {
+	t.Cleanup(func() {
 		_ = srv.Shutdown()
-	}()
+	})
 
-	// Give server time to start
-	time.Sleep(100 * time.Millisecond)
+	client := newContractClient(t, sockPath)
 
-	// Client over UDS
-	client := orisdk.NewClientUnix(sockPath)
-
-	// First, establish connection
-	cres, err := client.Connect("local-sqlite")
-	if err != nil {
-		t.Fatalf("Connect failed: %v", err)
-	}
-	if cres.Result != "connecting" {
-		t.Fatalf("Expected result 'connecting', got '%s'", cres.Result)
-	}
-
-	// Wait for connection to succeed
+	connectReq := dto.StartConnectionJSONRequestBody{ConfigurationName: "local-sqlite"}
 	deadline := time.Now().Add(2 * time.Second)
-	connected := false
 	for time.Now().Before(deadline) {
-		cres2, err2 := client.Connect("local-sqlite")
-		if err2 != nil {
-			t.Fatalf("Connect (second) failed: %v", err2)
+		resp, err := client.StartConnectionWithResponse(ctx, connectReq)
+		if err != nil {
+			t.Fatalf("Connect failed: %v", err)
 		}
-		if cres2.Result == "success" {
-			connected = true
+		if resp.JSON201 != nil && resp.JSON201.Result == dto.Success {
 			break
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
-	if !connected {
-		t.Fatalf("Connect did not reach success within timeout")
-	}
 
-	// Test 1: Execute a simple SELECT query
-	query := "SELECT id, name, email FROM authors"
-	execResp, err := client.QueryExec("local-sqlite", query)
+	execReq := dto.ExecQueryJSONRequestBody{ConfigurationName: "local-sqlite", Query: "SELECT id, name, email FROM authors"}
+	execResp, err := client.ExecQueryWithResponse(ctx, execReq)
 	if err != nil {
 		t.Fatalf("QueryExec failed: %v", err)
 	}
-	if execResp.JobID == "" {
-		t.Fatal("Expected non-empty JobID")
+	if execResp.JSON202 == nil || execResp.JSON202.JobId == "" {
+		t.Fatalf("expected job id from QueryExec")
+	}
+	jobID := execResp.JSON202.JobId
+
+	result := waitForQueryResult(t, ctx, client, jobID, nil, nil)
+	if len(result.Columns) != 3 {
+		t.Fatalf("expected 3 columns, got %d", len(result.Columns))
+	}
+	if len(result.Rows) != 1 {
+		t.Fatalf("expected 1 row, got %d", len(result.Rows))
 	}
 
-	// Wait for query to complete (up to 5 seconds)
-	queryDeadline := time.Now().Add(5 * time.Second)
-	jobCompleted := false
-	for time.Now().Before(queryDeadline) {
-		resultResp, err := client.QueryGetResult(execResp.JobID, nil, nil)
-		if err != nil {
-			// Result might not be stored yet, try again
-			time.Sleep(100 * time.Millisecond)
-			continue
-		}
-		// Verify the results
-		if len(resultResp.Columns) != 3 {
-			t.Fatalf("Expected 3 columns, got %d", len(resultResp.Columns))
-		}
-		expectedColumns := []string{"id", "name", "email"}
-		for i, col := range resultResp.Columns {
-			if col.Name != expectedColumns[i] {
-				t.Fatalf("Expected column %d to be '%s', got '%s'", i, expectedColumns[i], col.Name)
-			}
-		}
-		if len(resultResp.Rows) != 1 {
-			t.Fatalf("Expected 1 row, got %d", len(resultResp.Rows))
-		}
-		if len(resultResp.Rows[0]) != 3 {
-			t.Fatalf("Expected 3 values in row, got %d", len(resultResp.Rows[0]))
-		}
-		jobCompleted = true
-		break
-	}
-	if !jobCompleted {
-		t.Fatalf("Query did not complete within timeout")
-	}
-
-	// Test 2: Test pagination with limit and offset
-	query2 := "SELECT id, title FROM books"
-	execResp2, err := client.QueryExec("local-sqlite", query2)
+	execReq2 := dto.ExecQueryJSONRequestBody{ConfigurationName: "local-sqlite", Query: "SELECT id, title FROM books"}
+	execResp2, err := client.ExecQueryWithResponse(ctx, execReq2)
 	if err != nil {
-		t.Fatalf("QueryExec (2) failed: %v", err)
+		t.Fatalf("QueryExec (books) failed: %v", err)
+	}
+	if execResp2.JSON202 == nil {
+		t.Fatalf("expected job id for second query")
+	}
+	limit := 1
+	offset := 0
+	paginated := waitForQueryResult(t, ctx, client, execResp2.JSON202.JobId, &limit, &offset)
+	if len(paginated.Rows) != 1 {
+		t.Fatalf("expected 1 row for paginated request")
+	}
+	if paginated.RowCount != 1 {
+		t.Fatalf("expected RowCount=1, got %d", paginated.RowCount)
 	}
 
-	// Wait for second query to complete
-	queryDeadline2 := time.Now().Add(5 * time.Second)
-	jobCompleted2 := false
-	for time.Now().Before(queryDeadline2) {
-		_, err := client.QueryGetResult(execResp2.JobID, nil, nil)
-		if err != nil {
-			// Result might not be stored yet, try again
-			time.Sleep(100 * time.Millisecond)
-			continue
-		}
-		jobCompleted2 = true
-		// Test pagination with limit=1, offset=0
-		limit := 1
-		offset := 0
-		paginatedResp, err := client.QueryGetResult(execResp2.JobID, &limit, &offset)
-		if err != nil {
-			t.Fatalf("QueryGetResult with pagination failed: %v", err)
-		}
-		if len(paginatedResp.Rows) != 1 {
-			t.Fatalf("Expected 1 row with limit=1, got %d", len(paginatedResp.Rows))
-		}
-		if paginatedResp.RowCount != 1 {
-			t.Fatalf("Expected RowCount=1, got %d", paginatedResp.RowCount)
-		}
-		break
+	badResp, err := client.GetQueryResultWithResponse(ctx, "invalid-job-id", nil)
+	if err != nil {
+		t.Fatalf("QueryGetResult invalid job request failed: %v", err)
 	}
-	if !jobCompleted2 {
-		t.Fatalf("Second query did not complete within timeout")
+	if badResp.StatusCode() != http.StatusNotFound {
+		t.Fatalf("expected 404 for invalid job, got %d", badResp.StatusCode())
 	}
+}
 
-	// Test 3: Test error case with invalid job ID
-	_, err = client.QueryGetResult("invalid-job-id", nil, nil)
-	if err == nil {
-		t.Fatal("Expected error for invalid job ID")
+func waitForQueryResult(t *testing.T, ctx context.Context, client *dto.ClientWithResponses, jobID string, limit, offset *int) *dto.QueryResultResponse {
+	t.Helper()
+	dl := time.Now().Add(5 * time.Second)
+	params := &dto.GetQueryResultParams{Limit: limit, Offset: offset}
+	for time.Now().Before(dl) {
+		resp, err := client.GetQueryResultWithResponse(ctx, jobID, params)
+		if err != nil {
+			t.Fatalf("QueryGetResult failed: %v", err)
+		}
+		if resp.JSON200 != nil {
+			return resp.JSON200
+		}
+		time.Sleep(100 * time.Millisecond)
 	}
+	t.Fatalf("query %s did not complete within timeout", jobID)
+	return nil
+}
+
+func newContractClient(t *testing.T, socketPath string) *dto.ClientWithResponses {
+	t.Helper()
+	transport := &http.Transport{
+		DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
+			return net.Dial("unix", socketPath)
+		},
+	}
+	httpClient := &http.Client{Transport: transport}
+	client, err := dto.NewClientWithResponses("http://unix", dto.WithHTTPClient(httpClient))
+	if err != nil {
+		t.Fatalf("failed to construct contract client: %v", err)
+	}
+	return client
+}
+
+func unixSocketPath(prefix string) string {
+	return filepath.Join(os.TempDir(), fmt.Sprintf("%s-%d.sock", prefix, time.Now().UnixNano()))
 }
 
 func ensureSampleData(t *testing.T, dbPath string) {

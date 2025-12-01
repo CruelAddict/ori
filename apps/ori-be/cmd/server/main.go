@@ -12,9 +12,9 @@ import (
 	"syscall"
 
 	"github.com/crueladdict/ori/apps/ori-server/internal/events"
+	httpapi "github.com/crueladdict/ori/apps/ori-server/internal/httpapi"
 	postgresadapter "github.com/crueladdict/ori/apps/ori-server/internal/infrastructure/database/postgres"
 	sqliteadapter "github.com/crueladdict/ori/apps/ori-server/internal/infrastructure/database/sqlite"
-	"github.com/crueladdict/ori/apps/ori-server/internal/rpc"
 	"github.com/crueladdict/ori/apps/ori-server/internal/service"
 )
 
@@ -87,21 +87,21 @@ func main() {
 	nodeService := service.NewNodeService(configService, connectionService)
 	queryService := service.NewQueryService(connectionService, eventHub, ctx)
 
-	handler := rpc.NewHandler(configService, connectionService, nodeService, queryService)
+	handler := httpapi.NewHandler(configService, connectionService, nodeService, queryService)
 
 	var (
-		server *rpc.Server
+		server *httpapi.Server
 		err    error
 	)
 	if *socketPath != "" {
-		server, err = rpc.NewUnixServer(ctx, handler, eventHub, *socketPath)
+		server, err = httpapi.NewUnixServer(ctx, handler, eventHub, *socketPath)
 		if err != nil {
 			slog.Error("failed to create unix socket server", slog.Any("err", err))
 			os.Exit(1)
 		}
 		slog.Info("server started", slog.String("transport", "unix"), slog.String("socket", *socketPath))
 	} else {
-		server, err = rpc.NewServer(ctx, handler, eventHub, *port)
+		server, err = httpapi.NewServer(ctx, handler, eventHub, *port)
 		if err != nil {
 			slog.Error("failed to create TCP server", slog.Any("err", err))
 			os.Exit(1)

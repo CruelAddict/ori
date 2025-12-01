@@ -3,33 +3,33 @@ package model
 import (
 	"maps"
 
-	orisdk "github.com/crueladdict/ori/libs/sdk/go"
+	dto "github.com/crueladdict/ori/libs/contract/go"
 )
 
-// NodesToSDK converts internal node representations to the public SDK DTOs and
+// ConvertNodesToDTO converts internal node representations to the public DTOs and
 // enforces the edge truncation limit at response time.
-func NodesToSDK(nodes []*Node, edgeLimit int) []orisdk.Node {
+func ConvertNodesToDTO(nodes []*Node, edgeLimit int) []dto.Node {
 	if len(nodes) == 0 {
 		return nil
 	}
-	result := make([]orisdk.Node, len(nodes))
+	result := make([]dto.Node, len(nodes))
 	for i, node := range nodes {
 		result[i] = convertNode(node, edgeLimit)
 	}
 	return result
 }
 
-func convertNode(node *Node, edgeLimit int) orisdk.Node {
+func convertNode(node *Node, edgeLimit int) dto.Node {
 	if node == nil {
-		return orisdk.Node{}
+		return dto.Node{}
 	}
-	out := orisdk.Node{
-		ID:   node.ID,
+	out := dto.Node{
+		Id:   node.ID,
 		Type: node.Type,
 		Name: node.Name,
 	}
 	out.Attributes = cloneAttributes(node.Attributes)
-	out.Edges = make(map[string]orisdk.NodeEdge, len(node.Edges))
+	out.Edges = make(map[string]dto.NodeEdge, len(node.Edges))
 	for kind, edge := range node.Edges {
 		total := len(edge.Items)
 		max := edgeLimit
@@ -38,7 +38,7 @@ func convertNode(node *Node, edgeLimit int) orisdk.Node {
 		}
 		items := make([]string, max)
 		copy(items, edge.Items[:max])
-		out.Edges[kind] = orisdk.NodeEdge{Items: items, Truncated: total > max}
+		out.Edges[kind] = dto.NodeEdge{Items: items, Truncated: total > max}
 	}
 	return out
 }
