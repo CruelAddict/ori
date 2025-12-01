@@ -12,9 +12,7 @@ import (
 	"github.com/crueladdict/ori/apps/ori-server/internal/events"
 )
 
-var (
-	ErrNotFound = errors.New("query result not found")
-)
+var ErrNotFound = errors.New("query result not found")
 
 // QueryResultView represents a paginated view of query results
 type QueryResultView struct {

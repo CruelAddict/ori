@@ -142,12 +142,11 @@ func monitorParentAlive() {
 		// No pipe provided, running standalone (not from ori-cli)
 		return
 	}
-	defer pipe.Close()
+	defer func() { _ = pipe.Close() }()
 
 	// Block reading from pipe. When parent dies, pipe closes and read returns EOF
 	buf := make([]byte, 1)
 	_, err := pipe.Read(buf)
-
 	if err != nil {
 		// Parent died (pipe closed), exit immediately
 		slog.Warn("parent process died, exiting")
