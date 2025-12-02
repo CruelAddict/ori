@@ -6,10 +6,11 @@ import { EditorPanel } from "@src/widgets/editor-panel/editor-panel";
 import { ResultsPanel } from "@src/widgets/results-panel/results-panel";
 import { TreePanel } from "@src/widgets/tree-panel/tree-panel";
 import { WelcomePane } from "@src/widgets/welcome-pane/welcome-pane";
-import { Show } from "solid-js";
+import { Show, createEffect } from "solid-js";
 
 export type ConnectionViewPageProps = {
     configurationName: string;
+    isActive?: boolean;
 };
 
 export function ConnectionViewPage(props: ConnectionViewPageProps) {
@@ -18,6 +19,11 @@ export function ConnectionViewPage(props: ConnectionViewPageProps) {
     });
     const { theme } = useTheme();
     const palette = theme;
+    const scopeEnabled = () => props.isActive ?? true;
+
+    createEffect(() => {
+        vm.actions.setActive(scopeEnabled());
+    });
 
     const screenKeyBindings: KeyBinding[] = [
         {
@@ -94,8 +100,8 @@ export function ConnectionViewPage(props: ConnectionViewPageProps) {
 
     return (
         <KeyScope
-            id="connection-view"
             bindings={screenKeyBindings}
+            enabled={scopeEnabled}
         >
             <box
                 flexDirection="column"

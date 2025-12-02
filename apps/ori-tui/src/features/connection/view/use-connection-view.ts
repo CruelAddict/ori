@@ -25,6 +25,7 @@ export type ConnectionViewActions = {
     openEditor: () => void;
     focusTree: () => void;
     focusEditor: () => void;
+    setActive: (active: boolean) => void;
 };
 
 export type ConnectionViewModel = {
@@ -44,6 +45,7 @@ export function useConnectionView(options: UseConnectionViewOptions): Connection
     const title = createMemo(() => configuration()?.name ?? options.configurationName());
     const [focusedPane, setFocusedPane] = createSignal<FocusPane>(DEFAULT_PANE);
     const [editorOpen, setEditorOpen] = createSignal(false);
+    const [isActive, setIsActive] = createSignal(true);
     let previousFocusedPane: FocusPane = DEFAULT_PANE;
 
     const focusPane = (pane: FocusPane) => {
@@ -66,7 +68,7 @@ export function useConnectionView(options: UseConnectionViewOptions): Connection
     };
 
     const createFocusController = (pane: FocusPane, fallback?: () => void): PaneFocusController => ({
-        isFocused: () => focusedPane() === pane,
+        isFocused: () => isActive() && focusedPane() === pane,
         focusSelf: () => focusPane(pane),
         focusFallback: fallback,
     });
@@ -135,6 +137,23 @@ export function useConnectionView(options: UseConnectionViewOptions): Connection
         }
     };
 
+    const setActive = (active: boolean) => {
+        setIsActive(active);
+        if (!active) {
+            return;
+        }
+        const pane = focusedPane();
+        if (pane === "editor" && editorOpen()) {
+            focusEditor();
+            return;
+        }
+        if (pane === "results" && resultsPane.visible()) {
+            focusResults();
+            return;
+        }
+        focusTree();
+    };
+
     const toggleResultsVisible = () => {
         if (!hasResults()) return;
         resultsPane.toggleVisible();
@@ -167,6 +186,7 @@ export function useConnectionView(options: UseConnectionViewOptions): Connection
             openEditor,
             focusTree,
             focusEditor,
+            setActive,
         },
     };
 }
