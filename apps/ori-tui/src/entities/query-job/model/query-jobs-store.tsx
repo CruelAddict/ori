@@ -58,25 +58,38 @@ export function QueryJobsStoreProvider(props: QueryJobsStoreProviderProps) {
     };
 
     const executeQuery = async (configurationName: string, query: string) => {
-        try {
-            const execResult = await api.executeQuery(configurationName, query);
-            setState("jobsByConfiguration", configurationName, {
-                jobId: execResult.jobId,
-                configurationName,
-                query,
-                status: execResult.status === "running" ? "running" : "failed",
-                error: execResult.message,
-            });
+        const currentJob = state.jobsByConfiguration[configurationName];
+        if (currentJob && currentJob.status === "running") {
+            logger.warn(
+                { configurationName, jobId: currentJob.jobId },
+                "query already running for configuration; ignoring new execute request",
+            );
+            return;
+        }
 
+        const jobId = generateJobId();
+        setState("jobsByConfiguration", configurationName, {
+            jobId,
+            configurationName,
+            query,
+            status: "running",
+        });
+
+        try {
+            const execResult = await api.executeQuery(configurationName, query, jobId);
             if (execResult.status === "failed") {
-                logger.error(
-                    { jobId: execResult.jobId, message: execResult.message },
-                    "query execution failed immediately",
-                );
+                setState("jobsByConfiguration", configurationName, {
+                    jobId,
+                    configurationName,
+                    query,
+                    status: "failed",
+                    error: execResult.message,
+                });
+                logger.error({ jobId, message: execResult.message }, "query execution failed immediately");
             }
         } catch (err) {
             setState("jobsByConfiguration", configurationName, {
-                jobId: "",
+                jobId,
                 configurationName,
                 query,
                 status: "failed",
@@ -152,6 +165,8 @@ function resolveCompletedStatus(status: string): QueryJob["status"] {
     }
     return "failed";
 }
+
+export const generateJobId = () => crypto.randomUUID();
 
 export function useQueryJobs(): QueryJobsContextValue {
     const ctx = useContext(QueryJobsContext);

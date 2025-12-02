@@ -61,7 +61,12 @@ export type OriClient = {
     listConfigurations(): Promise<Configuration[]>;
     connect(configurationName: string): Promise<ConnectResult>;
     getNodes(configurationName: string, nodeIDs?: string[]): Promise<Node[]>;
-    queryExec(configurationName: string, query: string, params?: Record<string, unknown>): Promise<QueryExecResult>;
+    queryExec(
+        configurationName: string,
+        jobId: string,
+        query: string,
+        params?: Record<string, unknown>,
+    ): Promise<QueryExecResult>;
     queryGetResult(jobId: string, limit?: number, offset?: number): Promise<QueryResultView>;
     openEventStream(onEvent: (event: ServerEvent) => void): () => void;
 };
@@ -134,10 +139,11 @@ class RestOriClient implements OriClient {
 
     async queryExec(
         configurationName: string,
+        jobId: string,
         query: string,
         params?: Record<string, unknown>,
     ): Promise<QueryExecResult> {
-        const request: QueryExecRequest = { configurationName, query };
+        const request: QueryExecRequest = { configurationName, jobId, query };
         if (params !== undefined) {
             request.params = params;
         }
@@ -267,9 +273,14 @@ class StubOriClient implements OriClient {
         return nodes;
     }
 
-    async queryExec(_configurationName: string, _query: string): Promise<QueryExecResult> {
+    async queryExec(
+        _configurationName: string,
+        jobId: string,
+        _query: string,
+        _params?: Record<string, unknown>,
+    ): Promise<QueryExecResult> {
         return {
-            jobId: "stub-job-123",
+            jobId,
             status: "running",
         };
     }

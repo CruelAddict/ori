@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/oapi-codegen/runtime"
+	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
 // Defines values for ConnectionResultResult.
@@ -100,6 +101,7 @@ type QueryExecOptions struct {
 // QueryExecRequest defines model for QueryExecRequest.
 type QueryExecRequest struct {
 	ConfigurationName string                   `json:"configurationName"`
+	JobId             openapi_types.UUID       `json:"jobId"`
 	Options           *QueryExecOptions        `json:"options,omitempty"`
 	Params            *QueryExecRequest_Params `json:"params,omitempty"`
 	Query             string                   `json:"query"`

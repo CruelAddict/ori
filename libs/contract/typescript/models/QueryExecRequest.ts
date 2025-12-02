@@ -5,6 +5,7 @@
 import type { QueryExecOptions } from './QueryExecOptions';
 export type QueryExecRequest = {
     configurationName: string;
+    jobId: string;
     query: string;
     params?: Record<string, any>;
     options?: QueryExecOptions;

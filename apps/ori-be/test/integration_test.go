@@ -12,11 +12,13 @@ import (
 	"testing"
 	"time"
 
+	dto "github.com/crueladdict/ori/libs/contract/go"
+	"github.com/google/uuid"
+
 	"github.com/crueladdict/ori/apps/ori-server/internal/events"
 	httpapi "github.com/crueladdict/ori/apps/ori-server/internal/httpapi"
 	sqliteadapter "github.com/crueladdict/ori/apps/ori-server/internal/infrastructure/database/sqlite"
 	"github.com/crueladdict/ori/apps/ori-server/internal/service"
-	dto "github.com/crueladdict/ori/libs/contract/go"
 )
 
 func TestListConfigurationsAndConnectSQLiteOverUDS(t *testing.T) {
@@ -207,7 +209,11 @@ func TestQueryExecAndGetResult(t *testing.T) {
 		time.Sleep(100 * time.Millisecond)
 	}
 
-	execReq := dto.ExecQueryJSONRequestBody{ConfigurationName: "local-sqlite", Query: "SELECT id, name, email FROM authors"}
+	execReq := dto.ExecQueryJSONRequestBody{
+		ConfigurationName: "local-sqlite",
+		JobId:             uuid.New(),
+		Query:             "SELECT id, name, email FROM authors",
+	}
 	execResp, err := client.ExecQueryWithResponse(ctx, execReq)
 	if err != nil {
 		t.Fatalf("QueryExec failed: %v", err)
@@ -225,7 +231,11 @@ func TestQueryExecAndGetResult(t *testing.T) {
 		t.Fatalf("expected 1 row, got %d", len(result.Rows))
 	}
 
-	execReq2 := dto.ExecQueryJSONRequestBody{ConfigurationName: "local-sqlite", Query: "SELECT id, title FROM books"}
+	execReq2 := dto.ExecQueryJSONRequestBody{
+		ConfigurationName: "local-sqlite",
+		JobId:             uuid.New(),
+		Query:             "SELECT id, title FROM books",
+	}
 	execResp2, err := client.ExecQueryWithResponse(ctx, execReq2)
 	if err != nil {
 		t.Fatalf("QueryExec (books) failed: %v", err)

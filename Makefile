@@ -1,9 +1,10 @@
-.PHONY: build clean install uninstall test demo postgres-up postgres-down postgres-clean
+.PHONY: build clean install uninstall test demo postgres-up postgres-down postgres-clean contract-ts-install
 
 build:
 	@echo "Building all components..."
 	@$(MAKE) -C apps/ori-be build
 	@$(MAKE) -C apps/ori-cli build
+	@$(MAKE) contract-ts-install
 	@$(MAKE) -C apps/ori-tui build
 	@echo "Build complete!"
 
@@ -19,6 +20,10 @@ install: build
 
 uninstall:
 	@./scripts/uninstall.sh
+
+contract-ts-install:
+	@echo "Installing contract TypeScript dependencies..."
+	@(cd libs/contract/typescript && bun install)
 
 test:
 	@echo "Running tests..."

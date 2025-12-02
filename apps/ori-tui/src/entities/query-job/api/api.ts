@@ -7,7 +7,7 @@ import type { JSX } from "solid-js";
 import { createComponent, createContext, onCleanup, useContext } from "solid-js";
 
 export type QueryJobsApi = {
-    executeQuery(configurationName: string, query: string): Promise<QueryExecResult>;
+    executeQuery(configurationName: string, query: string, jobId: string): Promise<QueryExecResult>;
     fetchQueryResult(jobId: string): Promise<QueryResultView>;
     onJobCompleted(listener: (event: QueryJobCompletedEvent) => void): () => void;
 };
@@ -24,9 +24,9 @@ export function QueryJobsApiProvider(props: QueryJobsApiProviderProps) {
     const eventStream = useEventStream();
     const listeners = new Set<(event: QueryJobCompletedEvent) => void>();
 
-    const executeQuery = async (configurationName: string, query: string) => {
+    const executeQuery = async (configurationName: string, query: string, jobId: string) => {
         try {
-            return await client.queryExec(configurationName, query);
+            return await client.queryExec(configurationName, jobId, query);
         } catch (err) {
             logger.error({ err, configurationName }, "failed to execute query");
             throw err;

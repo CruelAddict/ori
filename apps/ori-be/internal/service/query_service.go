@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -12,7 +13,10 @@ import (
 	"github.com/crueladdict/ori/apps/ori-server/internal/events"
 )
 
-var ErrNotFound = errors.New("query result not found")
+var (
+	ErrNotFound         = errors.New("query result not found")
+	ErrJobAlreadyExists = errors.New("query job already exists")
+)
 
 // QueryResultView represents a paginated view of query results
 type QueryResultView struct {
@@ -44,7 +48,15 @@ func NewQueryService(connectionService *ConnectionService, eventHub *events.Hub,
 }
 
 // Exec starts execution of a database query asynchronously
-func (qs *QueryService) Exec(configurationName, query string, params interface{}, options *QueryExecOptions) (*QueryJob, error) {
+func (qs *QueryService) Exec(configurationName, jobID, query string, params interface{}, options *QueryExecOptions) (*QueryJob, error) {
+	jobID = strings.TrimSpace(jobID)
+	if jobID == "" {
+		return nil, fmt.Errorf("job ID cannot be empty")
+	}
+	if _, err := uuid.Parse(jobID); err != nil {
+		return nil, fmt.Errorf("invalid job ID: %w", err)
+	}
+
 	// Set default options
 	if options == nil {
 		options = &QueryExecOptions{MaxRows: DefaultMaxRows}
@@ -52,6 +64,7 @@ func (qs *QueryService) Exec(configurationName, query string, params interface{}
 	if options.MaxRows <= 0 {
 		options.MaxRows = DefaultMaxRows
 	}
+
 	if options.MaxRows > HardMaxRows {
 		options.MaxRows = HardMaxRows
 	}
@@ -63,7 +76,6 @@ func (qs *QueryService) Exec(configurationName, query string, params interface{}
 	}
 
 	// Create job
-	jobID := uuid.New().String()
 	job := &QueryJob{
 		ID:                jobID,
 		ConfigurationName: configurationName,
@@ -80,6 +92,10 @@ func (qs *QueryService) Exec(configurationName, query string, params interface{}
 
 	// Store job
 	qs.mu.Lock()
+	if _, exists := qs.activeJobs[jobID]; exists {
+		qs.mu.Unlock()
+		return nil, ErrJobAlreadyExists
+	}
 	qs.activeJobs[jobID] = job
 	qs.mu.Unlock()
 

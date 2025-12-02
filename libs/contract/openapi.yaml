@@ -301,6 +301,9 @@ components:
       properties:
         configurationName:
           type: string
+        jobId:
+          type: string
+          format: uuid
         query:
           type: string
         params:
@@ -313,6 +316,7 @@ components:
           $ref: '#/components/schemas/QueryExecOptions'
       required:
         - configurationName
+        - jobId
         - query
     QueryExecResponse:
       type: object

@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	dto "github.com/crueladdict/ori/libs/contract/go"
+	"github.com/google/uuid"
 
 	"github.com/crueladdict/ori/apps/ori-server/internal/service"
 )
@@ -26,7 +27,15 @@ func (h *Handler) execQuery(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var params interface{}
+	jobUUID := uuid.UUID(payload.JobId)
+	if jobUUID == uuid.Nil {
+		respondError(w, http.StatusBadRequest, "missing_job_id", "jobId is required", nil)
+		return
+	}
+	jobID := jobUUID.String()
+
+	var params any
+
 	if payload.Params != nil {
 		if obj, err := payload.Params.AsQueryExecRequestParams0(); err == nil {
 			params = obj
@@ -46,11 +55,13 @@ func (h *Handler) execQuery(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	job, err := h.queries.Exec(payload.ConfigurationName, payload.Query, params, options)
+	job, err := h.queries.Exec(payload.ConfigurationName, jobID, payload.Query, params, options)
 	if err != nil {
 		switch {
 		case errors.Is(err, service.ErrConnectionUnavailable):
 			respondError(w, http.StatusConflict, "connection_not_ready", err.Error(), nil)
+		case errors.Is(err, service.ErrJobAlreadyExists):
+			respondError(w, http.StatusConflict, "job_already_exists", err.Error(), nil)
 		default:
 			respondError(w, http.StatusInternalServerError, "query_exec_failed", err.Error(), nil)
 		}
