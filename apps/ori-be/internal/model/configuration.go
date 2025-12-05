@@ -3,8 +3,8 @@ package model
 import dto "github.com/crueladdict/ori/libs/contract/go"
 
 type PasswordConfig struct {
-	Type string `yaml:"type"` // Password provider type (plain_text, macos-keychain, etc.)
-	Key  string `yaml:"key"`  // The key/value for password retrieval
+	Type string `yaml:"type"`          // Password provider type (plain_text, shell, keychain)
+	Key  string `yaml:"key,omitempty"` // Provider-specific value (plain text, shell command, or keychain account)
 }
 
 type Configuration struct {
@@ -67,5 +67,9 @@ func clonePassword(src *PasswordConfig) *dto.PasswordConfig {
 	if src == nil {
 		return nil
 	}
-	return &dto.PasswordConfig{Type: src.Type, Key: src.Key}
+
+	return &dto.PasswordConfig{
+		Type: dto.PasswordConfigType(src.Type),
+		Key:  src.Key,
+	}
 }

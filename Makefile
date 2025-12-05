@@ -37,13 +37,14 @@ demo: build
 
 # PostgreSQL test database management
 postgres-up:
-	@echo "Starting PostgreSQL test database..."
+	@echo "Resetting PostgreSQL test database (fresh volume)..."
+	@docker compose -f testdata/docker-compose.yaml down -v --remove-orphans
 	@docker compose -f testdata/docker-compose.yaml up -d
 	@echo "PostgreSQL is running on localhost:5433"
 
 postgres-down:
 	@echo "Stopping PostgreSQL test database..."
-	@docker compose -f testdata/docker-compose.yaml down
+	@docker compose -f testdata/docker-compose.yaml down --remove-orphans
 
 postgres-clean:
 	@echo "Removing PostgreSQL test database and volumes..."

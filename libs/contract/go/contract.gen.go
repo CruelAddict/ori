@@ -24,6 +24,13 @@ const (
 	Success    ConnectionResultResult = "success"
 )
 
+// Defines values for PasswordConfigType.
+const (
+	Keychain  PasswordConfigType = "keychain"
+	PlainText PasswordConfigType = "plain_text"
+	Shell     PasswordConfigType = "shell"
+)
+
 // Defines values for QueryExecResponseStatus.
 const (
 	Failed  QueryExecResponseStatus = "failed"
@@ -89,9 +96,15 @@ type NodesResponse struct {
 
 // PasswordConfig defines model for PasswordConfig.
 type PasswordConfig struct {
-	Key  string `json:"key"`
-	Type string `json:"type"`
+	// Key Provider-specific identifier (plain text value, shell command, or keychain account)
+	Key string `json:"key"`
+
+	// Type Password provider type
+	Type PasswordConfigType `json:"type"`
 }
+
+// PasswordConfigType Password provider type
+type PasswordConfigType string
 
 // QueryExecOptions defines model for QueryExecOptions.
 type QueryExecOptions struct {

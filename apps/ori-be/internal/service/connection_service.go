@@ -86,6 +86,7 @@ func (cs *ConnectionService) RegisterAdapter(dbType string, factory ConnectionAd
 func (cs *ConnectionService) Connect(ctx context.Context, name string) ConnectOutcome {
 	handle, ok := cs.GetConnection(name)
 	if ok && handle != nil {
+		// TODO: move inside ping
 		pingCtx, cancel := context.WithTimeout(ctx, 250*time.Millisecond)
 		defer cancel()
 		if err := handle.Ping(pingCtx); err == nil {
@@ -113,6 +114,7 @@ func (cs *ConnectionService) openInBackground(name string) {
 		return
 	}
 
+	// TODO: get rid of this OOP slop
 	factory, ok := cs.adapterFactory(cfg.Type)
 	if !ok {
 		openErr := fmt.Errorf("unsupported database type: %s", cfg.Type)
@@ -220,3 +222,5 @@ func (cs *ConnectionService) adapterFactory(dbType string) (ConnectionAdapterFac
 	cs.factoryMu.RUnlock()
 	return factory, ok
 }
+
+// TODO: always use log with context

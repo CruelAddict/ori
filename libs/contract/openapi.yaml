@@ -190,8 +190,11 @@ components:
       properties:
         type:
           type: string
+          description: Password provider type
+          enum: [plain_text, shell, keychain]
         key:
           type: string
+          description: Provider-specific identifier (plain text value, shell command, or keychain account)
       required:
         - type
         - key

@@ -17,9 +17,27 @@ connections:
     password:
       type: "plain_text"
       key: "testpassword123"
+  - name: "pg-keychain"
+    type: "postgresql"
+    host: "localhost"
+    port: 5433
+    database: "testdb"
+    username: "kc_pg_user"
+    password:
+      type: "keychain"
+      key: "kc_pg_user"
   - name: "local-sqlite"
     type: "sqlite"
     database: "./sqlite/simple.db"
   - name: "long-names-sqlite"
     type: "sqlite"
     database: "./sqlite/long_names.db"
+  - name: "shell-password-example"
+    type: "postgresql"
+    host: "localhost"
+    port: 5433
+    database: "testdb"
+    username: "kc_pg_user"
+    password:
+      type: "shell"
+      key: "security find-generic-password -s \"ori.db\" -a \"kc_pg_user\" -w"

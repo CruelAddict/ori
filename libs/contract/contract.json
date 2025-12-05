@@ -163,12 +163,13 @@
             "description": "Password provider type",
             "enum": [
               "plain_text",
-              "macos-keychain"
+              "shell",
+              "keychain"
             ]
           },
           "key": {
             "type": "string",
-            "description": "The key/value for password retrieval"
+            "description": "Provider-specific value (password text, shell command, or keychain account)"
           }
         },
         "required": [

@@ -15,7 +15,7 @@ export type { ErrorPayload } from './models/ErrorPayload';
 export type { Node } from './models/Node';
 export type { NodeEdge } from './models/NodeEdge';
 export type { NodesResponse } from './models/NodesResponse';
-export type { PasswordConfig } from './models/PasswordConfig';
+export { PasswordConfig } from './models/PasswordConfig';
 export type { QueryExecOptions } from './models/QueryExecOptions';
 export type { QueryExecRequest } from './models/QueryExecRequest';
 export { QueryExecResponse } from './models/QueryExecResponse';

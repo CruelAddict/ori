@@ -75,13 +75,30 @@ func (cl *ConfigLoader) validate(config *model.Config) error {
 			if conn.Username == nil || *conn.Username == "" {
 				return fmt.Errorf("connection '%s': username is required", conn.Name)
 			}
-			if conn.Password == nil || conn.Password.Type == "" {
-				return fmt.Errorf("connection '%s': password.type is required", conn.Name)
-			}
-			if conn.Password.Key == "" {
-				return fmt.Errorf("connection '%s': password.key is required", conn.Name)
+			if err := cl.validatePassword(conn.Name, conn.Password); err != nil {
+				return err
 			}
 		}
+	}
+
+	return nil
+}
+
+func (cl *ConfigLoader) validatePassword(connName string, cfg *model.PasswordConfig) error {
+	if cfg == nil {
+		return fmt.Errorf("connection '%s': password configuration is required", connName)
+	}
+	if cfg.Type == "" {
+		return fmt.Errorf("connection '%s': password.type is required", connName)
+	}
+
+	switch cfg.Type {
+	case "plain_text", "shell", "keychain":
+		if cfg.Key == "" {
+			return fmt.Errorf("connection '%s': password.key is required", connName)
+		}
+	default:
+		return fmt.Errorf("connection '%s': password.type '%s' is not supported", connName, cfg.Type)
 	}
 
 	return nil

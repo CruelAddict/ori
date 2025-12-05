@@ -9,8 +9,8 @@ connections:
     database: string          # Database name
     username: string          # Database username
     password:                 # Password retrieval configuration
-      type: string            # Password provider type (plain_text, macos-keychain, etc.)
-      key: string             # The key/value for password retrieval
+      type: string            # Password provider type (plain_text, shell, keychain)
+      key: string             # Provider-specific value (password text, shell command, or keychain account)
 
 # Example:
 # connections:
