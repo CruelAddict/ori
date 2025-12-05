@@ -76,7 +76,7 @@ export function EditorPanel(props: EditorPanelProps) {
                         focusedBackgroundColor={palette().background}
                         cursorColor={palette().primary}
                         minHeight={3}
-                        maxHeight={12}
+                        maxHeight={"100%"}
                         onContentChange={handleChange}
                         onSubmit={handleSubmit}
                         keyBindings={[{ name: "return", action: "newline" }]}
