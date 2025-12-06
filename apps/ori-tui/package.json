@@ -17,8 +17,8 @@
     "typescript": "^5"
   },
   "dependencies": {
-    "@opentui/core": "^0.1.32",
-    "@opentui/solid": "^0.1.32",
+    "@opentui/core": "0.1.49",
+    "@opentui/solid": "0.1.49",
     "solid-js": "^1.9.9",
     "contract": "file:../../libs/contract/typescript",
     "axios": "^1.7.7",
