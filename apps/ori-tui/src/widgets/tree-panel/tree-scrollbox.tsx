@@ -1,4 +1,4 @@
-import type { BoxRenderable, ScrollBoxRenderable } from "@opentui/core";
+import { MouseEvent, type BoxRenderable, type ScrollBoxRenderable } from "@opentui/core";
 import { type Accessor, createContext, createEffect, onCleanup, type ParentProps, useContext } from "solid-js";
 import { createAutoscrollService } from "./tree-scroll/autoscroll-service.ts";
 import { createOverflowTracker } from "./tree-scroll/overflow-tracker.ts";
@@ -123,6 +123,16 @@ export function TreeScrollbox(props: TreeScrollboxProps) {
         autoscroll.setScrollBox(node);
         overflowTracker.setScrollBox(node);
         if (!scrollBox) return;
+        // @ts-expect-error onMouseEvent is protected in typings
+        const originalOnMouseEvent = scrollBox.onMouseEvent?.bind(scrollBox);
+        // @ts-expect-error override protected handler to gate horizontal wheel
+        scrollBox.onMouseEvent = (event: MouseEvent) => {
+            const direction = event.scroll?.direction;
+            if (event.type === "scroll" && (direction === "left" || direction === "right")) {
+                if (!overflowTracker.horizontalOverflow()) return;
+            }
+            originalOnMouseEvent?.(event);
+        };
         applyContentWidth(rowMetrics.contentWidth());
     };
 
