@@ -59,6 +59,7 @@ export function TreeNode(props: TreeNodeProps) {
                             fg={fg()}
                             wrapMode="none"
                             bg={bg()}
+                            selectable={false}
                         >
                             {isSelected() ? "> " : "  "}
                             {toggleGlyph()} {details.icon} {details.label}
@@ -68,6 +69,7 @@ export function TreeNode(props: TreeNodeProps) {
                                 attributes={TextAttributes.DIM}
                                 fg={palette().textMuted}
                                 wrapMode="none"
+                                selectable={false}
                             >
                                 {" "}
                                 {details.description}
@@ -77,6 +79,7 @@ export function TreeNode(props: TreeNodeProps) {
                             <text
                                 fg={palette().accent}
                                 wrapMode="none"
+                                selectable={false}
                             >
                                 {" "}
                                 {details.badges}

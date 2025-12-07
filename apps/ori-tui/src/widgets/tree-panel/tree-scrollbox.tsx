@@ -128,7 +128,7 @@ export function TreeScrollbox(props: TreeScrollboxProps) {
         // @ts-expect-error override protected handler to gate horizontal wheel
         scrollBox.onMouseEvent = (event: MouseEvent) => {
             const direction = event.scroll?.direction;
-            if (event.type === "scroll" && (direction === "left" || direction === "right")) {
+            if (event.type === "scroll" && (direction === "left" || direction === "right") || event.isSelecting) {
                 if (!overflowTracker.horizontalOverflow()) return;
             }
             originalOnMouseEvent?.(event);

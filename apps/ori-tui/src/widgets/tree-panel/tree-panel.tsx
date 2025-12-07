@@ -162,6 +162,7 @@ export function TreePanel(props: TreePanelProps) {
                                         <text
                                             attributes={TextAttributes.DIM}
                                             fg={palette().textMuted}
+                                            selectable={false}
                                         >
                                             Graph is empty. Try refreshing later.
                                         </text>
