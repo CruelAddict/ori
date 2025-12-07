@@ -7,11 +7,12 @@
     "dev": "bun run --watch src/index.tsx",
     "build": "./build.ts",
     "lint": "bunx biome check --reporter summary",
-    "lint:fix": "bunx biome check --write"
+    "lint:fix": "bunx biome check --write",
+    "postinstall": "patch -p1 -N -r- < patches/follow-redirects+1.15.11.patch || true"
   },
   "devDependencies": {
-    "@types/bun": "latest",
-    "@biomejs/biome": "^2.1.5"
+    "@biomejs/biome": "^2.1.5",
+    "@types/bun": "latest"
   },
   "peerDependencies": {
     "typescript": "^5"

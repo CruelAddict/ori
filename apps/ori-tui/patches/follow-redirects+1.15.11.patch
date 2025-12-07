@@ -1,0 +1,61 @@
+diff --git a/node_modules/follow-redirects/index.js b/node_modules/follow-redirects/index.js
+index a30b32c..f35224e 100644
+--- a/node_modules/follow-redirects/index.js
++++ b/node_modules/follow-redirects/index.js
+@@ -627,13 +627,18 @@ function removeMatchingHeaders(regex, headers) {
+ function createErrorType(code, message, baseClass) {
+   // Create constructor
+   function CustomError(properties) {
+-
+-    // istanbul ignore else
+-    if (isFunction(Error.captureStackTrace)) {
+-      Error.captureStackTrace(this, this.constructor);
+-    }
+-    Object.assign(this, properties || {});
+-    this.code = code;
+-    this.message = this.cause ? message + ": " + this.cause.message : message;
++    var Base = baseClass || Error;
++    var target = this instanceof Error ? this : new Base();
++    if (target !== this) {
++      Object.setPrototypeOf(target, CustomError.prototype);
++    }
++    var stackSource = new Error(target.message);
++    target.stack = stackSource.stack;
++    Object.assign(target, properties || {});
++    target.code = code;
++    target.message = target.cause ? message + ": " + target.cause.message : message;
++    return target;
+   }
+diff --git a/libs/contract/typescript/node_modules/follow-redirects/index.js b/libs/contract/typescript/node_modules/follow-redirects/index.js
+index a30b32c..f35224e 100644
+
+--- a/libs/contract/typescript/node_modules/follow-redirects/index.js
++++ b/libs/contract/typescript/node_modules/follow-redirects/index.js
+@@ -627,13 +627,18 @@ function removeMatchingHeaders(regex, headers) {
+ function createErrorType(code, message, baseClass) {
+   // Create constructor
+   function CustomError(properties) {
+
+-    // istanbul ignore else
+-    if (isFunction(Error.captureStackTrace)) {
+-      Error.captureStackTrace(this, this.constructor);
+-    }
+-    Object.assign(this, properties || {});
+-    this.code = code;
+-    this.message = this.cause ? message + ": " + this.cause.message : message;
++    var Base = baseClass || Error;
++    var target = this instanceof Error ? this : new Base();
++    if (target !== this) {
++      Object.setPrototypeOf(target, CustomError.prototype);
++    }
++    var stackSource = new Error(target.message);
++    target.stack = stackSource.stack;
++    Object.assign(target, properties || {});
++    target.code = code;
++    target.message = target.cause ? message + ": " + target.cause.message : message;
++    return target;
+   }
+ 
+   // Attach constructor and set default properties
+
+
