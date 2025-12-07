@@ -4,13 +4,14 @@ import type { OverlayManager } from "@app/overlay/overlay-store";
 import { ThemePickerOverlay } from "@app/overlay/ThemePickerOverlay";
 import { ClientProvider } from "@app/providers/client";
 import { EventStreamProvider } from "@app/providers/events";
-import { LoggerProvider } from "@app/providers/logger";
+import { LoggerProvider, useLogger } from "@app/providers/logger";
 import { NavigationProvider } from "@app/providers/navigation";
 import { OverlayProvider, useOverlayManager } from "@app/providers/overlay";
 import { ThemeProvider, useTheme } from "@app/providers/theme";
 import { RouteOutlet } from "@app/routes/RouteOutlet";
 import { useRouteNavigation } from "@app/routes/router";
-import { render } from "@opentui/solid";
+import { render, useRenderer } from "@opentui/solid";
+import { copyTextToClipboard } from "@shared/lib/clipboard";
 import { createLogger } from "@shared/lib/logger";
 import { KeymapProvider, KeyScope, SYSTEM_LAYER } from "@src/core/services/key-scopes";
 import { ConfigurationEntityProvider } from "@src/entities/configuration/providers/configuration-entity-provider";
@@ -33,6 +34,8 @@ function App() {
     const palette = theme;
     const overlays = useOverlayManager();
     const navigation = useRouteNavigation();
+    const renderer = useRenderer();
+    const logger = useLogger();
     const [welcomePickerOpened, setWelcomePickerOpened] = createSignal(false);
 
     createEffect(() => {
@@ -48,11 +51,30 @@ function App() {
         openConfigurationPicker(overlays);
     });
 
+    const handleMouseUp = async () => {
+        const text = renderer.getSelection?.()?.getSelectedText?.();
+        if (!text || text.length === 0) {
+            return;
+        }
+        try {
+            await copyTextToClipboard(text, { renderer, logger });
+        } catch (err) {
+            logger.error({ err }, "copy-on-select: failed to copy selection");
+        } finally {
+            try {
+                renderer.clearSelection?.();
+            } catch (err) {
+                logger.warn({ err }, "copy-on-select: failed to clear selection");
+            }
+        }
+    };
+
     return (
         <box
             flexDirection="column"
             flexGrow={1}
             backgroundColor={palette().background}
+            onMouseUp={handleMouseUp}
         >
             <GlobalHotkeys />
             <RouteOutlet />

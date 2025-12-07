@@ -5,3 +5,4 @@ export * from "./fuzzy";
 export * from "./keybind";
 export * from "./logger";
 export * from "./sse-client";
+export * from "./clipboard";
