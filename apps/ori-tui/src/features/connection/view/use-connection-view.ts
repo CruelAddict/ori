@@ -163,7 +163,7 @@ export function useConnectionView(options: UseConnectionViewOptions): Connection
         if (!editorOpen()) {
             return "q: open query console | ctrl+e: toggle tree";
         }
-        return "q: focus tree | ctrl+s: save | ctrl+e: toggle tree | ctrl+r: toggle results | ctrl+x h/j/k/l: move focus | ctrl+x enter: execute";
+        return "q: focus editor | ctrl+s: save | ctrl+e: toggle tree | ctrl+r: toggle results | ctrl+x h/j/k/l: move focus | ctrl+x enter: execute";
     });
 
     return {

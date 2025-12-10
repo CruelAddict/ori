@@ -94,6 +94,7 @@ export function ConnectionViewPage(props: ConnectionViewPageProps) {
                 }
                 vm.actions.focusEditor();
             },
+            when: () => !vm.editorPane.isFocused(),
             preventDefault: true,
         },
     ];

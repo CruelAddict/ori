@@ -1,10 +1,7 @@
 import { useTheme } from "@app/providers/theme";
-import { type MouseEvent, type TextareaRenderable } from "@opentui/core";
-import { type KeyBinding, KeyScope } from "@src/core/services/key-scopes";
 import type { EditorPaneViewModel } from "@src/features/editor-pane/use-editor-pane";
-import { createEffect, Show } from "solid-js";
-
-const EDITOR_SCOPE_ID = "connection-view.editor";
+import { Show, createEffect, createSignal } from "solid-js";
+import { Buffer, type BufferApi, type BufferPalette } from "./buffer";
 
 export type EditorPanelProps = {
     viewModel: EditorPaneViewModel;
@@ -12,76 +9,54 @@ export type EditorPanelProps = {
 
 export function EditorPanel(props: EditorPanelProps) {
     const pane = props.viewModel;
-    let textarea: TextareaRenderable | undefined;
     const { theme } = useTheme();
-    const palette = theme;
+    const paletteValue = theme();
+    const palette: BufferPalette = {
+        editorText: paletteValue.editorText,
+        primary: paletteValue.primary,
+    };
 
-    const bindings: KeyBinding[] = [
-        {
-            pattern: "escape",
-            handler: () => {
-                pane.unfocus();
-            },
-            preventDefault: true,
-        },
-    ];
+    const [bufferApi, setBufferApi] = createSignal<BufferApi>();
+    const [lastPushed, setLastPushed] = createSignal<{ text: string; version: string }>();
+
+    const handlePush = (text: string, version: string) => {
+        setLastPushed({ text, version });
+        pane.onQueryChange(text);
+    };
+
+    const handleUnfocus = () => {
+        pane.unfocus();
+    };
 
     createEffect(() => {
-        if (pane.isFocused() && textarea) {
-            textarea.focus();
-        } else {
-            textarea?.blur();
+        const api = bufferApi();
+        if (!api) {
+            return;
         }
-    });
-
-    createEffect(() => {
         const text = pane.queryText();
-        if (textarea && text !== textarea.plainText) {
-            textarea.setText(text, { history: false });
-        }
+        const pushed = lastPushed();
+        const version = pushed && pushed.text === text ? pushed.version : undefined;
+        api.acceptExternal(text, version);
     });
-
-    const handleChange = () => {
-        if (textarea) {
-            pane.onQueryChange(textarea.plainText);
-        }
-    };
-
-    const handleSubmit = () => {
-        if (!pane.isExecuting() && textarea && textarea.plainText.trim()) {
-            void pane.executeQuery();
-        }
-    };
 
     return (
-        <KeyScope
-            id={EDITOR_SCOPE_ID}
-            bindings={bindings}
-            enabled={pane.isFocused}
+        <box
+            flexDirection="column"
+            minHeight={3}
         >
-            <box flexDirection="column" minHeight={3}>
-                <textarea
-                    ref={(renderable: TextareaRenderable | undefined) => {
-                        textarea = renderable;
-                    }}
-                    placeholder={`Type to begin... (Enter inserts newline, Ctrl+X then Enter executes)`}
-                    textColor={palette().editorText}
-                    focusedTextColor={palette().editorText}
-                    cursorColor={palette().primary}
-                    selectable={true}
-                    onMouseDown={(event: MouseEvent) => {
-                        event.target?.focus();
-                    }}
-                    onContentChange={handleChange}
-                    onSubmit={handleSubmit}
-                    keyBindings={[{ name: "return", action: "newline" }]}
-                />
-                <Show when={pane.isExecuting()}>
-                    <box paddingTop={1}>
-                        <text fg={palette().warning}>Executing query...</text>
-                    </box>
-                </Show>
-            </box>
-        </KeyScope>
+            <Buffer
+                initialText={pane.queryText()}
+                isFocused={pane.isFocused}
+                palette={palette}
+                onPush={handlePush}
+                onUnfocus={handleUnfocus}
+                registerApi={setBufferApi}
+            />
+            <Show when={pane.isExecuting()}>
+                <box paddingTop={1}>
+                    <text fg={paletteValue.warning}>Executing query...</text>
+                </box>
+            </Show>
+        </box>
     );
 }
