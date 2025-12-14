@@ -108,20 +108,6 @@ export function Buffer(props: BufferProps) {
         debouncedPush.clear();
     });
 
-    const syncTextareasFromLines = (lines: Line[]) => {
-        textareaRefs.length = lines.length;
-        lines.forEach((line, idx) => {
-            const node = textareaRefs[idx];
-            if (!node || line.rendered) {
-                return;
-            }
-            if (node.plainText !== line.text) {
-                node.setText(line.text, { history: false });
-            }
-            setState("lines", idx, "rendered", true);
-        });
-    };
-
     const schedulePush = () => {
         debouncedPush();
     };
@@ -455,10 +441,6 @@ export function Buffer(props: BufferProps) {
             handler: (event: KeyEvent) => handleForwardDeleteKey(event),
         },
     ];
-
-    createEffect(() => {
-        syncTextareasFromLines(state.lines);
-    });
 
     createEffect(() => {
         const isFocused = props.isFocused();
