@@ -3,7 +3,7 @@ import { type Accessor, createSignal } from "solid-js";
 import { createStore } from "solid-js/store";
 import { type TextareaRenderable } from "@opentui/core";
 
-const DEBOUNCE_DEFAULT_MS = 200;
+const DEBOUNCE_DEFAULT_MS = 20;
 
 export type CursorContext = {
     index: number;
@@ -83,7 +83,7 @@ export function createBufferModel(options: BufferModelOptions): BufferModel {
         lineRefs.set(lineId, ref);
     };
 
-    const getLineRef = (index: number) => {
+    const getTextArea = (index: number) => {
         const line = state.lines[index];
         if (!line) {
             return undefined;
@@ -105,11 +105,7 @@ export function createBufferModel(options: BufferModelOptions): BufferModel {
         if (!line) {
             return "";
         }
-        const node = lineRefs.get(line.id);
-        if (node) {
-            return node.plainText;
-        }
-        return line.text;
+        return line.text
     };
 
     const emitPush = () => {
@@ -132,7 +128,7 @@ export function createBufferModel(options: BufferModelOptions): BufferModel {
     };
 
     const focusLine = (index: number, column: number) => {
-        const node = getLineRef(index);
+        const node = getTextArea(index);
         if (!node) {
             return;
         }
@@ -166,7 +162,7 @@ export function createBufferModel(options: BufferModelOptions): BufferModel {
     };
 
     const handleFocusChange = (isFocused: boolean) => {
-        const target = getLineRef(focusedRow());
+        const target = getTextArea(focusedRow());
         if (!target) {
             return;
         }
@@ -179,7 +175,7 @@ export function createBufferModel(options: BufferModelOptions): BufferModel {
 
     const getCursorContext = (): CursorContext | undefined => {
         const index = focusedRow();
-        const node = getLineRef(index);
+        const node = getTextArea(index);
         if (!node) {
             return undefined;
         }
@@ -189,7 +185,7 @@ export function createBufferModel(options: BufferModelOptions): BufferModel {
     };
 
     const handleContentChange = (index: number) => {
-        const node = getLineRef(index);
+        const node = getTextArea(index);
         const line = state.lines[index];
         if (!node || !line) {
             return;
@@ -238,7 +234,7 @@ export function createBufferModel(options: BufferModelOptions): BufferModel {
     };
 
     const handleEnter = (index: number) => {
-        const node = getLineRef(index);
+        const node = getTextArea(index);
         if (!node) {
             return;
         }
