@@ -1,3 +1,4 @@
+import { useTheme } from "@app/providers/theme";
 import { type KeyEvent, type MouseEvent, type TextareaRenderable } from "@opentui/core";
 import { type Accessor, For, Show, createEffect, createSignal, onCleanup, onMount } from "solid-js";
 import { debounce } from "@solid-primitives/scheduled";
@@ -7,29 +8,21 @@ import { type KeyBinding, KeyScope } from "@src/core/services/key-scopes";
 const BUFFER_SCOPE_ID = "connection-view.buffer";
 const DEBOUNCE_MS = 200;
 
-export type BufferPalette = {
-    editorText: string;
-    primary: string;
-};
-
 export type BufferApi = {
-    acceptExternal: (text: string, version?: string) => void;
-    flush: () => void;
+    setText: (text: string) => void;
     focus: () => void;
 };
 
 export type BufferProps = {
     initialText: string;
     isFocused: Accessor<boolean>;
-    palette: BufferPalette;
-    onPush?: (text: string, version: string) => void;
+    onTextChange: (text: string, info: { modified: boolean }) => void;
     onUnfocus?: () => void;
     registerApi?: (api: BufferApi) => void;
 };
 
 type CursorContext = {
     index: number;
-    node: TextareaRenderable;
     cursorCol: number;
     cursorRow: number;
     text: string;
@@ -38,45 +31,38 @@ type CursorContext = {
 type Line = {
     id: string;
     text: string;
+    rendered: boolean;
 };
 
 type BufferState = {
     lines: Line[];
+    contentModified: boolean;
 };
 
 let lineIdCounter = 0;
 const nextLineId = () => `line-${lineIdCounter++}`;
 
-function makeLine(text: string): Line {
-    return { id: nextLineId(), text };
+function makeLine(text: string, rendered: boolean): Line {
+    return { id: nextLineId(), text, rendered };
 }
 
-function makeLinesFromText(text: string): Line[] {
+function makeLinesFromText(text: string, rendered: boolean): Line[] {
     const parts = text.split("\n");
     const safeParts = parts.length > 0 ? parts : [""];
-    return safeParts.map((part) => makeLine(part));
-}
-
-
-function hashText(text: string): string {
-    const prime = 16777619;
-    let hash = 2166136261;
-    for (let i = 0; i < text.length; i += 1) {
-        hash ^= text.charCodeAt(i);
-        hash = Math.imul(hash, prime);
-    }
-    return `ext:${(hash >>> 0).toString(16)}`;
+    return safeParts.map((part) => makeLine(part, rendered));
 }
 
 export function Buffer(props: BufferProps) {
-    const [state, setState] = createStore<BufferState>({ lines: makeLinesFromText(props.initialText) });
+    const { theme } = useTheme();
+    const palette = theme();
+
+    const [state, setState] = createStore<BufferState>({
+        lines: makeLinesFromText(props.initialText, true),
+        contentModified: false,
+    });
     const [focusedRow, setFocusedRow] = createSignal(0);
     const [navColumn, setNavColumn] = createSignal(0);
-    const [lastVersion, setLastVersion] = createSignal(hashText(props.initialText));
-    const [localCounter, setLocalCounter] = createSignal(0);
     const textareaRefs: Array<TextareaRenderable | undefined> = [];
-    let suppressContentChange = false;
-    let pendingExternalText: string | undefined;
     let pushScheduled = false;
 
     const focusLine = (index: number, column: number) => {
@@ -112,11 +98,7 @@ export function Buffer(props: BufferProps) {
     const emitPush = () => {
         const lines = state.lines.map((_, i) => getLineText(i));
         const text = lines.join("\n");
-        const nextCount = localCounter() + 1;
-        const version = `local:${nextCount}`;
-        setLocalCounter(nextCount);
-        setLastVersion(version);
-        props.onPush?.(text, version);
+        props.onTextChange(text, { modified: state.contentModified });
     };
 
     const debouncedPush = debounce(() => {
@@ -130,30 +112,22 @@ export function Buffer(props: BufferProps) {
     });
 
     const syncTextareasFromLines = (lines: Line[]) => {
-        suppressContentChange = true;
         textareaRefs.length = lines.length;
         lines.forEach((line, idx) => {
             const node = textareaRefs[idx];
-            if (!node) {
+            if (!node || line.rendered) {
                 return;
             }
             if (node.plainText !== line.text) {
                 node.setText(line.text, { history: false });
             }
+            setState("lines", idx, "rendered", true);
         });
-        suppressContentChange = false;
     };
 
-    const acceptExternal = (text: string, version?: string) => {
-        const token = version ?? hashText(text);
-        if (token === lastVersion()) {
-            return;
-        }
-        const nextLines = makeLinesFromText(text);
-        setState("lines", nextLines);
-        setLastVersion(token);
-        clampFocus(nextLines);
-        syncTextareasFromLines(nextLines);
+    const schedulePush = () => {
+        pushScheduled = true;
+        debouncedPush();
     };
 
     const flush = () => {
@@ -165,9 +139,11 @@ export function Buffer(props: BufferProps) {
         emitPush();
     };
 
-    const schedulePush = () => {
-        pushScheduled = true;
-        debouncedPush();
+    const setText = (text: string) => {
+        const nextLines = makeLinesFromText(text, false);
+        setState({ lines: nextLines, contentModified: false });
+        clampFocus(nextLines);
+        schedulePush();
     };
 
     const focus = () => {
@@ -175,12 +151,8 @@ export function Buffer(props: BufferProps) {
     };
 
     onMount(() => {
-        const api: BufferApi = { acceptExternal, flush, focus };
+        const api: BufferApi = { setText, focus };
         props.registerApi?.(api);
-        if (pendingExternalText !== undefined) {
-            acceptExternal(pendingExternalText);
-            pendingExternalText = undefined;
-        }
     });
 
     const getCursorContext = (): CursorContext | undefined => {
@@ -191,7 +163,7 @@ export function Buffer(props: BufferProps) {
         }
         const cursor = node.logicalCursor;
         const text = getLineText(index);
-        return { index, node, cursorCol: cursor.col, cursorRow: cursor.row, text };
+        return { index, cursorCol: cursor.col, cursorRow: cursor.row, text };
     };
 
     const handleMouseDown = (index: number, event: MouseEvent) => {
@@ -201,33 +173,50 @@ export function Buffer(props: BufferProps) {
 
     const handleContentChange = (index: number) => {
         const node = textareaRefs[index];
-        if (!node || suppressContentChange) {
+        const line = state.lines[index];
+        if (!node || !line) {
             return;
         }
+
         const text = node.plainText;
-        if (!text.includes("\n")) {
-            schedulePush();
+
+        if (!line.rendered) {
+            setState("lines", index, { ...line, text, rendered: true });
             return;
         }
-        const pieces = text.split("\n");
-        const head = pieces[0] ?? "";
-        const tail = pieces.slice(1);
-        const targetIndex = index + tail.length;
-        setState("lines", (prev) => {
-            const next = [...prev];
-            const current = next[index];
-            if (!current) {
-                return prev;
-            }
-            const headLine: Line = { ...current, text: head };
-            const tailLines = tail.map((segment) => makeLine(segment));
-            next.splice(index, 1, headLine, ...tailLines);
-            return next;
-        });
-        setFocusedRow(targetIndex);
-        setNavColumn(tail[tail.length - 1]?.length ?? head.length);
+
+        if (text === line.text) {
+            return;
+        }
+
+        if (text.includes("\n")) {
+            const pieces = text.split("\n");
+            const head = pieces[0] ?? "";
+            const tail = pieces.slice(1);
+            const tailLines = tail.map((segment) => makeLine(segment, false));
+            setState("lines", (prev) => {
+                const next = [...prev];
+                const current = next[index];
+                if (!current) {
+                    return prev;
+                }
+                const headLine: Line = { ...current, text: head, rendered: false };
+                next.splice(index, 1, headLine, ...tailLines);
+                return next;
+            });
+            setState("contentModified", true);
+            const targetIndex = index + tail.length;
+            const targetCol = tail[tail.length - 1]?.length ?? head.length;
+            setFocusedRow(targetIndex);
+            setNavColumn(targetCol);
+            schedulePush();
+            queueMicrotask(() => focusLine(targetIndex, targetCol));
+            return;
+        }
+
+        setState("lines", index, { ...line, text, rendered: true });
+        setState("contentModified", true);
         schedulePush();
-        queueMicrotask(() => focusLine(targetIndex, navColumn()));
     };
 
     const handleEnter = (event: KeyEvent, index: number) => {
@@ -241,17 +230,18 @@ export function Buffer(props: BufferProps) {
         const before = value.slice(0, cursor.col);
         const after = value.slice(cursor.col);
         const nextIndex = index + 1;
+        const tailLine = makeLine(after, false);
         setState("lines", (prev) => {
             const next = [...prev];
             const current = next[index];
             if (!current) {
                 return prev;
             }
-            const headLine: Line = { ...current, text: before };
-            const tailLine = makeLine(after);
+            const headLine: Line = { ...current, text: before, rendered: false };
             next.splice(index, 1, headLine, tailLine);
             return next;
         });
+        setState("contentModified", true);
         setFocusedRow(nextIndex);
         setNavColumn(0);
         schedulePush();
@@ -271,10 +261,11 @@ export function Buffer(props: BufferProps) {
             if (!prevLine) {
                 return prev;
             }
-            const mergedLine: Line = { ...prevLine, text: prevText + currentText };
+            const mergedLine: Line = { ...prevLine, text: prevText + currentText, rendered: false };
             next.splice(prevIndex, 2, mergedLine);
             return next;
         });
+        setState("contentModified", true);
         const newCol = prevText.length;
         setFocusedRow(prevIndex);
         setNavColumn(newCol);
@@ -290,17 +281,18 @@ export function Buffer(props: BufferProps) {
             return;
         }
         const currentText = getLineText(index);
-        const nextText = getLineText(nextIndex);
+        const followingText = getLineText(nextIndex);
         setState("lines", (prev) => {
             const next = [...prev];
             const currentLine = next[index];
             if (!currentLine) {
                 return prev;
             }
-            const mergedLine: Line = { ...currentLine, text: currentText + nextText };
+            const mergedLine: Line = { ...currentLine, text: currentText + followingText, rendered: false };
             next.splice(index, 2, mergedLine);
             return next;
         });
+        setState("contentModified", true);
         const newCol = currentText.length;
         setFocusedRow(index);
         setNavColumn(newCol);
@@ -318,6 +310,7 @@ export function Buffer(props: BufferProps) {
         event.preventDefault();
         const targetCol = Math.min(navColumn(), getLineText(targetIndex).length);
         setFocusedRow(targetIndex);
+        setNavColumn(targetCol);
         queueMicrotask(() => focusLine(targetIndex, targetCol));
     };
 
@@ -421,72 +414,71 @@ export function Buffer(props: BufferProps) {
     };
 
     const bindings: KeyBinding[] = [
-         {
-             pattern: "escape",
-             handler: () => {
-                 flush();
-                 props.onUnfocus?.();
-             },
-             preventDefault: true,
-         },
-         {
-             pattern: "return",
-             handler: (event: KeyEvent) => handleReturnKey(event),
-         },
-         {
-             pattern: "up",
-             handler: (event: KeyEvent) => handleUpKey(event),
-         },
-         {
-             pattern: "down",
-             handler: (event: KeyEvent) => handleDownKey(event),
-         },
-         {
-             pattern: "left",
-             handler: (event: KeyEvent) => handleLeftKey(event),
-         },
-         {
-             pattern: "right",
-             handler: (event: KeyEvent) => handleRightKey(event),
-         },
-         {
-             pattern: "backspace",
-             handler: (event: KeyEvent) => handleBackwardDeleteKey(event),
-         },
-         {
-             pattern: "delete",
-             handler: (event: KeyEvent) => handleForwardDeleteKey(event),
-         },
-         {
-             pattern: "ctrl+h",
-             handler: (event: KeyEvent) => handleBackwardDeleteKey(event),
-         },
-         {
-             pattern: "ctrl+w",
-             handler: (event: KeyEvent) => handleBackwardDeleteKey(event),
-         },
-         {
-             pattern: "ctrl+d",
-             handler: (event: KeyEvent) => handleForwardDeleteKey(event),
-         },
-     ];
- 
-     createEffect(() => {
-         syncTextareasFromLines(state.lines);
-     });
- 
-     createEffect(() => {
-         const isFocused = props.isFocused();
-         const target = textareaRefs[focusedRow()];
-         if (!isFocused) {
-             target?.blur();
-             return;
-         }
-         if (target) {
-             focusLine(focusedRow(), navColumn());
-         }
-     });
+        {
+            pattern: "escape",
+            handler: () => {
+                flush();
+                props.onUnfocus?.();
+            },
+            preventDefault: true,
+        },
+        {
+            pattern: "return",
+            handler: (event: KeyEvent) => handleReturnKey(event),
+        },
+        {
+            pattern: "up",
+            handler: (event: KeyEvent) => handleUpKey(event),
+        },
+        {
+            pattern: "down",
+            handler: (event: KeyEvent) => handleDownKey(event),
+        },
+        {
+            pattern: "left",
+            handler: (event: KeyEvent) => handleLeftKey(event),
+        },
+        {
+            pattern: "right",
+            handler: (event: KeyEvent) => handleRightKey(event),
+        },
+        {
+            pattern: "backspace",
+            handler: (event: KeyEvent) => handleBackwardDeleteKey(event),
+        },
+        {
+            pattern: "delete",
+            handler: (event: KeyEvent) => handleForwardDeleteKey(event),
+        },
+        {
+            pattern: "ctrl+h",
+            handler: (event: KeyEvent) => handleBackwardDeleteKey(event),
+        },
+        {
+            pattern: "ctrl+w",
+            handler: (event: KeyEvent) => handleBackwardDeleteKey(event),
+        },
+        {
+            pattern: "ctrl+d",
+            handler: (event: KeyEvent) => handleForwardDeleteKey(event),
+        },
+    ];
 
+    createEffect(() => {
+        syncTextareasFromLines(state.lines);
+    });
+
+    createEffect(() => {
+        const isFocused = props.isFocused();
+        const target = textareaRefs[focusedRow()];
+        if (!isFocused) {
+            target?.blur();
+            return;
+        }
+        if (target) {
+            focusLine(focusedRow(), navColumn());
+        }
+    });
 
     return (
         <KeyScope
@@ -505,9 +497,9 @@ export function Buffer(props: BufferProps) {
                                         textareaRefs[index] = renderable;
                                     }}
                                     placeholder={`Type to begin... (Enter inserts line, Ctrl+X then Enter executes)`}
-                                    textColor={props.palette.editorText}
-                                    focusedTextColor={props.palette.editorText}
-                                    cursorColor={props.palette.primary}
+                                    textColor={palette.editorText}
+                                    focusedTextColor={palette.editorText}
+                                    cursorColor={palette.primary}
                                     selectable={true}
                                     keyBindings={[]}
                                     onMouseDown={(event: MouseEvent) => {
@@ -520,7 +512,7 @@ export function Buffer(props: BufferProps) {
                         }}
                     </For>
                     <Show when={state.lines.length === 0}>
-                        <text fg={props.palette.editorText}> </text>
+                        <text fg={palette.editorText}> </text>
                     </Show>
                 </box>
             </scrollbox>
