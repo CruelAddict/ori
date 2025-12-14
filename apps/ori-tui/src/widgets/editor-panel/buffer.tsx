@@ -229,7 +229,7 @@ export function Buffer(props: BufferProps) {
                                     onMouseDown={(event: MouseEvent) => {
                                         handleMouseDown(index, event);
                                     }}
-                                    onContentChange={() => bufferModel.handleContentChange(index)}
+                                    onContentChange={() => bufferModel.handleTextAreaChange(index)}
                                     initialValue={line.text}
                                 />
                             );

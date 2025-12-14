@@ -30,28 +30,6 @@ export type BufferModelOptions = {
     debounceMs?: number;
 };
 
-export type BufferModel = {
-    lines: Accessor<Line[]>;
-    focusedRow: Accessor<number>;
-    navColumn: Accessor<number>;
-    setLineRef: (lineId: string, ref: TextareaRenderable | undefined) => void;
-    setFocusedRow: (row: number) => void;
-    setNavColumn: (col: number) => void;
-    setText: (text: string) => void;
-    focusCurrent: () => void;
-    handleFocusChange: (isFocused: boolean) => void;
-    handleContentChange: (index: number) => void;
-    getCursorContext: () => CursorContext | undefined;
-    handleEnter: (index: number) => void;
-    handleBackwardMerge: (index: number) => void;
-    handleForwardMerge: (index: number) => void;
-    handleVerticalMove: (index: number, delta: -1 | 1) => void;
-    handleHorizontalJump: (index: number, toPrevious: boolean) => void;
-    clampFocus: (lines?: Line[]) => void;
-    flush: () => void;
-    dispose: () => void;
-};
-
 let lineIdCounter = 0;
 const nextLineId = () => `line-${lineIdCounter++}`;
 
@@ -65,7 +43,7 @@ function makeLinesFromText(text: string, rendered: boolean): Line[] {
     return safeParts.map((part) => makeLine(part, rendered));
 }
 
-export function createBufferModel(options: BufferModelOptions): BufferModel {
+export function createBufferModel(options: BufferModelOptions) {
     const [state, setState] = createStore<BufferState>({
         lines: makeLinesFromText(options.initialText, true),
         contentModified: false,
@@ -184,7 +162,7 @@ export function createBufferModel(options: BufferModelOptions): BufferModel {
         return { index, cursorCol: cursor.col, cursorRow: cursor.row, text };
     };
 
-    const handleContentChange = (index: number) => {
+    const handleTextAreaChange = (index: number) => {
         const node = getTextArea(index);
         const line = state.lines[index];
         if (!node || !line) {
@@ -364,7 +342,7 @@ export function createBufferModel(options: BufferModelOptions): BufferModel {
         setText,
         focusCurrent,
         handleFocusChange,
-        handleContentChange,
+        handleTextAreaChange,
         getCursorContext,
         handleEnter,
         handleBackwardMerge,
@@ -376,3 +354,5 @@ export function createBufferModel(options: BufferModelOptions): BufferModel {
         dispose,
     };
 }
+
+export type BufferModel = ReturnType<typeof createBufferModel>;
