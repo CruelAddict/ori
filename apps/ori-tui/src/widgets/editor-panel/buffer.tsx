@@ -63,7 +63,6 @@ export function Buffer(props: BufferProps) {
     const [focusedRow, setFocusedRow] = createSignal(0);
     const [navColumn, setNavColumn] = createSignal(0);
     const textareaRefs: Array<TextareaRenderable | undefined> = [];
-    let pushScheduled = false;
 
     const focusLine = (index: number, column: number) => {
         const node = textareaRefs[index];
@@ -102,12 +101,10 @@ export function Buffer(props: BufferProps) {
     };
 
     const debouncedPush = debounce(() => {
-        pushScheduled = false;
         emitPush();
     }, DEBOUNCE_MS);
 
     onCleanup(() => {
-        pushScheduled = false;
         debouncedPush.clear();
     });
 
@@ -126,15 +123,10 @@ export function Buffer(props: BufferProps) {
     };
 
     const schedulePush = () => {
-        pushScheduled = true;
         debouncedPush();
     };
 
     const flush = () => {
-        if (!pushScheduled) {
-            return;
-        }
-        pushScheduled = false;
         debouncedPush.clear();
         emitPush();
     };
