@@ -1,7 +1,7 @@
 import { useTheme } from "@app/providers/theme";
-import { type KeyEvent, type MouseEvent, type TextareaRenderable } from "@opentui/core";
-import { type Accessor, For, Show, createEffect, onCleanup, onMount } from "solid-js";
+import type { KeyEvent, MouseEvent, TextareaRenderable } from "@opentui/core";
 import { type KeyBinding, KeyScope } from "@src/core/services/key-scopes";
+import { type Accessor, createEffect, For, onCleanup, onMount, Show } from "solid-js";
 import { createBufferModel } from "./buffer-model";
 
 const BUFFER_SCOPE_ID = "connection-view.buffer";
@@ -209,7 +209,11 @@ export function Buffer(props: BufferProps) {
     });
 
     return (
-        <KeyScope id={BUFFER_SCOPE_ID} bindings={bindings} enabled={props.isFocused}>
+        <KeyScope
+            id={BUFFER_SCOPE_ID}
+            bindings={bindings}
+            enabled={props.isFocused}
+        >
             <scrollbox scrollbarOptions={{ visible: false }}>
                 <box flexDirection="column">
                     <For each={bufferModel.lines()}>

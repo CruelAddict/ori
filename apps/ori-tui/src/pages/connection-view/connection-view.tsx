@@ -6,7 +6,7 @@ import { EditorPanel } from "@src/widgets/editor-panel/editor-panel";
 import { ResultsPanel } from "@src/widgets/results-panel/results-panel";
 import { TreePanel } from "@src/widgets/tree-panel/tree-panel";
 import { WelcomePane } from "@src/widgets/welcome-pane/welcome-pane";
-import { Show, createEffect } from "solid-js";
+import { createEffect, Show } from "solid-js";
 
 export type ConnectionViewPageProps = {
     configurationName: string;

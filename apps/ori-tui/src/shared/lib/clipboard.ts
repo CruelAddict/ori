@@ -66,7 +66,7 @@ async function copyDarwin(text: string, logger?: Logger): Promise<boolean> {
         if (ok) return true;
     }
     if (commandExists("osascript")) {
-        const escaped = text.replace(/\\/g, "\\\\").replace(/"/g, '\\\"');
+        const escaped = text.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
         const script = `set the clipboard to "${escaped}"`;
         const ok = await run(["osascript", "-e", script]);
         if (ok) return true;

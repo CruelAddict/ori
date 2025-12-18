@@ -2,17 +2,7 @@ import { useTheme } from "@app/providers/theme";
 import { TextAttributes } from "@opentui/core";
 import { type KeyBinding, KeyScope } from "@src/core/services/key-scopes";
 import type { TreePaneViewModel } from "@src/features/tree-pane/use-tree-pane";
-import {
-    type Accessor,
-    createEffect,
-    createMemo,
-    createSelector,
-    createSignal,
-    For,
-    onCleanup,
-    onMount,
-    Show,
-} from "solid-js";
+import { type Accessor, createMemo, createSelector, createSignal, For, onCleanup, onMount, Show } from "solid-js";
 import { createTreeNodeMetrics, TreeNode } from "./tree-node.tsx";
 import { MIN_CONTENT_WIDTH } from "./tree-scroll/row-metrics.ts";
 import { TreeScrollbox, type TreeScrollboxApi } from "./tree-scrollbox.tsx";

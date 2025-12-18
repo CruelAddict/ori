@@ -1,4 +1,4 @@
-import { type TextareaRenderable } from "@opentui/core";
+import type { TextareaRenderable } from "@opentui/core";
 import { debounce } from "@shared/lib/debounce";
 import { type Accessor, createSignal } from "solid-js";
 import { createStore } from "solid-js/store";
@@ -83,7 +83,7 @@ export function createBufferModel(options: BufferModelOptions) {
         if (!line) {
             return "";
         }
-        return line.text
+        return line.text;
     };
 
     const emitPush = () => {
