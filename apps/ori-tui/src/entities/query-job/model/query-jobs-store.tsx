@@ -95,6 +95,7 @@ export function QueryJobsStoreProvider(props: QueryJobsStoreProviderProps) {
                 status: "failed",
                 error: err instanceof Error ? err.message : String(err),
             });
+            logger.error({ jobId, configurationName, err }, "query-jobs-store: query execution threw");
         }
     };
 
@@ -126,6 +127,7 @@ export function QueryJobsStoreProvider(props: QueryJobsStoreProviderProps) {
                     error: err instanceof Error ? err.message : String(err),
                     durationMs,
                 });
+                logger.error({ jobId, configurationName, err }, "query-jobs-store: failed to fetch query result");
             }
             return;
         }

@@ -1,7 +1,7 @@
-import { debounce } from "@solid-primitives/scheduled";
+import { type TextareaRenderable } from "@opentui/core";
+import { debounce } from "@shared/lib/debounce";
 import { type Accessor, createSignal } from "solid-js";
 import { createStore } from "solid-js/store";
-import { type TextareaRenderable } from "@opentui/core";
 
 const DEBOUNCE_DEFAULT_MS = 20;
 

@@ -20,7 +20,6 @@
   "dependencies": {
     "@opentui/core": "0.1.49",
     "@opentui/solid": "0.1.49",
-    "@solid-primitives/scheduled": "^1.5.2",
     "axios": "^1.7.7",
     "contract": "file:../../libs/contract/typescript",
     "fuzzysort": "^3.1.0",
