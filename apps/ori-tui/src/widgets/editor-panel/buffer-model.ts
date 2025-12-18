@@ -162,6 +162,41 @@ export function createBufferModel(options: BufferModelOptions) {
         return { index, cursorCol: cursor.col, cursorRow: cursor.row, text };
     };
 
+    const setRenderedLine = (index: number, text: string, line: Line) => {
+        setState("lines", index, { ...line, text, rendered: true });
+    };
+
+    const handleMultilineChange = (index: number, _line: Line, text: string) => {
+        const pieces = text.split("\n");
+        const head = pieces[0] ?? "";
+        const tail = pieces.slice(1);
+        const tailLines = tail.map((segment) => makeLine(segment, false));
+        setState("lines", (prev) => {
+            const next = [...prev];
+            const current = next[index];
+            if (!current) {
+                return prev;
+            }
+            const headLine: Line = { ...current, text: head, rendered: false };
+            next.splice(index, 1, headLine, ...tailLines);
+            return next;
+        });
+        syncRefsWithLines(state.lines);
+        setState("contentModified", true);
+        const targetIndex = index + tail.length;
+        const targetCol = tail[tail.length - 1]?.length ?? head.length;
+        setFocusedRow(targetIndex);
+        setNavColumn(targetCol);
+        schedulePush();
+        queueMicrotask(() => focusLine(targetIndex, targetCol));
+    };
+
+    const applyRenderedText = (index: number, line: Line, text: string) => {
+        setState("lines", index, { ...line, text, rendered: true });
+        setState("contentModified", true);
+        schedulePush();
+    };
+
     const handleTextAreaChange = (index: number) => {
         const node = getTextArea(index);
         const line = state.lines[index];
@@ -172,7 +207,7 @@ export function createBufferModel(options: BufferModelOptions) {
         const text = node.plainText;
 
         if (!line.rendered) {
-            setState("lines", index, { ...line, text, rendered: true });
+            setRenderedLine(index, text, line);
             return;
         }
 
@@ -181,34 +216,11 @@ export function createBufferModel(options: BufferModelOptions) {
         }
 
         if (text.includes("\n")) {
-            const pieces = text.split("\n");
-            const head = pieces[0] ?? "";
-            const tail = pieces.slice(1);
-            const tailLines = tail.map((segment) => makeLine(segment, false));
-            setState("lines", (prev) => {
-                const next = [...prev];
-                const current = next[index];
-                if (!current) {
-                    return prev;
-                }
-                const headLine: Line = { ...current, text: head, rendered: false };
-                next.splice(index, 1, headLine, ...tailLines);
-                return next;
-            });
-            syncRefsWithLines(state.lines);
-            setState("contentModified", true);
-            const targetIndex = index + tail.length;
-            const targetCol = tail[tail.length - 1]?.length ?? head.length;
-            setFocusedRow(targetIndex);
-            setNavColumn(targetCol);
-            schedulePush();
-            queueMicrotask(() => focusLine(targetIndex, targetCol));
+            handleMultilineChange(index, line, text);
             return;
         }
 
-        setState("lines", index, { ...line, text, rendered: true });
-        setState("contentModified", true);
-        schedulePush();
+        applyRenderedText(index, line, text);
     };
 
     const handleEnter = (index: number) => {

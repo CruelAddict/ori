@@ -2,7 +2,7 @@ import { useTheme } from "@app/providers/theme";
 import type { KeyEvent, MouseEvent, TextareaRenderable } from "@opentui/core";
 import { type KeyBinding, KeyScope } from "@src/core/services/key-scopes";
 import { type Accessor, createEffect, For, onCleanup, onMount, Show } from "solid-js";
-import { createBufferModel } from "./buffer-model";
+import { type BufferModel, type CursorContext, createBufferModel } from "./buffer-model";
 
 const BUFFER_SCOPE_ID = "connection-view.buffer";
 const DEBOUNCE_MS = 200;
@@ -19,6 +19,127 @@ export type BufferProps = {
     onUnfocus?: () => void;
     registerApi?: (api: BufferApi) => void;
 };
+
+function createBufferBindings(bufferModel: BufferModel, props: BufferProps): KeyBinding[] {
+    const withCursor = (handler: (ctx: CursorContext, event: KeyEvent) => void) => (event: KeyEvent) => {
+        const ctx = bufferModel.getCursorContext();
+        if (!ctx) {
+            return;
+        }
+        handler(ctx, event);
+    };
+
+    return [
+        {
+            pattern: "escape",
+            handler: () => {
+                bufferModel.flush();
+                props.onUnfocus?.();
+            },
+            preventDefault: true,
+        },
+        {
+            pattern: "return",
+            handler: withCursor((ctx, event) => {
+                event.preventDefault();
+                bufferModel.handleEnter(ctx.index);
+            }),
+        },
+        {
+            pattern: "up",
+            handler: withCursor((ctx, event) => {
+                event.preventDefault();
+                bufferModel.setNavColumn(ctx.cursorCol);
+                bufferModel.handleVerticalMove(ctx.index, -1);
+            }),
+        },
+        {
+            pattern: "down",
+            handler: withCursor((ctx, event) => {
+                event.preventDefault();
+                bufferModel.setNavColumn(ctx.cursorCol);
+                bufferModel.handleVerticalMove(ctx.index, 1);
+            }),
+        },
+        {
+            pattern: "left",
+            handler: withCursor((ctx, event) => {
+                bufferModel.setNavColumn(ctx.cursorCol);
+                const atStart = ctx.cursorCol === 0 && ctx.cursorRow === 0;
+                if (atStart) {
+                    event.preventDefault();
+                    bufferModel.handleHorizontalJump(ctx.index, true);
+                }
+            }),
+        },
+        {
+            pattern: "right",
+            handler: withCursor((ctx, event) => {
+                bufferModel.setNavColumn(ctx.cursorCol);
+                const atEnd = ctx.cursorCol === ctx.text.length && ctx.cursorRow === 0;
+                if (atEnd) {
+                    event.preventDefault();
+                    bufferModel.handleHorizontalJump(ctx.index, false);
+                }
+            }),
+        },
+        {
+            pattern: "backspace",
+            handler: withCursor((ctx, event) => {
+                bufferModel.setNavColumn(ctx.cursorCol);
+                const atStart = ctx.cursorCol === 0 && ctx.cursorRow === 0;
+                if (atStart) {
+                    event.preventDefault();
+                    bufferModel.handleBackwardMerge(ctx.index);
+                }
+            }),
+        },
+        {
+            pattern: "delete",
+            handler: withCursor((ctx, event) => {
+                bufferModel.setNavColumn(ctx.cursorCol);
+                const atEnd = ctx.cursorCol === ctx.text.length && ctx.cursorRow === 0;
+                if (atEnd) {
+                    event.preventDefault();
+                    bufferModel.handleForwardMerge(ctx.index);
+                }
+            }),
+        },
+        {
+            pattern: "ctrl+h",
+            handler: withCursor((ctx, event) => {
+                bufferModel.setNavColumn(ctx.cursorCol);
+                const atStart = ctx.cursorCol === 0 && ctx.cursorRow === 0;
+                if (atStart) {
+                    event.preventDefault();
+                    bufferModel.handleBackwardMerge(ctx.index);
+                }
+            }),
+        },
+        {
+            pattern: "ctrl+w",
+            handler: withCursor((ctx, event) => {
+                bufferModel.setNavColumn(ctx.cursorCol);
+                const atStart = ctx.cursorCol === 0 && ctx.cursorRow === 0;
+                if (atStart) {
+                    event.preventDefault();
+                    bufferModel.handleBackwardMerge(ctx.index);
+                }
+            }),
+        },
+        {
+            pattern: "ctrl+d",
+            handler: withCursor((ctx, event) => {
+                bufferModel.setNavColumn(ctx.cursorCol);
+                const atEnd = ctx.cursorCol === ctx.text.length && ctx.cursorRow === 0;
+                if (atEnd) {
+                    event.preventDefault();
+                    bufferModel.handleForwardMerge(ctx.index);
+                }
+            }),
+        },
+    ];
+}
 
 export function Buffer(props: BufferProps) {
     const { theme } = useTheme();
@@ -53,156 +174,7 @@ export function Buffer(props: BufferProps) {
         bufferModel.setFocusedRow(index);
     };
 
-    const bindings: KeyBinding[] = [
-        {
-            pattern: "escape",
-            handler: () => {
-                bufferModel.flush();
-                props.onUnfocus?.();
-            },
-            preventDefault: true,
-        },
-        {
-            pattern: "return",
-            handler: (event: KeyEvent) => {
-                const ctx = bufferModel.getCursorContext();
-                if (!ctx) {
-                    return;
-                }
-                event.preventDefault();
-                bufferModel.handleEnter(ctx.index);
-            },
-        },
-        {
-            pattern: "up",
-            handler: (event: KeyEvent) => {
-                const ctx = bufferModel.getCursorContext();
-                if (!ctx) {
-                    return;
-                }
-                event.preventDefault();
-                bufferModel.setNavColumn(ctx.cursorCol);
-                bufferModel.handleVerticalMove(ctx.index, -1);
-            },
-        },
-        {
-            pattern: "down",
-            handler: (event: KeyEvent) => {
-                const ctx = bufferModel.getCursorContext();
-                if (!ctx) {
-                    return;
-                }
-                event.preventDefault();
-                bufferModel.setNavColumn(ctx.cursorCol);
-                bufferModel.handleVerticalMove(ctx.index, 1);
-            },
-        },
-        {
-            pattern: "left",
-            handler: (event: KeyEvent) => {
-                const ctx = bufferModel.getCursorContext();
-                if (!ctx) {
-                    return;
-                }
-                bufferModel.setNavColumn(ctx.cursorCol);
-                const atStart = ctx.cursorCol === 0 && ctx.cursorRow === 0;
-                if (atStart) {
-                    event.preventDefault();
-                    bufferModel.handleHorizontalJump(ctx.index, true);
-                }
-            },
-        },
-        {
-            pattern: "right",
-            handler: (event: KeyEvent) => {
-                const ctx = bufferModel.getCursorContext();
-                if (!ctx) {
-                    return;
-                }
-                bufferModel.setNavColumn(ctx.cursorCol);
-                const atEnd = ctx.cursorCol === ctx.text.length && ctx.cursorRow === 0;
-                if (atEnd) {
-                    event.preventDefault();
-                    bufferModel.handleHorizontalJump(ctx.index, false);
-                }
-            },
-        },
-        {
-            pattern: "backspace",
-            handler: (event: KeyEvent) => {
-                const ctx = bufferModel.getCursorContext();
-                if (!ctx) {
-                    return;
-                }
-                bufferModel.setNavColumn(ctx.cursorCol);
-                const atStart = ctx.cursorCol === 0 && ctx.cursorRow === 0;
-                if (atStart) {
-                    event.preventDefault();
-                    bufferModel.handleBackwardMerge(ctx.index);
-                }
-            },
-        },
-        {
-            pattern: "delete",
-            handler: (event: KeyEvent) => {
-                const ctx = bufferModel.getCursorContext();
-                if (!ctx) {
-                    return;
-                }
-                bufferModel.setNavColumn(ctx.cursorCol);
-                const atEnd = ctx.cursorCol === ctx.text.length && ctx.cursorRow === 0;
-                if (atEnd) {
-                    event.preventDefault();
-                    bufferModel.handleForwardMerge(ctx.index);
-                }
-            },
-        },
-        {
-            pattern: "ctrl+h",
-            handler: (event: KeyEvent) => {
-                const ctx = bufferModel.getCursorContext();
-                if (!ctx) {
-                    return;
-                }
-                bufferModel.setNavColumn(ctx.cursorCol);
-                const atStart = ctx.cursorCol === 0 && ctx.cursorRow === 0;
-                if (atStart) {
-                    event.preventDefault();
-                    bufferModel.handleBackwardMerge(ctx.index);
-                }
-            },
-        },
-        {
-            pattern: "ctrl+w",
-            handler: (event: KeyEvent) => {
-                const ctx = bufferModel.getCursorContext();
-                if (!ctx) {
-                    return;
-                }
-                bufferModel.setNavColumn(ctx.cursorCol);
-                const atStart = ctx.cursorCol === 0 && ctx.cursorRow === 0;
-                if (atStart) {
-                    event.preventDefault();
-                    bufferModel.handleBackwardMerge(ctx.index);
-                }
-            },
-        },
-        {
-            pattern: "ctrl+d",
-            handler: (event: KeyEvent) => {
-                const ctx = bufferModel.getCursorContext();
-                if (!ctx) {
-                    return;
-                }
-                bufferModel.setNavColumn(ctx.cursorCol);
-                const atEnd = ctx.cursorCol === ctx.text.length && ctx.cursorRow === 0;
-                if (atEnd) {
-                    event.preventDefault();
-                    bufferModel.handleForwardMerge(ctx.index);
-                }
-            },
-        },
-    ];
+    const bindings = createBufferBindings(bufferModel, props);
 
     createEffect(() => {
         bufferModel.handleFocusChange(props.isFocused());

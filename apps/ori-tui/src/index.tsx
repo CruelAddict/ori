@@ -70,6 +70,7 @@ function App() {
     };
 
     return (
+        /* biome-ignore lint/a11y/noStaticElementInteractions: root captures mouse selection for clipboard */
         <box
             flexDirection="column"
             flexGrow={1}
