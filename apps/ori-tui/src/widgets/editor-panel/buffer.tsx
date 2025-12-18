@@ -192,22 +192,27 @@ export function Buffer(props: BufferProps) {
                         {(line, indexAccessor) => {
                             const index = indexAccessor();
                             return (
-                                <textarea
-                                    ref={(renderable: TextareaRenderable | undefined) => {
-                                        bufferModel.setLineRef(line.id, renderable);
-                                    }}
-                                    placeholder={`Type to begin... (Enter inserts line, Ctrl+X then Enter executes)`}
-                                    textColor={palette.editorText}
-                                    focusedTextColor={palette.editorText}
-                                    cursorColor={palette.primary}
-                                    selectable={true}
-                                    keyBindings={[]}
-                                    onMouseDown={(event: MouseEvent) => {
-                                        handleMouseDown(index, event);
-                                    }}
-                                    onContentChange={() => bufferModel.handleTextAreaChange(index)}
-                                    initialValue={line.text}
-                                />
+                                <box flexDirection="row">
+                                    <box flexDirection="row" minWidth={3} justifyContent="flex-end" alignItems="flex-start" marginRight={1} >
+                                        <text maxHeight={1} fg={palette.textMuted}>{index + 1}</text>
+                                    </box>
+                                    <textarea
+                                        ref={(renderable: TextareaRenderable | undefined) => {
+                                            bufferModel.setLineRef(line.id, renderable);
+                                        }}
+                                        placeholder={`Type to begin... (Enter inserts line, Ctrl+X then Enter executes)`}
+                                        textColor={palette.editorText}
+                                        focusedTextColor={palette.editorText}
+                                        cursorColor={palette.primary}
+                                        selectable={true}
+                                        keyBindings={[]}
+                                        onMouseDown={(event: MouseEvent) => {
+                                            handleMouseDown(index, event);
+                                        }}
+                                        onContentChange={() => bufferModel.handleTextAreaChange(index)}
+                                        initialValue={line.text}
+                                    />
+                                </box>
                             );
                         }}
                     </For>
