@@ -186,7 +186,7 @@ export function Buffer(props: BufferProps) {
             bindings={bindings}
             enabled={props.isFocused}
         >
-            <scrollbox height={"100%"} scrollbarOptions={{ visible: true }}>
+            <scrollbox height={"100%"} >
                 <box flexDirection="column">
                     <For each={bufferModel.lines()}>
                         {(line, indexAccessor) => {
@@ -200,7 +200,6 @@ export function Buffer(props: BufferProps) {
                                         ref={(renderable: TextareaRenderable | undefined) => {
                                             bufferModel.setLineRef(line.id, renderable);
                                         }}
-                                        placeholder={`Type to begin... (Enter inserts line, Ctrl+X then Enter executes)`}
                                         textColor={palette.editorText}
                                         focusedTextColor={palette.editorText}
                                         cursorColor={palette.primary}
