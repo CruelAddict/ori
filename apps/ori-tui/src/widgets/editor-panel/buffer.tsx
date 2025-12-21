@@ -186,7 +186,7 @@ export function Buffer(props: BufferProps) {
             bindings={bindings}
             enabled={props.isFocused}
         >
-            <scrollbox scrollbarOptions={{ visible: false }}>
+            <scrollbox height={"100%"} scrollbarOptions={{ visible: true }}>
                 <box flexDirection="column">
                     <For each={bufferModel.lines()}>
                         {(line, indexAccessor) => {
