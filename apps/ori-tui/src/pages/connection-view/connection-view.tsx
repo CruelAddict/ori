@@ -71,14 +71,6 @@ export function ConnectionViewPage(props: ConnectionViewPageProps) {
             preventDefault: true,
         },
         {
-            pattern: "enter",
-            mode: "leader",
-            handler: () => {
-                void vm.actions.executeQuery();
-            },
-            preventDefault: true,
-        },
-        {
             pattern: "ctrl+s",
             handler: () => {
                 vm.editorPane.saveQuery();

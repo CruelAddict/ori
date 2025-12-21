@@ -1,4 +1,5 @@
 import { useTheme } from "@app/providers/theme";
+import { type KeyBinding, KeyScope } from "@src/core/services/key-scopes";
 import type { EditorPaneViewModel } from "@src/features/editor-pane/use-editor-pane";
 import { Show } from "solid-js";
 import { Buffer } from "./buffer";
@@ -20,25 +21,43 @@ export function EditorPanel(props: EditorPanelProps) {
     };
 
     const handleUnfocus = () => {
-        pane.unfocus();
-    };
+         pane.unfocus();
+     };
+ 
+     const keyBindings: KeyBinding[] = [
+         {
+             pattern: "enter",
+             mode: "leader",
+             handler: () => {
+                 void pane.executeQuery();
+             },
+             preventDefault: true,
+         },
+     ];
+ 
+     return (
+         <KeyScope
+             id="connection-view.editor"
+             bindings={keyBindings}
+             enabled={pane.isFocused}
+         >
+             <box
+                 flexDirection="column"
+                 minHeight={3}
+             >
+                 <Buffer
+                     initialText={pane.queryText()}
+                     isFocused={pane.isFocused}
+                     onTextChange={handleTextChange}
+                     onUnfocus={handleUnfocus}
+                 />
+                 <Show when={pane.isExecuting()}>
+                     <box paddingTop={1}>
+                         <text fg={paletteValue.warning}>Executing query...</text>
+                     </box>
+                 </Show>
+             </box>
+         </KeyScope>
+     );
+ }
 
-    return (
-        <box
-            flexDirection="column"
-            minHeight={3}
-        >
-            <Buffer
-                initialText={pane.queryText()}
-                isFocused={pane.isFocused}
-                onTextChange={handleTextChange}
-                onUnfocus={handleUnfocus}
-            />
-            <Show when={pane.isExecuting()}>
-                <box paddingTop={1}>
-                    <text fg={paletteValue.warning}>Executing query...</text>
-                </box>
-            </Show>
-        </box>
-    );
-}
