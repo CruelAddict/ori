@@ -71,7 +71,7 @@ export function TreeNode(props: TreeNodeProps) {
             when={entity()}
             keyed
         >
-            {(details: NodeEntity) => (
+            {(_: NodeEntity) => (
                 <>
                     <box
                         id={rowElementId(rowId())}
@@ -119,14 +119,6 @@ function rowElementId(rowId: string) {
     return `${ROW_ID_PREFIX}${rowId}`;
 }
 
-type TreeRowEntityLike = {
-    label?: string;
-    icon?: string;
-    description?: string;
-    badges?: string;
-    hasChildren?: boolean;
-};
-
 type RowTextParts = {
     indicator: string;
     main: string;
@@ -134,7 +126,8 @@ type RowTextParts = {
     badges?: string;
 };
 
-function buildRowTextParts(details: TreeRowEntityLike | undefined, expanded: boolean, selected: boolean): RowTextParts {
+function buildRowTextParts(details: NodeEntity | undefined, expanded: boolean, selected: boolean): RowTextParts {
+    // TODO: handle undefined? 
     const hasChildren = Boolean(details?.hasChildren);
     const glyph = hasChildren ? (expanded ? "[-]" : "[+]") : "   ";
     const icon = details?.icon ? `${details.icon}` : "";
@@ -161,7 +154,7 @@ function calculateRowWidth(parts: RowTextParts, depth: number): number {
 }
 
 export function createRowWidthAccessor(options: {
-    getEntity: (id: string) => TreeRowEntityLike | undefined;
+    getEntity: (id: string) => NodeEntity | undefined;
     isExpanded: (id: string) => boolean;
 }) {
     const { getEntity, isExpanded } = options;
