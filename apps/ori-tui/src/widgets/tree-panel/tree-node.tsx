@@ -4,6 +4,8 @@ import { TextAttributes } from "@opentui/core";
 import type { NodeEntity } from "@src/entities/schema-tree/model/node-entity";
 import type { TreePaneViewModel } from "@src/features/tree-pane/use-tree-pane";
 import { type Accessor, createEffect, createMemo, createSignal, For, Show } from "solid-js";
+import { type TreeRowSegment } from "./tree-row-renderable.ts";
+import "./tree-row-renderable.ts";
 import { type RowDescriptor, useTreeScrollRegistration } from "./tree-scrollbox.tsx";
 
 type TreeNodeProps = {
@@ -31,13 +33,18 @@ export function TreeNode(props: TreeNodeProps) {
     });
 
     const fg = () => (isSelected() && props.isFocused() ? palette().background : palette().text);
-    const bg = () => (isSelected() && props.isFocused() ? palette().primary : undefined);
+    const bg = () => (isSelected() && props.isFocused() ? palette().primary : palette().background);
 
-    const toggleGlyph = () => {
-        const details = entity();
-        if (!details?.hasChildren) return "   ";
-        return isExpanded() ? "[-]" : "[+]";
-    };
+    const rowParts = createMemo(() => buildRowTextParts(entity(), isExpanded(), isSelected()));
+    const rowSegments = createMemo(() =>
+        buildRowSegments(rowParts(), {
+            baseFg: fg(),
+            baseBg: bg(),
+            accent: palette().accent,
+            muted: palette().textMuted,
+        }),
+    );
+    const rowWidth = createMemo(() => calculateRowTextWidth(rowParts()));
 
     return (
         <Show
@@ -55,36 +62,13 @@ export function TreeNode(props: TreeNodeProps) {
                         ref={(node: BoxRenderable | undefined) => registerRowNode(rowId(), node)}
                         backgroundColor={bg()}
                     >
-                        <text
+                        <tree_row
+                            segments={rowSegments()}
+                            width={rowWidth()}
                             fg={fg()}
-                            wrapMode="none"
                             bg={bg()}
                             selectable={false}
-                        >
-                            {isSelected() ? "> " : "  "}
-                            {toggleGlyph()} {details.icon} {details.label}
-                        </text>
-                        {details.description && (
-                            <text
-                                attributes={TextAttributes.DIM}
-                                fg={palette().textMuted}
-                                wrapMode="none"
-                                selectable={false}
-                            >
-                                {" "}
-                                {details.description}
-                            </text>
-                        )}
-                        {details.badges && (
-                            <text
-                                fg={palette().accent}
-                                wrapMode="none"
-                                selectable={false}
-                            >
-                                {" "}
-                                {details.badges}
-                            </text>
-                        )}
+                        />
                     </box>
                     <Show when={childrenMounted()}>
                         <box
@@ -115,10 +99,74 @@ function rowElementId(rowId: string) {
     return `${ROW_ID_PREFIX}${rowId}`;
 }
 
+type TreeRowEntityLike = {
+    label?: string;
+    icon?: string;
+    description?: string;
+    badges?: string;
+    hasChildren?: boolean;
+};
+
+type RowTextParts = {
+    indicator: string;
+    main: string;
+    description?: string;
+    badges?: string;
+};
+
+function buildRowTextParts(details: TreeRowEntityLike | undefined, expanded: boolean, selected: boolean): RowTextParts {
+    const hasChildren = Boolean(details?.hasChildren);
+    const glyph = hasChildren ? (expanded ? "[-]" : "[+]") : "   ";
+    const icon = details?.icon ? `${details.icon}` : "";
+    const label = details?.label ?? "";
+    const indicator = selected ? "> " : "  ";
+    const main = `${glyph} ${icon} ${label}`;
+    return {
+        indicator,
+        main,
+        description: details?.description,
+        badges: details?.badges,
+    };
+}
+
+function calculateRowTextWidth(parts: RowTextParts): number {
+    let width = parts.indicator.length + parts.main.length;
+    if (parts.description) width += 1 + parts.description.length;
+    if (parts.badges) width += 1 + parts.badges.length;
+    return width;
+}
+
+function calculateRowWidth(parts: RowTextParts, depth: number): number {
+    return depth * 2 + calculateRowTextWidth(parts);
+}
+
+function buildRowSegments(
+    parts: RowTextParts,
+    colors: { baseFg: string; baseBg?: string; muted: string; accent: string },
+): TreeRowSegment[] {
+    const segments: TreeRowSegment[] = [
+        { text: `${parts.indicator}${parts.main}`, fg: colors.baseFg, bg: colors.baseBg },
+    ];
+    if (parts.description) {
+        segments.push({
+            text: ` ${parts.description}`,
+            fg: colors.muted,
+            bg: colors.baseBg,
+            attributes: TextAttributes.DIM,
+        });
+    }
+    if (parts.badges) {
+        segments.push({
+            text: ` ${parts.badges}`,
+            fg: colors.accent,
+            bg: colors.baseBg,
+        });
+    }
+    return segments;
+}
+
 type TreeNodeMetricsOptions = {
-    getEntity: (
-        id: string,
-    ) => { label: string; icon?: string; description?: string; badges?: string; hasChildren: boolean } | undefined;
+    getEntity: (id: string) => TreeRowEntityLike | undefined;
     isExpanded: (id: string) => boolean;
 };
 
@@ -127,25 +175,15 @@ export function createTreeNodeMetrics(options: TreeNodeMetricsOptions) {
     const cache = new Map<string, number>();
 
     return (row: RowDescriptor): number => {
-        const expanded = isExpanded(row.id) ? 1 : 0;
-        const key = `${row.id}@${row.depth}:${expanded}`;
+        const expanded = isExpanded(row.id);
+        const key = `${row.id}@${row.depth}:${expanded ? 1 : 0}`;
 
         const cached = cache.get(key);
         if (cached !== undefined) return cached;
 
         const entity = getEntity(row.id);
-        const hasChildren = Boolean(entity?.hasChildren);
-        let glyph = "   ";
-        if (hasChildren) {
-            glyph = expanded ? "[-]" : "[+]";
-        }
-        const indicator = "> ";
-        const icon = entity?.icon ? `${entity.icon}` : "";
-        let width = row.depth * 2;
-        const base = `${indicator}${glyph} ${icon} ${entity?.label ?? ""}`;
-        width += base.length;
-        if (entity?.description) width += 1 + entity.description.length;
-        if (entity?.badges) width += 1 + entity.badges.length;
+        const parts = buildRowTextParts(entity, expanded, false);
+        const width = calculateRowWidth(parts, row.depth);
 
         cache.set(key, width);
         return width;
