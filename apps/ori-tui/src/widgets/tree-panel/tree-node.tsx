@@ -165,12 +165,10 @@ function buildRowSegments(
     return segments;
 }
 
-type TreeNodeMetricsOptions = {
+export function createRowWidthAccessor(options: {
     getEntity: (id: string) => TreeRowEntityLike | undefined;
     isExpanded: (id: string) => boolean;
-};
-
-export function createTreeNodeMetrics(options: TreeNodeMetricsOptions) {
+}) {
     const { getEntity, isExpanded } = options;
     const cache = new Map<string, number>();
 
