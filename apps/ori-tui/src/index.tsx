@@ -86,6 +86,7 @@ function App() {
 
 function GlobalHotkeys() {
     const overlays = useOverlayManager();
+    const renderer = useRenderer();
 
     const openThemePicker = () => {
         setTimeout(() => {
@@ -124,6 +125,7 @@ function GlobalHotkeys() {
                     {
                         pattern: "ctrl+c",
                         handler: () => {
+                            renderer.destroy();
                             process.exit(0);
                         },
                         preventDefault: true,
@@ -175,7 +177,7 @@ export function main() {
                 </ClientProvider>
             </LoggerProvider>
         ),
-        { exitOnCtrlC: false },
+        { exitOnCtrlC: true },
     );
 }
 
