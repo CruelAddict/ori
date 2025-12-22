@@ -36,14 +36,34 @@ export function TreeNode(props: TreeNodeProps) {
     const bg = () => (isSelected() && props.isFocused() ? palette().primary : palette().background);
 
     const rowParts = createMemo(() => buildRowTextParts(entity(), isExpanded(), isSelected()));
-    const rowSegments = createMemo(() =>
-        buildRowSegments(rowParts(), {
+    const rowSegments = createMemo(() => {
+        const parts = rowParts();
+        const colors = {
             baseFg: fg(),
             baseBg: bg(),
             accent: palette().accent,
             muted: palette().textMuted,
-        }),
-    );
+        };
+        const segments: TreeRowSegment[] = [
+            { text: `${parts.indicator}${parts.main}`, fg: colors.baseFg, bg: colors.baseBg },
+        ];
+        if (parts.description) {
+            segments.push({
+                text: ` ${parts.description}`,
+                fg: colors.muted,
+                bg: colors.baseBg,
+                attributes: TextAttributes.DIM,
+            });
+        }
+        if (parts.badges) {
+            segments.push({
+                text: ` ${parts.badges}`,
+                fg: colors.accent,
+                bg: colors.baseBg,
+            });
+        }
+        return segments;
+    });
     const rowWidth = createMemo(() => calculateRowTextWidth(rowParts()));
 
     return (
@@ -138,31 +158,6 @@ function calculateRowTextWidth(parts: RowTextParts): number {
 
 function calculateRowWidth(parts: RowTextParts, depth: number): number {
     return depth * 2 + calculateRowTextWidth(parts);
-}
-
-function buildRowSegments(
-    parts: RowTextParts,
-    colors: { baseFg: string; baseBg?: string; muted: string; accent: string },
-): TreeRowSegment[] {
-    const segments: TreeRowSegment[] = [
-        { text: `${parts.indicator}${parts.main}`, fg: colors.baseFg, bg: colors.baseBg },
-    ];
-    if (parts.description) {
-        segments.push({
-            text: ` ${parts.description}`,
-            fg: colors.muted,
-            bg: colors.baseBg,
-            attributes: TextAttributes.DIM,
-        });
-    }
-    if (parts.badges) {
-        segments.push({
-            text: ` ${parts.badges}`,
-            fg: colors.accent,
-            bg: colors.baseBg,
-        });
-    }
-    return segments;
 }
 
 export function createRowWidthAccessor(options: {
