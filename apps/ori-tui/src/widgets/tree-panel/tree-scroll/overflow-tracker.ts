@@ -15,6 +15,8 @@ export type OverflowTracker = {
     dispose(): void;
 };
 
+const MAX_ZERO_WIDTH_MEASURE_ATTEMPTS = 5;
+
 export function createOverflowTracker(options: OverflowTrackerOptions): OverflowTracker {
     const logger = useLogger();
     logger.debug({ options }, "Creating overflow tracker");
@@ -23,6 +25,7 @@ export function createOverflowTracker(options: OverflowTrackerOptions): Overflow
 
     let scrollBox: ScrollBoxRenderable | undefined;
     let measureHandle: ReturnType<typeof setTimeout> | null = null;
+    let zeroWidthAttempts = 0;
 
     // Deferred measurement — waits for layout to stabilize on next tick
     const scheduleMeasurement = () => {
@@ -41,10 +44,22 @@ export function createOverflowTracker(options: OverflowTrackerOptions): Overflow
         if (!scrollBox) {
             logger.debug("No scrollBox, resetting overflow state");
             setHasHorizontalOverflow(false);
+            zeroWidthAttempts = 0;
             return;
         }
 
         const viewportWidth = scrollBox.viewport?.width ?? 0;
+        if (viewportWidth <= 0) {
+            zeroWidthAttempts += 1;
+            if (zeroWidthAttempts >= MAX_ZERO_WIDTH_MEASURE_ATTEMPTS) {
+                logger.debug({ zeroWidthAttempts }, "Stopping auto-reschedule after repeated zero widths");
+                return;
+            }
+            scheduleMeasurement();
+            return;
+        }
+
+        zeroWidthAttempts = 0;
         const naturalWidth = options.getNaturalWidth();
         const previousOverflow = hasHorizontalOverflow();
         const hasOverflow = naturalWidth > viewportWidth;
