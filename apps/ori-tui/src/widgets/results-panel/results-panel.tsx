@@ -58,6 +58,7 @@ export function ResultsPanel(props: ResultsPanelProps) {
                     flexGrow={1}
                     border={["top"]}
                     borderColor={palette().backgroundElement}
+                    marginBottom={1}
                 >
                     <box
                         flexDirection="column"
