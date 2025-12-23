@@ -190,11 +190,10 @@ export function Buffer(props: BufferProps) {
                 <box flexDirection="column">
                     <For each={bufferModel.lines()}>
                         {(line, indexAccessor) => {
-                            const index = indexAccessor();
                             return (
                                 <box flexDirection="row">
                                     <box flexDirection="row" minWidth={3} justifyContent="flex-end" alignItems="flex-start" marginRight={1} >
-                                        <text maxHeight={1} fg={palette.textMuted}>{index + 1}</text>
+                                        <text maxHeight={1} fg={palette.textMuted}>{indexAccessor() + 1}</text>
                                     </box>
                                     <textarea
                                         ref={(renderable: TextareaRenderable | undefined) => {
@@ -206,9 +205,9 @@ export function Buffer(props: BufferProps) {
                                         selectable={true}
                                         keyBindings={[]}
                                         onMouseDown={(event: MouseEvent) => {
-                                            handleMouseDown(index, event);
+                                            handleMouseDown(indexAccessor(), event);
                                         }}
-                                        onContentChange={() => bufferModel.handleTextAreaChange(index)}
+                                        onContentChange={() => bufferModel.handleTextAreaChange(indexAccessor())}
                                         initialValue={line.text}
                                     />
                                 </box>
