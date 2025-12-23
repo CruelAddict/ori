@@ -74,7 +74,7 @@ export function TreeNode(props: TreeNodeProps) {
             {(_: NodeEntity) => (
                 <>
                     <box
-                        id={rowElementId(rowId())}
+                        id={`tree-row-${rowId()}`}
                         flexDirection="row"
                         paddingLeft={props.depth * 2}
                         minWidth={"100%"}
@@ -112,11 +112,6 @@ export function TreeNode(props: TreeNodeProps) {
             )}
         </Show>
     );
-}
-
-function rowElementId(rowId: string) {
-    const ROW_ID_PREFIX = "tree-row-";
-    return `${ROW_ID_PREFIX}${rowId}`;
 }
 
 type RowTextParts = {
