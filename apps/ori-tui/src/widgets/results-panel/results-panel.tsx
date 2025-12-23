@@ -106,7 +106,7 @@ export function ResultsPanel(props: ResultsPanelProps) {
                                                 >
                                                     {formatCell(column.name, maxColWidths()[index()])}
                                                 </text>
-                                                <Show when={index() < job()?.result?.columns.length - 1}>
+                                                <Show when={index() < (job()?.result?.columns.length ?? 0) - 1}>
                                                     <text
                                                         attributes={TextAttributes.DIM}
                                                         fg={palette().textMuted}
@@ -128,7 +128,7 @@ export function ResultsPanel(props: ResultsPanelProps) {
                                                 >
                                                     {"-".repeat(maxColWidths()[index()])}
                                                 </text>
-                                                <Show when={index() < job()?.result?.columns.length - 1}>
+                                                <Show when={index() < (job()?.result?.columns.length ?? 0) - 1}>
                                                     <text
                                                         attributes={TextAttributes.DIM}
                                                         fg={palette().textMuted}
