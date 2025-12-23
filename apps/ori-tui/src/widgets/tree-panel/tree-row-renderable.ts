@@ -23,7 +23,6 @@ type ParsedSegment = {
 };
 
 const DEFAULT_FG = parseColor("#ffffff");
-const TRANSPARENT_BG = parseColor("#00000000");
 
 const normalizeColor = (value: string | undefined, fallback?: RGBA) => {
     if (!value) return fallback;
