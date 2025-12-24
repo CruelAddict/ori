@@ -89,6 +89,7 @@ export async function main(argv = process.argv.slice(2)) {
         process.exit(1);
     }
 
+    installShutdownHooks(backendHandle);
     startTui({
         mode: parsed.mode,
         socketPath,
@@ -98,7 +99,6 @@ export async function main(argv = process.argv.slice(2)) {
         theme: parsed.theme,
         logger,
     });
-    installShutdownHooks(backendHandle);
 }
 
 if (import.meta.main) {

@@ -139,7 +139,7 @@ export async function ensureBackendSocket(options: {
 
     try {
         await fs.unlink(socketPath);
-    } catch {}
+    } catch { }
 
     const backendPath = await findBackendBinary(backendPathOverride);
     const args = ["-config", configPath, "-socket", socketPath];
@@ -176,7 +176,7 @@ export async function ensureBackendSocket(options: {
         logger.error({ err }, "backend failed healthcheck after start");
         try {
             child.kill("SIGKILL");
-        } catch {}
+        } catch { }
         throw new Error(message);
     }
 
