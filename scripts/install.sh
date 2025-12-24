@@ -14,9 +14,8 @@ sudo mkdir -p /usr/local/libexec
 
 # Install binaries
 echo "Installing binaries..."
-sudo cp apps/ori-cli/bin/ori /usr/local/bin/ori
+sudo cp apps/ori-tui/bin/ori /usr/local/bin/ori
 sudo cp apps/ori-be/bin/ori-be /usr/local/libexec/ori-be
-sudo cp apps/ori-tui/bin/ori-tui /usr/local/libexec/ori-tui
 
 # Create config directory
 mkdir -p ~/.config/ori

@@ -4,7 +4,7 @@ import { TextAttributes } from "@opentui/core";
 import type { NodeEntity } from "@src/entities/schema-tree/model/node-entity";
 import type { TreePaneViewModel } from "@src/features/tree-pane/use-tree-pane";
 import { type Accessor, createEffect, createMemo, createSignal, For, Show } from "solid-js";
-import { type TreeRowSegment } from "./tree-row-renderable.ts";
+import type { TreeRowSegment } from "./tree-row-renderable.ts";
 import "./tree-row-renderable.ts";
 import { type RowDescriptor, useTreeScrollRegistration } from "./tree-scrollbox.tsx";
 
@@ -122,7 +122,7 @@ type RowTextParts = {
 };
 
 function buildRowTextParts(details: NodeEntity | undefined, expanded: boolean, selected: boolean): RowTextParts {
-    // TODO: handle undefined? 
+    // TODO: handle undefined?
     const hasChildren = Boolean(details?.hasChildren);
     const glyph = hasChildren ? (expanded ? "[-]" : "[+]") : "   ";
     const icon = details?.icon ? `${details.icon}` : "";

@@ -3,7 +3,6 @@
 build:
 	@echo "Building all components..."
 	@$(MAKE) -C apps/ori-be build
-	@$(MAKE) -C apps/ori-cli build
 	@$(MAKE) contract-ts-install
 	@$(MAKE) -C apps/ori-tui build
 	@echo "Build complete!"
@@ -11,7 +10,6 @@ build:
 clean:
 	@echo "Cleaning all components..."
 	@$(MAKE) -C apps/ori-be clean
-	@$(MAKE) -C apps/ori-cli clean
 	@$(MAKE) -C apps/ori-tui clean
 	@echo "Clean complete!"
 
@@ -33,7 +31,7 @@ test:
 # Build everything and run the CLI with the test config
 demo: build
 	@echo "Starting demo with test config..."
-	@./apps/ori-cli/bin/ori -config testdata/config.yaml --log-level debug --ori-be-path ./apps/ori-be/bin/ori-be --ori-tui-path ./apps/ori-tui/bin/ori-tui
+	@./apps/ori-tui/bin/ori --config testdata/config.yaml --log-level debug --backend-path ./apps/ori-be/bin/ori-be
 
 # PostgreSQL test database management
 postgres-up:

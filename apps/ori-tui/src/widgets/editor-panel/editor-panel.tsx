@@ -21,43 +21,42 @@ export function EditorPanel(props: EditorPanelProps) {
     };
 
     const handleUnfocus = () => {
-         pane.unfocus();
-     };
- 
-     const keyBindings: KeyBinding[] = [
-         {
-             pattern: "enter",
-             mode: "leader",
-             handler: () => {
-                 void pane.executeQuery();
-             },
-             preventDefault: true,
-         },
-     ];
- 
-     return (
-         <KeyScope
-             id="connection-view.editor"
-             bindings={keyBindings}
-             enabled={pane.isFocused}
-         >
-             <box
-                 flexDirection="column"
-                 minHeight={3}
-             >
-                 <Buffer
-                     initialText={pane.queryText()}
-                     isFocused={pane.isFocused}
-                     onTextChange={handleTextChange}
-                     onUnfocus={handleUnfocus}
-                 />
-                 <Show when={pane.isExecuting()}>
-                     <box paddingTop={1}>
-                         <text fg={paletteValue.warning}>Executing query...</text>
-                     </box>
-                 </Show>
-             </box>
-         </KeyScope>
-     );
- }
+        pane.unfocus();
+    };
 
+    const keyBindings: KeyBinding[] = [
+        {
+            pattern: "enter",
+            mode: "leader",
+            handler: () => {
+                void pane.executeQuery();
+            },
+            preventDefault: true,
+        },
+    ];
+
+    return (
+        <KeyScope
+            id="connection-view.editor"
+            bindings={keyBindings}
+            enabled={pane.isFocused}
+        >
+            <box
+                flexDirection="column"
+                minHeight={3}
+            >
+                <Buffer
+                    initialText={pane.queryText()}
+                    isFocused={pane.isFocused}
+                    onTextChange={handleTextChange}
+                    onUnfocus={handleUnfocus}
+                />
+                <Show when={pane.isExecuting()}>
+                    <box paddingTop={1}>
+                        <text fg={paletteValue.warning}>Executing query...</text>
+                    </box>
+                </Show>
+            </box>
+        </KeyScope>
+    );
+}

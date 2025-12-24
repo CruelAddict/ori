@@ -1,4 +1,11 @@
-import { OptimizedBuffer, parseColor, Renderable, type RenderContext, type RenderableOptions, type RGBA } from "@opentui/core";
+import {
+    type OptimizedBuffer,
+    parseColor,
+    Renderable,
+    type RenderableOptions,
+    type RenderContext,
+    type RGBA,
+} from "@opentui/core";
 import { extend } from "@opentui/solid";
 
 export type TreeRowSegment = {

@@ -15,7 +15,7 @@ process.chdir(dir);
 import pkg from "./package.json";
 
 const versionLabel = pkg?.version ? ` v${pkg.version}` : "";
-console.log(`Building ori-tui${versionLabel}...`);
+console.log(`Building ori${versionLabel}...`);
 
 type BunBuildConfig = Parameters<typeof Bun.build>[0];
 type CompileOptions = NonNullable<BunBuildConfig["compile"]>;
@@ -27,7 +27,7 @@ const buildConfig: BunBuildConfig = {
     plugins: [solidPlugin],
     compile: {
         target,
-        outfile: "bin/ori-tui",
+        outfile: "bin/ori",
     },
     entrypoints: ["./src/index.tsx"],
     minify: false, // Keep readable for debugging
@@ -35,4 +35,4 @@ const buildConfig: BunBuildConfig = {
 
 await Bun.build(buildConfig);
 
-console.log("✓ Build complete: bin/ori-tui");
+console.log("✓ Build complete: bin/ori");

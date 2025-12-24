@@ -147,7 +147,7 @@ func monitorParentAlive(done chan<- struct{}, cancel context.CancelFunc) {
 	// (fd 0=stdin, 1=stdout, 2=stderr, 3=parent pipe)
 	pipe := os.NewFile(3, "parent-pipe")
 	if pipe == nil {
-		// No pipe provided, running standalone (not from ori-cli)
+		// No pipe provided, running standalone (not from ori launcher)
 		return
 	}
 	defer func() { _ = pipe.Close() }()

@@ -70,12 +70,6 @@
             "style": {
                 "noNestedTernary": "warn",
                 "noInferrableTypes": "warn",
-                "useConsistentTypeDefinitions": {
-                    "level": "warn",
-                    "options": {
-                        "style": "type"
-                    }
-                },
                 "useImportType": "warn",
                 "useExportType": "warn"
             },

@@ -12,8 +12,8 @@ make install
 This will:
 - Build all components
 - Install `ori` to `/usr/local/bin/`
-- Install supporting binaries to `/usr/local/lib/ori/`
-- Create empy config file at `~/.config/ori/config.example.yaml`
+- Install backend `ori-be` to `/usr/local/libexec/`
+- Create empty config file at `~/.config/ori/config.example.yaml`
 
 ## Usage
 
@@ -35,9 +35,8 @@ make uninstall
 
 ```
 apps/
-  ori-cli/     # CLI entrypoint
   ori-be/      # Backend
-  ori-tui/     # Terminal UI
+  ori-tui/     # Terminal UI + CLI entrypoint
 libs/
   rpc-contract/ # RPC contract definition
   sdk/         # Client SDKs (Go, TypeScript)

@@ -186,14 +186,25 @@ export function Buffer(props: BufferProps) {
             bindings={bindings}
             enabled={props.isFocused}
         >
-            <scrollbox height={"100%"} >
+            <scrollbox height={"100%"}>
                 <box flexDirection="column">
                     <For each={bufferModel.lines()}>
                         {(line, indexAccessor) => {
                             return (
                                 <box flexDirection="row">
-                                    <box flexDirection="row" minWidth={3} justifyContent="flex-end" alignItems="flex-start" marginRight={1} >
-                                        <text maxHeight={1} fg={palette.textMuted}>{indexAccessor() + 1}</text>
+                                    <box
+                                        flexDirection="row"
+                                        minWidth={3}
+                                        justifyContent="flex-end"
+                                        alignItems="flex-start"
+                                        marginRight={1}
+                                    >
+                                        <text
+                                            maxHeight={1}
+                                            fg={palette.textMuted}
+                                        >
+                                            {indexAccessor() + 1}
+                                        </text>
                                     </box>
                                     <textarea
                                         ref={(renderable: TextareaRenderable | undefined) => {

@@ -1,6 +1,6 @@
 .PHONY: build clean install dev lint lint-fix
 
-BINARY_NAME=ori-tui
+BINARY_NAME=ori
 BIN_DIR=bin
 
 build:

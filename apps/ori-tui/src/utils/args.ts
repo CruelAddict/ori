@@ -1,1 +1,2 @@
-export * from "@shared/config/args";
+export * from "@cli/args/parse";
+export * from "@cli/args/types";

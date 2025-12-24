@@ -3,7 +3,7 @@ info:
   title: Ori Event Stream
   version: 1.0.0
   description: |
-    Server-Sent Events (SSE) channel used by ori-tui to receive backend lifecycle
+    Server-Sent Events (SSE) channel used by the ori TUI to receive backend lifecycle
     notifications (connection state changes, errors, etc.).
 servers:
   tcp:
