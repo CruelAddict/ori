@@ -187,7 +187,7 @@ export function Buffer(props: BufferProps) {
             enabled={props.isFocused}
         >
             <scrollbox height={"100%"}>
-                <box flexDirection="column">
+                <box flexDirection="column" paddingTop={1} >
                     <For each={bufferModel.lines()}>
                         {(line, indexAccessor) => {
                             return (
