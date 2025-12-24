@@ -25,7 +25,10 @@ export function hashPath(value: string): string {
     return crypto.createHash("sha256").update(value).digest("hex").slice(0, 8);
 }
 
-export function socketPathForConfig(runtimeDir: string, configPath: string): string {
-    const hashed = hashPath(configPath);
-    return path.join(runtimeDir, `ori-${hashed}.sock`);
+export function socketPathForConfig(runtimeDir: string, _: string): string {
+    // initially, the idea was to reuse backend that look at the same config. maybe we'll return to it one day, but not now
+    // const hashed = hashPath(configPath);
+    // return path.join(runtimeDir, `ori-${hashed}.sock`);
+    const random = crypto.randomBytes(8).toString("hex");
+    return path.join(runtimeDir, `ori-${random}.sock`);
 }
