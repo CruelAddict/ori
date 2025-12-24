@@ -180,9 +180,7 @@ export function parseArgs(args: string[]): ParsedArgs {
         logLevel,
         logLevelSet,
         socketPath,
-        socketProvided: socketPath !== undefined,
         serverAddress,
-        serverProvided: serverAddress !== undefined,
         mode,
         theme,
     };

@@ -7,9 +7,7 @@ export type ParsedArgs = {
     logLevel: LogLevel;
     logLevelSet: boolean;
     socketPath?: string;
-    socketProvided: boolean;
     serverAddress?: string;
-    serverProvided: boolean;
     mode: ClientMode;
     theme?: string;
 };

@@ -37,6 +37,30 @@ export async function healthcheckUnix(socketPath: string, timeoutMs: number): Pr
     }
 }
 
+export async function healthcheckTcp(host: string, port: number, timeoutMs: number): Promise<boolean> {
+    const client = axios.create({
+        baseURL: `http://${host}:${port}`,
+        timeout: timeoutMs,
+        validateStatus: () => true,
+    });
+
+    try {
+        const response = await client.get("/health");
+        if (response.status !== 200) {
+            return false;
+        }
+        let bodyText = "";
+        if (typeof response.data === "string") {
+            bodyText = response.data;
+        } else {
+            bodyText = String(response.data ?? "");
+        }
+        return bodyText.startsWith("ok");
+    } catch {
+        return false;
+    }
+}
+
 export async function cleanupStaleSockets(runtimeDir: string, logger?: Logger) {
     let entries: Array<{ name: string; isDirectory(): boolean }> = [];
     try {
@@ -98,7 +122,7 @@ async function waitForHealthy(socketPath: string, logger: Logger, attempts = 20,
     throw new Error("backend failed to become healthy in time");
 }
 
-export async function ensureBackend(options: {
+export async function ensureBackendSocket(options: {
     socketPath: string;
     backendPathOverride?: string;
     configPath: string;
@@ -157,4 +181,46 @@ export async function ensureBackend(options: {
     }
 
     return { socketPath, process: child, pipe, started: true };
+}
+
+async function ensureBackendTCP(options: { host: string; port: number; logger: Logger }): Promise<void> {
+    const { host, port, logger } = options;
+    const healthy = await healthcheckTcp(host, port, 400);
+    if (healthy) {
+        logger.info({ host, port }, "backend is healthy");
+    } else {
+        throw new Error(`backend at ${host}:${port} is not healthy`);
+    }
+}
+
+export async function ensureBackend(options: {
+    host?: string;
+    port?: number;
+    socketPath?: string;
+    configPath?: string;
+    backendPathOverride?: string;
+    logLevel?: LogLevel;
+    logLevelSet: boolean;
+    logger: Logger;
+}): Promise<BackendHandle | undefined> {
+    if (options.host !== undefined && options.port !== undefined) {
+        await ensureBackendTCP({ host: options.host, port: options.port, logger: options.logger });
+        return undefined;
+    }
+
+    if (!options.socketPath) {
+        throw new Error("socketPath is required for ensureBackend when host/port not provided");
+    }
+    if (!options.configPath) {
+        throw new Error("configPath is required for ensureBackend when host/port not provided");
+    }
+
+    return ensureBackendSocket({
+        socketPath: options.socketPath,
+        backendPathOverride: options.backendPathOverride,
+        configPath: options.configPath,
+        logLevel: options.logLevel,
+        logLevelSet: options.logLevelSet,
+        logger: options.logger,
+    });
 }

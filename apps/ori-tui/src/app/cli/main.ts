@@ -55,38 +55,38 @@ export async function main(argv = process.argv.slice(2)) {
     const parsed = parseArgs(argv);
     const logger = createLogger("ori", parsed.logLevel);
 
-    let backendHandle: BackendHandle | undefined;
-    let socketPath: string | undefined;
     let host: string | undefined;
     let port: number | undefined;
+    let socketPath: string | undefined;
+    let backendHandle: BackendHandle | undefined;
 
-    if (parsed.socketProvided && parsed.socketPath) {
-        socketPath = parsed.socketPath;
-        logger.info({ socketPath }, "using provided socket");
-    } else if (parsed.serverProvided && parsed.serverAddress) {
-        const server = parseServer(parsed.serverAddress);
-        host = server.host;
-        port = server.port;
-        logger.info({ host, port }, "using provided server");
-    } else {
-        try {
-            const configPath = await resolveConfigPath(parsed.configPath);
+    try {
+        const configPath = await resolveConfigPath(parsed.configPath);
+
+        if (parsed.serverAddress) {
+            const server = parseServer(parsed.serverAddress);
+            host = server.host;
+            port = server.port;
+        } else {
             const runtimeDir = await ensureRuntimeDir();
             await cleanupStaleSockets(runtimeDir, logger);
-            socketPath = socketPathForConfig(runtimeDir, configPath);
-            backendHandle = await ensureBackend({
-                socketPath,
-                backendPathOverride: parsed.backendPath,
-                configPath,
-                logLevel: parsed.logLevel,
-                logLevelSet: parsed.logLevelSet,
-                logger,
-            });
-        } catch (err) {
-            const message = err instanceof Error ? err.message : String(err);
-            logger.error({ err }, `ori: ${message}`);
-            process.exit(1);
+            socketPath = parsed.socketPath ?? socketPathForConfig(runtimeDir, configPath);
         }
+
+        backendHandle = await ensureBackend({
+            host,
+            port,
+            socketPath,
+            backendPathOverride: parsed.backendPath,
+            configPath,
+            logLevel: parsed.logLevel,
+            logLevelSet: parsed.logLevelSet,
+            logger,
+        });
+    } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        logger.error({ err }, `failed to connect to backend: ${message}`);
+        process.exit(1);
     }
 
     startTui({
