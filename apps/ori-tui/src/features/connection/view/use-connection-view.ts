@@ -30,7 +30,6 @@ export type ConnectionViewActions = {
 
 export type ConnectionViewModel = {
     title: Accessor<string>;
-    helpText: Accessor<string>;
     editorOpen: Accessor<boolean>;
     treePane: TreePaneViewModel;
     editorPane: EditorPaneViewModel;
@@ -159,16 +158,8 @@ export function useConnectionView(options: UseConnectionViewOptions): Connection
         resultsPane.toggleVisible();
     };
 
-    const helpText = createMemo(() => {
-        if (!editorOpen()) {
-            return "q: open query console | ctrl+e: toggle tree";
-        }
-        return "q: focus editor | ctrl+s: save | ctrl+e: toggle tree | ctrl+r: toggle results | ctrl+x h/j/k/l: move focus | ctrl+x enter: execute";
-    });
-
     return {
         title,
-        helpText,
         editorOpen,
         treePane,
         editorPane,

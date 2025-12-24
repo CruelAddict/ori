@@ -6,6 +6,7 @@ import { EditorPanel } from "@src/widgets/editor-panel/editor-panel";
 import { ResultsPanel } from "@src/widgets/results-panel/results-panel";
 import { TreePanel } from "@src/widgets/tree-panel/tree-panel";
 import { WelcomePane } from "@src/widgets/welcome-pane/welcome-pane";
+import { Statusline } from "@src/widgets/statusline/statusline"
 import { createEffect, Show } from "solid-js";
 
 export type ConnectionViewPageProps = {
@@ -101,14 +102,6 @@ export function ConnectionViewPage(props: ConnectionViewPageProps) {
                 flexGrow={1}
                 backgroundColor={palette().background}
             >
-                <text
-                    fg={palette().accent}
-                    marginTop={1}
-                    marginLeft={3}
-                >
-                    {vm.title()}
-                </text>
-
                 <box
                     flexDirection="row"
                     flexGrow={1}
@@ -134,18 +127,8 @@ export function ConnectionViewPage(props: ConnectionViewPageProps) {
                     </box>
                 </box>
 
-                <box
-                    height={1}
-                    minWidth={"100%"}
-                >
-                    <text
-                        attributes={TextAttributes.DIM}
-                        fg={palette().textMuted}
-                    >
-                        {vm.helpText()}
-                    </text>
-                </box>
             </box>
+            <Statusline title={vm.title()} />
         </KeyScope>
     );
 }
