@@ -1,4 +1,7 @@
 import type { KeyEvent } from "@opentui/core";
+import { LEADER_KEY_PATTERN } from "@src/core/services/key-scopes";
+
+export type CommandPaletteSection = "System" | "Connection" | "Query";
 
 export type KeyBinding = {
   pattern: string;
@@ -8,6 +11,15 @@ export type KeyBinding = {
   preventDefault?: boolean;
   priority?: number;
   mode?: "normal" | "leader";
+  commandPaletteSection?: CommandPaletteSection;
+};
+
+export type Command = {
+  id: string;
+  title: string;
+  section: CommandPaletteSection;
+  keyPattern: string;
+  handler: () => void;
 };
 
 export const SYSTEM_LAYER = Number.POSITIVE_INFINITY;
@@ -96,5 +108,22 @@ export class KeyScopeStore {
       return -1;
     }
     return parent.depth;
+  }
+
+  getActiveCommands(): Command[] {
+    return Array.from(
+      this.scopes.values()
+        .filter(v => v.isEnabled())
+        .map(scope => scope.getBindings().filter(b => b.commandPaletteSection).map((binding, i): Command => {
+          return {
+            id: `${scope.id}-${i}`,
+            title: binding.description ?? "unnamed command",
+            section: binding.commandPaletteSection!,
+            keyPattern: `${(binding.mode == "leader") ? LEADER_KEY_PATTERN : ""} ${binding.pattern}`,
+            handler: () => binding.handler({} as KeyEvent),
+          }
+        }))
+        .flatMap(v => v)
+    )
   }
 }

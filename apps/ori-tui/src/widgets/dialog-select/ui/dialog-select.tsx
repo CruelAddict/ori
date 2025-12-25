@@ -144,6 +144,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
                       <box
                         paddingBottom={0}
                         paddingTop={groupIndex() > 0 ? 1 : 0}
+                        paddingLeft={2}
                       >
                         <text
                           fg={palette().accent}

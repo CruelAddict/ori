@@ -34,10 +34,12 @@ export function EditorPanel(props: EditorPanelProps) {
     {
       pattern: "enter",
       mode: "leader",
+      description: "Execute query",
       handler: () => {
         void pane.executeQuery();
       },
       preventDefault: true,
+      commandPaletteSection: "Query",
     },
   ];
 

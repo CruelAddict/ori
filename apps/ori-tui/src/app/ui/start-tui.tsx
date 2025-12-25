@@ -14,6 +14,7 @@ import { render, useRenderer } from "@opentui/solid";
 import { copyTextToClipboard } from "@shared/lib/clipboard";
 import type { ClientMode } from "@shared/lib/configurations-client";
 import type { LogLevel } from "@shared/lib/logger";
+import { CommandPalette } from "@src/features/commands-list";
 import { KeymapProvider, KeyScope, SYSTEM_LAYER } from "@src/core/services/key-scopes";
 import { ConfigurationEntityProvider } from "@src/entities/configuration/providers/configuration-entity-provider";
 import { ConnectionEntityProvider } from "@src/entities/connection/providers/connection-entity-provider";
@@ -112,6 +113,11 @@ function GlobalHotkeys() {
     openConfigurationPicker(overlays);
   };
 
+  const openCommandPalette = () => {
+    overlays.dismiss("command-palette");
+    overlays.show({ id: "command-palette", render: CommandPalette });
+  };
+
   return (
     <>
       <KeyScope
@@ -120,14 +126,18 @@ function GlobalHotkeys() {
           {
             pattern: "t",
             mode: "leader",
+            description: "Change theme",
             handler: openThemePicker,
             preventDefault: true,
+            commandPaletteSection: "System",
           },
           {
             pattern: "c",
             mode: "leader",
+            description: "Switch configuration",
             handler: openPickerFromHotkey,
             preventDefault: true,
+            commandPaletteSection: "Connection",
           },
         ]}
       />
@@ -141,6 +151,11 @@ function GlobalHotkeys() {
               renderer.destroy();
               process.exit(0);
             },
+            preventDefault: true,
+          },
+          {
+            pattern: "ctrl+p",
+            handler: openCommandPalette,
             preventDefault: true,
           },
         ]}

@@ -1,9 +1,9 @@
 import type { KeyEvent } from "@opentui/core";
 import { useKeyboard } from "@opentui/solid";
 import { Keybind, type KeyboardEventLike, type ParsedKeybind, useKeybind } from "@shared/lib/keybind";
-import { type KeyBinding, KeyScopeStore } from "@src/core/stores/key-scopes";
+import { type Command, type KeyBinding, KeyScopeStore } from "@src/core/stores/key-scopes";
 import type { Accessor, JSX, ParentComponent } from "solid-js";
-import { createContext, createUniqueId, onCleanup, useContext } from "solid-js";
+import { createContext, createMemo, createUniqueId, onCleanup, useContext } from "solid-js";
 
 type KeymapRuntime = {
   store: KeyScopeStore;
@@ -22,6 +22,8 @@ const ParentScopeContext = createContext<ParentScopeContextValue>({ id: null, la
 export type KeymapProviderProps = {
   children: JSX.Element;
 };
+
+export const LEADER_KEY_PATTERN = "ctrl+x";
 
 export const KeymapProvider: ParentComponent<KeymapProviderProps> = (props) => {
   const store = new KeyScopeStore();
@@ -138,7 +140,7 @@ function dispatchScopes({ scopes, parsed, mode, evt, awaitingLeader }: DispatchS
 }
 
 function shouldAwaitLeader(parsed: ParsedKeybind, awaitingLeader: boolean): boolean {
-  return !awaitingLeader && parsed.ctrl && parsed.name === "x";
+  return !awaitingLeader && Keybind.match(LEADER_KEY_PATTERN, parsed);
 }
 
 function useKeymapRuntime(): KeymapRuntime {
@@ -155,3 +157,9 @@ function isBindingsAccessor(value: KeyBinding[] | Accessor<KeyBinding[]>): value
 
 export type { KeyBinding } from "@src/core/stores/key-scopes";
 export { SYSTEM_LAYER } from "@src/core/stores/key-scopes";
+export type { Command } from "@src/core/stores/key-scopes";
+
+export function useActiveCommands(): Accessor<Command[]> {
+  const runtime = useKeymapRuntime();
+  return createMemo(() => runtime.store.getActiveCommands());
+}
