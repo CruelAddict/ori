@@ -1,6 +1,6 @@
-import { getAppDataDir } from "@shared/lib/data-storage";
 import { useTheme } from "@app/providers/theme";
-import { type Accessor, createContext, createSignal, type JSX, useContext } from "solid-js";
+import { getAppDataDir } from "@shared/lib/data-storage";
+import { type Accessor, createContext, createMemo, createSignal, type JSX, useContext } from "solid-js";
 
 type StatuslineState = {
     left: JSX.Element[];
@@ -24,20 +24,13 @@ export type StatuslineProviderProps = {
 
 export function StatuslineProvider(props: StatuslineProviderProps) {
     const { theme } = useTheme();
-    const palette = theme();
+    const [filePath, setFilePath] = createSignal<string | undefined>(undefined);
 
-    const [state, setState] = createSignal<StatuslineState>({
-        left: [
-            <text fg={palette.accent}>[CONN] {props.configurationName}</text>,
-        ],
-        right: [],
-    });
+    const state = createMemo<StatuslineState>(() => {
+        const palette = theme();
+        const left: JSX.Element[] = [<text fg={palette.accent}>[CONN] {props.configurationName}</text>];
 
-    const fileOpenedInBuffer = (path: string | undefined) => {
-        const left: JSX.Element[] = [
-            <text fg={palette.accent}>[CONN] {props.configurationName}</text>,
-        ];
-
+        const path = filePath();
         if (path) {
             const appDataDir = getAppDataDir();
             let displayPath = path;
@@ -53,7 +46,22 @@ export function StatuslineProvider(props: StatuslineProviderProps) {
             left[1] = <text fg={palette.textMuted}>{displayPath}</text>;
         }
 
-        setState({ left, right: [] });
+        return {
+            left,
+            right: [
+                <box
+                    flexDirection="row"
+                    maxHeight={1}
+                >
+                    <text fg={palette.text}>ctr+p </text>
+                    <text fg={palette.textMuted}>commands</text>
+                </box>,
+            ],
+        };
+    });
+
+    const fileOpenedInBuffer = (path: string | undefined) => {
+        setFilePath(path);
     };
 
     const value: StatuslineContextValue = {

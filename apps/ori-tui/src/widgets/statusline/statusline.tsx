@@ -1,26 +1,26 @@
-import { For, Show, type JSX, type JSXElement } from "solid-js";
+import { For, type JSXElement, Show } from "solid-js";
 import { useStatusline } from "./statusline-context";
 
 export { StatuslineProvider } from "./statusline-context";
 
 function elementsWithDelimiter(elements: JSXElement[], delimiter: string) {
-    return <For each={elements}>
-        {(item, index) => (
-            <>
-                <Show when={index() > 0}>
-                    <text>{delimiter}</text>
-                </Show>
-                {item}
-            </>
-        )}
-    </For>
-
+    return (
+        <For each={elements}>
+            {(item, index) => (
+                <>
+                    <Show when={index() > 0}>
+                        <text>{delimiter}</text>
+                    </Show>
+                    {item}
+                </>
+            )}
+        </For>
+    );
 }
 
 export function Statusline() {
     const statusline = useStatusline();
     const state = statusline.state;
-
 
     return (
         <box
@@ -31,14 +31,10 @@ export function Statusline() {
             marginTop={1}
             marginBottom={1}
             paddingLeft={3}
-            paddingRight={1}
+            paddingRight={3}
         >
-            <box flexDirection="row">
-                {elementsWithDelimiter(state().left, '  ')}
-            </box>
-            <box flexDirection="row">
-                {elementsWithDelimiter(state().right, '  ')}
-            </box>
+            <box flexDirection="row">{elementsWithDelimiter(state().left, "  ")}</box>
+            <box flexDirection="row">{elementsWithDelimiter(state().right, "  ")}</box>
         </box>
     );
 }
