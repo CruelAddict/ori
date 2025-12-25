@@ -1,5 +1,6 @@
 import { useTheme } from "@app/providers/theme";
 import { getAppDataDir } from "@shared/lib/data-storage";
+import path from "node:path";
 import { type Accessor, createContext, createMemo, createSignal, type JSX, useContext } from "solid-js";
 
 type StatuslineState = {
@@ -28,14 +29,22 @@ export function StatuslineProvider(props: StatuslineProviderProps) {
 
   const state = createMemo<StatuslineState>(() => {
     const palette = theme();
-    const left: JSX.Element[] = [<text fg={palette.accent}>[CONN] {props.configurationName}</text>];
+    const left: JSX.Element[] = [
+      <box
+        flexDirection="row"
+        maxHeight={1}
+      >
+        <text fg={palette.success}>• </text>
+        <text fg={palette.text}>{props.configurationName}</text>
+      </box>
+    ]
 
-    const path = filePath();
-    if (path) {
+    const pathValue = filePath();
+    if (pathValue) {
       const appDataDir = getAppDataDir();
-      let displayPath = path;
-      if (path.startsWith(appDataDir)) {
-        const relativePath = path.slice(appDataDir.length);
+      let displayPath = pathValue;
+      if (pathValue.startsWith(appDataDir)) {
+        const relativePath = pathValue.slice(appDataDir.length);
         const homeDir = process.env.HOME ?? "";
         if (appDataDir.startsWith(homeDir)) {
           displayPath = `~${relativePath}`;
@@ -43,7 +52,12 @@ export function StatuslineProvider(props: StatuslineProviderProps) {
           displayPath = relativePath;
         }
       }
-      left[1] = <text fg={palette.textMuted}>{displayPath}</text>;
+      left[1] = (
+        <box flexDirection="row">
+          <text fg={palette.textMuted}>{path.dirname(displayPath)}/</text>
+          <text fg={palette.text}>{path.basename(displayPath)}</text>
+        </box>
+      );
     }
 
     return {
