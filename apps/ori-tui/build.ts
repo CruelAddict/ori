@@ -23,14 +23,14 @@ type CompileOptions = NonNullable<BunBuildConfig["compile"]>;
 const target = `bun-${process.platform}-${process.arch}` as CompileOptions["target"];
 
 const buildConfig: BunBuildConfig = {
-    tsconfig: "./tsconfig.json",
-    plugins: [solidPlugin],
-    compile: {
-        target,
-        outfile: "bin/ori",
-    },
-    entrypoints: ["./src/index.tsx"],
-    minify: false, // Keep readable for debugging
+  tsconfig: "./tsconfig.json",
+  plugins: [solidPlugin],
+  compile: {
+    target,
+    outfile: "bin/ori",
+  },
+  entrypoints: ["./src/index.tsx"],
+  minify: false, // Keep readable for debugging
 };
 
 await Bun.build(buildConfig);

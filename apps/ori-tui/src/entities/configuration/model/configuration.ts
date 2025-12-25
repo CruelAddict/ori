@@ -1,8 +1,8 @@
 export type Configuration = {
-    name: string;
-    type: string;
-    host: string;
-    port: number;
-    database: string;
-    username: string;
+  name: string;
+  type: string;
+  host: string;
+  port: number;
+  database: string;
+  username: string;
 };

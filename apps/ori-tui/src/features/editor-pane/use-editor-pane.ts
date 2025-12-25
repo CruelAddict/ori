@@ -5,70 +5,70 @@ import type { Accessor } from "solid-js";
 import { createMemo, onMount } from "solid-js";
 
 export type EditorPaneViewModel = {
-    queryText: Accessor<string>;
-    currentJob: Accessor<QueryJob | undefined>;
-    isExecuting: Accessor<boolean>;
-    filePath: Accessor<string>;
-    onQueryChange: (text: string) => void;
-    executeQuery: () => Promise<void>;
-    saveQuery: () => boolean;
-    isFocused: Accessor<boolean>;
-    unfocus: () => void;
+  queryText: Accessor<string>;
+  currentJob: Accessor<QueryJob | undefined>;
+  isExecuting: Accessor<boolean>;
+  filePath: Accessor<string>;
+  onQueryChange: (text: string) => void;
+  executeQuery: () => Promise<void>;
+  saveQuery: () => boolean;
+  isFocused: Accessor<boolean>;
+  unfocus: () => void;
 };
 
 type UseEditorPaneOptions = {
-    configurationName: Accessor<string>;
-    focus: PaneFocusController;
-    unfocus: () => void;
+  configurationName: Accessor<string>;
+  focus: PaneFocusController;
+  unfocus: () => void;
 };
 
 export function useEditorPane(options: UseEditorPaneOptions): EditorPaneViewModel {
-    const queryJobs = useQueryJobs();
+  const queryJobs = useQueryJobs();
 
-    const queryText = createMemo(() => queryJobs.getQueryText(options.configurationName()));
-    const currentJob = createMemo(() => queryJobs.getJob(options.configurationName()));
-    const isExecuting = createMemo(() => currentJob()?.status === "running");
+  const queryText = createMemo(() => queryJobs.getQueryText(options.configurationName()));
+  const currentJob = createMemo(() => queryJobs.getJob(options.configurationName()));
+  const isExecuting = createMemo(() => currentJob()?.status === "running");
 
-    const onQueryChange = (text: string) => {
-        queryJobs.setQueryText(options.configurationName(), text);
-    };
+  const onQueryChange = (text: string) => {
+    queryJobs.setQueryText(options.configurationName(), text);
+  };
 
-    const executeQuery = async () => {
-        const text = queryText();
-        if (!text.trim()) {
-            return;
-        }
-        await queryJobs.executeQuery(options.configurationName(), text);
-    };
+  const executeQuery = async () => {
+    const text = queryText();
+    if (!text.trim()) {
+      return;
+    }
+    await queryJobs.executeQuery(options.configurationName(), text);
+  };
 
-    const saveQuery = (): boolean => {
-        const text = queryText();
-        return writeConsoleQuery(options.configurationName(), text);
-    };
+  const saveQuery = (): boolean => {
+    const text = queryText();
+    return writeConsoleQuery(options.configurationName(), text);
+  };
 
-    onMount(() => {
-        const name = options.configurationName();
-        const existing = queryJobs.getQueryText(name);
-        if (existing) {
-            return;
-        }
-        const saved = readConsoleQuery(name);
-        if (saved) {
-            queryJobs.setQueryText(name, saved);
-        }
-    });
+  onMount(() => {
+    const name = options.configurationName();
+    const existing = queryJobs.getQueryText(name);
+    if (existing) {
+      return;
+    }
+    const saved = readConsoleQuery(name);
+    if (saved) {
+      queryJobs.setQueryText(name, saved);
+    }
+  });
 
-    const filePath = createMemo(() => getConsoleFilePath(options.configurationName()));
+  const filePath = createMemo(() => getConsoleFilePath(options.configurationName()));
 
-    return {
-        queryText,
-        currentJob,
-        isExecuting,
-        filePath,
-        onQueryChange,
-        executeQuery,
-        saveQuery,
-        isFocused: options.focus.isFocused,
-        unfocus: options.unfocus,
-    };
+  return {
+    queryText,
+    currentJob,
+    isExecuting,
+    filePath,
+    onQueryChange,
+    executeQuery,
+    saveQuery,
+    isFocused: options.focus.isFocused,
+    unfocus: options.unfocus,
+  };
 }

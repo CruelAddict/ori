@@ -26,174 +26,174 @@ const AUTO_OPEN_WELCOME_PICKER = process.env.ORI_AUTO_OPEN_PICKER !== "0";
 type RendererHandle = ReturnType<typeof render>;
 
 type StartTuiOptions = {
-    mode: ClientMode;
-    socketPath?: string;
-    host?: string;
-    port?: number;
-    logLevel: LogLevel;
-    theme?: string;
-    logger: Logger;
+  mode: ClientMode;
+  socketPath?: string;
+  host?: string;
+  port?: number;
+  logLevel: LogLevel;
+  theme?: string;
+  logger: Logger;
 };
 
 function openConfigurationPicker(overlays: OverlayManager) {
-    setTimeout(() => {
-        overlays.dismiss("configuration-picker");
-        overlays.show({ id: "configuration-picker", render: ConfigurationPickerOverlay });
-    }, 0);
+  setTimeout(() => {
+    overlays.dismiss("configuration-picker");
+    overlays.show({ id: "configuration-picker", render: ConfigurationPickerOverlay });
+  }, 0);
 }
 
 function App() {
-    const { theme } = useTheme();
-    const palette = theme;
-    const overlays = useOverlayManager();
-    const navigation = useRouteNavigation();
-    const renderer = useRenderer();
-    const logger = useLogger();
-    const [welcomePickerOpened, setWelcomePickerOpened] = createSignal(false);
+  const { theme } = useTheme();
+  const palette = theme;
+  const overlays = useOverlayManager();
+  const navigation = useRouteNavigation();
+  const renderer = useRenderer();
+  const logger = useLogger();
+  const [welcomePickerOpened, setWelcomePickerOpened] = createSignal(false);
 
-    createEffect(() => {
-        const route = navigation.current();
-        if (route.type !== "welcome" || !AUTO_OPEN_WELCOME_PICKER) {
-            setWelcomePickerOpened(false);
-            return;
-        }
-        if (welcomePickerOpened()) {
-            return;
-        }
-        setWelcomePickerOpened(true);
-        openConfigurationPicker(overlays);
-    });
+  createEffect(() => {
+    const route = navigation.current();
+    if (route.type !== "welcome" || !AUTO_OPEN_WELCOME_PICKER) {
+      setWelcomePickerOpened(false);
+      return;
+    }
+    if (welcomePickerOpened()) {
+      return;
+    }
+    setWelcomePickerOpened(true);
+    openConfigurationPicker(overlays);
+  });
 
-    const handleMouseUp = async () => {
-        const text = renderer.getSelection?.()?.getSelectedText?.();
-        if (!text || text.length === 0) {
-            return;
-        }
-        try {
-            await copyTextToClipboard(text, { renderer, logger });
-        } catch (err) {
-            logger.error({ err }, "copy-on-select: failed to copy selection");
-        } finally {
-            try {
-                renderer.clearSelection?.();
-            } catch (err) {
-                logger.warn({ err }, "copy-on-select: failed to clear selection");
-            }
-        }
-    };
+  const handleMouseUp = async () => {
+    const text = renderer.getSelection?.()?.getSelectedText?.();
+    if (!text || text.length === 0) {
+      return;
+    }
+    try {
+      await copyTextToClipboard(text, { renderer, logger });
+    } catch (err) {
+      logger.error({ err }, "copy-on-select: failed to copy selection");
+    } finally {
+      try {
+        renderer.clearSelection?.();
+      } catch (err) {
+        logger.warn({ err }, "copy-on-select: failed to clear selection");
+      }
+    }
+  };
 
-    return (
-        /* biome-ignore lint/a11y/noStaticElementInteractions: root captures mouse selection for clipboard */
-        <box
-            flexDirection="column"
-            flexGrow={1}
-            backgroundColor={palette().background}
-            onMouseUp={handleMouseUp}
-        >
-            <GlobalHotkeys />
-            <RouteOutlet />
-            <OverlayHost />
-        </box>
-    );
+  return (
+    /* biome-ignore lint/a11y/noStaticElementInteractions: root captures mouse selection for clipboard */
+    <box
+      flexDirection="column"
+      flexGrow={1}
+      backgroundColor={palette().background}
+      onMouseUp={handleMouseUp}
+    >
+      <GlobalHotkeys />
+      <RouteOutlet />
+      <OverlayHost />
+    </box>
+  );
 }
 
 function GlobalHotkeys() {
-    const overlays = useOverlayManager();
-    const renderer = useRenderer();
+  const overlays = useOverlayManager();
+  const renderer = useRenderer();
 
-    const openThemePicker = () => {
-        setTimeout(() => {
-            overlays.dismiss("theme-picker");
-            overlays.show({ id: "theme-picker", render: ThemePickerOverlay });
-        }, 0);
-    };
+  const openThemePicker = () => {
+    setTimeout(() => {
+      overlays.dismiss("theme-picker");
+      overlays.show({ id: "theme-picker", render: ThemePickerOverlay });
+    }, 0);
+  };
 
-    const openPickerFromHotkey = () => {
-        openConfigurationPicker(overlays);
-    };
+  const openPickerFromHotkey = () => {
+    openConfigurationPicker(overlays);
+  };
 
-    return (
-        <>
-            <KeyScope
-                id="global"
-                bindings={[
-                    {
-                        pattern: "t",
-                        mode: "leader",
-                        handler: openThemePicker,
-                        preventDefault: true,
-                    },
-                    {
-                        pattern: "c",
-                        mode: "leader",
-                        handler: openPickerFromHotkey,
-                        preventDefault: true,
-                    },
-                ]}
-            />
-            <KeyScope
-                id="system-shortcuts"
-                layer={SYSTEM_LAYER}
-                bindings={[
-                    {
-                        pattern: "ctrl+c",
-                        handler: () => {
-                            renderer.destroy();
-                            process.exit(0);
-                        },
-                        preventDefault: true,
-                    },
-                ]}
-            />
-        </>
-    );
+  return (
+    <>
+      <KeyScope
+        id="global"
+        bindings={[
+          {
+            pattern: "t",
+            mode: "leader",
+            handler: openThemePicker,
+            preventDefault: true,
+          },
+          {
+            pattern: "c",
+            mode: "leader",
+            handler: openPickerFromHotkey,
+            preventDefault: true,
+          },
+        ]}
+      />
+      <KeyScope
+        id="system-shortcuts"
+        layer={SYSTEM_LAYER}
+        bindings={[
+          {
+            pattern: "ctrl+c",
+            handler: () => {
+              renderer.destroy();
+              process.exit(0);
+            },
+            preventDefault: true,
+          },
+        ]}
+      />
+    </>
+  );
 }
 
 export function startTui(options: StartTuiOptions): RendererHandle {
-    const host = options.host ?? "localhost";
-    const port = options.port ?? 8080;
-    const transport = options.socketPath ? "unix" : "tcp";
+  const host = options.host ?? "localhost";
+  const port = options.port ?? 8080;
+  const transport = options.socketPath ? "unix" : "tcp";
 
-    options.logger.info(
-        {
-            transport,
-            host: transport === "tcp" ? host : undefined,
-            port: transport === "tcp" ? port : undefined,
-            mode: options.mode,
-            socketPath: options.socketPath,
-            theme: options.theme,
-        },
-        "tui started",
-    );
+  options.logger.info(
+    {
+      transport,
+      host: transport === "tcp" ? host : undefined,
+      port: transport === "tcp" ? port : undefined,
+      mode: options.mode,
+      socketPath: options.socketPath,
+      theme: options.theme,
+    },
+    "tui started",
+  );
 
-    const clientOptions = options.socketPath
-        ? { mode: options.mode, socketPath: options.socketPath }
-        : { mode: options.mode, host, port };
+  const clientOptions = options.socketPath
+    ? { mode: options.mode, socketPath: options.socketPath }
+    : { mode: options.mode, host, port };
 
-    return render(
-        () => (
-            <LoggerProvider logger={options.logger}>
-                <ClientProvider options={clientOptions}>
-                    <EventStreamProvider>
-                        <ConfigurationEntityProvider>
-                            <ConnectionEntityProvider>
-                                <QueryJobsProvider>
-                                    <NavigationProvider>
-                                        <OverlayProvider>
-                                            <KeymapProvider>
-                                                <ThemeProvider defaultTheme={options.theme}>
-                                                    <App />
-                                                </ThemeProvider>
-                                            </KeymapProvider>
-                                        </OverlayProvider>
-                                    </NavigationProvider>
-                                </QueryJobsProvider>
-                            </ConnectionEntityProvider>
-                        </ConfigurationEntityProvider>
-                    </EventStreamProvider>
-                </ClientProvider>
-            </LoggerProvider>
-        ),
-        { exitOnCtrlC: true },
-    );
+  return render(
+    () => (
+      <LoggerProvider logger={options.logger}>
+        <ClientProvider options={clientOptions}>
+          <EventStreamProvider>
+            <ConfigurationEntityProvider>
+              <ConnectionEntityProvider>
+                <QueryJobsProvider>
+                  <NavigationProvider>
+                    <OverlayProvider>
+                      <KeymapProvider>
+                        <ThemeProvider defaultTheme={options.theme}>
+                          <App />
+                        </ThemeProvider>
+                      </KeymapProvider>
+                    </OverlayProvider>
+                  </NavigationProvider>
+                </QueryJobsProvider>
+              </ConnectionEntityProvider>
+            </ConfigurationEntityProvider>
+          </EventStreamProvider>
+        </ClientProvider>
+      </LoggerProvider>
+    ),
+    { exitOnCtrlC: true },
+  );
 }

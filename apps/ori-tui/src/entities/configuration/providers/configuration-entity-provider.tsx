@@ -3,13 +3,13 @@ import { ConfigurationListStoreProvider } from "@src/entities/configuration/mode
 import type { JSX } from "solid-js";
 
 export type ConfigurationEntityProviderProps = {
-    children: JSX.Element;
+  children: JSX.Element;
 };
 
 export function ConfigurationEntityProvider(props: ConfigurationEntityProviderProps) {
-    return (
-        <ConfigurationsServiceProvider>
-            <ConfigurationListStoreProvider>{props.children}</ConfigurationListStoreProvider>
-        </ConfigurationsServiceProvider>
-    );
+  return (
+    <ConfigurationsServiceProvider>
+      <ConfigurationListStoreProvider>{props.children}</ConfigurationListStoreProvider>
+    </ConfigurationsServiceProvider>
+  );
 }

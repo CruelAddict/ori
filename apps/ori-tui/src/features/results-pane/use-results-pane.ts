@@ -4,43 +4,43 @@ import type { Accessor } from "solid-js";
 import { createEffect, createSignal } from "solid-js";
 
 export type ResultsPaneViewModel = {
-    visible: Accessor<boolean>;
-    isFocused: Accessor<boolean>;
-    job: Accessor<QueryJob | undefined>;
-    toggleVisible: () => void;
+  visible: Accessor<boolean>;
+  isFocused: Accessor<boolean>;
+  job: Accessor<QueryJob | undefined>;
+  toggleVisible: () => void;
 };
 
 type UseResultsPaneOptions = {
-    job: Accessor<QueryJob | undefined>;
-    focus: PaneFocusController;
+  job: Accessor<QueryJob | undefined>;
+  focus: PaneFocusController;
 };
 
 export function useResultsPane(options: UseResultsPaneOptions): ResultsPaneViewModel {
-    const [visible, setVisible] = createSignal(false);
+  const [visible, setVisible] = createSignal(false);
 
-    const toggleVisible = () => {
-        setVisible((prev) => {
-            const next = !prev;
-            if (next) {
-                options.focus.focusSelf();
-            } else if (options.focus.isFocused() && options.focus.focusFallback) {
-                options.focus.focusFallback();
-            }
-            return next;
-        });
-    };
-
-    createEffect(() => {
-        const job = options.job();
-        if (job?.result || job?.error) {
-            setVisible(true);
-        }
+  const toggleVisible = () => {
+    setVisible((prev) => {
+      const next = !prev;
+      if (next) {
+        options.focus.focusSelf();
+      } else if (options.focus.isFocused() && options.focus.focusFallback) {
+        options.focus.focusFallback();
+      }
+      return next;
     });
+  };
 
-    return {
-        visible,
-        isFocused: options.focus.isFocused,
-        job: options.job,
-        toggleVisible,
-    };
+  createEffect(() => {
+    const job = options.job();
+    if (job?.result || job?.error) {
+      setVisible(true);
+    }
+  });
+
+  return {
+    visible,
+    isFocused: options.focus.isFocused,
+    job: options.job,
+    toggleVisible,
+  };
 }
