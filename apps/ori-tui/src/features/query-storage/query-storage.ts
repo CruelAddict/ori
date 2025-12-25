@@ -6,7 +6,7 @@ function getConnectionDir(connectionName: string): string {
     return path.join(getAppDataDir(), "connections", connectionName);
 }
 
-function getConsoleFilePath(connectionName: string): string {
+export function getConsoleFilePath(connectionName: string): string {
     return path.join(getConnectionDir(connectionName), ".console.sql");
 }
 

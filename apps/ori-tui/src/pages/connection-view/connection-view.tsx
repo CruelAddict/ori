@@ -1,12 +1,11 @@
 import { useTheme } from "@app/providers/theme";
-import { TextAttributes } from "@opentui/core";
 import { type KeyBinding, KeyScope } from "@src/core/services/key-scopes";
 import { useConnectionView } from "@src/features/connection/view/use-connection-view";
 import { EditorPanel } from "@src/widgets/editor-panel/editor-panel";
 import { ResultsPanel } from "@src/widgets/results-panel/results-panel";
+import { Statusline, StatuslineProvider } from "@src/widgets/statusline/statusline";
 import { TreePanel } from "@src/widgets/tree-panel/tree-panel";
 import { WelcomePane } from "@src/widgets/welcome-pane/welcome-pane";
-import { Statusline } from "@src/widgets/statusline/statusline"
 import { createEffect, Show } from "solid-js";
 
 export type ConnectionViewPageProps = {
@@ -93,42 +92,43 @@ export function ConnectionViewPage(props: ConnectionViewPageProps) {
     ];
 
     return (
-        <KeyScope
-            bindings={screenKeyBindings}
-            enabled={scopeEnabled}
-        >
-            <box
-                flexDirection="column"
-                flexGrow={1}
-                backgroundColor={palette().background}
+        <StatuslineProvider configurationName={props.configurationName}>
+            <KeyScope
+                bindings={screenKeyBindings}
+                enabled={scopeEnabled}
             >
                 <box
-                    flexDirection="row"
+                    flexDirection="column"
                     flexGrow={1}
+                    backgroundColor={palette().background}
                 >
-                    <TreePanel viewModel={vm.treePane} />
-
                     <box
-                        flexDirection="column"
+                        flexDirection="row"
                         flexGrow={1}
-                        marginLeft={vm.treePane.visible() ? 1 : 0}
-                        zIndex={2}
-                        justifyContent="space-between"
                     >
-                        <Show
-                            when={vm.editorOpen()}
-                            fallback={<WelcomePane />}
+                        <TreePanel viewModel={vm.treePane} />
+
+                        <box
+                            flexDirection="column"
+                            flexGrow={1}
+                            marginLeft={vm.treePane.visible() ? 1 : 0}
+                            zIndex={2}
+                            justifyContent="space-between"
                         >
-                            <EditorPanel viewModel={vm.editorPane} />
-                        </Show>
-                        <Show when={vm.resultsPane.visible()}>
-                            <ResultsPanel viewModel={vm.resultsPane} />
-                        </Show>
+                            <Show
+                                when={vm.editorOpen()}
+                                fallback={<WelcomePane />}
+                            >
+                                <EditorPanel viewModel={vm.editorPane} />
+                            </Show>
+                            <Show when={vm.resultsPane.visible()}>
+                                <ResultsPanel viewModel={vm.resultsPane} />
+                            </Show>
+                        </box>
                     </box>
                 </box>
-
-            </box>
-            <Statusline title={vm.title()} />
-        </KeyScope>
+                <Statusline />
+            </KeyScope>
+        </StatuslineProvider>
     );
 }

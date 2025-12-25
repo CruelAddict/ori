@@ -1,12 +1,26 @@
-import { useTheme } from "@app/providers/theme"
+import { For, Show, type JSX, type JSXElement } from "solid-js";
+import { useStatusline } from "./statusline-context";
 
-export type StatuslineProps = {
-    title: string
+export { StatuslineProvider } from "./statusline-context";
+
+function elementsWithDelimiter(elements: JSXElement[], delimiter: string) {
+    return <For each={elements}>
+        {(item, index) => (
+            <>
+                <Show when={index() > 0}>
+                    <text>{delimiter}</text>
+                </Show>
+                {item}
+            </>
+        )}
+    </For>
+
 }
 
-export function Statusline({ title }: StatuslineProps) {
-    const { theme } = useTheme()
-    const palette = theme
+export function Statusline() {
+    const statusline = useStatusline();
+    const state = statusline.state;
+
 
     return (
         <box
@@ -19,7 +33,12 @@ export function Statusline({ title }: StatuslineProps) {
             paddingLeft={3}
             paddingRight={1}
         >
-            <text fg={palette().text}>{`[CONN] ${title}`}</text>
+            <box flexDirection="row">
+                {elementsWithDelimiter(state().left, '  ')}
+            </box>
+            <box flexDirection="row">
+                {elementsWithDelimiter(state().right, '  ')}
+            </box>
         </box>
-    )
+    );
 }

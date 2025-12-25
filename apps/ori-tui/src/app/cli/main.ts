@@ -26,10 +26,10 @@ function installShutdownHooks(backend?: BackendHandle) {
         }
         try {
             backend.pipe?.end();
-        } catch { }
+        } catch {}
         try {
             backend.process.kill("SIGTERM");
-        } catch { }
+        } catch {}
     };
 
     const shutdown = () => {

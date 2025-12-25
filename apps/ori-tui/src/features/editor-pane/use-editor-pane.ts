@@ -1,6 +1,6 @@
 import { type QueryJob, useQueryJobs } from "@src/entities/query-job/providers/query-jobs-provider";
 import type { PaneFocusController } from "@src/features/connection/view/pane-types";
-import { readConsoleQuery, writeConsoleQuery } from "@src/features/query-storage/query-storage";
+import { getConsoleFilePath, readConsoleQuery, writeConsoleQuery } from "@src/features/query-storage/query-storage";
 import type { Accessor } from "solid-js";
 import { createMemo, onMount } from "solid-js";
 
@@ -8,6 +8,7 @@ export type EditorPaneViewModel = {
     queryText: Accessor<string>;
     currentJob: Accessor<QueryJob | undefined>;
     isExecuting: Accessor<boolean>;
+    filePath: Accessor<string>;
     onQueryChange: (text: string) => void;
     executeQuery: () => Promise<void>;
     saveQuery: () => boolean;
@@ -57,10 +58,13 @@ export function useEditorPane(options: UseEditorPaneOptions): EditorPaneViewMode
         }
     });
 
+    const filePath = createMemo(() => getConsoleFilePath(options.configurationName()));
+
     return {
         queryText,
         currentJob,
         isExecuting,
+        filePath,
         onQueryChange,
         executeQuery,
         saveQuery,

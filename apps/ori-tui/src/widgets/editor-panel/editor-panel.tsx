@@ -1,7 +1,8 @@
 import { useTheme } from "@app/providers/theme";
 import { type KeyBinding, KeyScope } from "@src/core/services/key-scopes";
 import type { EditorPaneViewModel } from "@src/features/editor-pane/use-editor-pane";
-import { Show } from "solid-js";
+import { useStatusline } from "@src/widgets/statusline/statusline-context";
+import { onMount, Show } from "solid-js";
 import { Buffer } from "./buffer";
 
 export type EditorPanelProps = {
@@ -10,8 +11,13 @@ export type EditorPanelProps = {
 
 export function EditorPanel(props: EditorPanelProps) {
     const pane = props.viewModel;
+    const statusline = useStatusline();
     const { theme } = useTheme();
     const paletteValue = theme();
+
+    onMount(() => {
+        statusline.fileOpenedInBuffer(pane.filePath());
+    });
 
     const handleTextChange = (text: string, info: { modified: boolean }) => {
         if (info.modified) {
