@@ -155,9 +155,8 @@ function isBindingsAccessor(value: KeyBinding[] | Accessor<KeyBinding[]>): value
   return typeof value === "function";
 }
 
-export type { KeyBinding } from "@src/core/stores/key-scopes";
+export type { Command, KeyBinding } from "@src/core/stores/key-scopes";
 export { SYSTEM_LAYER } from "@src/core/stores/key-scopes";
-export type { Command } from "@src/core/stores/key-scopes";
 
 export function useActiveCommands(): Accessor<Command[]> {
   const runtime = useKeymapRuntime();

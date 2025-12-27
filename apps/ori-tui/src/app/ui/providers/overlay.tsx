@@ -1,11 +1,18 @@
 import type { OverlayManager } from "@app/overlay/overlay-store";
 import { createOverlayManager } from "@app/overlay/overlay-store";
-import { createContext, type JSX, useContext } from "solid-js";
+import { useRenderer } from "@opentui/solid";
+import { createContext, type JSX, onMount, useContext } from "solid-js";
 
 const OverlayContext = createContext<OverlayManager>();
 
 export function OverlayProvider(props: { children: JSX.Element }) {
   const manager = createOverlayManager();
+  const renderer = useRenderer();
+
+  onMount(() => {
+    manager.setRenderer(renderer);
+  });
+
   return <OverlayContext.Provider value={manager}>{props.children}</OverlayContext.Provider>;
 }
 

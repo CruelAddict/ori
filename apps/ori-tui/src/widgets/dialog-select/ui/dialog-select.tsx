@@ -45,7 +45,9 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
   const bindings = useDialogBindings(vm, props);
 
   onMount(() => {
-    queueMicrotask(() => inputRef?.focus());
+    queueMicrotask(() => {
+      inputRef?.focus();
+    });
   });
 
   createEffect(() => {

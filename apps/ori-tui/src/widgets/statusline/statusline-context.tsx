@@ -1,6 +1,6 @@
+import path from "node:path";
 import { useTheme } from "@app/providers/theme";
 import { getAppDataDir } from "@shared/lib/data-storage";
-import path from "node:path";
 import { type Accessor, createContext, createMemo, createSignal, type JSX, useContext } from "solid-js";
 
 type StatuslineState = {
@@ -36,8 +36,8 @@ export function StatuslineProvider(props: StatuslineProviderProps) {
       >
         <text fg={palette.success}>• </text>
         <text fg={palette.text}>{props.configurationName}</text>
-      </box>
-    ]
+      </box>,
+    ];
 
     const pathValue = filePath();
     if (pathValue) {

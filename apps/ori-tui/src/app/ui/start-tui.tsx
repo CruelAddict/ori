@@ -14,11 +14,11 @@ import { render, useRenderer } from "@opentui/solid";
 import { copyTextToClipboard } from "@shared/lib/clipboard";
 import type { ClientMode } from "@shared/lib/configurations-client";
 import type { LogLevel } from "@shared/lib/logger";
-import { CommandPalette } from "@src/features/commands-list";
 import { KeymapProvider, KeyScope, SYSTEM_LAYER } from "@src/core/services/key-scopes";
 import { ConfigurationEntityProvider } from "@src/entities/configuration/providers/configuration-entity-provider";
 import { ConnectionEntityProvider } from "@src/entities/connection/providers/connection-entity-provider";
 import { QueryJobsProvider } from "@src/entities/query-job/providers/query-jobs-provider";
+import { CommandPalette } from "@src/features/commands-list";
 import type { Logger } from "pino";
 import { createEffect, createSignal } from "solid-js";
 
@@ -37,10 +37,7 @@ type StartTuiOptions = {
 };
 
 function openConfigurationPicker(overlays: OverlayManager) {
-  setTimeout(() => {
-    overlays.dismiss("configuration-picker");
-    overlays.show({ id: "configuration-picker", render: ConfigurationPickerOverlay });
-  }, 0);
+  overlays.show({ id: "configuration-picker", render: ConfigurationPickerOverlay });
 }
 
 function App() {
@@ -103,10 +100,7 @@ function GlobalHotkeys() {
   const renderer = useRenderer();
 
   const openThemePicker = () => {
-    setTimeout(() => {
-      overlays.dismiss("theme-picker");
-      overlays.show({ id: "theme-picker", render: ThemePickerOverlay });
-    }, 0);
+    overlays.show({ id: "theme-picker", render: ThemePickerOverlay });
   };
 
   const openPickerFromHotkey = () => {
@@ -114,7 +108,6 @@ function GlobalHotkeys() {
   };
 
   const openCommandPalette = () => {
-    overlays.dismiss("command-palette");
     overlays.show({ id: "command-palette", render: CommandPalette });
   };
 
