@@ -1,7 +1,10 @@
 import path from "node:path";
+import { useNotifications, type Notification, type NotificationLevel } from "@app/providers/notifications";
 import { useTheme } from "@app/providers/theme";
 import { getAppDataDir } from "@shared/lib/data-storage";
-import { type Accessor, createContext, createMemo, createSignal, type JSX, useContext } from "solid-js";
+import { debounce } from "@shared/lib/debounce";
+import { type Accessor, createContext, createEffect, createMemo, createSignal, type JSX, onCleanup, Show, useContext } from "solid-js";
+import type { Renderable } from "@opentui/core";
 
 type StatuslineState = {
   left: JSX.Element[];
@@ -25,7 +28,29 @@ export type StatuslineProviderProps = {
 
 export function StatuslineProvider(props: StatuslineProviderProps) {
   const { theme } = useTheme();
+  const notifications = useNotifications();
   const [filePath, setFilePath] = createSignal<string | undefined>(undefined);
+  const [currentNotification, setCurrentNotification] = createSignal<Notification | undefined>(undefined);
+
+  createEffect(() => {
+    const abortController = new AbortController();
+    const clearNotification = debounce(() => setCurrentNotification(undefined), 3000);
+
+    const run = async () => {
+      for await (const notification of notifications.notifications("statusline", { signal: abortController.signal })) {
+        setCurrentNotification(notification);
+        clearNotification();
+      }
+    };
+
+    void run();
+
+    onCleanup(() => {
+      abortController.abort();
+      clearNotification.clear();
+      setCurrentNotification(undefined);
+    });
+  });
 
   const state = createMemo<StatuslineState>(() => {
     const palette = theme();
@@ -60,17 +85,40 @@ export function StatuslineProvider(props: StatuslineProviderProps) {
       );
     }
 
+    const right: JSX.Element[] = [
+      <box
+        flexDirection="row"
+        maxHeight={1}
+      >
+        <text fg={palette.text}>ctr+p </text>
+        <text fg={palette.textMuted}>commands</text>
+      </box>,
+    ];
+
+    const colorByLevel = (level: NotificationLevel): string => {
+      switch (level) {
+        case "error":
+          return palette.error
+        case "success":
+          return palette.success
+        default:
+          return palette.textMuted
+      }
+    }
+
+    const notification = currentNotification();
+    if (notification) {
+      right.push(
+        <>
+          <text fg={colorByLevel(notification.style.level)}>• </text>
+          <text fg={palette.textMuted}>{notification.message}</text>
+        </>
+      )
+    }
+
     return {
       left,
-      right: [
-        <box
-          flexDirection="row"
-          maxHeight={1}
-        >
-          <text fg={palette.text}>ctr+p </text>
-          <text fg={palette.textMuted}>commands</text>
-        </box>,
-      ],
+      right,
     };
   });
 

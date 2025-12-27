@@ -67,14 +67,6 @@ export function ResultsPanel(props: ResultsPanelProps) {
             paddingRight={1}
             flexShrink={0}
           >
-            <text
-              attributes={TextAttributes.BOLD}
-              fg={palette().text}
-            >
-              Query Results
-            </text>
-            <box height={1} />
-
             <Show when={!job()}>
               <text
                 attributes={TextAttributes.DIM}
@@ -162,15 +154,6 @@ export function ResultsPanel(props: ResultsPanelProps) {
                     </box>
                   )}
                 </For>
-                <box height={1} />
-                <text
-                  attributes={TextAttributes.DIM}
-                  fg={palette().textMuted}
-                >
-                  {job()?.result?.rowCount} row{job()?.result?.rowCount !== 1 ? "s" : ""}
-                  {job()?.result?.truncated ? " (truncated)" : ""}
-                  {job()?.durationMs ? ` • ${job()?.durationMs}ms` : ""}
-                </text>
               </box>
             </Show>
 

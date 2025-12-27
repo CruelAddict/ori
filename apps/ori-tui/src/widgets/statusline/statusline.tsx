@@ -34,7 +34,7 @@ export function Statusline() {
       paddingRight={3}
     >
       <box flexDirection="row">{elementsWithDelimiter(state().left, "  ")}</box>
-      <box flexDirection="row">{elementsWithDelimiter(state().right, "  ")}</box>
+      <box flexDirection="row">{elementsWithDelimiter(state().right.reverse(), "  ")}</box>
     </box>
   );
 }

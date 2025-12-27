@@ -6,6 +6,7 @@ import { ClientProvider } from "@app/providers/client";
 import { EventStreamProvider } from "@app/providers/events";
 import { LoggerProvider, useLogger } from "@app/providers/logger";
 import { NavigationProvider } from "@app/providers/navigation";
+import { NotificationsProvider } from "@app/providers/notifications";
 import { OverlayProvider, useOverlayManager } from "@app/providers/overlay";
 import { ThemeProvider, useTheme } from "@app/providers/theme";
 import { RouteOutlet } from "@app/routes/RouteOutlet";
@@ -183,21 +184,23 @@ export function startTui(options: StartTuiOptions): RendererHandle {
       <LoggerProvider logger={options.logger}>
         <ClientProvider options={clientOptions}>
           <EventStreamProvider>
-            <ConfigurationEntityProvider>
-              <ConnectionEntityProvider>
-                <QueryJobsProvider>
-                  <NavigationProvider>
-                    <OverlayProvider>
-                      <KeymapProvider>
-                        <ThemeProvider defaultTheme={options.theme}>
-                          <App />
-                        </ThemeProvider>
-                      </KeymapProvider>
-                    </OverlayProvider>
-                  </NavigationProvider>
-                </QueryJobsProvider>
-              </ConnectionEntityProvider>
-            </ConfigurationEntityProvider>
+            <NotificationsProvider>
+              <ConfigurationEntityProvider>
+                <ConnectionEntityProvider>
+                  <QueryJobsProvider>
+                    <NavigationProvider>
+                      <OverlayProvider>
+                        <KeymapProvider>
+                          <ThemeProvider defaultTheme={options.theme}>
+                            <App />
+                          </ThemeProvider>
+                        </KeymapProvider>
+                      </OverlayProvider>
+                    </NavigationProvider>
+                  </QueryJobsProvider>
+                </ConnectionEntityProvider>
+              </ConfigurationEntityProvider>
+            </NotificationsProvider>
           </EventStreamProvider>
         </ClientProvider>
       </LoggerProvider>

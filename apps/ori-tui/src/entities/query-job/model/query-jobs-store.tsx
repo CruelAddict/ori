@@ -1,4 +1,5 @@
 import { useLogger } from "@app/providers/logger";
+import { useNotifications } from "@app/providers/notifications";
 import type { QueryResultView } from "@shared/lib/configurations-client";
 import type { QueryJobCompletedEvent } from "@shared/lib/events";
 import { useQueryJobsApi } from "@src/entities/query-job/api/api";
@@ -42,11 +43,21 @@ export type QueryJobsStoreProviderProps = {
 export function QueryJobsStoreProvider(props: QueryJobsStoreProviderProps) {
   const api = useQueryJobsApi();
   const logger = useLogger();
+  const notifications = useNotifications();
 
   const [state, setState] = createStore<QueryJobsStoreState>({
     jobsByConfiguration: {},
     queryTextByConfiguration: {},
   });
+
+  const notifyError = (_?: string) => {
+    notifications.notify("query failed", { level: "error", channel: "statusline" });
+  };
+
+  const notifySuccess = (result?: QueryResultView, durationMs?: number) => {
+    const text = formatSuccessNotification(result, durationMs);
+    notifications.notify(text, { level: "success", channel: "statusline" });
+  };
 
   const setQueryText = (configurationName: string, text: string) => {
     setState("queryTextByConfiguration", configurationName, text);
@@ -85,16 +96,19 @@ export function QueryJobsStoreProvider(props: QueryJobsStoreProviderProps) {
           status: "failed",
           error: execResult.message,
         });
+        notifyError(execResult.message);
         logger.error({ jobId, message: execResult.message }, "query execution failed immediately");
       }
     } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : String(err);
       setState("jobsByConfiguration", configurationName, {
         jobId,
         configurationName,
         query,
         status: "failed",
-        error: err instanceof Error ? err.message : String(err),
+        error: errorMessage,
       });
+      notifyError(errorMessage);
       logger.error({ jobId, configurationName, err }, "query-jobs-store: query execution threw");
     }
   };
@@ -120,13 +134,16 @@ export function QueryJobsStoreProvider(props: QueryJobsStoreProviderProps) {
           result,
           durationMs,
         });
+        notifySuccess(result, durationMs);
       } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : String(err);
         setState("jobsByConfiguration", configurationName, {
           ...currentJob,
           status: "failed",
-          error: err instanceof Error ? err.message : String(err),
+          error: errorMessage,
           durationMs,
         });
+        notifyError(errorMessage);
         logger.error({ jobId, configurationName, err }, "query-jobs-store: failed to fetch query result");
       }
       return;
@@ -139,6 +156,12 @@ export function QueryJobsStoreProvider(props: QueryJobsStoreProviderProps) {
       error: error || message,
       durationMs,
     });
+
+    if (nextStatus === "success") {
+      notifySuccess(undefined, durationMs);
+    } else if (nextStatus === "failed") {
+      notifyError(error || message);
+    }
   };
 
   const unsubscribe = api.onJobCompleted(handleQueryJobCompleted);
@@ -156,6 +179,17 @@ export function QueryJobsStoreProvider(props: QueryJobsStoreProviderProps) {
   };
 
   return <QueryJobsContext.Provider value={value}>{props.children}</QueryJobsContext.Provider>;
+}
+
+function formatSuccessNotification(result?: QueryResultView, durationMs?: number) {
+  if (result && result.rows.length > 0) {
+    const rowsText = `${result.rowCount} row${result.rowCount === 1 ? "" : "s"}`;
+    const truncatedText = result.truncated ? " (truncated)" : "";
+    const durationText = ` in ${durationMs}ms`;
+    return `${rowsText}${truncatedText}${durationText}`;
+  }
+  const durationText = durationMs ? ` (${durationMs}ms)` : "";
+  return `${durationText}`;
 }
 
 function resolveCompletedStatus(status: string): QueryJob["status"] {
