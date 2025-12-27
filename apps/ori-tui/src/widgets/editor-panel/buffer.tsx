@@ -143,7 +143,7 @@ function createBufferBindings(bufferModel: BufferModel, props: BufferProps): Key
 
 export function Buffer(props: BufferProps) {
   const { theme } = useTheme();
-  const palette = theme();
+  const palette = theme;
 
   const bufferModel = createBufferModel({
     initialText: props.initialText,
@@ -204,7 +204,7 @@ export function Buffer(props: BufferProps) {
                   >
                     <text
                       maxHeight={1}
-                      fg={palette.textMuted}
+                      fg={palette().textMuted}
                     >
                       {indexAccessor() + 1}
                     </text>
@@ -213,9 +213,9 @@ export function Buffer(props: BufferProps) {
                     ref={(renderable: TextareaRenderable | undefined) => {
                       bufferModel.setLineRef(line.id, renderable);
                     }}
-                    textColor={palette.editorText}
-                    focusedTextColor={palette.editorText}
-                    cursorColor={palette.primary}
+                    textColor={palette().editorText}
+                    focusedTextColor={palette().editorText}
+                    cursorColor={palette().primary}
                     selectable={true}
                     keyBindings={[]}
                     onMouseDown={(event: MouseEvent) => {
@@ -229,7 +229,7 @@ export function Buffer(props: BufferProps) {
             }}
           </For>
           <Show when={bufferModel.lines().length === 0}>
-            <text fg={palette.editorText}> </text>
+            <text fg={palette().editorText}> </text>
           </Show>
         </box>
       </scrollbox>
