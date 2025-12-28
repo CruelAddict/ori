@@ -1,7 +1,9 @@
-import type { TextareaRenderable } from "@opentui/core";
+import type { SyntaxStyle, TextareaRenderable } from "@opentui/core";
 import { debounce } from "@shared/lib/debounce";
 import { type Accessor, createSignal } from "solid-js";
 import { createStore } from "solid-js/store";
+import { collectSqlHighlightsByLine, type SqlHighlightSpan, type SqlTokenKind } from "./sql-highlighter";
+import { useLogger } from "@app/providers/logger";
 
 const DEBOUNCE_DEFAULT_MS = 20;
 
@@ -28,6 +30,7 @@ export type BufferModelOptions = {
   isFocused: Accessor<boolean>;
   onTextChange: (text: string, info: { modified: boolean }) => void;
   debounceMs?: number;
+  syntaxStyle?: SyntaxStyle;
 };
 
 let lineIdCounter = 0;
@@ -43,6 +46,10 @@ function makeLinesFromText(text: string, rendered: boolean): Line[] {
   return safeParts.map((part) => makeLine(part, rendered));
 }
 
+const SYNTAX_EXTMARK_TYPE = "sql-syntax";
+
+type SqlStyleIds = Record<SqlTokenKind, number | undefined>;
+
 export function createBufferModel(options: BufferModelOptions) {
   const [state, setState] = createStore<BufferState>({
     lines: makeLinesFromText(options.initialText, true),
@@ -52,13 +59,91 @@ export function createBufferModel(options: BufferModelOptions) {
   const [navColumn, setNavColumn] = createSignal(0);
 
   const lineRefs = new Map<string, TextareaRenderable | undefined>();
+  const styleIds: SqlStyleIds | null = options.syntaxStyle
+    ? {
+      keyword: options.syntaxStyle.getStyleId("syntax.keyword") ?? undefined,
+      string: options.syntaxStyle.getStyleId("syntax.string") ?? undefined,
+      number: options.syntaxStyle.getStyleId("syntax.number") ?? undefined,
+      comment: options.syntaxStyle.getStyleId("syntax.comment") ?? undefined,
+      identifier: options.syntaxStyle.getStyleId("syntax.identifier") ?? undefined,
+      operator: options.syntaxStyle.getStyleId("syntax.operator") ?? undefined,
+    }
+    : null;
+  let syntaxRefreshVersion = 0;
+
+  const getSyntaxHighlightTypeID = (ref: TextareaRenderable) => {
+    return ref.extmarks.getTypeId(SYNTAX_EXTMARK_TYPE) ?? ref.extmarks.registerType(SYNTAX_EXTMARK_TYPE);
+  };
+
+  const clearSyntaxExtmarks = (ref: TextareaRenderable, typeId: number) => {
+    const marks = ref.extmarks.getAllForTypeId(typeId);
+    for (const mark of marks) {
+      ref.extmarks.delete(mark.id);
+    }
+  };
+
+  const applySqlHighlights = (highlightMap: Map<number, SqlHighlightSpan[]>) => {
+    if (!styleIds) {
+      return;
+    }
+    state.lines.forEach((_, index) => {
+      const ref = getTextArea(index);
+      if (!ref) {
+        return;
+      }
+      // TODO: likely remove when supporting reactive code theme
+      if (options.syntaxStyle && (ref as any).syntaxStyle !== options.syntaxStyle) {
+        (ref as any).syntaxStyle = options.syntaxStyle;
+      }
+      const typeId = getSyntaxHighlightTypeID(ref);
+      clearSyntaxExtmarks(ref, typeId);
+      const spans = highlightMap.get(index);
+      for (const span of spans ?? []) {
+        const styleId = styleIds[span.kind];
+        if (styleId == null) {
+          continue;
+        }
+        ref.extmarks.create({
+          start: span.start,
+          end: span.end,
+          styleId,
+          typeId,
+          virtual: false,
+        });
+      }
+      ref.requestRender();
+    });
+  };
+
+  const refreshSyntaxHighlights = () => {
+    if (!styleIds) {
+      return;
+    }
+    const text = state.lines.map((line) => line.text).join("\n");
+    const requestId = ++syntaxRefreshVersion;
+    collectSqlHighlightsByLine(text)
+      .then((result) => {
+        if (requestId !== syntaxRefreshVersion) {
+          return;
+        }
+        applySqlHighlights(result);
+      })
+      .catch((err) => {
+        useLogger().error({ err }, "buffer: highlight parse failed");
+        applySqlHighlights(new Map());
+      });
+  };
 
   const setLineRef = (lineId: string, ref: TextareaRenderable | undefined) => {
     if (!ref) {
       lineRefs.delete(lineId);
       return;
     }
+    if (options.syntaxStyle) {
+      (ref as any).syntaxStyle = options.syntaxStyle;
+    }
     lineRefs.set(lineId, ref);
+    refreshSyntaxHighlights();
   };
 
   const getTextArea = (index: number) => {
@@ -97,6 +182,7 @@ export function createBufferModel(options: BufferModelOptions) {
   }, options.debounceMs ?? DEBOUNCE_DEFAULT_MS);
 
   const schedulePush = () => {
+    refreshSyntaxHighlights();
     debouncedPush();
   };
 

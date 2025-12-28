@@ -1,5 +1,7 @@
+import { useLogger } from "@app/providers/logger";
 import { useTheme } from "@app/providers/theme";
 import type { KeyEvent, MouseEvent, TextareaRenderable } from "@opentui/core";
+import { RGBA, SyntaxStyle } from "@opentui/core";
 import { type KeyBinding, KeyScope } from "@src/core/services/key-scopes";
 import { type Accessor, createEffect, For, onCleanup, onMount, Show } from "solid-js";
 import { type BufferModel, type CursorContext, createBufferModel } from "./buffer-model";
@@ -144,12 +146,24 @@ function createBufferBindings(bufferModel: BufferModel, props: BufferProps): Key
 export function Buffer(props: BufferProps) {
   const { theme } = useTheme();
   const palette = theme;
+  const logger = useLogger();
+
+  const syntaxStyle = SyntaxStyle.create();
+  // TODO: make reactive
+  const p = palette();
+  syntaxStyle.registerStyle("syntax.keyword", { fg: RGBA.fromHex(p.primary) });
+  syntaxStyle.registerStyle("syntax.string", { fg: RGBA.fromHex(p.accent) });
+  syntaxStyle.registerStyle("syntax.number", { fg: RGBA.fromHex(p.info) });
+  syntaxStyle.registerStyle("syntax.comment", { fg: RGBA.fromHex(p.textMuted) });
+  syntaxStyle.registerStyle("syntax.identifier", { fg: RGBA.fromHex(p.text) });
+  syntaxStyle.registerStyle("syntax.operator", { fg: RGBA.fromHex(p.secondary) });
 
   const bufferModel = createBufferModel({
     initialText: props.initialText,
     isFocused: props.isFocused,
     onTextChange: props.onTextChange,
     debounceMs: DEBOUNCE_MS,
+    syntaxStyle,
   });
 
   const focus = () => {
@@ -167,6 +181,7 @@ export function Buffer(props: BufferProps) {
 
   onCleanup(() => {
     bufferModel.dispose();
+    syntaxStyle.destroy();
   });
 
   const handleMouseDown = (index: number, event: MouseEvent) => {
@@ -216,6 +231,7 @@ export function Buffer(props: BufferProps) {
                     textColor={palette().editorText}
                     focusedTextColor={palette().editorText}
                     cursorColor={palette().primary}
+                    syntaxStyle={syntaxStyle}
                     selectable={true}
                     keyBindings={[]}
                     onMouseDown={(event: MouseEvent) => {
