@@ -1,10 +1,18 @@
 import path from "node:path";
-import { useNotifications, type Notification, type NotificationLevel } from "@app/providers/notifications";
+import { type Notification, type NotificationLevel, useNotifications } from "@app/providers/notifications";
 import { useTheme } from "@app/providers/theme";
 import { getAppDataDir } from "@shared/lib/data-storage";
 import { debounce } from "@shared/lib/debounce";
-import { type Accessor, createContext, createEffect, createMemo, createSignal, type JSX, onCleanup, Show, useContext } from "solid-js";
-import type { Renderable } from "@opentui/core";
+import {
+  type Accessor,
+  createContext,
+  createEffect,
+  createMemo,
+  createSignal,
+  type JSX,
+  onCleanup,
+  useContext,
+} from "solid-js";
 
 type StatuslineState = {
   left: JSX.Element[];
@@ -98,13 +106,13 @@ export function StatuslineProvider(props: StatuslineProviderProps) {
     const colorByLevel = (level: NotificationLevel): string => {
       switch (level) {
         case "error":
-          return palette.error
+          return palette.error;
         case "success":
-          return palette.success
+          return palette.success;
         default:
-          return palette.textMuted
+          return palette.textMuted;
       }
-    }
+    };
 
     const notification = currentNotification();
     if (notification) {
@@ -112,8 +120,8 @@ export function StatuslineProvider(props: StatuslineProviderProps) {
         <>
           <text fg={colorByLevel(notification.style.level)}>• </text>
           <text fg={palette.textMuted}>{notification.message}</text>
-        </>
-      )
+        </>,
+      );
     }
 
     return {

@@ -1,159 +1,77 @@
-import { getTreeSitterClient } from "@opentui/core";
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
-import type { Logger } from "pino";
-import sqlWasm from "../../assets/tree-sitter-sql.wasm" with { type: "file" };
-import sqlHighlights from "../../assets/highlights.scm" with { type: "file" };
+import type { SyntaxStyle, TextareaRenderable } from "@opentui/core";
 
-export type SqlTokenKind = "keyword" | "string" | "number" | "comment" | "identifier" | "operator";
+const SYNTAX_EXTMARK_TYPE = "syntax-highlight";
 
-export type SqlHighlightSpan = {
-  line: number;
-  start: number;
-  end: number;
-  kind: SqlTokenKind;
-};
+type LineSpan = { start: number; end: number; styleId: number };
 
-type SimpleHighlight = [startIndex: number, endIndex: number, group: string];
-
-type HighlightResult = {
-  highlights?: SimpleHighlight[];
-  warning?: string;
-  error?: string;
-};
-
-const FILETYPE_SQL = "sql";
-const ASSET_BASE = dirname(fileURLToPath(import.meta.url));
-const SQL_WASM_PATH = resolve(ASSET_BASE, sqlWasm);
-const SQL_HIGHLIGHTS_URL = resolve(ASSET_BASE, sqlHighlights);
-const SQL_ASSET_LOG = { wasm: SQL_WASM_PATH, highlights: SQL_HIGHLIGHTS_URL };
-
-let registerPromise: Promise<void> | null = null;
-
-async function ensureSqlRegistered(logger?: Logger) {
-  if (!registerPromise) {
-    registerPromise = (async () => {
-      const client = getTreeSitterClient();
-      try {
-        await client.initialize?.();
-      } catch (err) {
-        logger?.warn({ err }, "sql-highlight: client initialize failed, continuing");
-      }
-      logger?.warn({ assets: SQL_ASSET_LOG }, "sql-highlight: register assets");
-      client.addFiletypeParser({
-        filetype: FILETYPE_SQL,
-        wasm: SQL_WASM_PATH,
-        queries: { highlights: [SQL_HIGHLIGHTS_URL] },
-      });
-      try {
-        await client.preloadParser?.(FILETYPE_SQL);
-      } catch (err) {
-        logger?.warn({ err }, "sql-highlight: preload parser failed");
-      }
-    })().catch((err) => {
-      registerPromise = null;
-      throw err;
-    });
-  }
-  return registerPromise;
+function getSyntaxHighlightTypeID(ref: TextareaRenderable) {
+  return ref.extmarks.getTypeId(SYNTAX_EXTMARK_TYPE) ?? ref.extmarks.registerType(SYNTAX_EXTMARK_TYPE);
 }
 
-function mapGroupToKind(group: string): SqlTokenKind | null {
-  switch (group) {
-    case "keyword":
-    case "keyword.operator":
-      return "keyword";
-    case "string":
-      return "string";
-    case "comment":
-      return "comment";
-    case "number":
-    case "float":
-    case "boolean":
-      return "number";
-    case "operator":
-      return "operator";
-    case "function.call":
-    case "variable":
-    case "field":
-    case "parameter":
-    case "attribute":
-    case "storageclass":
-    case "conditional":
-    case "type":
-    case "type.qualifier":
-    case "type.builtin":
-      return "identifier";
-    default:
-      return null;
+function clearSyntaxExtmarks(ref: TextareaRenderable, typeId: number) {
+  const marks = ref.extmarks.getAllForTypeId(typeId);
+  for (const mark of marks) {
+    ref.extmarks.delete(mark.id);
   }
 }
 
-function buildLineStarts(text: string): number[] {
-  const starts = [0];
-  for (let i = 0; i < text.length; i++) {
-    if (text[i] === "\n") {
-      starts.push(i + 1);
+function spansEqual(a: LineSpan[], b: LineSpan[]) {
+  if (a.length !== b.length) {
+    return false;
+  }
+  for (let i = 0; i < a.length; i++) {
+    const left = a[i];
+    const right = b[i];
+    if (left.start !== right.start || left.end !== right.end || left.styleId !== right.styleId) {
+      return false;
     }
   }
-  return starts;
+  return true;
 }
 
-function offsetToLineCol(offset: number, lineStarts: number[]): { line: number; col: number } {
-  let low = 0;
-  let high = lineStarts.length - 1;
-  while (low <= high) {
-    const mid = (low + high) >> 1;
-    const start = lineStarts[mid];
-    const nextStart = mid + 1 < lineStarts.length ? lineStarts[mid + 1] : Number.POSITIVE_INFINITY;
-    if (offset < start) {
-      high = mid - 1;
-    } else if (offset >= nextStart) {
-      low = mid + 1;
-    } else {
-      return { line: mid, col: offset - start };
-    }
-  }
-  return { line: lineStarts.length - 1, col: 0 };
-}
+export function applySyntaxHighlights(params: {
+  spansByLine: Map<number, LineSpan[]>;
+  syntaxStyle: SyntaxStyle;
+  lineCount: number;
+  getLineRef: (index: number) => TextareaRenderable | undefined;
+}) {
+  const { spansByLine, syntaxStyle, lineCount, getLineRef } = params;
 
-export async function collectSqlHighlightsByLine(
-  text: string,
-  logger?: Logger,
-): Promise<Map<number, SqlHighlightSpan[]>> {
-  await ensureSqlRegistered(logger);
-  const client = getTreeSitterClient();
-  const result = (await client.highlightOnce(text, FILETYPE_SQL)) as HighlightResult;
-  const byLine = new Map<number, SqlHighlightSpan[]>();
-  if (result.error) {
-    logger?.error({ error: result.error }, "sql-highlight: highlightOnce returned issue");
-    return byLine
-  }
-  if (result.warning) {
-    logger?.warn({ warning: result.warning }, "sql-highlight: highlightOnce returned issue");
-  }
-
-  const highlights = result.highlights ?? [];
-  const lineStarts = buildLineStarts(text);
-
-  for (const [startIndex, endIndex, group] of highlights) {
-    const kind = mapGroupToKind(String(group));
-    if (!kind) {
+  for (let index = 0; index < lineCount; index++) {
+    const ref = getLineRef(index);
+    if (!ref) {
       continue;
     }
-    const start = offsetToLineCol(startIndex, lineStarts);
-    const end = offsetToLineCol(endIndex, lineStarts);
-    if (start.line !== end.line) {
+
+    const refState = ref as TextareaRenderable & { syntaxStyle?: SyntaxStyle; __syntaxSpans?: LineSpan[] };
+    const prevSpans = refState.__syntaxSpans ?? [];
+    const nextSpans = spansByLine.get(index) ?? [];
+    const styleChanged = refState.syntaxStyle !== syntaxStyle;
+    const spansChanged = !spansEqual(prevSpans, nextSpans);
+
+    if (!styleChanged && !spansChanged) {
       continue;
     }
-    const spans = byLine.get(start.line) ?? [];
-    spans.push({ line: start.line, start: start.col, end: end.col, kind });
-    byLine.set(start.line, spans);
-  }
 
-  for (const spans of byLine.values()) {
-    spans.sort((a, b) => a.start - b.start || a.end - b.end);
-  }
+    if (spansChanged) {
+      const typeId = getSyntaxHighlightTypeID(ref);
+      clearSyntaxExtmarks(ref, typeId);
+      for (const span of nextSpans) {
+        ref.extmarks.create({
+          start: span.start,
+          end: span.end,
+          styleId: span.styleId,
+          typeId,
+          virtual: false,
+        });
+      }
+      refState.__syntaxSpans = nextSpans.map((span) => ({ ...span }));
+    }
 
-  return byLine;
+    if (styleChanged) {
+      refState.syntaxStyle = syntaxStyle;
+    }
+
+    ref.requestRender();
+  }
 }

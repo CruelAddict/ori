@@ -1,9 +1,9 @@
 import { useLogger } from "@app/providers/logger";
 import { useTheme } from "@app/providers/theme";
 import type { KeyEvent, MouseEvent, TextareaRenderable } from "@opentui/core";
-import { RGBA, SyntaxStyle } from "@opentui/core";
 import { type KeyBinding, KeyScope } from "@src/core/services/key-scopes";
 import { type Accessor, createEffect, For, onCleanup, onMount, Show } from "solid-js";
+import { syntaxHighlighter } from "../../features/syntax-highlighting/syntax-highlighter";
 import { type BufferModel, type CursorContext, createBufferModel } from "./buffer-model";
 
 const BUFFER_SCOPE_ID = "connection-view.buffer";
@@ -148,22 +148,20 @@ export function Buffer(props: BufferProps) {
   const palette = theme;
   const logger = useLogger();
 
-  const syntaxStyle = SyntaxStyle.create();
-  // TODO: make reactive
-  const p = palette();
-  syntaxStyle.registerStyle("syntax.keyword", { fg: RGBA.fromHex(p.primary) });
-  syntaxStyle.registerStyle("syntax.string", { fg: RGBA.fromHex(p.accent) });
-  syntaxStyle.registerStyle("syntax.number", { fg: RGBA.fromHex(p.info) });
-  syntaxStyle.registerStyle("syntax.comment", { fg: RGBA.fromHex(p.textMuted) });
-  syntaxStyle.registerStyle("syntax.identifier", { fg: RGBA.fromHex(p.text) });
-  syntaxStyle.registerStyle("syntax.operator", { fg: RGBA.fromHex(p.secondary) });
+  const highlighter = syntaxHighlighter({
+    theme: palette,
+    language: "sql",
+    logger,
+  });
 
   const bufferModel = createBufferModel({
     initialText: props.initialText,
     isFocused: props.isFocused,
     onTextChange: props.onTextChange,
     debounceMs: DEBOUNCE_MS,
-    syntaxStyle,
+    scheduleHighlight: highlighter.scheduleHighlight,
+    highlightResult: highlighter.highlightResult,
+    logger,
   });
 
   const focus = () => {
@@ -181,7 +179,7 @@ export function Buffer(props: BufferProps) {
 
   onCleanup(() => {
     bufferModel.dispose();
-    syntaxStyle.destroy();
+    highlighter.dispose();
   });
 
   const handleMouseDown = (index: number, event: MouseEvent) => {
@@ -231,7 +229,7 @@ export function Buffer(props: BufferProps) {
                     textColor={palette().editorText}
                     focusedTextColor={palette().editorText}
                     cursorColor={palette().primary}
-                    syntaxStyle={syntaxStyle}
+                    syntaxStyle={highlighter.highlightResult().syntaxStyle}
                     selectable={true}
                     keyBindings={[]}
                     onMouseDown={(event: MouseEvent) => {

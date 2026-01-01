@@ -1,9 +1,10 @@
-import type { SyntaxStyle, TextareaRenderable } from "@opentui/core";
+import type { TextareaRenderable } from "@opentui/core";
 import { debounce } from "@shared/lib/debounce";
-import { type Accessor, createSignal } from "solid-js";
+import type { Logger } from "pino";
+import { type Accessor, createEffect, createSignal, on } from "solid-js";
 import { createStore } from "solid-js/store";
-import { collectSqlHighlightsByLine, type SqlHighlightSpan, type SqlTokenKind } from "./sql-highlighter";
-import { useLogger } from "@app/providers/logger";
+import type { SyntaxHighlightResult } from "../../features/syntax-highlighting/syntax-highlighter";
+import { applySyntaxHighlights } from "./sql-highlighter";
 
 const DEBOUNCE_DEFAULT_MS = 20;
 
@@ -30,7 +31,9 @@ export type BufferModelOptions = {
   isFocused: Accessor<boolean>;
   onTextChange: (text: string, info: { modified: boolean }) => void;
   debounceMs?: number;
-  syntaxStyle?: SyntaxStyle;
+  scheduleHighlight: (text: string, version: number | string) => void;
+  highlightResult: Accessor<SyntaxHighlightResult>;
+  logger: Logger;
 };
 
 let lineIdCounter = 0;
@@ -46,9 +49,33 @@ function makeLinesFromText(text: string, rendered: boolean): Line[] {
   return safeParts.map((part) => makeLine(part, rendered));
 }
 
-const SYNTAX_EXTMARK_TYPE = "sql-syntax";
+function buildLineStarts(text: string): number[] {
+  const starts = [0];
+  for (let i = 0; i < text.length; i++) {
+    if (text[i] === "\n") {
+      starts.push(i + 1);
+    }
+  }
+  return starts;
+}
 
-type SqlStyleIds = Record<SqlTokenKind, number | undefined>;
+function offsetToLineCol(offset: number, lineStarts: number[]): { line: number; col: number } {
+  let low = 0;
+  let high = lineStarts.length - 1;
+  while (low <= high) {
+    const mid = (low + high) >> 1;
+    const start = lineStarts[mid];
+    const nextStart = mid + 1 < lineStarts.length ? lineStarts[mid + 1] : Number.POSITIVE_INFINITY;
+    if (offset < start) {
+      high = mid - 1;
+    } else if (offset >= nextStart) {
+      low = mid + 1;
+    } else {
+      return { line: mid, col: offset - start };
+    }
+  }
+  return { line: lineStarts.length - 1, col: 0 };
+}
 
 export function createBufferModel(options: BufferModelOptions) {
   const [state, setState] = createStore<BufferState>({
@@ -59,79 +86,35 @@ export function createBufferModel(options: BufferModelOptions) {
   const [navColumn, setNavColumn] = createSignal(0);
 
   const lineRefs = new Map<string, TextareaRenderable | undefined>();
-  const styleIds: SqlStyleIds | null = options.syntaxStyle
-    ? {
-      keyword: options.syntaxStyle.getStyleId("syntax.keyword") ?? undefined,
-      string: options.syntaxStyle.getStyleId("syntax.string") ?? undefined,
-      number: options.syntaxStyle.getStyleId("syntax.number") ?? undefined,
-      comment: options.syntaxStyle.getStyleId("syntax.comment") ?? undefined,
-      identifier: options.syntaxStyle.getStyleId("syntax.identifier") ?? undefined,
-      operator: options.syntaxStyle.getStyleId("syntax.operator") ?? undefined,
-    }
-    : null;
-  let syntaxRefreshVersion = 0;
+  let highlightRequestVersion = 0;
 
-  const getSyntaxHighlightTypeID = (ref: TextareaRenderable) => {
-    return ref.extmarks.getTypeId(SYNTAX_EXTMARK_TYPE) ?? ref.extmarks.registerType(SYNTAX_EXTMARK_TYPE);
-  };
-
-  const clearSyntaxExtmarks = (ref: TextareaRenderable, typeId: number) => {
-    const marks = ref.extmarks.getAllForTypeId(typeId);
-    for (const mark of marks) {
-      ref.extmarks.delete(mark.id);
-    }
-  };
-
-  const applySqlHighlights = (highlightMap: Map<number, SqlHighlightSpan[]>) => {
-    if (!styleIds) {
-      return;
-    }
-    state.lines.forEach((_, index) => {
-      const ref = getTextArea(index);
-      if (!ref) {
-        return;
-      }
-      // TODO: likely remove when supporting reactive code theme
-      if (options.syntaxStyle && (ref as any).syntaxStyle !== options.syntaxStyle) {
-        (ref as any).syntaxStyle = options.syntaxStyle;
-      }
-      const typeId = getSyntaxHighlightTypeID(ref);
-      clearSyntaxExtmarks(ref, typeId);
-      const spans = highlightMap.get(index);
-      for (const span of spans ?? []) {
-        const styleId = styleIds[span.kind];
-        if (styleId == null) {
-          continue;
-        }
-        ref.extmarks.create({
-          start: span.start,
-          end: span.end,
-          styleId,
-          typeId,
-          virtual: false,
-        });
-      }
-      ref.requestRender();
-    });
-  };
-
-  const refreshSyntaxHighlights = () => {
-    if (!styleIds) {
-      return;
-    }
+  const requestHighlights = () => {
     const text = state.lines.map((line) => line.text).join("\n");
-    const requestId = ++syntaxRefreshVersion;
-    collectSqlHighlightsByLine(text)
-      .then((result) => {
-        if (requestId !== syntaxRefreshVersion) {
-          return;
-        }
-        applySqlHighlights(result);
-      })
-      .catch((err) => {
-        useLogger().error({ err }, "buffer: highlight parse failed");
-        applySqlHighlights(new Map());
-      });
+    const nextVersion = ++highlightRequestVersion;
+    options.scheduleHighlight(text, nextVersion);
+  };
+
+  const buildSpansByLine = (highlight: SyntaxHighlightResult) => {
+    const text = state.lines.map((line) => line.text).join("\n");
+    const lineStarts = buildLineStarts(text);
+    const spansByLine = new Map<number, { start: number; end: number; styleId: number }[]>();
+
+    for (const span of highlight.spans) {
+      const start = offsetToLineCol(span.start, lineStarts);
+      const end = offsetToLineCol(span.end, lineStarts);
+      if (start.line !== end.line) {
+        continue;
+      }
+      const spans = spansByLine.get(start.line) ?? [];
+      spans.push({ start: start.col, end: end.col, styleId: span.styleId });
+      spansByLine.set(start.line, spans);
+    }
+
+    for (const spans of spansByLine.values()) {
+      spans.sort((a, b) => a.start - b.start || a.end - b.end);
+    }
+
+    return spansByLine;
   };
 
   const setLineRef = (lineId: string, ref: TextareaRenderable | undefined) => {
@@ -139,11 +122,7 @@ export function createBufferModel(options: BufferModelOptions) {
       lineRefs.delete(lineId);
       return;
     }
-    if (options.syntaxStyle) {
-      (ref as any).syntaxStyle = options.syntaxStyle;
-    }
     lineRefs.set(lineId, ref);
-    refreshSyntaxHighlights();
   };
 
   const getTextArea = (index: number) => {
@@ -153,6 +132,21 @@ export function createBufferModel(options: BufferModelOptions) {
     }
     return lineRefs.get(line.id);
   };
+
+  createEffect(
+    on(options.highlightResult, (highlight) => {
+      if (highlight.version !== highlightRequestVersion) {
+        return;
+      }
+      const spansByLine = buildSpansByLine(highlight);
+      applySyntaxHighlights({
+        spansByLine,
+        syntaxStyle: highlight.syntaxStyle,
+        lineCount: state.lines.length,
+        getLineRef: getTextArea,
+      });
+    }),
+  );
 
   const syncRefsWithLines = (lines: Line[]) => {
     const ids = new Set(lines.map((line) => line.id));
@@ -182,9 +176,12 @@ export function createBufferModel(options: BufferModelOptions) {
   }, options.debounceMs ?? DEBOUNCE_DEFAULT_MS);
 
   const schedulePush = () => {
-    refreshSyntaxHighlights();
+    requestHighlights();
     debouncedPush();
   };
+
+  // Seed initial highlight computation for the starting text
+  requestHighlights();
 
   const flush = () => {
     debouncedPush.clear();

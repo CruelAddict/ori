@@ -124,7 +124,7 @@ export class KeyScopeStore {
                 id: `${scope.id}-${i}`,
                 title: binding.description ?? "unnamed command",
                 section: binding.commandPaletteSection!,
-                keyPattern: `${binding.mode == "leader" ? LEADER_KEY_PATTERN : ""} ${binding.pattern}`,
+                keyPattern: `${binding.mode === "leader" ? LEADER_KEY_PATTERN : ""} ${binding.pattern}`,
                 handler: () => binding.handler({} as KeyEvent),
               };
             }),
