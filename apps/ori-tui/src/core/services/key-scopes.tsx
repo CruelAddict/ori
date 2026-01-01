@@ -1,7 +1,7 @@
 import type { KeyEvent } from "@opentui/core";
 import { useKeyboard } from "@opentui/solid";
 import { Keybind, type KeyboardEventLike, type ParsedKeybind, useKeybind } from "@shared/lib/keybind";
-import { type Command, type KeyBinding, KeyScopeStore } from "@src/core/stores/key-scopes";
+import { type Command, type KeyBinding, KeyScopeStore } from "@shared/config/key-scopes";
 import type { Accessor, JSX, ParentComponent } from "solid-js";
 import { createContext, createMemo, createUniqueId, onCleanup, useContext } from "solid-js";
 
@@ -155,8 +155,8 @@ function isBindingsAccessor(value: KeyBinding[] | Accessor<KeyBinding[]>): value
   return typeof value === "function";
 }
 
-export type { Command, KeyBinding } from "@src/core/stores/key-scopes";
-export { SYSTEM_LAYER } from "@src/core/stores/key-scopes";
+export type { Command, KeyBinding } from "@shared/config/key-scopes";
+export { SYSTEM_LAYER } from "@shared/config/key-scopes";
 
 export function useActiveCommands(): Accessor<Command[]> {
   const runtime = useKeymapRuntime();
