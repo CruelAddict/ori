@@ -2,9 +2,10 @@ import { useLogger } from "@app/providers/logger";
 import { useTheme } from "@app/providers/theme";
 import type { KeyEvent, MouseEvent, TextareaRenderable } from "@opentui/core";
 import { type KeyBinding, KeyScope } from "@src/core/services/key-scopes";
-import { type Accessor, createEffect, For, onCleanup, onMount, Show } from "solid-js";
+import { type Accessor, createEffect, createMemo, For, onCleanup, onMount, Show } from "solid-js";
 import { syntaxHighlighter } from "../../features/syntax-highlighting/syntax-highlighter";
 import { type BufferModel, type CursorContext, createBufferModel } from "./buffer-model";
+import { collectSqlStatements, findSqlStatementAtCursor } from "./sql-statement-detector";
 
 const BUFFER_SCOPE_ID = "connection-view.buffer";
 const DEBOUNCE_MS = 200;
@@ -164,6 +165,24 @@ export function Buffer(props: BufferProps) {
     logger,
   });
 
+  const fullText = createMemo(() => bufferModel.lines().map((entry) => entry.text).join("\n"));
+
+  const statementsMemo = createMemo(() => collectSqlStatements(fullText()));
+
+  const statementAtCursor = createMemo(() => {
+    bufferModel.navColumn();
+    bufferModel.focusedRow();
+    const ctx = bufferModel.getCursorContext();
+    const cursorLine = ctx?.index ?? bufferModel.focusedRow();
+    const cursorCol = ctx?.cursorCol ?? bufferModel.navColumn();
+    return findSqlStatementAtCursor({
+      text: fullText(),
+      cursorLine,
+      cursorCol,
+      spans: statementsMemo(),
+    });
+  });
+
   const focus = () => {
     bufferModel.focusCurrent();
   };
@@ -210,11 +229,29 @@ export function Buffer(props: BufferProps) {
                 <box flexDirection="row">
                   <box
                     flexDirection="row"
-                    minWidth={3}
+                    minWidth={5}
                     justifyContent="flex-end"
                     alignItems="flex-start"
                     marginRight={1}
                   >
+                    <text
+                      maxHeight={1}
+                      fg={palette().textMuted}
+                    >
+                      {(() => {
+                        if (statementsMemo().length < 2) {
+                          return "";
+                        }
+                        const target = statementAtCursor();
+                        if (target?.startLine === indexAccessor()) {
+                          return "󰻃 ";
+                        }
+                        const hasStart = statementsMemo().some(
+                          (span) => span.isLikelySql && span.startLine === indexAccessor(),
+                        );
+                        return hasStart ? "• " : "";
+                      })()}
+                    </text>
                     <text
                       maxHeight={1}
                       fg={palette().textMuted}
