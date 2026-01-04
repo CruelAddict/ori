@@ -1,3 +1,5 @@
+/* This will hopfully be replaced once we get proper access to treesitter */
+
 export type SqlStatement = {
   startLine: number;
   endLine: number;
