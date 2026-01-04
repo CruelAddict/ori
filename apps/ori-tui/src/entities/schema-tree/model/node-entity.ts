@@ -6,7 +6,7 @@ type BaseNodeEntity = {
   id: string;
   kind: "node" | "edge";
   label: string;
-  icon: string;
+  icon?: string;
   description?: string;
   badges?: string;
   childIds: string[];
@@ -77,7 +77,6 @@ function createEdgeNodeEntity(node: Node, edgeName: string, edge: NodeEdge): Edg
     sourceNodeId: node.id,
     edgeName,
     label: edgeLabel(edgeName),
-    icon: iconForEdge(edgeName),
     description: describeEdge(edge),
     badges: edgeBadges(edge),
     childIds,
@@ -121,39 +120,24 @@ function formatEdgeCount(count: number, truncated: boolean): string {
 function iconForNode(node: Node): string {
   switch (node.type) {
     case "database":
-      return "[DB]";
+      return "";
     case "table":
-      return "[TB]";
+      return "▥";
     case "view":
-      return "[VW]";
+      return "▥";
     case "column":
-      return "[CL]";
+      return "≡";
     case "constraint":
-      return "[CT]";
+      return "▸";
     default:
-      return "[ND]";
-  }
-}
-
-function iconForEdge(edgeName: string): string {
-  switch (edgeName) {
-    case "tables":
-      return "[TB]";
-    case "views":
-      return "[VW]";
-    case "columns":
-      return "[CL]";
-    case "constraints":
-      return "[CT]";
-    default:
-      return "[ED]";
+      return "▸";
   }
 }
 
 function describeNode(node: Node): string | undefined {
   switch (node.type) {
     case "database":
-      return node.attributes?.database ?? undefined;
+      return "database";
     case "table":
     case "view":
       return node.attributes?.table ?? undefined;

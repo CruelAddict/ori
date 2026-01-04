@@ -8,6 +8,9 @@ import type { TreeRowSegment } from "./tree-row-renderable.ts";
 import "./tree-row-renderable.ts";
 import { type RowDescriptor, useTreeScrollRegistration } from "./tree-scrollbox.tsx";
 
+const ROW_LEFT_PADDING = 2;
+const GLYPH_SEPARATOR_WIDTH = 1;
+
 type TreeNodeProps = {
   nodeId: string;
   depth: number;
@@ -33,19 +36,21 @@ export function TreeNode(props: TreeNodeProps) {
   });
 
   const fg = () => (isSelected() && props.isFocused() ? palette().background : palette().text);
+  const muted = () => (isSelected() && props.isFocused() ? palette().background : palette().textMuted);
   const bg = () => (isSelected() && props.isFocused() ? palette().primary : palette().background);
 
-  const rowParts = createMemo(() => buildRowTextParts(entity(), isExpanded(), isSelected()));
+  const rowParts = createMemo(() => buildRowTextParts(entity(), isExpanded()));
   const rowSegments = createMemo(() => {
     const parts = rowParts();
     const colors = {
       baseFg: fg(),
       baseBg: bg(),
       accent: palette().accent,
-      muted: palette().textMuted,
+      muted: muted(),
     };
     const segments: TreeRowSegment[] = [
-      { text: `${parts.indicator}${parts.main}`, fg: colors.baseFg, bg: colors.baseBg },
+      { text: `${parts.glyph} `, fg: colors.muted, bg: colors.baseBg },
+      { text: parts.main, fg: colors.baseFg, bg: colors.baseBg },
     ];
     if (parts.description) {
       segments.push({
@@ -76,7 +81,7 @@ export function TreeNode(props: TreeNodeProps) {
           <box
             id={`tree-row-${rowId()}`}
             flexDirection="row"
-            paddingLeft={props.depth * 2}
+            paddingLeft={ROW_LEFT_PADDING + props.depth * 2}
             minWidth={"100%"}
             flexShrink={0}
             ref={(node: BoxRenderable | undefined) => registerRowNode(rowId(), node)}
@@ -115,37 +120,34 @@ export function TreeNode(props: TreeNodeProps) {
 }
 
 type RowTextParts = {
-  indicator: string;
+  glyph: string;
   main: string;
   description?: string;
   badges?: string;
 };
 
-function buildRowTextParts(details: NodeEntity | undefined, expanded: boolean, selected: boolean): RowTextParts {
+function buildRowTextParts(details: NodeEntity | undefined, expanded: boolean): RowTextParts {
   // TODO: handle undefined?
   const hasChildren = Boolean(details?.hasChildren);
-  const glyph = hasChildren ? (expanded ? "[-]" : "[+]") : "   ";
-  const icon = details?.icon ? `${details.icon}` : "";
+  const glyph = hasChildren ? (expanded ? "▽" : "▷") : "·";
   const label = details?.label ?? "";
-  const indicator = selected ? "> " : "  ";
-  const main = `${glyph} ${icon} ${label}`;
   return {
-    indicator,
-    main,
+    glyph,
+    main: label,
     description: details?.description,
     badges: details?.badges,
   };
 }
 
 function calculateRowTextWidth(parts: RowTextParts): number {
-  let width = parts.indicator.length + parts.main.length;
+  let width = parts.glyph.length + GLYPH_SEPARATOR_WIDTH + parts.main.length;
   if (parts.description) width += 1 + parts.description.length;
   if (parts.badges) width += 1 + parts.badges.length;
   return width;
 }
 
 function calculateRowWidth(parts: RowTextParts, depth: number): number {
-  return depth * 2 + calculateRowTextWidth(parts);
+  return ROW_LEFT_PADDING + depth * 2 + calculateRowTextWidth(parts);
 }
 
 export function createRowWidthAccessor(options: {
@@ -163,7 +165,7 @@ export function createRowWidthAccessor(options: {
     if (cached !== undefined) return cached;
 
     const entity = getEntity(row.id);
-    const parts = buildRowTextParts(entity, expanded, false);
+    const parts = buildRowTextParts(entity, expanded);
     const width = calculateRowWidth(parts, row.depth);
 
     cache.set(key, width);
