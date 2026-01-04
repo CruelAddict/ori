@@ -3,21 +3,17 @@ import { useRouteNavigation } from "@app/routes/router";
 import { connectionRoute } from "@app/routes/types";
 import type { Configuration } from "@src/entities/configuration/model/configuration";
 import { useConfigurationListStore } from "@src/entities/configuration/model/configuration-list-store";
-import { type ConnectionRecord, useConnectionState } from "@src/entities/connection/model/connection-state";
+import { useConnectionState, type ConnectionRecord } from "@src/entities/connection/model/connection-state";
 import { DialogSelect, type DialogSelectOption } from "@widgets/dialog-select";
 import { createEffect, createMemo, createSignal } from "solid-js";
 
-function formatConfigurationDetails(configuration: Configuration) {
-  return `${configuration.type}`;
-}
-
-function formatStatusBadge(record: ConnectionRecord | undefined) {
-  if (!record) return undefined;
-  if (record.status === "connected") return "connected";
-  if (record.status === "requesting" || record.status === "waiting") return "connecting";
-  if (record.status === "failed") return "failed";
-  return undefined;
-}
+const getConnectionPrefix = (record?: ConnectionRecord) => {
+  if (!record || record.status === "idle") return "○";
+  if (record.status === "connected") return "●";
+  if (record.status === "failed") return "⊗";
+  if (record.status === "requesting" || record.status === "waiting") return "◌";
+  return "○";
+};
 
 export function ConfigurationPickerOverlay(props: OverlayComponentProps) {
   const store = useConfigurationListStore();
@@ -30,12 +26,12 @@ export function ConfigurationPickerOverlay(props: OverlayComponentProps) {
     const records = connectionState.records();
     return list.map((configuration) => {
       const record = records[configuration.name];
+      const prefix = getConnectionPrefix(record);
       return {
         id: configuration.name,
-        title: configuration.name,
-        description: formatConfigurationDetails(configuration),
+        title: `${prefix} ${configuration.name}`,
+        badge: `${configuration.type}`,
         value: configuration,
-        badge: formatStatusBadge(record),
       } satisfies DialogSelectOption<Configuration>;
     });
   });
