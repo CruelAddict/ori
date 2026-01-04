@@ -5,10 +5,20 @@ import { type KeyBinding, KeyScope } from "@src/core/services/key-scopes";
 import { type Accessor, createEffect, createMemo, For, onCleanup, onMount, Show } from "solid-js";
 import { syntaxHighlighter } from "../../features/syntax-highlighting/syntax-highlighter";
 import { type BufferModel, type CursorContext, createBufferModel } from "./buffer-model";
-import { collectSqlStatements, findSqlStatementAtCursor } from "./sql-statement-detector";
+import { collectSqlStatements } from "./sql-statement-detector";
 
 const BUFFER_SCOPE_ID = "connection-view.buffer";
 const DEBOUNCE_MS = 200;
+
+function buildLineStarts(text: string): number[] {
+  const starts = [0];
+  for (let i = 0; i < text.length; i++) {
+    if (text[i] === "\n") {
+      starts.push(i + 1);
+    }
+  }
+  return starts;
+}
 
 export type BufferApi = {
   setText: (text: string) => void;
@@ -170,17 +180,7 @@ export function Buffer(props: BufferProps) {
   const statementsMemo = createMemo(() => collectSqlStatements(fullText()));
 
   const statementAtCursor = createMemo(() => {
-    bufferModel.navColumn();
-    bufferModel.focusedRow();
-    const ctx = bufferModel.getCursorContext();
-    const cursorLine = ctx?.index ?? bufferModel.focusedRow();
-    const cursorCol = ctx?.cursorCol ?? bufferModel.navColumn();
-    return findSqlStatementAtCursor({
-      text: fullText(),
-      cursorLine,
-      cursorCol,
-      spans: statementsMemo(),
-    });
+    return statementsMemo().find(stmt => stmt.startLine <= bufferModel.focusedRow() && stmt.endLine >= bufferModel.focusedRow())
   });
 
   const focus = () => {
@@ -246,9 +246,7 @@ export function Buffer(props: BufferProps) {
                         if (target?.startLine === indexAccessor()) {
                           return "󰻃 ";
                         }
-                        const hasStart = statementsMemo().some(
-                          (span) => span.isLikelySql && span.startLine === indexAccessor(),
-                        );
+                        const hasStart = statementsMemo().some((statement) => statement.startLine === indexAccessor());
                         return hasStart ? "• " : "";
                       })()}
                     </text>

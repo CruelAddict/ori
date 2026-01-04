@@ -1,22 +1,8 @@
-export type SqlStatementLines = {
-  startLine: number;
-  endLine: number;
-  isLikelySql: boolean;
-};
-
-export type SqlStatementSpan = {
+export type SqlStatement = {
   startOffset: number;
   endOffset: number;
   startLine: number;
   endLine: number;
-  isLikelySql: boolean;
-};
-
-export type FindSqlStatementAtCursorParams = {
-  text: string;
-  cursorLine: number;
-  cursorCol: number;
-  spans?: SqlStatementSpan[];
 };
 
 type Span = { start: number; end: number };
@@ -83,15 +69,6 @@ function offsetToLine(offset: number, lineStarts: number[]): number {
   return lineStarts.length - 1;
 }
 
-function clampCursorToOffset(text: string, lineStarts: number[], line: number, col: number): number {
-  const lineIndex = Math.max(0, Math.min(line, lineStarts.length - 1));
-  const start = lineStarts[lineIndex];
-  const nextStart = lineIndex + 1 < lineStarts.length ? lineStarts[lineIndex + 1] : text.length;
-  const maxCol = Math.max(0, nextStart - start);
-  const clampedCol = Math.max(0, Math.min(col, maxCol));
-  return start + clampedCol;
-}
-
 function startsDollarTag(text: string, index: number): string | undefined {
   if (text[index] !== "$") {
     return undefined;
@@ -106,17 +83,52 @@ function startsDollarTag(text: string, index: number): string | undefined {
   return text.slice(index, j + 1);
 }
 
-function isLikelySqlStatement(text: string, span: Span): boolean {
+function findStatementTokenStart(text: string, span: Span): number | undefined {
   let i = span.start;
-  while (i < span.end && WHITESPACE_RE.test(text[i]!)) {
-    i++;
+
+  while (i < span.end) {
+    while (i < span.end && WHITESPACE_RE.test(text[i]!)) {
+      i++;
+    }
+
+    if (text.startsWith("--", i)) {
+      i += 2;
+      while (i < span.end && text[i] !== "\n") {
+        i++;
+      }
+      continue;
+    }
+
+    if (text.startsWith("/*", i)) {
+      const end = text.indexOf("*/", i + 2);
+      if (end === -1 || end + 2 > span.end) {
+        return undefined;
+      }
+      i = end + 2;
+      continue;
+    }
+
+    if (text[i] === ";") {
+      i++;
+      continue;
+    }
+
+    break;
   }
-  const tokenMatch = /^[A-Za-z_][A-Za-z0-9_$]*/.exec(text.slice(i, span.end));
+
+  return i < span.end ? i : undefined;
+}
+
+function getLeadingToken(text: string, span: Span): { tokenStart: number; token: string } | undefined {
+  const tokenStart = findStatementTokenStart(text, span);
+  if (tokenStart === undefined) {
+    return undefined;
+  }
+  const tokenMatch = /^[A-Za-z_][A-Za-z0-9_$]*/.exec(text.slice(tokenStart, span.end));
   if (!tokenMatch) {
-    return false;
+    return undefined;
   }
-  const token = tokenMatch[0]?.toLowerCase();
-  return LIKELY_SQL_KEYWORDS.has(token);
+  return { tokenStart, token: tokenMatch[0]!.toLowerCase() };
 }
 
 function collectRawStatementSpans(text: string): Span[] {
@@ -235,29 +247,169 @@ function collectRawStatementSpans(text: string): Span[] {
   return spans;
 }
 
-export function collectSqlStatements(text: string): SqlStatementSpan[] {
-  if (!text.length) {
-    return [];
+function hasNonWhitespace(text: string, start: number, end: number): boolean {
+  for (let i = start; i < end; i++) {
+    if (!WHITESPACE_RE.test(text[i]!)) {
+      return true;
+    }
   }
-  const lineStarts = buildLineStarts(text);
-  const rawSpans = collectRawStatementSpans(text);
-  const result: SqlStatementSpan[] = [];
-  for (const span of rawSpans) {
-    const trimmed = trimSpan(text, span);
-    if (!trimmed) {
+  return false;
+}
+
+function findLikelyKeywordAfterNewline(text: string, start: number, end: number): number | undefined {
+  let i = start;
+  let sawIndent = false;
+  while (i < end && WHITESPACE_RE.test(text[i]!)) {
+    if (text[i] === "\n") {
+      return undefined;
+    }
+    sawIndent = true;
+    i++;
+  }
+  if (sawIndent || i >= end) {
+    return undefined;
+  }
+  const tokenMatch = /^[A-Za-z_][A-Za-z0-9_$]*/.exec(text.slice(i, end));
+  if (!tokenMatch) {
+    return undefined;
+  }
+  const token = tokenMatch[0]?.toLowerCase();
+  if (!token || !LIKELY_SQL_KEYWORDS.has(token)) {
+    return undefined;
+  }
+  return i;
+}
+
+function splitSpanOnStatementStarts(text: string, span: Span): Span[] {
+  const segments: Span[] = [];
+  let segmentStart = span.start;
+  let state: ParseState = { kind: "normal" };
+  let leadingToken = getLeadingToken(text, { start: segmentStart, end: span.end });
+  let allowWithContinuation = leadingToken?.token === "with";
+
+  let i = span.start;
+  while (i < span.end) {
+    const ch = text[i];
+    const next = text[i + 1];
+
+    if (state.kind === "normal") {
+      if (ch === "-" && next === "-") {
+        state = { kind: "line-comment" };
+        i += 2;
+        continue;
+      }
+      if (ch === "/" && next === "*") {
+        state = { kind: "block-comment" };
+        i += 2;
+        continue;
+      }
+      if (ch === "'" || ((ch === "E" || ch === "e") && next === "'")) {
+        state = { kind: "single-quote" };
+        i += ch === "'" ? 1 : 2;
+        continue;
+      }
+      if (ch === '"') {
+        state = { kind: "double-quote" };
+        i++;
+        continue;
+      }
+      const tag = startsDollarTag(text, i);
+      if (tag) {
+        state = { kind: "dollar-quote", tag };
+        i += tag.length;
+        continue;
+      }
+      if (ch === "\n") {
+        const nextStart = findLikelyKeywordAfterNewline(text, i + 1, span.end);
+        if (nextStart !== undefined && hasNonWhitespace(text, segmentStart, nextStart)) {
+          if (leadingToken?.token === "with" && allowWithContinuation) {
+            allowWithContinuation = false;
+            i++;
+            continue;
+          }
+          const trimmed = trimSpan(text, { start: segmentStart, end: nextStart });
+          if (trimmed) {
+            segments.push(trimmed);
+          }
+          segmentStart = nextStart;
+          leadingToken = getLeadingToken(text, { start: segmentStart, end: span.end });
+          allowWithContinuation = leadingToken?.token === "with";
+          i = nextStart;
+          continue;
+        }
+      }
+      i++;
       continue;
     }
-    const startLine = offsetToLine(trimmed.start, lineStarts);
-    const endLine = offsetToLine(trimmed.end - 1, lineStarts);
-    result.push({
-      startOffset: trimmed.start,
-      endOffset: trimmed.end,
-      startLine,
-      endLine,
-      isLikelySql: isLikelySqlStatement(text, trimmed),
-    });
+
+    if (state.kind === "line-comment") {
+      if (ch === "\n") {
+        state = { kind: "normal" };
+      }
+      i++;
+      continue;
+    }
+
+    if (state.kind === "block-comment") {
+      if (ch === "*" && next === "/") {
+        state = { kind: "normal" };
+        i += 2;
+        continue;
+      }
+      i++;
+      continue;
+    }
+
+    if (state.kind === "single-quote") {
+      if (ch === "'" && next === "'") {
+        i += 2;
+        continue;
+      }
+      if (ch === "\\") {
+        i += 2;
+        continue;
+      }
+      if (ch === "'") {
+        state = { kind: "normal" };
+        i++;
+        continue;
+      }
+      i++;
+      continue;
+    }
+
+    if (state.kind === "double-quote") {
+      if (ch === '"' && next === '"') {
+        i += 2;
+        continue;
+      }
+      if (ch === '"') {
+        state = { kind: "normal" };
+        i++;
+        continue;
+      }
+      i++;
+      continue;
+    }
+
+    if (state.kind === "dollar-quote") {
+      if (text.startsWith(state.tag, i)) {
+        const tag = state.tag;
+        state = { kind: "normal" };
+        i += tag.length;
+        continue;
+      }
+      i++;
+      continue;
+    }
   }
-  return result;
+
+  const tail = trimSpan(text, { start: segmentStart, end: span.end });
+  if (tail) {
+    segments.push(tail);
+  }
+
+  return segments;
 }
 
 function trimSpan(text: string, span: Span): Span | undefined {
@@ -276,40 +428,33 @@ function trimSpan(text: string, span: Span): Span | undefined {
   return { start, end };
 }
 
-export function findSqlStatementAtCursor(params: FindSqlStatementAtCursorParams): SqlStatementLines | undefined {
-  const { text, cursorLine, cursorCol, spans } = params;
+export function collectSqlStatements(text: string): SqlStatement[] {
   if (!text.length) {
-    return undefined;
+    return [];
   }
-
   const lineStarts = buildLineStarts(text);
-  const cursorOffset = clampCursorToOffset(text, lineStarts, cursorLine, cursorCol);
+  const rawSpans = collectRawStatementSpans(text);
+  const result: SqlStatement[] = [];
 
-  const statementSpans = spans ?? collectSqlStatements(text);
-  if (!statementSpans.length) {
-    return undefined;
-  }
+  for (const span of rawSpans) {
+    const logicalSpans = splitSpanOnStatementStarts(text, span);
+    for (const logical of logicalSpans) {
+      const leadingToken = getLeadingToken(text, logical);
+      if (!leadingToken || !LIKELY_SQL_KEYWORDS.has(leadingToken.token)) {
+        continue;
+      }
 
-  let target: SqlStatementSpan | undefined;
-  let previous: SqlStatementSpan | undefined;
-  for (const span of statementSpans) {
-    if (cursorOffset >= span.startOffset && cursorOffset < span.endOffset) {
-      target = span;
-      break;
+      const startLine = offsetToLine(leadingToken.tokenStart, lineStarts);
+      const endLine = offsetToLine(logical.end - 1, lineStarts);
+
+      result.push({
+        startOffset: logical.start,
+        endOffset: logical.end,
+        startLine,
+        endLine,
+      });
     }
-    if (cursorOffset < span.startOffset) {
-      target = previous && previous.isLikelySql ? previous : span;
-      break;
-    }
-    previous = span;
-  }
-  if (!target) {
-    target = statementSpans[statementSpans.length - 1];
   }
 
-  if (!target.isLikelySql) {
-    return undefined;
-  }
-
-  return { startLine: target.startLine, endLine: target.endLine, isLikelySql: true };
+  return result;
 }
