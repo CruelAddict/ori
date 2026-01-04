@@ -286,7 +286,6 @@ function collectStatementSpans(text: string): Span[] {
         continue;
       }
       i++;
-      continue;
     }
   }
 

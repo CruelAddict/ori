@@ -1,7 +1,7 @@
 import type { KeyEvent } from "@opentui/core";
 import { useKeyboard } from "@opentui/solid";
-import { Keybind, type KeyboardEventLike, type ParsedKeybind, useKeybind } from "@shared/lib/keybind";
 import { type Command, type KeyBinding, KeyScopeStore } from "@shared/config/key-scopes";
+import { Keybind, type KeyboardEventLike, type ParsedKeybind, useKeybind } from "@shared/lib/keybind";
 import type { Accessor, JSX, ParentComponent } from "solid-js";
 import { createContext, createMemo, createUniqueId, onCleanup, useContext } from "solid-js";
 

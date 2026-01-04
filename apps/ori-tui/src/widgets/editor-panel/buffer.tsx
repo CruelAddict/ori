@@ -4,7 +4,7 @@ import type { KeyEvent, MouseEvent, TextareaRenderable } from "@opentui/core";
 import { type KeyBinding, KeyScope } from "@src/core/services/key-scopes";
 import { type Accessor, createEffect, createMemo, For, onCleanup, onMount, Show } from "solid-js";
 import { syntaxHighlighter } from "../../features/syntax-highlighting/syntax-highlighter";
-import { buildLineStarts, type BufferModel, type CursorContext, createBufferModel } from "./buffer-model";
+import { type BufferModel, buildLineStarts, type CursorContext, createBufferModel } from "./buffer-model";
 import { collectSqlStatements } from "./sql-statement-detector";
 
 const BUFFER_SCOPE_ID = "connection-view.buffer";
@@ -170,7 +170,9 @@ export function Buffer(props: BufferProps) {
   const lineStarts = createMemo(() => buildLineStarts(fullText()));
   const statementsMemo = createMemo(() => collectSqlStatements(fullText(), lineStarts()));
   const statementAtCursor = createMemo(() => {
-    return statementsMemo().find((stmt) => stmt.startLine <= bufferModel.focusedRow() && stmt.endLine >= bufferModel.focusedRow());
+    return statementsMemo().find(
+      (stmt) => stmt.startLine <= bufferModel.focusedRow() && stmt.endLine >= bufferModel.focusedRow(),
+    );
   });
 
   const focus = () => {
