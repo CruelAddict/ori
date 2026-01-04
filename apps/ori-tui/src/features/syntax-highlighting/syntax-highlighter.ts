@@ -1,6 +1,6 @@
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { getTreeSitterClient, RGBA, SyntaxStyle } from "@opentui/core";
+import { addDefaultParsers, getTreeSitterClient, RGBA, SyntaxStyle } from "@opentui/core";
 import type { Logger } from "pino";
 import { type Accessor, createEffect, createSignal, onCleanup } from "solid-js";
 import sqlHighlights from "../../assets/highlights.scm" with { type: "file" };
@@ -51,24 +51,25 @@ const ASSET_BASE = dirname(fileURLToPath(import.meta.url));
 const SQL_WASM_PATH = resolve(ASSET_BASE, sqlWasm);
 const SQL_HIGHLIGHTS_URL = resolve(ASSET_BASE, sqlHighlights);
 const SQL_ASSET_LOG = { wasm: SQL_WASM_PATH, highlights: SQL_HIGHLIGHTS_URL };
+const SQL_PARSER = {
+  filetype: FILETYPE_SQL,
+  wasm: SQL_WASM_PATH,
+  queries: { highlights: [SQL_HIGHLIGHTS_URL] },
+};
 
 let registerPromise: Promise<void> | null = null;
 
 async function ensureSqlRegistered(logger?: Logger) {
   if (!registerPromise) {
     registerPromise = (async () => {
+      addDefaultParsers([SQL_PARSER]);
       const client = getTreeSitterClient();
       try {
         await client.initialize?.();
       } catch (err) {
         logger?.warn({ err }, "syntax-highlighter: client initialize failed, continuing");
       }
-      logger?.warn({ assets: SQL_ASSET_LOG }, "syntax-highlighter: register assets");
-      client.addFiletypeParser({
-        filetype: FILETYPE_SQL,
-        wasm: SQL_WASM_PATH,
-        queries: { highlights: [SQL_HIGHLIGHTS_URL] },
-      });
+      logger?.warn({ assets: SQL_ASSET_LOG }, "syntax-highlighter: register default parser assets");
       try {
         await client.preloadParser?.(FILETYPE_SQL);
       } catch (err) {
