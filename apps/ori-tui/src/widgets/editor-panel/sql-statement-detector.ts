@@ -17,7 +17,7 @@ type ParseState =
 
 const WHITESPACE_RE = /\s/;
 
-const LIKELY_SQL_KEYWORDS = new Set(
+const SQL_START_KEYWORDS = new Set(
   [
     "with",
     "select",
@@ -131,13 +131,49 @@ function getLeadingToken(text: string, span: Span): { tokenStart: number; token:
   return { tokenStart, token: tokenMatch[0]!.toLowerCase() };
 }
 
-function collectRawStatementSpans(text: string): Span[] {
-  const spans: Span[] = [];
-  let currentStart = 0;
+function hasNonWhitespace(text: string, start: number, end: number): boolean {
+  for (let i = start; i < end; i++) {
+    if (!WHITESPACE_RE.test(text[i]!)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function findLikelyKeywordAfterNewline(text: string, start: number, end: number): number | undefined {
+  let i = start;
+  let sawIndent = false;
+  while (i < end && WHITESPACE_RE.test(text[i]!)) {
+    if (text[i] === "\n") {
+      return undefined;
+    }
+    sawIndent = true;
+    i++;
+  }
+  if (sawIndent || i >= end) {
+    return undefined;
+  }
+  const tokenMatch = /^[A-Za-z_][A-Za-z0-9_$]*/.exec(text.slice(i, end));
+  if (!tokenMatch) {
+    return undefined;
+  }
+  const token = tokenMatch[0]?.toLowerCase();
+  if (!token || !SQL_START_KEYWORDS.has(token)) {
+    return undefined;
+  }
+  return i;
+}
+
+function collectStatementSpans(text: string): Span[] {
+  const segments: Span[] = [];
+  const spanEnd = text.length;
+  let segmentStart = 0;
   let state: ParseState = { kind: "normal" };
+  let leadingToken = getLeadingToken(text, { start: segmentStart, end: spanEnd });
+  let allowWithContinuation = leadingToken?.token === "with";
 
   let i = 0;
-  while (i < text.length) {
+  while (i < spanEnd) {
     const ch = text[i];
     const next = text[i + 1];
 
@@ -169,158 +205,18 @@ function collectRawStatementSpans(text: string): Span[] {
         continue;
       }
       if (ch === ";") {
-        spans.push({ start: currentStart, end: i + 1 });
-        currentStart = i + 1;
+        const trimmed = trimSpan(text, { start: segmentStart, end: i + 1 });
+        if (trimmed) {
+          segments.push(trimmed);
+        }
+        segmentStart = i + 1;
+        leadingToken = getLeadingToken(text, { start: segmentStart, end: spanEnd });
+        allowWithContinuation = leadingToken?.token === "with";
         i++;
-        continue;
-      }
-      i++;
-      continue;
-    }
-
-    if (state.kind === "line-comment") {
-      if (ch === "\n") {
-        state = { kind: "normal" };
-      }
-      i++;
-      continue;
-    }
-
-    if (state.kind === "block-comment") {
-      if (ch === "*" && next === "/") {
-        state = { kind: "normal" };
-        i += 2;
-        continue;
-      }
-      i++;
-      continue;
-    }
-
-    if (state.kind === "single-quote") {
-      if (ch === "'" && next === "'") {
-        i += 2;
-        continue;
-      }
-      if (ch === "\\") {
-        i += 2;
-        continue;
-      }
-      if (ch === "'") {
-        state = { kind: "normal" };
-        i++;
-        continue;
-      }
-      i++;
-      continue;
-    }
-
-    if (state.kind === "double-quote") {
-      if (ch === '"' && next === '"') {
-        i += 2;
-        continue;
-      }
-      if (ch === '"') {
-        state = { kind: "normal" };
-        i++;
-        continue;
-      }
-      i++;
-      continue;
-    }
-
-    if (state.kind === "dollar-quote") {
-      if (text.startsWith(state.tag, i)) {
-        const tag = state.tag;
-        state = { kind: "normal" };
-        i += tag.length;
-        continue;
-      }
-      i++;
-      continue;
-    }
-  }
-
-  if (currentStart < text.length) {
-    spans.push({ start: currentStart, end: text.length });
-  }
-
-  return spans;
-}
-
-function hasNonWhitespace(text: string, start: number, end: number): boolean {
-  for (let i = start; i < end; i++) {
-    if (!WHITESPACE_RE.test(text[i]!)) {
-      return true;
-    }
-  }
-  return false;
-}
-
-function findLikelyKeywordAfterNewline(text: string, start: number, end: number): number | undefined {
-  let i = start;
-  let sawIndent = false;
-  while (i < end && WHITESPACE_RE.test(text[i]!)) {
-    if (text[i] === "\n") {
-      return undefined;
-    }
-    sawIndent = true;
-    i++;
-  }
-  if (sawIndent || i >= end) {
-    return undefined;
-  }
-  const tokenMatch = /^[A-Za-z_][A-Za-z0-9_$]*/.exec(text.slice(i, end));
-  if (!tokenMatch) {
-    return undefined;
-  }
-  const token = tokenMatch[0]?.toLowerCase();
-  if (!token || !LIKELY_SQL_KEYWORDS.has(token)) {
-    return undefined;
-  }
-  return i;
-}
-
-function splitSpanOnStatementStarts(text: string, span: Span): Span[] {
-  const segments: Span[] = [];
-  let segmentStart = span.start;
-  let state: ParseState = { kind: "normal" };
-  let leadingToken = getLeadingToken(text, { start: segmentStart, end: span.end });
-  let allowWithContinuation = leadingToken?.token === "with";
-
-  let i = span.start;
-  while (i < span.end) {
-    const ch = text[i];
-    const next = text[i + 1];
-
-    if (state.kind === "normal") {
-      if (ch === "-" && next === "-") {
-        state = { kind: "line-comment" };
-        i += 2;
-        continue;
-      }
-      if (ch === "/" && next === "*") {
-        state = { kind: "block-comment" };
-        i += 2;
-        continue;
-      }
-      if (ch === "'" || ((ch === "E" || ch === "e") && next === "'")) {
-        state = { kind: "single-quote" };
-        i += ch === "'" ? 1 : 2;
-        continue;
-      }
-      if (ch === '"') {
-        state = { kind: "double-quote" };
-        i++;
-        continue;
-      }
-      const tag = startsDollarTag(text, i);
-      if (tag) {
-        state = { kind: "dollar-quote", tag };
-        i += tag.length;
         continue;
       }
       if (ch === "\n") {
-        const nextStart = findLikelyKeywordAfterNewline(text, i + 1, span.end);
+        const nextStart = findLikelyKeywordAfterNewline(text, i + 1, spanEnd);
         if (nextStart !== undefined && hasNonWhitespace(text, segmentStart, nextStart)) {
           if (leadingToken?.token === "with" && allowWithContinuation) {
             allowWithContinuation = false;
@@ -332,7 +228,7 @@ function splitSpanOnStatementStarts(text: string, span: Span): Span[] {
             segments.push(trimmed);
           }
           segmentStart = nextStart;
-          leadingToken = getLeadingToken(text, { start: segmentStart, end: span.end });
+          leadingToken = getLeadingToken(text, { start: segmentStart, end: spanEnd });
           allowWithContinuation = leadingToken?.token === "with";
           i = nextStart;
           continue;
@@ -404,7 +300,7 @@ function splitSpanOnStatementStarts(text: string, span: Span): Span[] {
     }
   }
 
-  const tail = trimSpan(text, { start: segmentStart, end: span.end });
+  const tail = trimSpan(text, { start: segmentStart, end: spanEnd });
   if (tail) {
     segments.push(tail);
   }
@@ -433,27 +329,24 @@ export function collectSqlStatements(text: string): SqlStatement[] {
     return [];
   }
   const lineStarts = buildLineStarts(text);
-  const rawSpans = collectRawStatementSpans(text);
+  const logicalSpans = collectStatementSpans(text);
   const result: SqlStatement[] = [];
 
-  for (const span of rawSpans) {
-    const logicalSpans = splitSpanOnStatementStarts(text, span);
-    for (const logical of logicalSpans) {
-      const leadingToken = getLeadingToken(text, logical);
-      if (!leadingToken || !LIKELY_SQL_KEYWORDS.has(leadingToken.token)) {
-        continue;
-      }
-
-      const startLine = offsetToLine(leadingToken.tokenStart, lineStarts);
-      const endLine = offsetToLine(logical.end - 1, lineStarts);
-
-      result.push({
-        startOffset: logical.start,
-        endOffset: logical.end,
-        startLine,
-        endLine,
-      });
+  for (const logical of logicalSpans) {
+    const leadingToken = getLeadingToken(text, logical);
+    if (!leadingToken || !SQL_START_KEYWORDS.has(leadingToken.token)) {
+      continue;
     }
+
+    const startLine = offsetToLine(leadingToken.tokenStart, lineStarts);
+    const endLine = offsetToLine(logical.end - 1, lineStarts);
+
+    result.push({
+      startOffset: logical.start,
+      endOffset: logical.end,
+      startLine,
+      endLine,
+    });
   }
 
   return result;
