@@ -94,10 +94,10 @@ export function createBufferModel(options: BufferModelOptions) {
     options.scheduleHighlight(text, nextVersion);
   };
 
-  const buildSpansByLine = (highlight: SyntaxHighlightResult) => {
+  const buildHighlightSpansByLine = (highlight: SyntaxHighlightResult) => {
     const text = state.lines.map((line) => line.text).join("\n");
     const lineStarts = buildLineStarts(text);
-    const spansByLine = new Map<number, { start: number; end: number; styleId: number }[]>();
+    const highlightSpansByLine = new Map<number, { start: number; end: number; styleId: number }[]>();
 
     for (const span of highlight.spans) {
       const start = offsetToLineCol(span.start, lineStarts);
@@ -105,16 +105,16 @@ export function createBufferModel(options: BufferModelOptions) {
       if (start.line !== end.line) {
         continue;
       }
-      const spans = spansByLine.get(start.line) ?? [];
+      const spans = highlightSpansByLine.get(start.line) ?? [];
       spans.push({ start: start.col, end: end.col, styleId: span.styleId });
-      spansByLine.set(start.line, spans);
+      highlightSpansByLine.set(start.line, spans);
     }
 
-    for (const spans of spansByLine.values()) {
+    for (const spans of highlightSpansByLine.values()) {
       spans.sort((a, b) => a.start - b.start || a.end - b.end);
     }
 
-    return spansByLine;
+    return highlightSpansByLine;
   };
 
   const setLineRef = (lineId: string, ref: TextareaRenderable | undefined) => {
@@ -138,7 +138,7 @@ export function createBufferModel(options: BufferModelOptions) {
       if (highlight.version !== highlightRequestVersion) {
         return;
       }
-      const spansByLine = buildSpansByLine(highlight);
+      const spansByLine = buildHighlightSpansByLine(highlight);
       applySyntaxHighlights({
         spansByLine,
         syntaxStyle: highlight.syntaxStyle,

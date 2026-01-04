@@ -168,9 +168,7 @@ export function Buffer(props: BufferProps) {
   const lineTexts = createMemo(() => bufferModel.lines().map((entry) => entry.text));
   const fullText = createMemo(() => lineTexts().join("\n"));
   const lineStarts = createMemo(() => buildLineStarts(fullText()));
-
   const statementsMemo = createMemo(() => collectSqlStatements(fullText(), lineStarts()));
-
   const statementAtCursor = createMemo(() => {
     return statementsMemo().find((stmt) => stmt.startLine <= bufferModel.focusedRow() && stmt.endLine >= bufferModel.focusedRow());
   });
