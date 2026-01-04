@@ -47,10 +47,6 @@ export function useDialogSelect<T>(params: UseDialogSelectParams<T>): DialogSele
     setCursorIndex(0);
   });
 
-  createEffect(() => {
-    options();
-    setCursorIndex(0);
-  });
 
   createEffect(() => {
     if (!selectedId) return;

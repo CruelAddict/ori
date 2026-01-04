@@ -8,11 +8,11 @@ import { DialogSelect, type DialogSelectOption } from "@widgets/dialog-select";
 import { createEffect, createMemo, createSignal } from "solid-js";
 
 const getConnectionPrefix = (record?: ConnectionRecord) => {
-  if (!record || record.status === "idle") return "○";
-  if (record.status === "connected") return "●";
-  if (record.status === "failed") return "⊗";
-  if (record.status === "requesting" || record.status === "waiting") return "◌";
-  return "○";
+  if (!record || record.status === "idle") return "–";
+  if (record.status === "connected") return "∿";
+  if (record.status === "failed") return "×";
+  if (record.status === "requesting" || record.status === "waiting") return "⋯";
+  return "–";
 };
 
 export function ConfigurationPickerOverlay(props: OverlayComponentProps) {
@@ -50,6 +50,15 @@ export function ConfigurationPickerOverlay(props: OverlayComponentProps) {
     if (!record) return;
     if (record.status === "connected") {
       navigateToConfiguration(intent);
+    }
+  });
+
+  createEffect(() => {
+    const intent = pendingName();
+    if (!intent) return;
+    const record = connectionState.records()[intent];
+    if (record?.status === "failed") {
+      setPendingName(null);
     }
   });
 
