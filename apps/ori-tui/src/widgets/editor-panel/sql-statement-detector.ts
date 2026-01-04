@@ -1,6 +1,4 @@
 export type SqlStatement = {
-  startOffset: number;
-  endOffset: number;
   startLine: number;
   endLine: number;
 };
@@ -342,8 +340,6 @@ export function collectSqlStatements(text: string): SqlStatement[] {
     const endLine = offsetToLine(logical.end - 1, lineStarts);
 
     result.push({
-      startOffset: logical.start,
-      endOffset: logical.end,
       startLine,
       endLine,
     });
