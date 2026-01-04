@@ -84,7 +84,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
           flexDirection="row"
           justifyContent="space-between"
           paddingLeft={2}
-          paddingRight={3}
+          paddingRight={2}
         >
           <text
             fg={palette().text}
@@ -266,7 +266,7 @@ function OptionRow<T>(props: {
       id={`dialog-option-${optionIndex()}`}
       flexDirection="row"
       paddingLeft={2}
-      paddingRight={1}
+      paddingRight={2}
       backgroundColor={isCursor() ? props.palette().primary : undefined}
       gap={1}
     >
