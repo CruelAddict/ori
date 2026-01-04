@@ -34,19 +34,8 @@
       "recommended": true,
       "a11y": "warn",
       "complexity": {
-        "noExcessiveLinesPerFunction": {
-          "level": "warn",
-          "options": {
-            "maxLines": 120,
-            "skipBlankLines": true
-          }
-        },
-        "noExcessiveCognitiveComplexity": {
-          "level": "warn",
-          "options": {
-            "maxAllowedComplexity": 25
-          }
-        }
+        "noExcessiveLinesPerFunction": "off",
+        "noExcessiveCognitiveComplexity": "off"
       },
       "correctness": {
         "noUnusedImports": "error",
@@ -68,7 +57,8 @@
         "noDynamicNamespaceImportAccess": "warn"
       },
       "style": {
-        "noNestedTernary": "warn",
+        "noNestedTernary": "off",
+        "noNonNullAssertion": "off",
         "noInferrableTypes": "warn",
         "useImportType": "warn",
         "useExportType": "warn"
