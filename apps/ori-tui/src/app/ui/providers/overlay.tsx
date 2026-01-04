@@ -1,5 +1,4 @@
-import type { OverlayManager } from "@app/overlay/overlay-store";
-import { createOverlayManager } from "@app/overlay/overlay-store";
+import { createOverlayManager, type OverlayManager } from "@widgets/overlay/overlay-store";
 import { useRenderer } from "@opentui/solid";
 import { createContext, type JSX, onMount, useContext } from "solid-js";
 

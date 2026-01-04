@@ -1,4 +1,4 @@
-import type { OverlayComponentProps } from "@app/overlay/overlay-store";
+import type { OverlayComponentProps } from "./overlay-store";
 import { useTheme } from "@app/providers/theme";
 import { DialogSelect, type DialogSelectOption } from "@widgets/dialog-select";
 import { createMemo, onCleanup } from "solid-js";

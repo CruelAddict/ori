@@ -1,4 +1,4 @@
-import type { OverlayComponentProps } from "@app/overlay/overlay-store";
+import type { OverlayComponentProps } from "./overlay-store";
 import { useRouteNavigation } from "@app/routes/router";
 import { connectionRoute } from "@app/routes/types";
 import type { Configuration } from "@src/entities/configuration/model/configuration";

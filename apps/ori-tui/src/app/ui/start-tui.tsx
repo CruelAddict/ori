@@ -1,7 +1,7 @@
-import { ConfigurationPickerOverlay } from "@app/overlay/ConfigurationPickerOverlay";
-import { OverlayHost } from "@app/overlay/OverlayHost";
-import type { OverlayManager } from "@app/overlay/overlay-store";
-import { ThemePickerOverlay } from "@app/overlay/ThemePickerOverlay";
+import { ConfigurationPickerOverlay } from "@widgets/overlay/ConfigurationPickerOverlay";
+import { OverlayHost } from "@widgets/overlay/OverlayHost";
+import type { OverlayManager } from "@widgets/overlay/overlay-store";
+import { ThemePickerOverlay } from "@widgets/overlay/ThemePickerOverlay";
 import { ClientProvider } from "@app/providers/client";
 import { EventStreamProvider } from "@app/providers/events";
 import { LoggerProvider, useLogger } from "@app/providers/logger";
