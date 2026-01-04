@@ -49,7 +49,7 @@ function makeLinesFromText(text: string, rendered: boolean): Line[] {
   return safeParts.map((part) => makeLine(part, rendered));
 }
 
-function buildLineStarts(text: string): number[] {
+export function buildLineStarts(text: string): number[] {
   const starts = [0];
   for (let i = 0; i < text.length; i++) {
     if (text[i] === "\n") {

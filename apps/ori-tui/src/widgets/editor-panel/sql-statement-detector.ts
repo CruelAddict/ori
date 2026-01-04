@@ -39,16 +39,6 @@ const SQL_START_KEYWORDS = new Set(
   ].map((word) => word.toLowerCase()),
 );
 
-function buildLineStarts(text: string): number[] {
-  const starts = [0];
-  for (let i = 0; i < text.length; i++) {
-    if (text[i] === "\n") {
-      starts.push(i + 1);
-    }
-  }
-  return starts;
-}
-
 function offsetToLine(offset: number, lineStarts: number[]): number {
   let low = 0;
   let high = lineStarts.length - 1;
@@ -322,11 +312,10 @@ function trimSpan(text: string, span: Span): Span | undefined {
   return { start, end };
 }
 
-export function collectSqlStatements(text: string): SqlStatement[] {
+export function collectSqlStatements(text: string, lineStarts: number[]): SqlStatement[] {
   if (!text.length) {
     return [];
   }
-  const lineStarts = buildLineStarts(text);
   const logicalSpans = collectStatementSpans(text);
   const result: SqlStatement[] = [];
 

@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { buildLineStarts } from "./buffer-model";
 import { collectSqlStatements, type SqlStatement } from "./sql-statement-detector";
 
 type SpanSummary = Pick<SqlStatement, "startLine" | "endLine">;
@@ -200,7 +201,8 @@ const collectFixtures: CollectFixture[] = [
 describe("collectSqlStatements", () => {
   for (const { name, sql, expected } of collectFixtures) {
     test(name, () => {
-      const spans = collectSqlStatements(sql).map((span) => ({
+      const lineStarts = buildLineStarts(sql);
+      const spans = collectSqlStatements(sql, lineStarts).map((span) => ({
         startLine: span.startLine,
         endLine: span.endLine,
       }));
