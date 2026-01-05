@@ -31,11 +31,12 @@ export function WelcomePane() {
         <ascii_font
           text="ORI"
           font="tiny"
-          fg={RGBA.fromHex(palette().text)}
+          color={palette().text}
         />
         <text
           attributes={TextAttributes.DIM}
           marginLeft={2}
+          fg={palette().text}
         >
           v0.0.1
         </text>
