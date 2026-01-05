@@ -7,7 +7,6 @@ import { syntaxHighlighter } from "../../features/syntax-highlighting/syntax-hig
 import { type BufferModel, buildLineStarts, type CursorContext, createBufferModel } from "./buffer-model";
 import { collectSqlStatements } from "./sql-statement-detector";
 
-const BUFFER_SCOPE_ID = "connection-view.buffer";
 const DEBOUNCE_MS = 200;
 
 export type BufferApi = {
@@ -206,7 +205,6 @@ export function Buffer(props: BufferProps) {
 
   return (
     <KeyScope
-      id={BUFFER_SCOPE_ID}
       bindings={bindings}
       enabled={props.isFocused}
     >

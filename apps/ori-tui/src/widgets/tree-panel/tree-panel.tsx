@@ -7,8 +7,8 @@ import { createRowWidthAccessor, TreeNode } from "./tree-node.tsx";
 import { MIN_CONTENT_WIDTH } from "./tree-scroll/row-metrics.ts";
 import { TreeScrollbox, type TreeScrollboxApi } from "./tree-scrollbox.tsx";
 
-const TREE_SCOPE_ID = "connection-view.tree";
 const HORIZONTAL_SCROLL_STEP = 6;
+
 const MIN_FOCUSED_COLUMN_WIDTH = 50;
 const MIN_FOCUSED_PERCENT = 0.2;
 const MAX_FOCUSED_PERCENT = 0.5;
@@ -111,7 +111,6 @@ export function TreePanel(props: TreePanelProps) {
   return (
     <Show when={pane.visible()}>
       <KeyScope
-        id={TREE_SCOPE_ID}
         bindings={bindings}
         enabled={enabled}
       >

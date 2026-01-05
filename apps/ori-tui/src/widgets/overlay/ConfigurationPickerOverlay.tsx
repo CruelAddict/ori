@@ -85,7 +85,6 @@ export function ConfigurationPickerOverlay(props: OverlayComponentProps) {
 
   return (
     <DialogSelect
-      scopeId="configuration-picker"
       title="Select database"
       placeholder="Type to search"
       emptyMessage="No configurations available"

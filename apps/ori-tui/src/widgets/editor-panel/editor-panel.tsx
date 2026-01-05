@@ -45,7 +45,6 @@ export function EditorPanel(props: EditorPanelProps) {
 
   return (
     <KeyScope
-      id="connection-view.editor"
       bindings={keyBindings}
       enabled={pane.isFocused}
     >

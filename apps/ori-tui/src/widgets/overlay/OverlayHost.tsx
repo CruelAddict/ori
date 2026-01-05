@@ -37,7 +37,6 @@ export function OverlayHost() {
             const Render = entry.render;
             return (
               <KeyScope
-                id={`overlay-${entry.id}`}
                 bindings={[]}
                 layer={entry.zIndex}
               >

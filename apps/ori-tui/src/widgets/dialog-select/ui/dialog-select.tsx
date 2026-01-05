@@ -14,7 +14,6 @@ export type DialogSelectProps<T> = {
   emptyMessage?: string;
   width?: number;
   maxHeight?: number;
-  scopeId?: string;
   hints?: readonly DialogSelectHint[];
   extraKeyBindings?: Accessor<KeyBinding[] | undefined>;
   initialFilter?: string;
@@ -67,7 +66,6 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
 
   return (
     <KeyScope
-      id={props.scopeId}
       bindings={bindings}
     >
       <box

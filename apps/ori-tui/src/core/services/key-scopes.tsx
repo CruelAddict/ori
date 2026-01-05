@@ -41,7 +41,6 @@ export const KeymapProvider: ParentComponent<KeymapProviderProps> = (props) => {
 };
 
 export type KeyScopeProps = {
-  id?: string;
   bindings: KeyBinding[] | Accessor<KeyBinding[]>;
   enabled?: boolean | (() => boolean);
   priority?: number;
@@ -54,8 +53,7 @@ export function KeyScope(props: KeyScopeProps) {
   const parent = useContext(ParentScopeContext);
   const parentId = parent.id;
   const inheritedLayer = parent.layer;
-  const instanceId = createUniqueId();
-  const scopeId = props.id ? `${props.id}-${instanceId}` : instanceId;
+  const scopeId = createUniqueId();
   const bindingsProp = props.bindings;
 
   const bindingsAccessor: Accessor<KeyBinding[]> = isBindingsAccessor(bindingsProp) ? bindingsProp : () => bindingsProp;

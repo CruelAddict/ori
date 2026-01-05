@@ -4,8 +4,6 @@ import { type KeyBinding, KeyScope } from "@src/core/services/key-scopes";
 import type { ResultsPaneViewModel } from "@src/features/results-pane/use-results-pane";
 import { createMemo, For, Show } from "solid-js";
 
-const RESULTS_SCOPE_ID = "connection-view.results";
-
 export type ResultsPanelProps = {
   viewModel: ResultsPaneViewModel;
 };
@@ -49,7 +47,6 @@ export function ResultsPanel(props: ResultsPanelProps) {
   return (
     <Show when={pane.visible()}>
       <KeyScope
-        id={RESULTS_SCOPE_ID}
         bindings={bindings}
         enabled={enabled}
       >

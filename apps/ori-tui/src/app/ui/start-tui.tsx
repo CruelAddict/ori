@@ -115,7 +115,6 @@ function GlobalHotkeys() {
   return (
     <>
       <KeyScope
-        id="global"
         bindings={[
           {
             pattern: "t",
@@ -136,7 +135,6 @@ function GlobalHotkeys() {
         ]}
       />
       <KeyScope
-        id="system-shortcuts"
         layer={SYSTEM_LAYER}
         bindings={[
           {
