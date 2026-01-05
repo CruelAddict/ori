@@ -54,7 +54,6 @@ export function TreePanel(props: TreePanelProps) {
   });
 
   onMount(() => {
-    handleResize();
     process.stdout?.on?.("resize", handleResize);
   });
 
