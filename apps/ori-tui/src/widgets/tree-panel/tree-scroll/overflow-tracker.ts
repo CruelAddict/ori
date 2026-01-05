@@ -36,7 +36,7 @@ export function createOverflowTracker(options: OverflowTrackerOptions): Overflow
       logger.debug("Measurement timeout triggered");
       measureHandle = null;
       measure();
-    }, 0);
+    }, 100);
   };
 
   const measure = () => {
