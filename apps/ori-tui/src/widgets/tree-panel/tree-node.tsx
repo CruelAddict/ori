@@ -36,7 +36,6 @@ export function TreeNode(props: TreeNodeProps) {
   });
 
   const fg = () => (isSelected() && props.isFocused() ? palette().background : palette().text);
-  const muted = () => (isSelected() && props.isFocused() ? palette().background : palette().textMuted);
   const bg = () => (isSelected() && props.isFocused() ? palette().primary : palette().background);
 
   const rowParts = createMemo(() => buildRowTextParts(entity(), isExpanded()));
@@ -46,16 +45,15 @@ export function TreeNode(props: TreeNodeProps) {
       baseFg: fg(),
       baseBg: bg(),
       accent: palette().accent,
-      muted: muted(),
     };
     const segments: TreeRowSegment[] = [
-      { text: `${parts.glyph} `, fg: colors.muted, bg: colors.baseBg },
+      { text: `${parts.glyph} `, fg: colors.baseFg, bg: colors.baseBg, attributes: TextAttributes.DIM },
       { text: parts.main, fg: colors.baseFg, bg: colors.baseBg },
     ];
     if (parts.description) {
       segments.push({
         text: ` ${parts.description}`,
-        fg: colors.muted,
+        fg: colors.baseFg,
         bg: colors.baseBg,
         attributes: TextAttributes.DIM,
       });
