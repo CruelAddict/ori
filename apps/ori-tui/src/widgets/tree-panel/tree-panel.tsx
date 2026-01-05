@@ -25,7 +25,6 @@ export function TreePanel(props: TreePanelProps) {
   const selectedId = pane.controller.selectedId;
   const isRowSelected = createSelector(selectedId);
   const { theme } = useTheme();
-  const palette = theme;
 
   const measureRowWidth = createRowWidthAccessor({
     getEntity: pane.controller.getEntity,
@@ -125,14 +124,14 @@ export function TreePanel(props: TreePanelProps) {
             flexGrow={1}
             height="100%"
             border={["right"]}
-            borderColor={palette().backgroundElement}
+            borderColor={theme().backgroundElement}
           >
             <Show when={pane.loading()}>
-              <text fg={palette().text}>Loading schema graph...</text>
+              <text fg={theme().text}>Loading schema graph...</text>
             </Show>
             <Show when={!pane.loading() && pane.error()}>
               {(message: Accessor<string | null>) => (
-                <text fg={palette().error}>Failed to load graph: {message()}</text>
+                <text fg={theme().error}>Failed to load graph: {message()}</text>
               )}
             </Show>
             <Show when={!pane.loading() && !pane.error()}>
@@ -149,7 +148,7 @@ export function TreePanel(props: TreePanelProps) {
                   fallback={
                     <text
                       attributes={TextAttributes.DIM}
-                      fg={palette().textMuted}
+                      fg={theme().textMuted}
                       selectable={false}
                     >
                       Graph is empty. Try refreshing later.
