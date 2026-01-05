@@ -54,7 +54,8 @@ export function KeyScope(props: KeyScopeProps) {
   const parent = useContext(ParentScopeContext);
   const parentId = parent.id;
   const inheritedLayer = parent.layer;
-  const scopeId = props.id ?? createUniqueId();
+  const instanceId = createUniqueId();
+  const scopeId = props.id ? `${props.id}-${instanceId}` : instanceId;
   const bindingsProp = props.bindings;
 
   const bindingsAccessor: Accessor<KeyBinding[]> = isBindingsAccessor(bindingsProp) ? bindingsProp : () => bindingsProp;
