@@ -4,7 +4,7 @@ import { type KeyBinding, KeyScope } from "@src/core/services/key-scopes";
 import type { TreePaneViewModel } from "@src/features/tree-pane/use-tree-pane";
 import { type Accessor, createMemo, createSelector, createSignal, For, onCleanup, onMount, Show } from "solid-js";
 import { createRowWidthAccessor, TreeNode } from "./tree-node.tsx";
-import { MIN_CONTENT_WIDTH } from "./tree-scroll/row-metrics.ts";
+import { MIN_VIEWPORT_WIDTH } from "./tree-scroll/row-metrics.ts";
 import { TreeScrollbox, type TreeScrollboxApi } from "./tree-scrollbox.tsx";
 
 const HORIZONTAL_SCROLL_STEP = 6;
@@ -30,7 +30,7 @@ export function TreePanel(props: TreePanelProps) {
     getEntity: pane.controller.getEntity,
     isExpanded: pane.controller.isExpanded,
   });
-  const [treeNaturalWidth, setTreeNaturalWidth] = createSignal(MIN_CONTENT_WIDTH);
+  const [treeNaturalWidth, setTreeNaturalWidth] = createSignal(MIN_VIEWPORT_WIDTH);
   let treeScrollboxApi: TreeScrollboxApi | null = null;
   const handleScrollboxApi = (api?: TreeScrollboxApi) => {
     treeScrollboxApi = api ?? null;

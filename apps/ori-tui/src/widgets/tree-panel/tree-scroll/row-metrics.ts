@@ -1,7 +1,6 @@
 import { createSignal } from "solid-js";
 
-export const MIN_CONTENT_WIDTH = 20;
-const clampContentWidth = (width: number) => Math.max(width, MIN_CONTENT_WIDTH);
+export const MIN_VIEWPORT_WIDTH = 20;
 
 export type RowDescriptor = {
   id: string;
@@ -21,7 +20,11 @@ export type RowMetricsService = {
   dispose(): void;
 };
 
-// the reason this file exists is that opentui can't properly handle scrollbar with changing content & viewport width
+/* the reason this file exists is that opentui can't properly handle scrollbar 
+ * when content & viewport both change widths; the scrollbar sizing gets broken
+ * and I was not in the mood to debug it; as a result, we have this component 
+ * that dynamically resizes scrollbox's underlying content in a controllable way
+ * for tiptoeing around that scrollbar size bug */
 export function createRowMetrics(
   measureRowWidth: MeasureRowWidth,
   onWidthUpdate: WidthChangeHandler,
@@ -29,10 +32,10 @@ export function createRowMetrics(
   const rowWidths = new Map<string, RowMeta>();
   const depthStats = new Map<number, WidthEntry>();
   const activeRowIds = new Set<string>();
-  const [contentWidth, setContentWidth] = createSignal(MIN_CONTENT_WIDTH);
-  const [naturalWidth, setNaturalWidth] = createSignal(MIN_CONTENT_WIDTH);
+  const [contentWidth, setContentWidth] = createSignal(MIN_VIEWPORT_WIDTH);
+  const [naturalWidth, setNaturalWidth] = createSignal(MIN_VIEWPORT_WIDTH);
 
-  let viewportWidth = clampContentWidth(readTerminalWidth() - 30);
+  let minContentWidth = Math.max(readTerminalWidth() - 30, MIN_VIEWPORT_WIDTH);
   let widthRecalcHandle: ReturnType<typeof setTimeout> | null = null;
   let pendingWidthUpdate = false;
 
@@ -89,7 +92,7 @@ export function createRowMetrics(
     widthRecalcHandle = setTimeout(() => {
       pendingWidthUpdate = false;
       widthRecalcHandle = null;
-      let widest = MIN_CONTENT_WIDTH;
+      let widest = MIN_VIEWPORT_WIDTH;
       for (const { width } of depthStats.values()) {
         if (width > widest) widest = width;
       }
@@ -99,23 +102,23 @@ export function createRowMetrics(
 
   const emitWidthChange = (widest: number) => {
     setNaturalWidth(widest);
-    const applied = Math.max(widest, viewportWidth);
+    const applied = Math.max(widest, minContentWidth);
     setContentWidth(applied);
     onWidthUpdate(applied);
   };
 
   const handleViewportResize = () => {
-    const normalized = clampContentWidth(readTerminalWidth());
-    if (normalized === viewportWidth) return;
-    viewportWidth = normalized;
+    const normalized = Math.max(readTerminalWidth() - 30, MIN_VIEWPORT_WIDTH);
+    if (normalized === minContentWidth) return;
+    minContentWidth = normalized;
     emitWidthChange(naturalWidth());
   };
 
-  const detachViewportResize = attachViewportResizeListener(handleViewportResize);
+  process.stdout?.on?.("resize", handleViewportResize);
   emitWidthChange(naturalWidth());
 
   const dispose = () => {
-    detachViewportResize();
+    process.stdout?.off?.("resize", handleViewportResize);
     if (widthRecalcHandle) {
       clearTimeout(widthRecalcHandle);
       widthRecalcHandle = null;
@@ -137,13 +140,4 @@ function readTerminalWidth() {
   if (typeof process === "undefined") return 0;
   const columns = process.stdout?.columns;
   return columns ?? 0;
-}
-
-function attachViewportResizeListener(handler: () => void) {
-  if (typeof process === "undefined") return () => { };
-  const stdout = process.stdout;
-  stdout?.on?.("resize", handler);
-  return () => {
-    stdout?.off?.("resize", handler);
-  };
 }
