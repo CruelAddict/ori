@@ -1,8 +1,9 @@
 import { ConnectionViewPage } from "@pages/connection-view/connection-view";
 import { WelcomePage } from "@pages/welcome/welcome-page";
+import { KeyScope, type KeyBinding } from "@src/core/services/key-scopes";
 import { createMemo, For } from "solid-js";
 import { useRouteNavigation } from "./router";
-import type { ConnectionRoute, RouteLocation } from "./types";
+import { connectionRoute, type ConnectionRoute, type RouteLocation } from "./types";
 
 export function RouteOutlet() {
   const navigation = useRouteNavigation();
@@ -18,40 +19,75 @@ export function RouteOutlet() {
     return null;
   });
   const showWelcome = createMemo(() => activeConnectionName() === null);
+  const previousConnectionName = createMemo(() => {
+    const currentName = activeConnectionName();
+    if (!currentName) {
+      return null;
+    }
+    const list = connections();
+    const index = list.findIndex((route) => route.configurationName === currentName);
+    if (index <= 0) {
+      return null;
+    }
+    return list[index - 1]?.configurationName ?? null;
+  });
+
+  const goToPreviousConnection = () => {
+    const name = previousConnectionName();
+    if (!name) {
+      return;
+    }
+    navigation.push(connectionRoute(name));
+  };
+
+  const hotkeys: KeyBinding[] = [
+    {
+      pattern: "shift+tab",
+      handler: goToPreviousConnection,
+      preventDefault: true,
+      description: "Switch to previous connection",
+      commandPaletteSection: "Navigation",
+    },
+  ];
 
   return (
-    <box
-      flexGrow={1}
-      position="relative"
+    <KeyScope
+      bindings={hotkeys}
+      enabled={() => previousConnectionName() !== null}
     >
       <box
         flexGrow={1}
-        visible={showWelcome()}
+        position="relative"
       >
-        <WelcomePage />
+        <box
+          flexGrow={1}
+          visible={showWelcome()}
+        >
+          <WelcomePage />
+        </box>
+        <For each={connections()}>
+          {(route) => {
+            const isActive = () => activeConnectionName() === route.configurationName;
+            return (
+              <box
+                flexGrow={1}
+                position="absolute"
+                top={0}
+                left={0}
+                right={0}
+                bottom={0}
+                visible={isActive()}
+              >
+                <ConnectionViewPage
+                  configurationName={route.configurationName}
+                  isActive={isActive()}
+                />
+              </box>
+            );
+          }}
+        </For>
       </box>
-      <For each={connections()}>
-        {(route) => {
-          const isActive = () => activeConnectionName() === route.configurationName;
-          return (
-            <box
-              flexGrow={1}
-              position="absolute"
-              top={0}
-              left={0}
-              right={0}
-              bottom={0}
-              visible={isActive()}
-            >
-              <ConnectionViewPage
-                configurationName={route.configurationName}
-                isActive={isActive()}
-              />
-            </box>
-          );
-        }}
-      </For>
-    </box>
+    </KeyScope>
   );
 }
 

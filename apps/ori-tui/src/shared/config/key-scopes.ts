@@ -1,7 +1,7 @@
 import type { KeyEvent } from "@opentui/core";
 import { LEADER_KEY_PATTERN } from "@src/core/services/key-scopes";
 
-export type CommandPaletteSection = "System" | "Connection" | "Query";
+export type CommandPaletteSection = "System" | "Navigation" | "Connection" | "Query";
 
 export type KeyBinding = {
   pattern: string;
