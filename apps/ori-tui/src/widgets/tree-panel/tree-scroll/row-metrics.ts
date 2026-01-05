@@ -32,7 +32,7 @@ export function createRowMetrics(
   const [contentWidth, setContentWidth] = createSignal(MIN_CONTENT_WIDTH);
   const [naturalWidth, setNaturalWidth] = createSignal(MIN_CONTENT_WIDTH);
 
-  let viewportWidth = clampContentWidth(readTerminalWidth());
+  let viewportWidth = clampContentWidth(readTerminalWidth() - 30);
   let widthRecalcHandle: ReturnType<typeof setTimeout> | null = null;
   let pendingWidthUpdate = false;
 
@@ -140,7 +140,7 @@ function readTerminalWidth() {
 }
 
 function attachViewportResizeListener(handler: () => void) {
-  if (typeof process === "undefined") return () => {};
+  if (typeof process === "undefined") return () => { };
   const stdout = process.stdout;
   stdout?.on?.("resize", handler);
   return () => {

@@ -60,20 +60,16 @@ export function TreePanel(props: TreePanelProps) {
     process.stdout?.off?.("resize", handleResize);
   });
 
-  const moveSelection = (delta: number) => {
-    pane.controller.moveSelection(delta);
-  };
-
   const handleManualHorizontalScroll = (direction: "left" | "right") => {
     const delta = direction === "left" ? -HORIZONTAL_SCROLL_STEP : HORIZONTAL_SCROLL_STEP;
     treeScrollboxApi?.scrollBy({ x: delta, y: 0 });
   };
 
   const bindings: KeyBinding[] = [
-    { pattern: "down", handler: () => moveSelection(1), preventDefault: true },
-    { pattern: "j", handler: () => moveSelection(1), preventDefault: true },
-    { pattern: "up", handler: () => moveSelection(-1), preventDefault: true },
-    { pattern: "k", handler: () => moveSelection(-1), preventDefault: true },
+    { pattern: "down", handler: () => pane.controller.moveSelection(1), preventDefault: true },
+    { pattern: "j", handler: () => pane.controller.moveSelection(1), preventDefault: true },
+    { pattern: "up", handler: () => pane.controller.moveSelection(-1), preventDefault: true },
+    { pattern: "k", handler: () => pane.controller.moveSelection(-1), preventDefault: true },
     { pattern: "right", handler: () => pane.controller.focusFirstChild(), preventDefault: true },
     { pattern: "l", handler: () => pane.controller.focusFirstChild(), preventDefault: true },
     { pattern: "left", handler: () => pane.controller.collapseCurrentOrParent(), preventDefault: true },
