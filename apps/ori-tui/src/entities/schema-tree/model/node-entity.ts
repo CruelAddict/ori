@@ -154,13 +154,7 @@ function nodeBadges(node: Node): string | undefined {
     if (node.attributes?.notNull) {
       badges.push("NOT NULL");
     }
-    if (node.attributes?.dataType) {
-      badges.push(String(node.attributes.dataType));
-    }
     return badges.length > 0 ? badges.join(" • ") : undefined;
-  }
-  if (node.type === "constraint") {
-    return node.attributes?.constraintType ?? undefined;
   }
   return undefined;
 }
