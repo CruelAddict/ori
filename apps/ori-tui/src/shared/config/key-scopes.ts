@@ -7,7 +7,7 @@ export type KeyBinding = {
   pattern: string;
   handler: (event: KeyEvent) => void;
   description?: string;
-  when?: () => boolean;
+  enabled?: () => boolean;
   preventDefault?: boolean;
   priority?: number;
   mode?: "normal" | "leader";
@@ -117,7 +117,7 @@ export class KeyScopeStore {
         scope
           .getBindings()
           .filter((binding): binding is KeyBinding & { commandPaletteSection: CommandPaletteSection } =>
-            Boolean(binding.commandPaletteSection),
+            (Boolean(binding.commandPaletteSection) && (binding.enabled?.() ?? true)),
           )
           .map((binding, i): Command => {
             return {

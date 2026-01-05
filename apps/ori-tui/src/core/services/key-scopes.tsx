@@ -122,7 +122,7 @@ function dispatchScopes({ scopes, parsed, mode, evt, awaitingLeader }: DispatchS
       if (bindingMode !== mode) {
         continue;
       }
-      if (binding.when && !binding.when()) {
+      if (binding.enabled && !binding.enabled()) {
         continue;
       }
       if (!Keybind.match(binding.pattern, parsed)) {

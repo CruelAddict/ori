@@ -65,7 +65,7 @@ export function ConnectionViewPage(props: ConnectionViewPageProps) {
       pattern: "h",
       mode: "leader",
       handler: vm.actions.moveFocusLeft,
-      when: () => vm.treePane.visible(),
+      enabled: () => vm.treePane.visible(),
       preventDefault: true,
     },
     {
@@ -78,14 +78,14 @@ export function ConnectionViewPage(props: ConnectionViewPageProps) {
       pattern: "j",
       mode: "leader",
       handler: vm.actions.moveFocusDown,
-      when: () => vm.resultsPane.visible(),
+      enabled: () => vm.resultsPane.visible(),
       preventDefault: true,
     },
     {
       pattern: "k",
       mode: "leader",
       handler: vm.actions.moveFocusUp,
-      when: () => vm.resultsPane.isFocused(),
+      enabled: () => vm.resultsPane.isFocused(),
       preventDefault: true,
     },
     {
@@ -104,7 +104,7 @@ export function ConnectionViewPage(props: ConnectionViewPageProps) {
         }
         vm.actions.focusEditor();
       },
-      when: () => !vm.editorPane.isFocused(),
+      enabled: () => !vm.editorPane.isFocused(),
       preventDefault: true,
     },
   ];

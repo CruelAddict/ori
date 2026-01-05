@@ -47,13 +47,13 @@ export function RouteOutlet() {
       preventDefault: true,
       description: "Switch to previous connection",
       commandPaletteSection: "Navigation",
+      enabled: () => previousConnectionName() !== null,
     },
   ];
 
   return (
     <KeyScope
       bindings={hotkeys}
-      enabled={() => previousConnectionName() !== null}
     >
       <box
         flexGrow={1}
