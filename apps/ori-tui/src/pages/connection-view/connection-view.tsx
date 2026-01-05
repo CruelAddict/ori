@@ -6,7 +6,7 @@ import { ResultsPanel } from "@src/widgets/results-panel/results-panel";
 import { Statusline, StatuslineProvider } from "@src/widgets/statusline/statusline";
 import { TreePanel } from "@src/widgets/tree-panel/tree-panel";
 import { WelcomePane } from "@src/widgets/welcome-pane/welcome-pane";
-import { createEffect, Show } from "solid-js";
+import { createEffect, on, onCleanup, Show } from "solid-js";
 
 export type ConnectionViewPageProps = {
   configurationName: string;
@@ -21,9 +21,27 @@ export function ConnectionViewPage(props: ConnectionViewPageProps) {
   const palette = theme;
   const scopeEnabled = () => props.isActive ?? true;
 
-  createEffect(() => {
-    vm.actions.setActive(scopeEnabled());
-  });
+  createEffect(
+    on(scopeEnabled, (active) => {
+      vm.actions.setActive(active);
+      if (!active) {
+        return;
+      }
+      if (!vm.editorPane.isFocused()) {
+        return;
+      }
+      vm.actions.focusTree();
+
+      const timeoutId = setTimeout(() => {
+        if (!scopeEnabled()) {
+          return;
+        }
+        vm.actions.focusEditor();
+      }, 10);
+
+      onCleanup(() => clearTimeout(timeoutId));
+    })
+  );
 
   const screenKeyBindings: KeyBinding[] = [
     {
