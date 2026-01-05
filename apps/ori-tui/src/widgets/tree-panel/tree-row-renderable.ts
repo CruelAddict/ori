@@ -8,6 +8,10 @@ import {
 } from "@opentui/core";
 import { extend } from "@opentui/solid";
 
+/* We have a custom renderable because the more straightforward approach (just using the
+ * native JSX building blocks) forces extremely heavy width computations we can't afford
+ * when dealing with 1000s of columns */
+
 export type TreeRowSegment = {
   text: string;
   fg?: string;
