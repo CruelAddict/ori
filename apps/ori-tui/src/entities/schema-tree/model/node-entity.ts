@@ -78,7 +78,6 @@ function createEdgeNodeEntity(node: Node, edgeName: string, edge: NodeEdge): Edg
     edgeName,
     label: edgeLabel(edgeName),
     description: describeEdge(edge),
-    badges: edgeBadges(edge),
     childIds,
     hasChildren: childIds.length > 0,
     truncated: edge.truncated,
@@ -94,17 +93,13 @@ function edgeLabel(edgeName: string): string {
 }
 
 function describeEdge(edge: NodeEdge): string | undefined {
-  return edge.truncated ? "Truncated list" : undefined;
-}
-
-function edgeBadges(edge: NodeEdge): string | undefined {
   const count = edge.items.length;
   if (count === 0 && !edge.truncated) {
     return undefined;
   }
   const suffix = count === 1 ? "item" : "items";
   const baseCount = formatEdgeCount(count, edge.truncated);
-  return `${baseCount} ${suffix}`.trim();
+  return `${baseCount} ${suffix} ${edge.truncated ? "(truncated)" : ""}`.trim()
 }
 
 function formatEdgeCount(count: number, truncated: boolean): string {
