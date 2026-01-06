@@ -137,7 +137,7 @@ export function ResultsPanel(props: ResultsPanelProps) {
           flexGrow={1}
           border={["top"]}
           borderColor={palette().backgroundElement}
-          marginBottom={1}
+          justifyContent="space-between"
         >
           <Show when={!job()}>
             <text
@@ -164,6 +164,7 @@ export function ResultsPanel(props: ResultsPanelProps) {
               flexDirection="column"
               justifyContent="flex-start"
               onMouseDown={pane.focusSelf}
+              paddingRight={1}
             >
               <box
                 flexDirection="row"
@@ -257,6 +258,18 @@ export function ResultsPanel(props: ResultsPanelProps) {
               </scrollbox>
             </box>
           </Show>
+          <box
+            height={1}
+            flexDirection="row"
+            justifyContent="flex-end"
+            width="100%"
+            gap={1}
+            paddingRight={3}
+          >
+            <Show when={hasResults() && pane.isFocused()}>
+              <text fg={palette().textMuted}>{`row ${selectedRow() + 1} / ${job()?.result?.rows.length}`}</text>
+            </Show>
+          </box>
 
           <Show when={job()?.status === "success" && !hasResults()}>
             <text
