@@ -98,6 +98,8 @@ export function StatuslineProvider(props: StatuslineProviderProps) {
         flexDirection="row"
         maxHeight={1}
       >
+        <text fg={palette.text}>ctr+x + h/j/k/l </text>
+        <text fg={palette.textMuted} marginRight={2}>navigate panes</text>
         <text fg={palette.text}>ctr+p </text>
         <text fg={palette.textMuted}>commands</text>
       </box>,
