@@ -20,6 +20,7 @@ export type BufferProps = {
   onTextChange: (text: string, info: { modified: boolean }) => void;
   onUnfocus?: () => void;
   registerApi?: (api: BufferApi) => void;
+  focusSelf: () => void;
 };
 
 
@@ -103,9 +104,33 @@ export function Buffer(props: BufferProps) {
     highlighter.dispose();
   });
 
+  const focusLineEnd = (index: number) => {
+    const line = bufferModel.lines()[index];
+    if (!line) {
+      return;
+    }
+    bufferModel.setFocusedRow(index);
+    bufferModel.setNavColumn(line.text.length);
+    bufferModel.focusCurrent();
+  };
+
   const handleMouseDown = (index: number, event: MouseEvent) => {
+    props.focusSelf();
     event.target?.focus();
     bufferModel.setFocusedRow(index);
+    queueMicrotask(() => {
+      const ctx = bufferModel.getCursorContext();
+      if (!ctx || ctx.index !== index) {
+        return;
+      }
+      bufferModel.setNavColumn(ctx.cursorCol);
+    });
+  };
+
+  const handleLineMouseDown = (index: number, event: MouseEvent) => {
+    event.preventDefault();
+    props.focusSelf();
+    focusLineEnd(index);
   };
 
   const withCursor = (handler: (ctx: CursorContext, event: KeyEvent) => void) => (event: KeyEvent) => {
@@ -265,6 +290,7 @@ export function Buffer(props: BufferProps) {
                     lineRenderables.set(line.id, ref);
                   }}
                   flexDirection="row"
+                  width="100%"
                 >
                   <box
                     flexDirection="row"
@@ -272,6 +298,7 @@ export function Buffer(props: BufferProps) {
                     justifyContent="flex-end"
                     alignItems="flex-start"
                     marginRight={1}
+                    onMouseDown={(event: MouseEvent) => handleLineMouseDown(indexAccessor(), event)}
                   >
                     <text
                       maxHeight={1}
@@ -311,6 +338,10 @@ export function Buffer(props: BufferProps) {
                     }}
                     onContentChange={() => bufferModel.handleTextAreaChange(indexAccessor())}
                     initialValue={line.text}
+                  />
+                  <box
+                    flexGrow={1}
+                    onMouseDown={(event: MouseEvent) => handleLineMouseDown(indexAccessor(), event)}
                   />
                 </box>
               );

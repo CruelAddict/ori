@@ -13,6 +13,7 @@ export type EditorPaneViewModel = {
   executeQuery: () => Promise<void>;
   saveQuery: () => boolean;
   isFocused: Accessor<boolean>;
+  focusSelf: () => void;
   unfocus: () => void;
 };
 
@@ -69,6 +70,7 @@ export function useEditorPane(options: UseEditorPaneOptions): EditorPaneViewMode
     executeQuery,
     saveQuery,
     isFocused: options.focus.isFocused,
+    focusSelf: options.focus.focusSelf,
     unfocus: options.unfocus,
   };
 }

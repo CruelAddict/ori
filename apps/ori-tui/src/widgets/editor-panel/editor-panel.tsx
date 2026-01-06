@@ -57,6 +57,7 @@ export function EditorPanel(props: EditorPanelProps) {
           isFocused={pane.isFocused}
           onTextChange={handleTextChange}
           onUnfocus={handleUnfocus}
+          focusSelf={pane.focusSelf}
         />
         <Show when={pane.isExecuting()}>
           <box paddingTop={1}>
