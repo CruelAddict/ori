@@ -9,6 +9,7 @@ export type TreePaneViewModel = {
   isFocused: Accessor<boolean>;
   loading: Accessor<boolean>;
   error: Accessor<string | null>;
+  focusSelf: () => void;
   toggleVisible: () => void;
   refreshGraph: () => Promise<void>;
 };
@@ -43,6 +44,7 @@ export function useTreePane(options: UseTreePaneOptions): TreePaneViewModel {
     controller,
     visible,
     isFocused: options.focus.isFocused,
+    focusSelf: options.focus.focusSelf,
     loading,
     error,
     toggleVisible,

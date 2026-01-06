@@ -1,5 +1,5 @@
 import { useTheme } from "@app/providers/theme";
-import type { BoxRenderable } from "@opentui/core";
+import type { BoxRenderable, MouseEvent } from "@opentui/core";
 import { TextAttributes } from "@opentui/core";
 import type { NodeEntity } from "@src/entities/schema-tree/model/node-entity";
 import type { TreePaneViewModel } from "@src/features/tree-pane/use-tree-pane";
@@ -30,15 +30,41 @@ export function TreeNode(props: TreeNodeProps) {
   const isExpanded = () => props.pane.controller.isExpanded(props.nodeId);
   const isSelected = () => props.isRowSelected(props.nodeId);
   const [childrenMounted, setChildrenMounted] = createSignal(false);
+  const [hovered, setHovered] = createSignal(false);
 
   createEffect(() => {
     if (isExpanded()) setChildrenMounted(true);
   });
 
   const fg = () => (isSelected() && props.isFocused() ? palette().background : palette().text);
-  const bg = () => (isSelected() && props.isFocused() ? palette().primary : palette().background);
+  const bg = () => {
+    if (isSelected() && props.isFocused()) return palette().primary;
+    if (hovered()) return palette().backgroundElement;
+    if (isSelected()) return palette().background;
+    return palette().background;
+  };
+
+  const handleMouseDown = (event: MouseEvent) => {
+    event.preventDefault();
+    props.pane.focusSelf();
+
+    if (!isSelected()) {
+      props.pane.controller.selectNode(props.nodeId);
+      return;
+    }
+
+    const details = entity();
+    if (!details?.hasChildren) return;
+    if (isExpanded()) {
+      props.pane.controller.collapseNode(props.nodeId);
+    } else {
+      props.pane.controller.expandNode(props.nodeId);
+    }
+  };
+
 
   const rowParts = createMemo(() => buildRowTextParts(entity(), isExpanded()));
+
   const rowSegments = createMemo(() => {
     const parts = rowParts();
     const colors = {
@@ -70,20 +96,20 @@ export function TreeNode(props: TreeNodeProps) {
   const rowWidth = createMemo(() => calculateRowTextWidth(rowParts()));
 
   return (
-    <Show
-      when={entity()}
-      keyed
-    >
+    <Show when={entity()} keyed>
       {(_: NodeEntity) => (
         <>
           <box
             id={`tree-row-${rowId()}`}
             flexDirection="row"
             paddingLeft={ROW_LEFT_PADDING + props.depth * 2}
-            minWidth={"100%"}
+            minWidth="100%"
             flexShrink={0}
             ref={(node: BoxRenderable | undefined) => registerRowNode(rowId(), node)}
             backgroundColor={bg()}
+            onMouseOver={() => setHovered(true)}
+            onMouseOut={() => setHovered(false)}
+            onMouseDown={handleMouseDown}
           >
             <tree_row
               segments={rowSegments()}
@@ -94,10 +120,7 @@ export function TreeNode(props: TreeNodeProps) {
             />
           </box>
           <Show when={childrenMounted()}>
-            <box
-              flexDirection="column"
-              visible={isExpanded()}
-            >
+            <box flexDirection="column" visible={isExpanded()}>
               <For each={childIds()}>
                 {(childId) => (
                   <TreeNode
