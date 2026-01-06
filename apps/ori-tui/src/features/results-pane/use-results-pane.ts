@@ -6,6 +6,7 @@ import { createEffect, createSignal } from "solid-js";
 export type ResultsPaneViewModel = {
   visible: Accessor<boolean>;
   isFocused: Accessor<boolean>;
+  focusSelf: () => void;
   job: Accessor<QueryJob | undefined>;
   toggleVisible: () => void;
 };
@@ -40,6 +41,7 @@ export function useResultsPane(options: UseResultsPaneOptions): ResultsPaneViewM
   return {
     visible,
     isFocused: options.focus.isFocused,
+    focusSelf: options.focus.focusSelf,
     job: options.job,
     toggleVisible,
   };
