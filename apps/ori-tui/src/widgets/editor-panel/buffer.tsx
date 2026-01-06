@@ -1,10 +1,10 @@
 import { useLogger } from "@app/providers/logger";
 import { useTheme } from "@app/providers/theme";
-import type { KeyEvent, MouseEvent, TextareaRenderable } from "@opentui/core";
+import type { BoxRenderable, KeyEvent, MouseEvent, ScrollBoxRenderable, TextareaRenderable } from "@opentui/core";
 import { type KeyBinding, KeyScope } from "@src/core/services/key-scopes";
 import { type Accessor, createEffect, createMemo, For, onCleanup, onMount, Show } from "solid-js";
 import { syntaxHighlighter } from "../../features/syntax-highlighting/syntax-highlighter";
-import { type BufferModel, buildLineStarts, type CursorContext, createBufferModel } from "./buffer-model";
+import { buildLineStarts, type CursorContext, createBufferModel } from "./buffer-model";
 import { collectSqlStatements } from "./sql-statement-detector";
 
 const DEBOUNCE_MS = 200;
@@ -22,126 +22,6 @@ export type BufferProps = {
   registerApi?: (api: BufferApi) => void;
 };
 
-function createBufferBindings(bufferModel: BufferModel, props: BufferProps): KeyBinding[] {
-  const withCursor = (handler: (ctx: CursorContext, event: KeyEvent) => void) => (event: KeyEvent) => {
-    const ctx = bufferModel.getCursorContext();
-    if (!ctx) {
-      return;
-    }
-    handler(ctx, event);
-  };
-
-  return [
-    {
-      pattern: "escape",
-      handler: () => {
-        bufferModel.flush();
-        props.onUnfocus?.();
-      },
-      preventDefault: true,
-    },
-    {
-      pattern: "return",
-      handler: withCursor((ctx, event) => {
-        event.preventDefault();
-        bufferModel.handleEnter(ctx.index);
-      }),
-    },
-    {
-      pattern: "up",
-      handler: withCursor((ctx, event) => {
-        event.preventDefault();
-        bufferModel.setNavColumn(ctx.cursorCol);
-        bufferModel.handleVerticalMove(ctx.index, -1);
-      }),
-    },
-    {
-      pattern: "down",
-      handler: withCursor((ctx, event) => {
-        event.preventDefault();
-        bufferModel.setNavColumn(ctx.cursorCol);
-        bufferModel.handleVerticalMove(ctx.index, 1);
-      }),
-    },
-    {
-      pattern: "left",
-      handler: withCursor((ctx, event) => {
-        bufferModel.setNavColumn(ctx.cursorCol);
-        const atStart = ctx.cursorCol === 0 && ctx.cursorRow === 0;
-        if (atStart) {
-          event.preventDefault();
-          bufferModel.handleHorizontalJump(ctx.index, true);
-        }
-      }),
-    },
-    {
-      pattern: "right",
-      handler: withCursor((ctx, event) => {
-        bufferModel.setNavColumn(ctx.cursorCol);
-        const atEnd = ctx.cursorCol === ctx.text.length && ctx.cursorRow === 0;
-        if (atEnd) {
-          event.preventDefault();
-          bufferModel.handleHorizontalJump(ctx.index, false);
-        }
-      }),
-    },
-    {
-      pattern: "backspace",
-      handler: withCursor((ctx, event) => {
-        bufferModel.setNavColumn(ctx.cursorCol);
-        const atStart = ctx.cursorCol === 0 && ctx.cursorRow === 0;
-        if (atStart) {
-          event.preventDefault();
-          bufferModel.handleBackwardMerge(ctx.index);
-        }
-      }),
-    },
-    {
-      pattern: "delete",
-      handler: withCursor((ctx, event) => {
-        bufferModel.setNavColumn(ctx.cursorCol);
-        const atEnd = ctx.cursorCol === ctx.text.length && ctx.cursorRow === 0;
-        if (atEnd) {
-          event.preventDefault();
-          bufferModel.handleForwardMerge(ctx.index);
-        }
-      }),
-    },
-    {
-      pattern: "ctrl+h",
-      handler: withCursor((ctx, event) => {
-        bufferModel.setNavColumn(ctx.cursorCol);
-        const atStart = ctx.cursorCol === 0 && ctx.cursorRow === 0;
-        if (atStart) {
-          event.preventDefault();
-          bufferModel.handleBackwardMerge(ctx.index);
-        }
-      }),
-    },
-    {
-      pattern: "ctrl+w",
-      handler: withCursor((ctx, event) => {
-        bufferModel.setNavColumn(ctx.cursorCol);
-        const atStart = ctx.cursorCol === 0 && ctx.cursorRow === 0;
-        if (atStart) {
-          event.preventDefault();
-          bufferModel.handleBackwardMerge(ctx.index);
-        }
-      }),
-    },
-    {
-      pattern: "ctrl+d",
-      handler: withCursor((ctx, event) => {
-        bufferModel.setNavColumn(ctx.cursorCol);
-        const atEnd = ctx.cursorCol === ctx.text.length && ctx.cursorRow === 0;
-        if (atEnd) {
-          event.preventDefault();
-          bufferModel.handleForwardMerge(ctx.index);
-        }
-      }),
-    },
-  ];
-}
 
 export function Buffer(props: BufferProps) {
   const { theme } = useTheme();
@@ -163,6 +43,37 @@ export function Buffer(props: BufferProps) {
     highlightResult: highlighter.highlightResult,
     logger,
   });
+
+  let scrollRef: ScrollBoxRenderable | undefined;
+  const lineRenderables = new Map<string, BoxRenderable>();
+
+  const getViewport = () => (scrollRef as ScrollBoxRenderable & { viewport?: BoxRenderable })?.viewport;
+
+  const autoScrollIfAtEdge = (ctx: CursorContext, direction: -1 | 1) => {
+    const targetIndex = ctx.index + direction;
+    if (!bufferModel.lines()[targetIndex]) {
+      return;
+    }
+    const line = bufferModel.lines()[ctx.index];
+    if (!line) {
+      return;
+    }
+    const renderable = lineRenderables.get(line.id);
+    const viewport = getViewport();
+    if (!renderable || !viewport) {
+      return;
+    }
+    const lineTop = renderable.y ?? 0;
+    const lineBottom = lineTop + (renderable.height ?? 0);
+    const viewportTop = viewport.y ?? 0;
+    const viewportBottom = viewportTop + (viewport.height ?? 0);
+
+    if (direction === 1 && lineBottom >= viewportBottom) {
+      scrollRef?.scrollBy({ x: 0, y: renderable.height ?? 1 });
+    } else if (direction === -1 && lineTop <= viewportTop) {
+      scrollRef?.scrollBy({ x: 0, y: -(renderable.height ?? 1) });
+    }
+  };
 
   const lineTexts = createMemo(() => bufferModel.lines().map((entry) => entry.text));
   const fullText = createMemo(() => lineTexts().join("\n"));
@@ -197,7 +108,129 @@ export function Buffer(props: BufferProps) {
     bufferModel.setFocusedRow(index);
   };
 
-  const bindings = createBufferBindings(bufferModel, props);
+  const withCursor = (handler: (ctx: CursorContext, event: KeyEvent) => void) => (event: KeyEvent) => {
+    const ctx = bufferModel.getCursorContext();
+    if (!ctx) {
+      return;
+    }
+    handler(ctx, event);
+  };
+
+  const bindings: KeyBinding[] = [
+    {
+      pattern: "escape",
+      handler: () => {
+        bufferModel.flush();
+        props.onUnfocus?.();
+      },
+      preventDefault: true,
+    },
+    {
+      pattern: "return",
+      handler: withCursor((ctx, event) => {
+        event.preventDefault();
+        bufferModel.handleEnter(ctx.index);
+      }),
+    },
+    {
+      pattern: "up",
+      handler: withCursor((ctx, event) => {
+        event.preventDefault();
+        bufferModel.setNavColumn(ctx.cursorCol);
+        autoScrollIfAtEdge(ctx, -1);
+        bufferModel.handleVerticalMove(ctx.index, -1);
+      }),
+    },
+    {
+      pattern: "down",
+      handler: withCursor((ctx, event) => {
+        event.preventDefault();
+        bufferModel.setNavColumn(ctx.cursorCol);
+        autoScrollIfAtEdge(ctx, 1);
+        bufferModel.handleVerticalMove(ctx.index, 1);
+      }),
+    },
+    {
+      pattern: "left",
+      handler: withCursor((ctx, event) => {
+        bufferModel.setNavColumn(ctx.cursorCol);
+        const atStart = ctx.cursorCol === 0 && ctx.cursorRow === 0;
+        if (atStart) {
+          event.preventDefault();
+          bufferModel.handleHorizontalJump(ctx.index, true);
+        }
+      }),
+    },
+    {
+      pattern: "right",
+      handler: withCursor((ctx, event) => {
+        bufferModel.setNavColumn(ctx.cursorCol);
+        const atEnd = ctx.cursorCol === ctx.text.length && ctx.cursorRow === 0;
+        if (atEnd) {
+          event.preventDefault();
+          bufferModel.handleHorizontalJump(ctx.index, false);
+        }
+      }),
+    },
+    {
+      pattern: "backspace",
+      handler: withCursor((ctx, event) => {
+        bufferModel.setNavColumn(ctx.cursorCol);
+        const atStart = ctx.cursorCol === 0 && ctx.cursorRow === 0;
+        if (atStart) {
+          event.preventDefault();
+          autoScrollIfAtEdge(ctx, -1);
+          bufferModel.handleBackwardMerge(ctx.index);
+        }
+      }),
+    },
+    {
+      pattern: "delete",
+      handler: withCursor((ctx, event) => {
+        bufferModel.setNavColumn(ctx.cursorCol);
+        const atEnd = ctx.cursorCol === ctx.text.length && ctx.cursorRow === 0;
+        if (atEnd) {
+          event.preventDefault();
+          bufferModel.handleForwardMerge(ctx.index);
+        }
+      }),
+    },
+    {
+      pattern: "ctrl+h",
+      handler: withCursor((ctx, event) => {
+        bufferModel.setNavColumn(ctx.cursorCol);
+        const atStart = ctx.cursorCol === 0 && ctx.cursorRow === 0;
+        if (atStart) {
+          event.preventDefault();
+          autoScrollIfAtEdge(ctx, -1);
+          bufferModel.handleBackwardMerge(ctx.index);
+        }
+      }),
+    },
+    {
+      pattern: "ctrl+w",
+      handler: withCursor((ctx, event) => {
+        bufferModel.setNavColumn(ctx.cursorCol);
+        const atStart = ctx.cursorCol === 0 && ctx.cursorRow === 0;
+        if (atStart) {
+          event.preventDefault();
+          autoScrollIfAtEdge(ctx, -1);
+          bufferModel.handleBackwardMerge(ctx.index);
+        }
+      }),
+    },
+    {
+      pattern: "ctrl+d",
+      handler: withCursor((ctx, event) => {
+        bufferModel.setNavColumn(ctx.cursorCol);
+        const atEnd = ctx.cursorCol === ctx.text.length && ctx.cursorRow === 0;
+        if (atEnd) {
+          event.preventDefault();
+          bufferModel.handleForwardMerge(ctx.index);
+        }
+      }),
+    },
+  ];
 
   createEffect(() => {
     bufferModel.handleFocusChange(props.isFocused());
@@ -208,7 +241,14 @@ export function Buffer(props: BufferProps) {
       bindings={bindings}
       enabled={props.isFocused}
     >
-      <scrollbox height={"100%"}>
+      <scrollbox
+        ref={(node: ScrollBoxRenderable | undefined) => {
+          scrollRef = node ?? undefined;
+        }}
+        height={"100%"}
+        stickyScroll={true}
+        stickyStart="bottom"
+      >
         <box
           flexDirection="column"
           paddingTop={1}
@@ -216,7 +256,16 @@ export function Buffer(props: BufferProps) {
           <For each={bufferModel.lines()}>
             {(line, indexAccessor) => {
               return (
-                <box flexDirection="row">
+                <box
+                  ref={(ref: BoxRenderable | undefined) => {
+                    if (!ref) {
+                      lineRenderables.delete(line.id);
+                      return;
+                    }
+                    lineRenderables.set(line.id, ref);
+                  }}
+                  flexDirection="row"
+                >
                   <box
                     flexDirection="row"
                     minWidth={5}
