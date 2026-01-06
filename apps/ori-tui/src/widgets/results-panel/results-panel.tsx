@@ -237,7 +237,7 @@ export function ResultsPanel(props: ResultsPanelProps) {
                                   paddingRight={1}
                                   flexDirection="row"
                                   width={columnWidths()[colIndex()] + 2}
-                                  justifyContent={typeof cell === "number" ? "flex-end" : "flex-end"}
+                                  justifyContent={typeof cell === "number" ? "flex-end" : "flex-start"}
                                 >
                                   <text
                                     wrapMode="none"
