@@ -92,13 +92,20 @@ func (ns *NodeService) GetNodes(ctx context.Context, configurationName string, n
 
 func (ns *NodeService) ensureRootNodes(ctx context.Context, graph *connectionGraph, handle *ConnectionHandle) ([]*model.Node, error) {
 	if !graph.hasRoots() {
-		nodes, err := handle.Adapter.Bootstrap(ctx)
+		scopes, err := handle.Adapter.GetScopes(ctx)
 		if err != nil {
 			return nil, err
 		}
-		if len(nodes) == 0 {
-			return nil, errors.New("adapter returned no root nodes")
+		if len(scopes) == 0 {
+			return nil, fmt.Errorf("no scopes found for configuration '%s'", handle.Name)
 		}
+
+		builder := NewGraphBuilder(handle)
+		nodes := make([]*model.Node, 0, len(scopes))
+		for _, scope := range scopes {
+			nodes = append(nodes, builder.BuildScopeNode(scope))
+		}
+
 		ns.prepareNodes(nodes)
 		graph.setRootNodes(nodes)
 	}
@@ -124,49 +131,119 @@ func (ns *NodeService) ensureNodeAvailable(ctx context.Context, graph *connectio
 }
 
 func (ns *NodeService) hydrateNode(ctx context.Context, graph *connectionGraph, handle *ConnectionHandle, nodeID string) error {
+	// Ensures we're not handling the same node in separate requests
 	key := hydrationKey{config: handle.Name, node: nodeID}
 	wg, owner := ns.enterHydration(key)
 	if !owner {
 		wg.Wait()
 		return nil
 	}
+	defer ns.leaveHydration(key)
 
 	node, ok := graph.get(nodeID)
 	if !ok {
-		ns.leaveHydration(key)
 		return fmt.Errorf("%w: %s", ErrUnknownNode, nodeID)
 	}
 	if node.Hydrated {
-		ns.leaveHydration(key)
 		return nil
 	}
 
 	nodeCopy := cloneNode(node)
-	nodes, err := handle.Adapter.Hydrate(ctx, nodeCopy)
-	if err != nil {
-		ns.leaveHydration(key)
-		return err
-	}
-	if len(nodes) == 0 {
+	var nodes []*model.Node
+	var err error
+
+	switch nodeCopy.Type {
+	case "database", "schema":
+		nodes, err = ns.hydrateScope(ctx, handle, nodeCopy)
+	case "table", "view":
+		nodes, err = ns.hydrateRelation(ctx, handle, nodeCopy)
+	default:
+		nodeCopy.Hydrated = true
 		nodes = []*model.Node{nodeCopy}
 	}
-	found := false
-	for _, n := range nodes {
-		if n != nil && n.ID == nodeID {
-			n.Hydrated = true
-			found = true
-			break
-		}
-	}
-	if !found {
-		nodeCopy.Hydrated = true
-		nodes = append(nodes, nodeCopy)
+
+	if err != nil {
+		return err
 	}
 
 	ns.prepareNodes(nodes)
 	graph.upsert(nodes)
-	ns.leaveHydration(key)
 	return nil
+}
+
+func (ns *NodeService) hydrateScope(ctx context.Context, handle *ConnectionHandle, node *model.Node) ([]*model.Node, error) {
+	scope := scopeIDFromNode(node)
+
+	relations, err := handle.Adapter.GetRelations(ctx, scope)
+	if err != nil {
+		return nil, err
+	}
+
+	builder := NewGraphBuilder(handle)
+
+	childNodes := []*model.Node{node}
+	tableEdge := model.EdgeList{Items: make([]string, 0)}
+	viewEdge := model.EdgeList{Items: make([]string, 0)}
+
+	for _, rel := range relations {
+		relNode := builder.BuildRelationNode(scope, rel)
+		childNodes = append(childNodes, relNode)
+		if rel.Type == "table" {
+			tableEdge.Items = append(tableEdge.Items, relNode.ID)
+		} else {
+			viewEdge.Items = append(viewEdge.Items, relNode.ID)
+		}
+	}
+
+	node.Edges["tables"] = tableEdge
+	node.Edges["views"] = viewEdge
+	node.Hydrated = true
+
+	return childNodes, nil
+}
+
+func (ns *NodeService) hydrateRelation(ctx context.Context, handle *ConnectionHandle, node *model.Node) ([]*model.Node, error) {
+	scope := scopeIDFromNode(node)
+	relation, _ := node.Attributes["table"].(string)
+	if relation == "" {
+		return nil, fmt.Errorf("relation node %s missing 'table' attribute", node.ID)
+	}
+
+	columns, err := handle.Adapter.GetColumns(ctx, scope, relation)
+	if err != nil {
+		return nil, err
+	}
+
+	constraints, err := handle.Adapter.GetConstraints(ctx, scope, relation)
+	if err != nil {
+		return nil, err
+	}
+
+	builder := NewGraphBuilder(handle)
+
+	columnNodes, columnEdge := builder.BuildColumnNodes(scope, relation, columns)
+	constraintNodes, constraintEdge := builder.BuildConstraintNodes(scope, relation, constraints)
+
+	node.Edges["columns"] = columnEdge
+	node.Edges["constraints"] = constraintEdge
+	node.Hydrated = true
+
+	nodes := []*model.Node{node}
+	nodes = append(nodes, columnNodes...)
+	nodes = append(nodes, constraintNodes...)
+
+	return nodes, nil
+}
+
+func scopeIDFromNode(node *model.Node) model.ScopeID {
+	scope := model.ScopeID{}
+	if db, ok := node.Attributes["database"].(string); ok {
+		scope.Database = db
+	}
+	if schema, ok := node.Attributes["schema"].(string); ok {
+		scope.Schema = &schema
+	}
+	return scope
 }
 
 func (ns *NodeService) enterHydration(key hydrationKey) (*sync.WaitGroup, bool) {
