@@ -2,13 +2,26 @@ package httpapi
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
+	"strings"
 
 	dto "github.com/crueladdict/ori/libs/contract/go"
 
 	"github.com/crueladdict/ori/apps/ori-server/internal/model"
 	"github.com/crueladdict/ori/apps/ori-server/internal/service"
 )
+
+type validationError struct {
+	code    string
+	message string
+}
+
+func (e validationError) Error() string {
+	return e.message
+}
+
+const nodeIDLimit = 1000
 
 func (h *Handler) listConfigurations(w http.ResponseWriter, r *http.Request) {
 	configs, err := h.configs.ListConfigurations()
@@ -21,13 +34,16 @@ func (h *Handler) listConfigurations(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) getConfigurationNodes(w http.ResponseWriter, r *http.Request) {
-	configurationName, err := decodePathParam(r, "configurationName")
+	configurationName, nodeIDs, err := h.validateGetConfigurationNodes(r)
 	if err != nil {
-		respondError(w, http.StatusBadRequest, "invalid_configuration", err.Error(), nil)
+		if vErr, ok := err.(validationError); ok {
+			respondError(w, http.StatusBadRequest, vErr.code, vErr.message, nil)
+			return
+		}
+		respondError(w, http.StatusInternalServerError, "node_fetch_failed", err.Error(), nil)
 		return
 	}
 
-	nodeIDs := r.URL.Query()["nodeId"]
 	nodes, err := h.nodes.GetNodes(r.Context(), configurationName, nodeIDs)
 	if err != nil {
 		switch {
@@ -46,4 +62,32 @@ func (h *Handler) getConfigurationNodes(w http.ResponseWriter, r *http.Request) 
 	respondJSON(w, http.StatusOK, dto.NodesResponse{
 		Nodes: model.ConvertNodesToDTO(nodes, h.nodes.EdgeLimit()),
 	})
+}
+
+func (h *Handler) validateGetConfigurationNodes(r *http.Request) (string, []string, error) {
+	configurationName, err := decodePathParam(r, "configurationName")
+	if err != nil {
+		return "", nil, validationError{code: "invalid_configuration", message: err.Error()}
+	}
+
+	configurationName = strings.TrimSpace(configurationName)
+	if configurationName == "" {
+		return "", nil, validationError{code: "missing_configuration", message: "configurationName is required"}
+	}
+
+	nodeIDs := r.URL.Query()["nodeId"]
+	if len(nodeIDs) > nodeIDLimit {
+		return "", nil, validationError{code: "node_limit_exceeded", message: fmt.Sprintf("%s: limit %d", service.ErrNodeLimitExceeded, nodeIDLimit)}
+	}
+
+	trimmedNodeIDs := make([]string, len(nodeIDs))
+	for i, id := range nodeIDs {
+		trimmedID := strings.TrimSpace(id)
+		if trimmedID == "" {
+			return "", nil, validationError{code: "invalid_node_id", message: "nodeId cannot be empty"}
+		}
+		trimmedNodeIDs[i] = trimmedID
+	}
+
+	return configurationName, trimmedNodeIDs, nil
 }

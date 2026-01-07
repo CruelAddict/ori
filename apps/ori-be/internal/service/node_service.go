@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"maps"
-	"strings"
 	"sync"
 
 	"github.com/crueladdict/ori/apps/ori-server/internal/model"
@@ -51,19 +50,6 @@ func NewNodeService(configs *ConfigService, connections *ConnectionService) *Nod
 
 // GetNodes returns root nodes (when nodeIDs is empty) or hydrates the requested nodes.
 func (ns *NodeService) GetNodes(ctx context.Context, configurationName string, nodeIDs []string) ([]*model.Node, error) {
-	configurationName = strings.TrimSpace(configurationName)
-	if configurationName == "" {
-		return nil, fmt.Errorf("configurationName is required")
-	}
-	if len(nodeIDs) > ns.idLimit {
-		return nil, fmt.Errorf("%w: limit %d", ErrNodeLimitExceeded, ns.idLimit)
-	}
-	for _, id := range nodeIDs {
-		if strings.TrimSpace(id) == "" {
-			return nil, fmt.Errorf("nodeIDs cannot contain empty values")
-		}
-	}
-
 	connection, ok := ns.connections.GetConnection(configurationName)
 	if !ok || connection == nil || connection.Adapter == nil {
 		return nil, fmt.Errorf("%w: %s", ErrConnectionUnavailable, configurationName)
