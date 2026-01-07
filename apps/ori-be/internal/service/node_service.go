@@ -64,21 +64,18 @@ func (ns *NodeService) GetNodes(ctx context.Context, configurationName string, n
 		}
 	}
 
-	handle, ok := ns.connections.GetConnection(configurationName)
-	if !ok || handle == nil || handle.Adapter == nil {
+	connection, ok := ns.connections.GetConnection(configurationName)
+	if !ok || connection == nil || connection.Adapter == nil {
 		return nil, fmt.Errorf("%w: %s", ErrConnectionUnavailable, configurationName)
 	}
 
-	cGraph := ns.getOrCreateConnGraph(configurationName)
-
-	if len(nodeIDs) == 0 {
-		return ns.ensureRootNodes(ctx, cGraph, handle)
+	cGraph, err := ns.getOrCreateConnGraph(ctx, connection)
+	if err != nil {
+		return nil, err
 	}
 
-	if !cGraph.hasRoots() {
-		if _, err := ns.ensureRootNodes(ctx, cGraph, handle); err != nil {
-			return nil, err
-		}
+	if len(nodeIDs) == 0 {
+		nodeIDs = cGraph.rootIDList()
 	}
 
 	uniqueIDs := uniqueStrings(nodeIDs)
@@ -90,41 +87,12 @@ func (ns *NodeService) GetNodes(ctx context.Context, configurationName string, n
 		if node.Hydrated {
 			continue
 		}
-		if err := ns.hydrateNode(ctx, cGraph, handle, id); err != nil {
+		if err := ns.hydrateNode(ctx, cGraph, connection, id); err != nil {
 			return nil, err
 		}
 	}
 
 	return cGraph.snapshot(uniqueIDs)
-}
-
-func (ns *NodeService) ensureRootNodes(ctx context.Context, graph *connectionGraph, handle *ConnectionHandle) ([]*model.Node, error) {
-	if !graph.hasRoots() {
-		scopes, err := handle.Adapter.GetScopes(ctx)
-		if err != nil {
-			return nil, err
-		}
-		if len(scopes) == 0 {
-			return nil, fmt.Errorf("no scopes found for configuration '%s'", handle.Name)
-		}
-
-		builder := NewGraphBuilder(handle)
-		nodes := make([]*model.Node, 0, len(scopes))
-		for _, scope := range scopes {
-			nodes = append(nodes, builder.BuildScopeNode(scope))
-		}
-
-		ns.prepareNodes(nodes)
-		graph.setRootNodes(nodes)
-	}
-
-	for _, rootID := range graph.rootIDList() {
-		if err := ns.hydrateNode(ctx, graph, handle, rootID); err != nil {
-			return nil, err
-		}
-	}
-
-	return graph.rootSnapshot(), nil
 }
 
 func (ns *NodeService) hydrateNode(ctx context.Context, graph *connectionGraph, handle *ConnectionHandle, nodeID string) error {
@@ -278,21 +246,49 @@ func (ns *NodeService) prepareNodes(nodes []*model.Node) {
 	}
 }
 
-func (ns *NodeService) getOrCreateConnGraph(name string) *connectionGraph {
+func (ns *NodeService) getOrCreateConnGraph(ctx context.Context, connection *ConnectionHandle) (*connectionGraph, error) {
+	name := connection.Name
 	ns.graphsMu.RLock()
-	cGraph, ok := ns.connectionGraphs[name]
+	graph, ok := ns.connectionGraphs[name]
 	ns.graphsMu.RUnlock()
 	if ok {
-		return cGraph
+		return graph, nil
 	}
 	ns.graphsMu.Lock()
 	defer ns.graphsMu.Unlock()
-	if cGraph, ok = ns.connectionGraphs[name]; ok {
-		return cGraph
+	if graph, ok = ns.connectionGraphs[name]; ok {
+		return graph, nil
 	}
-	cGraph = newGraph()
-	ns.connectionGraphs[name] = cGraph
-	return cGraph
+	graph, err := ns.createConnGraph(ctx, connection)
+	if err != nil {
+		return graph, err
+	}
+
+	ns.connectionGraphs[name] = graph
+	return graph, nil
+}
+
+func (ns *NodeService) createConnGraph(ctx context.Context, connection *ConnectionHandle) (*connectionGraph, error) {
+	graph := &connectionGraph{nodes: make(map[string]*model.Node)}
+
+	scopes, err := connection.Adapter.GetScopes(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if len(scopes) == 0 {
+		return nil, fmt.Errorf("no scopes found for configuration '%s'", connection.Name)
+	}
+
+	builder := NewGraphBuilder(connection)
+	nodes := make([]*model.Node, 0, len(scopes))
+	for _, scope := range scopes {
+		nodes = append(nodes, builder.BuildScopeNode(scope))
+	}
+
+	ns.prepareNodes(nodes)
+	graph.setRootNodes(nodes)
+
+	return graph, nil
 }
 
 type hydrationKey struct {
@@ -304,28 +300,6 @@ type connectionGraph struct {
 	mu      sync.RWMutex
 	nodes   map[string]*model.Node
 	rootIDs []string
-}
-
-func newGraph() *connectionGraph {
-	return &connectionGraph{nodes: make(map[string]*model.Node)}
-}
-
-func (s *connectionGraph) hasRoots() bool {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return len(s.rootIDs) > 0
-}
-
-func (s *connectionGraph) rootSnapshot() []*model.Node {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	result := make([]*model.Node, 0, len(s.rootIDs))
-	for _, id := range s.rootIDs {
-		if node, ok := s.nodes[id]; ok {
-			result = append(result, cloneNode(node))
-		}
-	}
-	return result
 }
 
 func (s *connectionGraph) rootIDList() []string {
