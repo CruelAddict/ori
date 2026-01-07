@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"strings"
 	"sync"
 
@@ -82,7 +83,14 @@ func (ns *NodeService) GetNodes(ctx context.Context, configurationName string, n
 
 	uniqueIDs := uniqueStrings(nodeIDs)
 	for _, id := range uniqueIDs {
-		if err := ns.ensureNodeAvailable(ctx, cGraph, handle, id); err != nil {
+		node, ok := cGraph.get(id)
+		if !ok {
+			return nil, fmt.Errorf("%w: %s", ErrUnknownNode, id)
+		}
+		if node.Hydrated {
+			continue
+		}
+		if err := ns.hydrateNode(ctx, cGraph, handle, id); err != nil {
 			return nil, err
 		}
 	}
@@ -111,23 +119,12 @@ func (ns *NodeService) ensureRootNodes(ctx context.Context, graph *connectionGra
 	}
 
 	for _, rootID := range graph.rootIDList() {
-		if err := ns.ensureNodeAvailable(ctx, graph, handle, rootID); err != nil {
+		if err := ns.hydrateNode(ctx, graph, handle, rootID); err != nil {
 			return nil, err
 		}
 	}
 
 	return graph.rootSnapshot(), nil
-}
-
-func (ns *NodeService) ensureNodeAvailable(ctx context.Context, graph *connectionGraph, handle *ConnectionHandle, nodeID string) error {
-	node, ok := graph.get(nodeID)
-	if !ok {
-		return fmt.Errorf("%w: %s", ErrUnknownNode, nodeID)
-	}
-	if node.Hydrated {
-		return nil
-	}
-	return ns.hydrateNode(ctx, graph, handle, nodeID)
 }
 
 func (ns *NodeService) hydrateNode(ctx context.Context, graph *connectionGraph, handle *ConnectionHandle, nodeID string) error {
@@ -172,7 +169,10 @@ func (ns *NodeService) hydrateNode(ctx context.Context, graph *connectionGraph, 
 }
 
 func (ns *NodeService) hydrateScope(ctx context.Context, handle *ConnectionHandle, node *model.Node) ([]*model.Node, error) {
-	scope := scopeIDFromNode(node)
+	scope := node.Scope
+	if scope.Database == "" {
+		return nil, fmt.Errorf("node %s missing scope", node.ID)
+	}
 
 	relations, err := handle.Adapter.GetRelations(ctx, scope)
 	if err != nil {
@@ -203,7 +203,10 @@ func (ns *NodeService) hydrateScope(ctx context.Context, handle *ConnectionHandl
 }
 
 func (ns *NodeService) hydrateRelation(ctx context.Context, handle *ConnectionHandle, node *model.Node) ([]*model.Node, error) {
-	scope := scopeIDFromNode(node)
+	scope := node.Scope
+	if scope.Database == "" {
+		return nil, fmt.Errorf("node %s missing scope", node.ID)
+	}
 	relation, _ := node.Attributes["table"].(string)
 	if relation == "" {
 		return nil, fmt.Errorf("relation node %s missing 'table' attribute", node.ID)
@@ -233,17 +236,6 @@ func (ns *NodeService) hydrateRelation(ctx context.Context, handle *ConnectionHa
 	nodes = append(nodes, constraintNodes...)
 
 	return nodes, nil
-}
-
-func scopeIDFromNode(node *model.Node) model.ScopeID {
-	scope := model.ScopeID{}
-	if db, ok := node.Attributes["database"].(string); ok {
-		scope.Database = db
-	}
-	if schema, ok := node.Attributes["schema"].(string); ok {
-		scope.Schema = &schema
-	}
-	return scope
 }
 
 func (ns *NodeService) enterHydration(key hydrationKey) (*sync.WaitGroup, bool) {
@@ -398,6 +390,7 @@ func cloneNode(src *model.Node) *model.Node {
 		ID:       src.ID,
 		Type:     src.Type,
 		Name:     src.Name,
+		Scope:    src.Scope,
 		Hydrated: src.Hydrated,
 	}
 	clone.Attributes = cloneAttributeMap(src.Attributes)
@@ -410,9 +403,7 @@ func cloneAttributeMap(attrs map[string]any) map[string]any {
 		return map[string]any{}
 	}
 	out := make(map[string]any, len(attrs))
-	for k, v := range attrs {
-		out[k] = v
-	}
+	maps.Copy(out, attrs)
 	return out
 }
 

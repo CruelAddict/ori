@@ -2,6 +2,7 @@ package service
 
 import (
 	"fmt"
+	"maps"
 	"sort"
 	"strings"
 
@@ -62,7 +63,6 @@ func (b *GraphBuilder) BuildScopeNode(scope model.Scope) *model.Node {
 	attrs := map[string]any{
 		"connection": b.connectionName,
 		"engine":     b.engine,
-		"database":   scope.Database,
 	}
 
 	var name string
@@ -71,18 +71,16 @@ func (b *GraphBuilder) BuildScopeNode(scope model.Scope) *model.Node {
 		name = scope.Database
 	} else {
 		nodeType = "schema"
-		attrs["schema"] = *scope.Schema
 		name = *scope.Schema
 	}
 
-	for k, v := range scope.Attrs {
-		attrs[k] = v
-	}
+	maps.Copy(attrs, scope.Attrs)
 
 	return &model.Node{
 		ID:         b.ScopeNodeID(scope.ScopeID),
 		Type:       nodeType,
 		Name:       name,
+		Scope:      scope.ScopeID,
 		Attributes: attrs,
 		Edges:      make(map[string]model.EdgeList),
 		Hydrated:   false,
@@ -93,13 +91,8 @@ func (b *GraphBuilder) BuildScopeNode(scope model.Scope) *model.Node {
 func (b *GraphBuilder) BuildRelationNode(scope model.ScopeID, rel model.Relation) *model.Node {
 	attrs := map[string]any{
 		"connection": b.connectionName,
-		"database":   scope.Database,
 		"table":      rel.Name,
 		"tableType":  rel.Type,
-	}
-
-	if scope.Schema != nil {
-		attrs["schema"] = *scope.Schema
 	}
 
 	if rel.Definition != "" {
@@ -110,6 +103,7 @@ func (b *GraphBuilder) BuildRelationNode(scope model.ScopeID, rel model.Relation
 		ID:         b.RelationNodeID(scope, rel),
 		Type:       rel.Type,
 		Name:       rel.Name,
+		Scope:      scope,
 		Attributes: attrs,
 		Edges:      make(map[string]model.EdgeList),
 		Hydrated:   false,
@@ -124,7 +118,6 @@ func (b *GraphBuilder) BuildColumnNodes(scope model.ScopeID, relation string, co
 	for _, col := range columns {
 		attrs := map[string]any{
 			"connection": b.connectionName,
-			"database":   scope.Database,
 			"table":      relation,
 			"column":     col.Name,
 			"ordinal":    col.Ordinal,
@@ -132,9 +125,6 @@ func (b *GraphBuilder) BuildColumnNodes(scope model.ScopeID, relation string, co
 			"notNull":    col.NotNull,
 		}
 
-		if scope.Schema != nil {
-			attrs["schema"] = *scope.Schema
-		}
 		if col.DefaultValue != nil {
 			attrs["defaultValue"] = *col.DefaultValue
 		}
@@ -155,6 +145,7 @@ func (b *GraphBuilder) BuildColumnNodes(scope model.ScopeID, relation string, co
 			ID:         b.ColumnNodeID(scope, relation, col.Name),
 			Type:       "column",
 			Name:       col.Name,
+			Scope:      scope,
 			Attributes: attrs,
 			Edges:      make(map[string]model.EdgeList),
 			Hydrated:   true,
@@ -183,14 +174,9 @@ func (b *GraphBuilder) BuildConstraintNodes(scope model.ScopeID, relation string
 	for _, c := range sorted {
 		attrs := map[string]any{
 			"connection":     b.connectionName,
-			"database":       scope.Database,
 			"table":          relation,
 			"constraintName": c.Name,
 			"constraintType": c.Type,
-		}
-
-		if scope.Schema != nil {
-			attrs["schema"] = *scope.Schema
 		}
 
 		if len(c.Columns) > 0 {
@@ -231,6 +217,7 @@ func (b *GraphBuilder) BuildConstraintNodes(scope model.ScopeID, relation string
 			ID:         b.ConstraintNodeID(scope, relation, c.Name),
 			Type:       "constraint",
 			Name:       constraintDisplayName(c),
+			Scope:      scope,
 			Attributes: attrs,
 			Edges:      make(map[string]model.EdgeList),
 			Hydrated:   true,
