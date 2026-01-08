@@ -40,8 +40,7 @@ export function TreeNode(props: TreeNodeProps) {
   const bg = () => {
     if (isSelected() && props.isFocused()) return palette().primary;
     if (hovered()) return palette().backgroundElement;
-    if (isSelected()) return palette().background;
-    return palette().background;
+    return palette().backgroundPanel
   };
 
   const handleMouseDown = (event: MouseEvent) => {

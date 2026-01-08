@@ -12,7 +12,7 @@ type GraphSnapshotControls = {
   refresh: () => Promise<GraphSnapshot | null | undefined>;
 };
 
-export function useGraphSnapshot(configurationName: Accessor<string | null>): GraphSnapshotControls {
+export function useResourceGraphSnapshot(configurationName: Accessor<string | null>): GraphSnapshotControls {
   const client = useOriClient();
   const logger = useLogger();
 

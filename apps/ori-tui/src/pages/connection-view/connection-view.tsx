@@ -118,7 +118,7 @@ export function ConnectionViewPage(props: ConnectionViewPageProps) {
         <box
           flexDirection="column"
           flexGrow={1}
-          backgroundColor={palette().background}
+          backgroundColor={palette().backgroundPanel}
           marginTop={1}
           marginLeft={2}
         >

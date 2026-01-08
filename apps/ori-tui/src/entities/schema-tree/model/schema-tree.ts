@@ -12,26 +12,7 @@ export type VisibleRow = {
   depth: number;
 };
 
-export type SchemaTreeController = {
-  rootIds: Accessor<string[]>;
-  visibleRows: Accessor<VisibleRow[]>;
-  selectedId: Accessor<string | null>;
-  selectedRow: Accessor<VisibleRow | null>;
-  expandNode: (nodeId: string | null) => void;
-  collapseNode: (nodeId: string | null) => void;
-  moveSelection: (delta: number) => void;
-  focusFirstChild: () => void;
-  collapseCurrentOrParent: () => void;
-  selectNode: (nodeId: string | null) => void;
-  isExpanded: (nodeId: string | null) => boolean;
-  getEntity: (nodeId: string | null) => NodeEntity | undefined;
-  getVisibleChildIds: (nodeId: string) => string[];
-  // Returns currently loaded children (based on batching), independent of expanded state.
-  getRenderableChildIds: (nodeId: string) => string[];
-  activateSelection: () => void;
-};
-
-export function useSchemaTree(snapshot: Accessor<GraphSnapshot | null>): SchemaTreeController {
+export function useSchemaTree(snapshot: Accessor<GraphSnapshot | null>) {
   const entityMap = createMemo(() => {
     const snap = snapshot();
     if (!snap) {
@@ -152,8 +133,8 @@ export function useSchemaTree(snapshot: Accessor<GraphSnapshot | null>): SchemaT
     focusFirstChild,
     collapseCurrentOrParent,
     selectNode,
-    isExpanded: (nodeId) => isNodeExpanded(nodeId),
-    getEntity: (nodeId) => (nodeId ? entityMap().get(nodeId) : undefined),
+    isExpanded: (nodeId: string | null) => isNodeExpanded(nodeId),
+    getEntity: (nodeId: string | null) => (nodeId ? entityMap().get(nodeId) : undefined),
     getVisibleChildIds: childVisibility.getVisibleChildIds,
     getRenderableChildIds: childVisibility.getRenderableChildIds,
     activateSelection,

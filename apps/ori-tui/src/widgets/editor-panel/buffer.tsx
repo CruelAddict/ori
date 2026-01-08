@@ -261,6 +261,10 @@ export function Buffer(props: BufferProps) {
     bufferModel.handleFocusChange(props.isFocused());
   });
 
+  const lineBg = (row: number) => {
+    return props.isFocused() && bufferModel.focusedRow() == row ? palette().editorBackgroundFocused : undefined
+  }
+
   return (
     <KeyScope
       bindings={bindings}
@@ -277,6 +281,7 @@ export function Buffer(props: BufferProps) {
         <box
           flexDirection="column"
           paddingTop={1}
+          backgroundColor={palette().editorBackground}
         >
           <For each={bufferModel.lines()}>
             {(line, indexAccessor) => {
@@ -297,12 +302,14 @@ export function Buffer(props: BufferProps) {
                     minWidth={5}
                     justifyContent="flex-end"
                     alignItems="flex-start"
-                    marginRight={1}
+                    paddingRight={1}
                     onMouseDown={(event: MouseEvent) => handleLineMouseDown(indexAccessor(), event)}
+                    backgroundColor={lineBg(indexAccessor())}
                   >
                     <text
                       maxHeight={1}
                       fg={palette().textMuted}
+                      bg={lineBg(indexAccessor())}
                     >
                       {(() => {
                         if (statementsMemo().length < 2) {
@@ -319,11 +326,14 @@ export function Buffer(props: BufferProps) {
                     <text
                       maxHeight={1}
                       fg={palette().textMuted}
+                      bg={lineBg(indexAccessor())}
                     >
                       {indexAccessor() + 1}
                     </text>
                   </box>
                   <textarea
+                    backgroundColor={lineBg(indexAccessor())}
+                    focusedBackgroundColor={lineBg(indexAccessor())}
                     ref={(renderable: TextareaRenderable | undefined) => {
                       bufferModel.setLineRef(line.id, renderable);
                     }}
@@ -341,6 +351,7 @@ export function Buffer(props: BufferProps) {
                   />
                   <box
                     flexGrow={1}
+                    backgroundColor={lineBg(indexAccessor())}
                     onMouseDown={(event: MouseEvent) => handleLineMouseDown(indexAccessor(), event)}
                   />
                 </box>

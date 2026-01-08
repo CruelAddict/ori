@@ -51,6 +51,8 @@ export function EditorPanel(props: EditorPanelProps) {
       <box
         flexDirection="column"
         minHeight={3}
+        marginRight={1}
+        backgroundColor={useTheme().theme().editorBackground}
       >
         <Buffer
           initialText={pane.queryText()}

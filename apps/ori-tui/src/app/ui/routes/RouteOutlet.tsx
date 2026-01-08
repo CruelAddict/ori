@@ -4,6 +4,7 @@ import { KeyScope, type KeyBinding } from "@src/core/services/key-scopes";
 import { createMemo, For } from "solid-js";
 import { useRouteNavigation } from "./router";
 import { connectionRoute, type ConnectionRoute, type RouteLocation } from "./types";
+import { useTheme } from "@app/providers/theme";
 
 export function RouteOutlet() {
   const navigation = useRouteNavigation();

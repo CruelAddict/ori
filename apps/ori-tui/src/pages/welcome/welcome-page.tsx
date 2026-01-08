@@ -22,7 +22,6 @@ export function WelcomePage() {
       flexDirection="column"
       flexGrow={1}
       padding={2}
-      backgroundColor={palette().background}
       alignItems="center"
       justifyContent="center"
     >
