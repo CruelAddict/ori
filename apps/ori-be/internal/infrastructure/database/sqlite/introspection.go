@@ -216,7 +216,7 @@ func (a *Adapter) getPrimaryKeyConstraint(ctx context.Context, database, table s
 	}
 
 	return &model.Constraint{
-		Name:    "primary-key",
+		Name:    "PK",
 		Type:    "PRIMARY KEY",
 		Columns: columns,
 	}, nil
@@ -382,7 +382,7 @@ func (a *Adapter) getForeignKeyConstraints(ctx context.Context, database, table 
 	for _, id := range ids {
 		grp := groups[id]
 		constraints = append(constraints, model.Constraint{
-			Name:    fmt.Sprintf("fk-%d", grp.id),
+			Name:    fmt.Sprintf("FK on %s", grp.refTable),
 			Type:    "FOREIGN KEY",
 			Columns: grp.columns,
 			ReferencedScope: &model.ScopeID{

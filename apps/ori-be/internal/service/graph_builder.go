@@ -1,10 +1,8 @@
 package service
 
 import (
-	"fmt"
 	"maps"
 	"sort"
-	"strings"
 
 	"github.com/crueladdict/ori/apps/ori-server/internal/model"
 	"github.com/crueladdict/ori/apps/ori-server/internal/pkg/stringutil"
@@ -216,7 +214,7 @@ func (b *GraphBuilder) BuildConstraintNodes(scope model.ScopeID, relation string
 		node := &model.Node{
 			ID:         b.ConstraintNodeID(scope, relation, c.Name),
 			Type:       "constraint",
-			Name:       constraintDisplayName(c),
+			Name:       c.Name,
 			Scope:      scope,
 			Attributes: attrs,
 			Edges:      make(map[string]model.EdgeList),
@@ -241,20 +239,5 @@ func constraintTypeOrder(t string) int {
 		return 3
 	default:
 		return 4
-	}
-}
-
-func constraintDisplayName(c model.Constraint) string {
-	switch c.Type {
-	case "PRIMARY KEY":
-		return fmt.Sprintf("PRIMARY KEY on %s", strings.Join(c.Columns, ", "))
-	case "UNIQUE":
-		return fmt.Sprintf("UNIQUE %s", c.Name)
-	case "FOREIGN KEY":
-		return fmt.Sprintf("FOREIGN KEY referencing %s", c.ReferencedTable)
-	case "CHECK":
-		return fmt.Sprintf("CHECK %s", c.Name)
-	default:
-		return c.Name
 	}
 }
