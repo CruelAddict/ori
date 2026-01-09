@@ -308,6 +308,7 @@ export function Buffer(props: BufferProps) {
             <For each={bufferModel.lines()}>
               {(line, indexAccessor) => {
                 return (
+                  // Wrapper for the whole line
                   <box
                     ref={(ref: BoxRenderable | undefined) => {
                       if (!ref) {
@@ -319,6 +320,7 @@ export function Buffer(props: BufferProps) {
                     flexDirection="row"
                     width="100%"
                   >
+                    {/* Line info (number, indicators) */}
                     <box
                       flexDirection="row"
                       minWidth={5}
@@ -353,6 +355,7 @@ export function Buffer(props: BufferProps) {
                         {indexAccessor() + 1}
                       </text>
                     </box>
+                    {/* Per-line input field */}
                     <textarea
                       backgroundColor={lineBg(indexAccessor())}
                       focusedBackgroundColor={lineBg(indexAccessor())}
@@ -371,6 +374,7 @@ export function Buffer(props: BufferProps) {
                       onContentChange={() => bufferModel.handleTextAreaChange(indexAccessor())}
                       initialValue={line.text}
                     />
+                    {/* Fills the rest of the line to handle mouse clicks */}
                     <box
                       flexGrow={1}
                       backgroundColor={lineBg(indexAccessor())}
