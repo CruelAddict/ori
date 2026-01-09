@@ -114,7 +114,22 @@ export function Buffer(props: BufferProps) {
     bufferModel.focusCurrent();
   };
 
+  const focusLastLineEnd = () => {
+    const lastIndex = bufferModel.lines().length - 1;
+    if (lastIndex < 0) {
+      return;
+    }
+    focusLineEnd(lastIndex);
+  };
+
+  const handleBufferMouseDown = (event: MouseEvent) => {
+    event.preventDefault();
+    props.focusSelf();
+    focusLastLineEnd();
+  };
+
   const handleMouseDown = (index: number, event: MouseEvent) => {
+    event.stopPropagation();
     props.focusSelf();
     event.target?.focus();
     bufferModel.setFocusedRow(index);
@@ -128,6 +143,7 @@ export function Buffer(props: BufferProps) {
   };
 
   const handleLineMouseDown = (index: number, event: MouseEvent) => {
+    event.stopPropagation();
     event.preventDefault();
     props.focusSelf();
     focusLineEnd(index);
@@ -262,7 +278,7 @@ export function Buffer(props: BufferProps) {
   });
 
   const lineBg = (row: number) => {
-    return props.isFocused() && bufferModel.focusedRow() == row ? palette().editorBackgroundFocused : undefined
+    return props.isFocused() && bufferModel.focusedRow() === row ? palette().editorBackgroundFocused : undefined
   }
 
   return (
@@ -280,87 +296,94 @@ export function Buffer(props: BufferProps) {
       >
         <box
           flexDirection="column"
-          paddingTop={1}
           backgroundColor={palette().editorBackground}
+          flexGrow={1}
         >
-          <For each={bufferModel.lines()}>
-            {(line, indexAccessor) => {
-              return (
-                <box
-                  ref={(ref: BoxRenderable | undefined) => {
-                    if (!ref) {
-                      lineRenderables.delete(line.id);
-                      return;
-                    }
-                    lineRenderables.set(line.id, ref);
-                  }}
-                  flexDirection="row"
-                  width="100%"
-                >
+          <box
+            marginTop={1}
+            flexDirection="column"
+            flexGrow={1}
+            onMouseDown={handleBufferMouseDown}
+          >
+            <For each={bufferModel.lines()}>
+              {(line, indexAccessor) => {
+                return (
                   <box
+                    ref={(ref: BoxRenderable | undefined) => {
+                      if (!ref) {
+                        lineRenderables.delete(line.id);
+                        return;
+                      }
+                      lineRenderables.set(line.id, ref);
+                    }}
                     flexDirection="row"
-                    minWidth={5}
-                    justifyContent="flex-end"
-                    alignItems="flex-start"
-                    paddingRight={1}
-                    onMouseDown={(event: MouseEvent) => handleLineMouseDown(indexAccessor(), event)}
-                    backgroundColor={lineBg(indexAccessor())}
+                    width="100%"
                   >
-                    <text
-                      maxHeight={1}
-                      fg={palette().textMuted}
-                      bg={lineBg(indexAccessor())}
+                    <box
+                      flexDirection="row"
+                      minWidth={5}
+                      justifyContent="flex-end"
+                      alignItems="flex-start"
+                      paddingRight={1}
+                      onMouseDown={(event: MouseEvent) => handleLineMouseDown(indexAccessor(), event)}
+                      backgroundColor={lineBg(indexAccessor())}
                     >
-                      {(() => {
-                        if (statementsMemo().length < 2) {
-                          return "";
-                        }
-                        const target = statementAtCursor();
-                        if (target?.startLine === indexAccessor()) {
-                          return "󰻃 ";
-                        }
-                        const hasStart = statementsMemo().some((statement) => statement.startLine === indexAccessor());
-                        return hasStart ? "• " : "";
-                      })()}
-                    </text>
-                    <text
-                      maxHeight={1}
-                      fg={palette().textMuted}
-                      bg={lineBg(indexAccessor())}
-                    >
-                      {indexAccessor() + 1}
-                    </text>
+                      <text
+                        maxHeight={1}
+                        fg={palette().textMuted}
+                        bg={lineBg(indexAccessor())}
+                      >
+                        {(() => {
+                          if (statementsMemo().length < 2) {
+                            return "";
+                          }
+                          const target = statementAtCursor();
+                          if (target?.startLine === indexAccessor()) {
+                            return "󰻃 ";
+                          }
+                          const hasStart = statementsMemo().some((statement) => statement.startLine === indexAccessor());
+                          return hasStart ? "• " : "";
+                        })()}
+                      </text>
+                      <text
+                        maxHeight={1}
+                        fg={palette().textMuted}
+                        bg={lineBg(indexAccessor())}
+                      >
+                        {indexAccessor() + 1}
+                      </text>
+                    </box>
+                    <textarea
+                      backgroundColor={lineBg(indexAccessor())}
+                      focusedBackgroundColor={lineBg(indexAccessor())}
+                      ref={(renderable: TextareaRenderable | undefined) => {
+                        bufferModel.setLineRef(line.id, renderable);
+                      }}
+                      textColor={palette().editorText}
+                      focusedTextColor={palette().editorText}
+                      cursorColor={palette().primary}
+                      syntaxStyle={highlighter.highlightResult().syntaxStyle}
+                      selectable={true}
+                      keyBindings={[]}
+                      onMouseDown={(event: MouseEvent) => {
+                        handleMouseDown(indexAccessor(), event);
+                      }}
+                      onContentChange={() => bufferModel.handleTextAreaChange(indexAccessor())}
+                      initialValue={line.text}
+                    />
+                    <box
+                      flexGrow={1}
+                      backgroundColor={lineBg(indexAccessor())}
+                      onMouseDown={(event: MouseEvent) => handleLineMouseDown(indexAccessor(), event)}
+                    />
                   </box>
-                  <textarea
-                    backgroundColor={lineBg(indexAccessor())}
-                    focusedBackgroundColor={lineBg(indexAccessor())}
-                    ref={(renderable: TextareaRenderable | undefined) => {
-                      bufferModel.setLineRef(line.id, renderable);
-                    }}
-                    textColor={palette().editorText}
-                    focusedTextColor={palette().editorText}
-                    cursorColor={palette().primary}
-                    syntaxStyle={highlighter.highlightResult().syntaxStyle}
-                    selectable={true}
-                    keyBindings={[]}
-                    onMouseDown={(event: MouseEvent) => {
-                      handleMouseDown(indexAccessor(), event);
-                    }}
-                    onContentChange={() => bufferModel.handleTextAreaChange(indexAccessor())}
-                    initialValue={line.text}
-                  />
-                  <box
-                    flexGrow={1}
-                    backgroundColor={lineBg(indexAccessor())}
-                    onMouseDown={(event: MouseEvent) => handleLineMouseDown(indexAccessor(), event)}
-                  />
-                </box>
-              );
-            }}
-          </For>
-          <Show when={bufferModel.lines().length === 0}>
-            <text fg={palette().editorText}> </text>
-          </Show>
+                );
+              }}
+            </For>
+            <Show when={bufferModel.lines().length === 0}>
+              <text fg={palette().editorText}> </text>
+            </Show>
+          </box>
         </box>
       </scrollbox>
     </KeyScope>
