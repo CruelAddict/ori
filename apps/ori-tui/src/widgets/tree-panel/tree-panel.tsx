@@ -65,6 +65,11 @@ export function TreePanel(props: TreePanelProps) {
     treeScrollboxApi?.scrollBy({ x: delta, y: 0 })
   }
 
+  const handleEmptySpaceClick = () => {
+    pane.focusSelf()
+    treeScrollboxApi?.ensureRowVisible(selectedId())
+  }
+
   const bindings: KeyBinding[] = [
     { pattern: "down", handler: () => pane.controller.moveSelection(1), preventDefault: true },
     { pattern: "j", handler: () => pane.controller.moveSelection(1), preventDefault: true },
@@ -121,6 +126,7 @@ export function TreePanel(props: TreePanelProps) {
             height="100%"
             border={["right"]}
             borderColor={theme().backgroundElement}
+            onMouseDown={handleEmptySpaceClick}
           >
             <Show when={pane.loading()}>
               <text fg={theme().text}>Loading schema graph...</text>

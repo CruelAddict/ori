@@ -66,6 +66,7 @@ export function useTreeScrollRegistration() {
 
 export type TreeScrollboxApi = {
   scrollBy(delta: ScrollDelta): void
+  ensureRowVisible(rowId: string | null): void
 }
 
 interface TreeScrollboxProps extends ParentProps {
@@ -109,7 +110,7 @@ export function TreeScrollbox(props: TreeScrollboxProps) {
   })
   overflowTrackerRef = overflowTracker
 
-  props.onApiReady?.({ scrollBy: autoscroll.scrollBy })
+  props.onApiReady?.({ scrollBy: autoscroll.scrollBy, ensureRowVisible: autoscroll.ensureRowVisible })
   onCleanup(() => {
     props.onApiReady?.(undefined)
   })
