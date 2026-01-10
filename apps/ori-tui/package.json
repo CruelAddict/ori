@@ -8,11 +8,18 @@
     "build": "./build.ts",
     "lint": "bunx biome check --reporter summary",
     "lint:fix": "bunx biome check --write",
-    "postinstall": "patch -p1 -N -r- < patches/follow-redirects+1.15.11.patch || true"
+    "postinstall": "patch -p1 -N -r- < patches/follow-redirects+1.15.11.patch || true",
+    "test": "bun run vitest",
+    "test:run": "bun run vitest run",
+    "test:watch": "bun run vitest watch",
+    "test:coverage": "bun run vitest run --coverage"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.1.5",
-    "@types/bun": "latest"
+    "@types/bun": "latest",
+    "@vitest/coverage-v8": "^4.0.16",
+    "vite-tsconfig-paths": "^6.0.3",
+    "vitest": "^4.0.16"
   },
   "peerDependencies": {
     "typescript": "^5"

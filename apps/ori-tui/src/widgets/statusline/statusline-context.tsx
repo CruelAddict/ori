@@ -1,8 +1,7 @@
-import path from "node:path";
 import { type Notification, type NotificationLevel, useNotifications } from "@app/providers/notifications";
 import { useTheme } from "@app/providers/theme";
-import { getAppDataDir } from "@shared/lib/data-storage";
 import { debounce } from "@shared/lib/debounce";
+import { formatFilePath } from "@shared/lib/path-format";
 import {
   type Accessor,
   createContext,
@@ -74,21 +73,11 @@ export function StatuslineProvider(props: StatuslineProviderProps) {
 
     const pathValue = filePath();
     if (pathValue) {
-      const appDataDir = getAppDataDir();
-      let displayPath = pathValue;
-      if (pathValue.startsWith(appDataDir)) {
-        const relativePath = pathValue.slice(appDataDir.length);
-        const homeDir = process.env.HOME ?? "";
-        if (appDataDir.startsWith(homeDir)) {
-          displayPath = `~${relativePath}`;
-        } else {
-          displayPath = relativePath;
-        }
-      }
+      const { dirPath, fileName } = formatFilePath(pathValue);
       left[1] = (
         <box flexDirection="row">
-          <text fg={palette.textMuted}>{path.dirname(displayPath)}/</text>
-          <text fg={palette.text}>{path.basename(displayPath)}</text>
+          <text fg={palette.textMuted}>{dirPath}</text>
+          <text fg={palette.text}>{fileName}</text>
         </box>
       );
     }
