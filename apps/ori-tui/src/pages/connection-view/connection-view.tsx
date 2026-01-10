@@ -1,47 +1,47 @@
-import { useTheme } from "@app/providers/theme";
-import { type KeyBinding, KeyScope } from "@src/core/services/key-scopes";
-import { useConnectionView } from "@src/features/connection/view/use-connection-view";
-import { EditorPanel } from "@src/widgets/editor-panel/editor-panel";
-import { ResultsPanel } from "@src/widgets/results-panel/results-panel";
-import { Statusline, StatuslineProvider } from "@src/widgets/statusline/statusline";
-import { TreePanel } from "@src/widgets/tree-panel/tree-panel";
-import { WelcomePane } from "@src/widgets/welcome-pane/welcome-pane";
-import { createEffect, on, onCleanup, Show } from "solid-js";
+import { useTheme } from "@app/providers/theme"
+import { type KeyBinding, KeyScope } from "@src/core/services/key-scopes"
+import { useConnectionView } from "@src/features/connection/view/use-connection-view"
+import { EditorPanel } from "@src/widgets/editor-panel/editor-panel"
+import { ResultsPanel } from "@src/widgets/results-panel/results-panel"
+import { Statusline, StatuslineProvider } from "@src/widgets/statusline/statusline"
+import { TreePanel } from "@src/widgets/tree-panel/tree-panel"
+import { WelcomePane } from "@src/widgets/welcome-pane/welcome-pane"
+import { createEffect, on, onCleanup, Show } from "solid-js"
 
 export type ConnectionViewPageProps = {
-  configurationName: string;
-  isActive?: boolean;
-};
+  configurationName: string
+  isActive?: boolean
+}
 
 export function ConnectionViewPage(props: ConnectionViewPageProps) {
   const vm = useConnectionView({
     configurationName: () => props.configurationName,
-  });
-  const { theme } = useTheme();
-  const palette = theme;
-  const scopeEnabled = () => props.isActive ?? true;
+  })
+  const { theme } = useTheme()
+  const palette = theme
+  const scopeEnabled = () => props.isActive ?? true
 
   createEffect(
     on(scopeEnabled, (active) => {
-      vm.actions.setActive(active);
+      vm.actions.setActive(active)
       if (!active) {
-        return;
+        return
       }
       if (!vm.editorPane.isFocused()) {
-        return;
+        return
       }
-      vm.actions.focusTree();
+      vm.actions.focusTree()
 
       const timeoutId = setTimeout(() => {
         if (!scopeEnabled()) {
-          return;
+          return
         }
-        vm.actions.focusEditor();
-      }, 10);
+        vm.actions.focusEditor()
+      }, 10)
 
-      onCleanup(() => clearTimeout(timeoutId));
-    })
-  );
+      onCleanup(() => clearTimeout(timeoutId))
+    }),
+  )
 
   const screenKeyBindings: KeyBinding[] = [
     {
@@ -57,7 +57,7 @@ export function ConnectionViewPage(props: ConnectionViewPageProps) {
     {
       pattern: "ctrl+shift+r",
       handler: () => {
-        void vm.actions.refreshGraph();
+        void vm.actions.refreshGraph()
       },
       preventDefault: true,
     },
@@ -91,7 +91,7 @@ export function ConnectionViewPage(props: ConnectionViewPageProps) {
     {
       pattern: "ctrl+s",
       handler: () => {
-        vm.editorPane.saveQuery();
+        vm.editorPane.saveQuery()
       },
       preventDefault: true,
     },
@@ -99,15 +99,15 @@ export function ConnectionViewPage(props: ConnectionViewPageProps) {
       pattern: "q",
       handler: () => {
         if (!vm.editorOpen()) {
-          vm.actions.openEditor();
-          return;
+          vm.actions.openEditor()
+          return
         }
-        vm.actions.focusEditor();
+        vm.actions.focusEditor()
       },
       enabled: () => !vm.editorPane.isFocused(),
       preventDefault: true,
     },
-  ];
+  ]
 
   return (
     <StatuslineProvider configurationName={props.configurationName}>
@@ -150,5 +150,5 @@ export function ConnectionViewPage(props: ConnectionViewPageProps) {
         <Statusline />
       </KeyScope>
     </StatuslineProvider>
-  );
+  )
 }

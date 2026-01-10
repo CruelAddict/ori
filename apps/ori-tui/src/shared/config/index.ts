@@ -1,2 +1,2 @@
-export * from "./args";
-export * from "./key-scopes";
+export * from "./args"
+export * from "./key-scopes"

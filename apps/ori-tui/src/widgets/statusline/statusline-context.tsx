@@ -1,7 +1,7 @@
-import { type Notification, type NotificationLevel, useNotifications } from "@app/providers/notifications";
-import { useTheme } from "@app/providers/theme";
-import { debounce } from "@shared/lib/debounce";
-import { formatFilePath } from "@shared/lib/path-format";
+import { type Notification, type NotificationLevel, useNotifications } from "@app/providers/notifications"
+import { useTheme } from "@app/providers/theme"
+import { debounce } from "@shared/lib/debounce"
+import { formatFilePath } from "@shared/lib/path-format"
 import {
   type Accessor,
   createContext,
@@ -11,56 +11,56 @@ import {
   type JSX,
   onCleanup,
   useContext,
-} from "solid-js";
+} from "solid-js"
 
 type StatuslineState = {
-  left: JSX.Element[];
-  right: JSX.Element[];
-};
-
-type StatuslineMethods = {
-  fileOpenedInBuffer: (path: string | undefined) => void;
-};
-
-interface StatuslineContextValue extends StatuslineMethods {
-  state: Accessor<StatuslineState>;
+  left: JSX.Element[]
+  right: JSX.Element[]
 }
 
-const StatuslineContext = createContext<StatuslineContextValue>();
+type StatuslineMethods = {
+  fileOpenedInBuffer: (path: string | undefined) => void
+}
+
+interface StatuslineContextValue extends StatuslineMethods {
+  state: Accessor<StatuslineState>
+}
+
+const StatuslineContext = createContext<StatuslineContextValue>()
 
 export type StatuslineProviderProps = {
-  configurationName: string;
-  children: JSX.Element;
-};
+  configurationName: string
+  children: JSX.Element
+}
 
 export function StatuslineProvider(props: StatuslineProviderProps) {
-  const { theme } = useTheme();
-  const notifications = useNotifications();
-  const [filePath, setFilePath] = createSignal<string | undefined>(undefined);
-  const [currentNotification, setCurrentNotification] = createSignal<Notification | undefined>(undefined);
+  const { theme } = useTheme()
+  const notifications = useNotifications()
+  const [filePath, setFilePath] = createSignal<string | undefined>(undefined)
+  const [currentNotification, setCurrentNotification] = createSignal<Notification | undefined>(undefined)
 
   createEffect(() => {
-    const abortController = new AbortController();
-    const clearNotification = debounce(() => setCurrentNotification(undefined), 3000);
+    const abortController = new AbortController()
+    const clearNotification = debounce(() => setCurrentNotification(undefined), 3000)
 
     const run = async () => {
       for await (const notification of notifications.notifications("statusline", { signal: abortController.signal })) {
-        setCurrentNotification(notification);
-        clearNotification();
+        setCurrentNotification(notification)
+        clearNotification()
       }
-    };
+    }
 
-    void run();
+    void run()
 
     onCleanup(() => {
-      abortController.abort();
-      clearNotification.clear();
-      setCurrentNotification(undefined);
-    });
-  });
+      abortController.abort()
+      clearNotification.clear()
+      setCurrentNotification(undefined)
+    })
+  })
 
   const state = createMemo<StatuslineState>(() => {
-    const palette = theme();
+    const palette = theme()
     const left: JSX.Element[] = [
       <box
         flexDirection="row"
@@ -69,17 +69,17 @@ export function StatuslineProvider(props: StatuslineProviderProps) {
         <text fg={palette.success}>• </text>
         <text fg={palette.text}>{props.configurationName}</text>
       </box>,
-    ];
+    ]
 
-    const pathValue = filePath();
+    const pathValue = filePath()
     if (pathValue) {
-      const { dirPath, fileName } = formatFilePath(pathValue);
+      const { dirPath, fileName } = formatFilePath(pathValue)
       left[1] = (
         <box flexDirection="row">
           <text fg={palette.textMuted}>{dirPath}</text>
           <text fg={palette.text}>{fileName}</text>
         </box>
-      );
+      )
     }
 
     const right: JSX.Element[] = [
@@ -88,55 +88,60 @@ export function StatuslineProvider(props: StatuslineProviderProps) {
         maxHeight={1}
       >
         <text fg={palette.text}>ctr+x + h/j/k/l </text>
-        <text fg={palette.textMuted} marginRight={2}>navigate panes</text>
+        <text
+          fg={palette.textMuted}
+          marginRight={2}
+        >
+          navigate panes
+        </text>
         <text fg={palette.text}>ctr+p </text>
         <text fg={palette.textMuted}>commands</text>
       </box>,
-    ];
+    ]
 
     const colorByLevel = (level: NotificationLevel): string => {
       switch (level) {
         case "error":
-          return palette.error;
+          return palette.error
         case "success":
-          return palette.success;
+          return palette.success
         default:
-          return palette.textMuted;
+          return palette.textMuted
       }
-    };
+    }
 
-    const notification = currentNotification();
+    const notification = currentNotification()
     if (notification) {
       right.push(
         <>
           <text fg={colorByLevel(notification.style.level)}>• </text>
           <text fg={palette.textMuted}>{notification.message}</text>
         </>,
-      );
+      )
     }
 
     return {
       left,
       right,
-    };
-  });
+    }
+  })
 
   const fileOpenedInBuffer = (path: string | undefined) => {
-    setFilePath(path);
-  };
+    setFilePath(path)
+  }
 
   const value: StatuslineContextValue = {
     state,
     fileOpenedInBuffer,
-  };
+  }
 
-  return <StatuslineContext.Provider value={value}>{props.children}</StatuslineContext.Provider>;
+  return <StatuslineContext.Provider value={value}>{props.children}</StatuslineContext.Provider>
 }
 
 export function useStatusline(): StatuslineContextValue {
-  const ctx = useContext(StatuslineContext);
+  const ctx = useContext(StatuslineContext)
   if (!ctx) {
-    throw new Error("StatuslineProvider is missing in component tree");
+    throw new Error("StatuslineProvider is missing in component tree")
   }
-  return ctx;
+  return ctx
 }

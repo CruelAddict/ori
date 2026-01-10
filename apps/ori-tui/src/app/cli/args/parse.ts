@@ -1,53 +1,53 @@
-import type { ClientMode } from "@shared/lib/configurations-client";
-import type { LogLevel } from "@shared/lib/logger";
-import type { ParsedArgs } from "./types";
+import type { ClientMode } from "@shared/lib/configurations-client"
+import type { LogLevel } from "@shared/lib/logger"
+import type { ParsedArgs } from "./types"
 
 type ArgHandler = {
-  requiresValue: boolean;
-  handle(value: string | undefined): void;
-};
+  requiresValue: boolean
+  handle(value: string | undefined): void
+}
 
-const VALID_LOG_LEVELS: LogLevel[] = ["debug", "info", "warn", "error"];
+const VALID_LOG_LEVELS: LogLevel[] = ["debug", "info", "warn", "error"]
 
 function normalizeLogLevel(value?: string, def: LogLevel = "warn"): LogLevel {
   if (!value) {
-    return def;
+    return def
   }
-  const normalized = value.toLowerCase();
+  const normalized = value.toLowerCase()
   if ((VALID_LOG_LEVELS as string[]).includes(normalized)) {
-    return normalized as LogLevel;
+    return normalized as LogLevel
   }
-  return def;
+  return def
 }
 
 function normalizeMode(value?: string, def: ClientMode = "sdk"): ClientMode {
   if (!value) {
-    return def;
+    return def
   }
-  return value === "stub" ? "stub" : def;
+  return value === "stub" ? "stub" : def
 }
 
 export function parseArgs(args: string[]): ParsedArgs {
-  let configPath: string | undefined;
-  let backendPath: string | undefined;
-  let socketPath: string | undefined;
-  let serverAddress: string | undefined;
-  let mode: ClientMode = "sdk";
-  let logLevel: LogLevel = "warn";
-  let logLevelSet = false;
-  let theme: string | undefined;
+  let configPath: string | undefined
+  let backendPath: string | undefined
+  let socketPath: string | undefined
+  let serverAddress: string | undefined
+  let mode: ClientMode = "sdk"
+  let logLevel: LogLevel = "warn"
+  let logLevelSet = false
+  let theme: string | undefined
 
   const markLogLevel = (value?: string) => {
-    logLevel = normalizeLogLevel(value, logLevel);
-    logLevelSet = value !== undefined;
-  };
+    logLevel = normalizeLogLevel(value, logLevel)
+    logLevelSet = value !== undefined
+  }
 
   const handlers: Record<string, ArgHandler> = {
     "--config": {
       requiresValue: true,
       handle: (v) => {
         if (v) {
-          configPath = v;
+          configPath = v
         }
       },
     },
@@ -55,7 +55,7 @@ export function parseArgs(args: string[]): ParsedArgs {
       requiresValue: true,
       handle: (v) => {
         if (v) {
-          configPath = v;
+          configPath = v
         }
       },
     },
@@ -63,7 +63,7 @@ export function parseArgs(args: string[]): ParsedArgs {
       requiresValue: true,
       handle: (v) => {
         if (v) {
-          backendPath = v;
+          backendPath = v
         }
       },
     },
@@ -71,7 +71,7 @@ export function parseArgs(args: string[]): ParsedArgs {
       requiresValue: true,
       handle: (v) => {
         if (v) {
-          backendPath = v;
+          backendPath = v
         }
       },
     },
@@ -79,7 +79,7 @@ export function parseArgs(args: string[]): ParsedArgs {
       requiresValue: true,
       handle: (v) => {
         if (v) {
-          socketPath = v;
+          socketPath = v
         }
       },
     },
@@ -87,7 +87,7 @@ export function parseArgs(args: string[]): ParsedArgs {
       requiresValue: true,
       handle: (v) => {
         if (v) {
-          socketPath = v;
+          socketPath = v
         }
       },
     },
@@ -95,7 +95,7 @@ export function parseArgs(args: string[]): ParsedArgs {
       requiresValue: true,
       handle: (v) => {
         if (v) {
-          serverAddress = v;
+          serverAddress = v
         }
       },
     },
@@ -103,39 +103,39 @@ export function parseArgs(args: string[]): ParsedArgs {
       requiresValue: true,
       handle: (v) => {
         if (v) {
-          serverAddress = v;
+          serverAddress = v
         }
       },
     },
     "--mode": {
       requiresValue: true,
       handle: (v) => {
-        mode = normalizeMode(v, mode);
+        mode = normalizeMode(v, mode)
       },
     },
     "-mode": {
       requiresValue: true,
       handle: (v) => {
-        mode = normalizeMode(v, mode);
+        mode = normalizeMode(v, mode)
       },
     },
     "--log-level": {
       requiresValue: true,
       handle: (v) => {
-        markLogLevel(v);
+        markLogLevel(v)
       },
     },
     "-log-level": {
       requiresValue: true,
       handle: (v) => {
-        markLogLevel(v);
+        markLogLevel(v)
       },
     },
     "--theme": {
       requiresValue: true,
       handle: (v) => {
         if (v) {
-          theme = v;
+          theme = v
         }
       },
     },
@@ -143,34 +143,34 @@ export function parseArgs(args: string[]): ParsedArgs {
       requiresValue: true,
       handle: (v) => {
         if (v) {
-          theme = v;
+          theme = v
         }
       },
     },
     "--stub": {
       requiresValue: false,
       handle: () => {
-        mode = "stub";
+        mode = "stub"
       },
     },
     "--sdk": {
       requiresValue: false,
       handle: () => {
-        mode = "sdk";
+        mode = "sdk"
       },
     },
-  };
+  }
 
   for (let index = 0; index < args.length; index += 1) {
-    const token = args[index];
-    const handler = handlers[token];
+    const token = args[index]
+    const handler = handlers[token]
     if (!handler) {
-      continue;
+      continue
     }
-    const nextValue = handler.requiresValue ? args[index + 1] : undefined;
-    handler.handle(nextValue);
+    const nextValue = handler.requiresValue ? args[index + 1] : undefined
+    handler.handle(nextValue)
     if (handler.requiresValue && nextValue !== undefined) {
-      index += 1;
+      index += 1
     }
   }
 
@@ -183,5 +183,5 @@ export function parseArgs(args: string[]): ParsedArgs {
     serverAddress,
     mode,
     theme,
-  };
+  }
 }

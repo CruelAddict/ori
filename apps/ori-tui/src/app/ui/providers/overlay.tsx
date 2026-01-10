@@ -1,24 +1,24 @@
-import { createOverlayManager, type OverlayManager } from "@widgets/overlay/overlay-store";
-import { useRenderer } from "@opentui/solid";
-import { createContext, type JSX, onMount, useContext } from "solid-js";
+import { useRenderer } from "@opentui/solid"
+import { createOverlayManager, type OverlayManager } from "@widgets/overlay/overlay-store"
+import { createContext, type JSX, onMount, useContext } from "solid-js"
 
-const OverlayContext = createContext<OverlayManager>();
+const OverlayContext = createContext<OverlayManager>()
 
 export function OverlayProvider(props: { children: JSX.Element }) {
-  const manager = createOverlayManager();
-  const renderer = useRenderer();
+  const manager = createOverlayManager()
+  const renderer = useRenderer()
 
   onMount(() => {
-    manager.setRenderer(renderer);
-  });
+    manager.setRenderer(renderer)
+  })
 
-  return <OverlayContext.Provider value={manager}>{props.children}</OverlayContext.Provider>;
+  return <OverlayContext.Provider value={manager}>{props.children}</OverlayContext.Provider>
 }
 
 export function useOverlayManager(): OverlayManager {
-  const ctx = useContext(OverlayContext);
+  const ctx = useContext(OverlayContext)
   if (!ctx) {
-    throw new Error("OverlayProvider is missing in component tree");
+    throw new Error("OverlayProvider is missing in component tree")
   }
-  return ctx;
+  return ctx
 }

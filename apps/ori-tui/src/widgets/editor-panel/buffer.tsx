@@ -1,39 +1,38 @@
-import { useLogger } from "@app/providers/logger";
-import { useTheme } from "@app/providers/theme";
-import type { BoxRenderable, KeyEvent, MouseEvent, ScrollBoxRenderable, TextareaRenderable } from "@opentui/core";
-import { type KeyBinding, KeyScope } from "@src/core/services/key-scopes";
-import { type Accessor, createEffect, createMemo, For, onCleanup, onMount, Show } from "solid-js";
-import { syntaxHighlighter } from "../../features/syntax-highlighting/syntax-highlighter";
-import { buildLineStarts, type CursorContext, createBufferModel } from "./buffer-model";
-import { collectSqlStatements } from "./sql-statement-detector";
+import { useLogger } from "@app/providers/logger"
+import { useTheme } from "@app/providers/theme"
+import type { BoxRenderable, KeyEvent, MouseEvent, ScrollBoxRenderable, TextareaRenderable } from "@opentui/core"
+import { type KeyBinding, KeyScope } from "@src/core/services/key-scopes"
+import { type Accessor, createEffect, createMemo, For, onCleanup, onMount, Show } from "solid-js"
+import { syntaxHighlighter } from "../../features/syntax-highlighting/syntax-highlighter"
+import { buildLineStarts, type CursorContext, createBufferModel } from "./buffer-model"
+import { collectSqlStatements } from "./sql-statement-detector"
 
-const DEBOUNCE_MS = 200;
+const DEBOUNCE_MS = 200
 
 export type BufferApi = {
-  setText: (text: string) => void;
-  focus: () => void;
-};
+  setText: (text: string) => void
+  focus: () => void
+}
 
 export type BufferProps = {
-  initialText: string;
-  isFocused: Accessor<boolean>;
-  onTextChange: (text: string, info: { modified: boolean }) => void;
-  onUnfocus?: () => void;
-  registerApi?: (api: BufferApi) => void;
-  focusSelf: () => void;
-};
-
+  initialText: string
+  isFocused: Accessor<boolean>
+  onTextChange: (text: string, info: { modified: boolean }) => void
+  onUnfocus?: () => void
+  registerApi?: (api: BufferApi) => void
+  focusSelf: () => void
+}
 
 export function Buffer(props: BufferProps) {
-  const { theme } = useTheme();
-  const palette = theme;
-  const logger = useLogger();
+  const { theme } = useTheme()
+  const palette = theme
+  const logger = useLogger()
 
   const highlighter = syntaxHighlighter({
     theme: palette,
     language: "sql",
     logger,
-  });
+  })
 
   const bufferModel = createBufferModel({
     initialText: props.initialText,
@@ -43,239 +42,239 @@ export function Buffer(props: BufferProps) {
     scheduleHighlight: highlighter.scheduleHighlight,
     highlightResult: highlighter.highlightResult,
     logger,
-  });
+  })
 
-  let scrollRef: ScrollBoxRenderable | undefined;
-  const lineRenderables = new Map<string, BoxRenderable>();
+  let scrollRef: ScrollBoxRenderable | undefined
+  const lineRenderables = new Map<string, BoxRenderable>()
 
-  const getViewport = () => (scrollRef as ScrollBoxRenderable & { viewport?: BoxRenderable })?.viewport;
+  const getViewport = () => (scrollRef as ScrollBoxRenderable & { viewport?: BoxRenderable })?.viewport
 
   const autoScrollIfAtEdge = (ctx: CursorContext, direction: -1 | 1) => {
-    const targetIndex = ctx.index + direction;
+    const targetIndex = ctx.index + direction
     if (!bufferModel.lines()[targetIndex]) {
-      return;
+      return
     }
-    const line = bufferModel.lines()[ctx.index];
+    const line = bufferModel.lines()[ctx.index]
     if (!line) {
-      return;
+      return
     }
-    const renderable = lineRenderables.get(line.id);
-    const viewport = getViewport();
+    const renderable = lineRenderables.get(line.id)
+    const viewport = getViewport()
     if (!renderable || !viewport) {
-      return;
+      return
     }
-    const lineTop = renderable.y ?? 0;
-    const lineBottom = lineTop + (renderable.height ?? 0);
-    const viewportTop = viewport.y ?? 0;
-    const viewportBottom = viewportTop + (viewport.height ?? 0);
+    const lineTop = renderable.y ?? 0
+    const lineBottom = lineTop + (renderable.height ?? 0)
+    const viewportTop = viewport.y ?? 0
+    const viewportBottom = viewportTop + (viewport.height ?? 0)
 
     if (direction === 1 && lineBottom >= viewportBottom) {
-      scrollRef?.scrollBy({ x: 0, y: renderable.height ?? 1 });
+      scrollRef?.scrollBy({ x: 0, y: renderable.height ?? 1 })
     } else if (direction === -1 && lineTop <= viewportTop) {
-      scrollRef?.scrollBy({ x: 0, y: -(renderable.height ?? 1) });
+      scrollRef?.scrollBy({ x: 0, y: -(renderable.height ?? 1) })
     }
-  };
+  }
 
-  const lineTexts = createMemo(() => bufferModel.lines().map((entry) => entry.text));
-  const fullText = createMemo(() => lineTexts().join("\n"));
-  const lineStarts = createMemo(() => buildLineStarts(fullText()));
-  const statementsMemo = createMemo(() => collectSqlStatements(fullText(), lineStarts()));
+  const lineTexts = createMemo(() => bufferModel.lines().map((entry) => entry.text))
+  const fullText = createMemo(() => lineTexts().join("\n"))
+  const lineStarts = createMemo(() => buildLineStarts(fullText()))
+  const statementsMemo = createMemo(() => collectSqlStatements(fullText(), lineStarts()))
   const statementAtCursor = createMemo(() => {
     return statementsMemo().find(
       (stmt) => stmt.startLine <= bufferModel.focusedRow() && stmt.endLine >= bufferModel.focusedRow(),
-    );
-  });
+    )
+  })
 
   const focus = () => {
-    bufferModel.focusCurrent();
-  };
+    bufferModel.focusCurrent()
+  }
 
   const setText = (text: string) => {
-    bufferModel.setText(text);
-  };
+    bufferModel.setText(text)
+  }
 
   onMount(() => {
-    const api: BufferApi = { setText, focus };
-    props.registerApi?.(api);
-  });
+    const api: BufferApi = { setText, focus }
+    props.registerApi?.(api)
+  })
 
   onCleanup(() => {
-    bufferModel.dispose();
-    highlighter.dispose();
-  });
+    bufferModel.dispose()
+    highlighter.dispose()
+  })
 
   const focusLineEnd = (index: number) => {
-    const line = bufferModel.lines()[index];
+    const line = bufferModel.lines()[index]
     if (!line) {
-      return;
+      return
     }
-    bufferModel.setFocusedRow(index);
-    bufferModel.setNavColumn(line.text.length);
-    bufferModel.focusCurrent();
-  };
+    bufferModel.setFocusedRow(index)
+    bufferModel.setNavColumn(line.text.length)
+    bufferModel.focusCurrent()
+  }
 
   const focusLastLineEnd = () => {
-    const lastIndex = bufferModel.lines().length - 1;
+    const lastIndex = bufferModel.lines().length - 1
     if (lastIndex < 0) {
-      return;
+      return
     }
-    focusLineEnd(lastIndex);
-  };
+    focusLineEnd(lastIndex)
+  }
 
   const handleBufferMouseDown = (event: MouseEvent) => {
-    event.preventDefault();
-    props.focusSelf();
-    focusLastLineEnd();
-  };
+    event.preventDefault()
+    props.focusSelf()
+    focusLastLineEnd()
+  }
 
   const handleMouseDown = (index: number, event: MouseEvent) => {
-    event.stopPropagation();
-    props.focusSelf();
-    event.target?.focus();
-    bufferModel.setFocusedRow(index);
+    event.stopPropagation()
+    props.focusSelf()
+    event.target?.focus()
+    bufferModel.setFocusedRow(index)
     queueMicrotask(() => {
-      const ctx = bufferModel.getCursorContext();
+      const ctx = bufferModel.getCursorContext()
       if (!ctx || ctx.index !== index) {
-        return;
+        return
       }
-      bufferModel.setNavColumn(ctx.cursorCol);
-    });
-  };
+      bufferModel.setNavColumn(ctx.cursorCol)
+    })
+  }
 
   const handleLineMouseDown = (index: number, event: MouseEvent) => {
-    event.stopPropagation();
-    event.preventDefault();
-    props.focusSelf();
-    focusLineEnd(index);
-  };
+    event.stopPropagation()
+    event.preventDefault()
+    props.focusSelf()
+    focusLineEnd(index)
+  }
 
   const withCursor = (handler: (ctx: CursorContext, event: KeyEvent) => void) => (event: KeyEvent) => {
-    const ctx = bufferModel.getCursorContext();
+    const ctx = bufferModel.getCursorContext()
     if (!ctx) {
-      return;
+      return
     }
-    handler(ctx, event);
-  };
+    handler(ctx, event)
+  }
 
   const bindings: KeyBinding[] = [
     {
       pattern: "escape",
       handler: () => {
-        bufferModel.flush();
-        props.onUnfocus?.();
+        bufferModel.flush()
+        props.onUnfocus?.()
       },
       preventDefault: true,
     },
     {
       pattern: "return",
       handler: withCursor((ctx, event) => {
-        event.preventDefault();
-        bufferModel.handleEnter(ctx.index);
+        event.preventDefault()
+        bufferModel.handleEnter(ctx.index)
       }),
     },
     {
       pattern: "up",
       handler: withCursor((ctx, event) => {
-        event.preventDefault();
-        bufferModel.setNavColumn(ctx.cursorCol);
-        autoScrollIfAtEdge(ctx, -1);
-        bufferModel.handleVerticalMove(ctx.index, -1);
+        event.preventDefault()
+        bufferModel.setNavColumn(ctx.cursorCol)
+        autoScrollIfAtEdge(ctx, -1)
+        bufferModel.handleVerticalMove(ctx.index, -1)
       }),
     },
     {
       pattern: "down",
       handler: withCursor((ctx, event) => {
-        event.preventDefault();
-        bufferModel.setNavColumn(ctx.cursorCol);
-        autoScrollIfAtEdge(ctx, 1);
-        bufferModel.handleVerticalMove(ctx.index, 1);
+        event.preventDefault()
+        bufferModel.setNavColumn(ctx.cursorCol)
+        autoScrollIfAtEdge(ctx, 1)
+        bufferModel.handleVerticalMove(ctx.index, 1)
       }),
     },
     {
       pattern: "left",
       handler: withCursor((ctx, event) => {
-        bufferModel.setNavColumn(ctx.cursorCol);
-        const atStart = ctx.cursorCol === 0 && ctx.cursorRow === 0;
+        bufferModel.setNavColumn(ctx.cursorCol)
+        const atStart = ctx.cursorCol === 0 && ctx.cursorRow === 0
         if (atStart) {
-          event.preventDefault();
-          bufferModel.handleHorizontalJump(ctx.index, true);
+          event.preventDefault()
+          bufferModel.handleHorizontalJump(ctx.index, true)
         }
       }),
     },
     {
       pattern: "right",
       handler: withCursor((ctx, event) => {
-        bufferModel.setNavColumn(ctx.cursorCol);
-        const atEnd = ctx.cursorCol === ctx.text.length && ctx.cursorRow === 0;
+        bufferModel.setNavColumn(ctx.cursorCol)
+        const atEnd = ctx.cursorCol === ctx.text.length && ctx.cursorRow === 0
         if (atEnd) {
-          event.preventDefault();
-          bufferModel.handleHorizontalJump(ctx.index, false);
+          event.preventDefault()
+          bufferModel.handleHorizontalJump(ctx.index, false)
         }
       }),
     },
     {
       pattern: "backspace",
       handler: withCursor((ctx, event) => {
-        bufferModel.setNavColumn(ctx.cursorCol);
-        const atStart = ctx.cursorCol === 0 && ctx.cursorRow === 0;
+        bufferModel.setNavColumn(ctx.cursorCol)
+        const atStart = ctx.cursorCol === 0 && ctx.cursorRow === 0
         if (atStart) {
-          event.preventDefault();
-          autoScrollIfAtEdge(ctx, -1);
-          bufferModel.handleBackwardMerge(ctx.index);
+          event.preventDefault()
+          autoScrollIfAtEdge(ctx, -1)
+          bufferModel.handleBackwardMerge(ctx.index)
         }
       }),
     },
     {
       pattern: "delete",
       handler: withCursor((ctx, event) => {
-        bufferModel.setNavColumn(ctx.cursorCol);
-        const atEnd = ctx.cursorCol === ctx.text.length && ctx.cursorRow === 0;
+        bufferModel.setNavColumn(ctx.cursorCol)
+        const atEnd = ctx.cursorCol === ctx.text.length && ctx.cursorRow === 0
         if (atEnd) {
-          event.preventDefault();
-          bufferModel.handleForwardMerge(ctx.index);
+          event.preventDefault()
+          bufferModel.handleForwardMerge(ctx.index)
         }
       }),
     },
     {
       pattern: "ctrl+h",
       handler: withCursor((ctx, event) => {
-        bufferModel.setNavColumn(ctx.cursorCol);
-        const atStart = ctx.cursorCol === 0 && ctx.cursorRow === 0;
+        bufferModel.setNavColumn(ctx.cursorCol)
+        const atStart = ctx.cursorCol === 0 && ctx.cursorRow === 0
         if (atStart) {
-          event.preventDefault();
-          autoScrollIfAtEdge(ctx, -1);
-          bufferModel.handleBackwardMerge(ctx.index);
+          event.preventDefault()
+          autoScrollIfAtEdge(ctx, -1)
+          bufferModel.handleBackwardMerge(ctx.index)
         }
       }),
     },
     {
       pattern: "ctrl+w",
       handler: withCursor((ctx, event) => {
-        bufferModel.setNavColumn(ctx.cursorCol);
-        const atStart = ctx.cursorCol === 0 && ctx.cursorRow === 0;
+        bufferModel.setNavColumn(ctx.cursorCol)
+        const atStart = ctx.cursorCol === 0 && ctx.cursorRow === 0
         if (atStart) {
-          event.preventDefault();
-          autoScrollIfAtEdge(ctx, -1);
-          bufferModel.handleBackwardMerge(ctx.index);
+          event.preventDefault()
+          autoScrollIfAtEdge(ctx, -1)
+          bufferModel.handleBackwardMerge(ctx.index)
         }
       }),
     },
     {
       pattern: "ctrl+d",
       handler: withCursor((ctx, event) => {
-        bufferModel.setNavColumn(ctx.cursorCol);
-        const atEnd = ctx.cursorCol === ctx.text.length && ctx.cursorRow === 0;
+        bufferModel.setNavColumn(ctx.cursorCol)
+        const atEnd = ctx.cursorCol === ctx.text.length && ctx.cursorRow === 0
         if (atEnd) {
-          event.preventDefault();
-          bufferModel.handleForwardMerge(ctx.index);
+          event.preventDefault()
+          bufferModel.handleForwardMerge(ctx.index)
         }
       }),
     },
-  ];
+  ]
 
   createEffect(() => {
-    bufferModel.handleFocusChange(props.isFocused());
-  });
+    bufferModel.handleFocusChange(props.isFocused())
+  })
 
   const lineBg = (row: number) => {
     return props.isFocused() && bufferModel.focusedRow() === row ? palette().editorBackgroundFocused : undefined
@@ -288,7 +287,7 @@ export function Buffer(props: BufferProps) {
     >
       <scrollbox
         ref={(node: ScrollBoxRenderable | undefined) => {
-          scrollRef = node ?? undefined;
+          scrollRef = node ?? undefined
         }}
         height={"100%"}
         stickyScroll={true}
@@ -312,10 +311,10 @@ export function Buffer(props: BufferProps) {
                   <box
                     ref={(ref: BoxRenderable | undefined) => {
                       if (!ref) {
-                        lineRenderables.delete(line.id);
-                        return;
+                        lineRenderables.delete(line.id)
+                        return
                       }
-                      lineRenderables.set(line.id, ref);
+                      lineRenderables.set(line.id, ref)
                     }}
                     flexDirection="row"
                     width="100%"
@@ -337,14 +336,14 @@ export function Buffer(props: BufferProps) {
                       >
                         {(() => {
                           if (statementsMemo().length < 2) {
-                            return "";
+                            return ""
                           }
-                          const target = statementAtCursor();
+                          const target = statementAtCursor()
                           if (target?.startLine === indexAccessor()) {
-                            return "󰻃 ";
+                            return "󰻃 "
                           }
-                          const hasStart = statementsMemo().some((statement) => statement.startLine === indexAccessor());
-                          return hasStart ? "• " : "";
+                          const hasStart = statementsMemo().some((statement) => statement.startLine === indexAccessor())
+                          return hasStart ? "• " : ""
                         })()}
                       </text>
                       <text
@@ -360,7 +359,7 @@ export function Buffer(props: BufferProps) {
                       backgroundColor={lineBg(indexAccessor())}
                       focusedBackgroundColor={lineBg(indexAccessor())}
                       ref={(renderable: TextareaRenderable | undefined) => {
-                        bufferModel.setLineRef(line.id, renderable);
+                        bufferModel.setLineRef(line.id, renderable)
                       }}
                       textColor={palette().editorText}
                       focusedTextColor={palette().editorText}
@@ -369,7 +368,7 @@ export function Buffer(props: BufferProps) {
                       selectable={true}
                       keyBindings={[]}
                       onMouseDown={(event: MouseEvent) => {
-                        handleMouseDown(indexAccessor(), event);
+                        handleMouseDown(indexAccessor(), event)
                       }}
                       onContentChange={() => bufferModel.handleTextAreaChange(indexAccessor())}
                       initialValue={line.text}
@@ -381,7 +380,7 @@ export function Buffer(props: BufferProps) {
                       onMouseDown={(event: MouseEvent) => handleLineMouseDown(indexAccessor(), event)}
                     />
                   </box>
-                );
+                )
               }}
             </For>
             <Show when={bufferModel.lines().length === 0}>
@@ -391,5 +390,5 @@ export function Buffer(props: BufferProps) {
         </box>
       </scrollbox>
     </KeyScope>
-  );
+  )
 }

@@ -1,7 +1,7 @@
-import type { Configuration } from "@shared/lib/configuration";
-import { decodeServerEvent, type ServerEvent } from "@shared/lib/events";
-import { createSSEStream, type SSEMessage } from "@shared/lib/sse-client";
-import axios, { type AxiosInstance } from "axios";
+import type { Configuration } from "@shared/lib/configuration"
+import { decodeServerEvent, type ServerEvent } from "@shared/lib/events"
+import { createSSEStream, type SSEMessage } from "@shared/lib/sse-client"
+import axios, { type AxiosInstance } from "axios"
 import {
   type ConfigurationsResponse,
   type ConnectionResult as ContractConnectionResult,
@@ -14,96 +14,96 @@ import {
   type QueryExecRequest,
   type QueryExecResponse,
   type QueryResultResponse,
-} from "contract";
-import type { ApiRequestOptions } from "contract/core/ApiRequestOptions";
-import { request as contractRequest } from "contract/core/request";
-import type { Logger } from "pino";
+} from "contract"
+import type { ApiRequestOptions } from "contract/core/ApiRequestOptions"
+import { request as contractRequest } from "contract/core/request"
+import type { Logger } from "pino"
 
-export type ClientMode = "sdk" | "stub";
+export type ClientMode = "sdk" | "stub"
 
 export type ConnectResult = {
-  result: "success" | "fail" | "connecting";
-  userMessage?: string;
-};
+  result: "success" | "fail" | "connecting"
+  userMessage?: string
+}
 
 export type NodeEdge = {
-  items: string[];
-  truncated: boolean;
-};
+  items: string[]
+  truncated: boolean
+}
 
 export type Node = {
-  id: string;
-  type: string;
-  name: string;
-  attributes: Record<string, unknown>;
-  edges: Record<string, NodeEdge>;
-};
+  id: string
+  type: string
+  name: string
+  attributes: Record<string, unknown>
+  edges: Record<string, NodeEdge>
+}
 
 export type QueryExecResult = {
-  jobId: string;
-  status: "running" | "failed";
-  message?: string;
-};
+  jobId: string
+  status: "running" | "failed"
+  message?: string
+}
 
 export type QueryColumn = {
-  name: string;
-  type: string;
-};
+  name: string
+  type: string
+}
 
 export type QueryResultView = {
-  columns: QueryColumn[];
-  rows: unknown[][];
-  rowCount: number;
-  truncated: boolean;
-};
+  columns: QueryColumn[]
+  rows: unknown[][]
+  rowCount: number
+  truncated: boolean
+}
 
 export type OriClient = {
-  listConfigurations(): Promise<Configuration[]>;
-  connect(configurationName: string): Promise<ConnectResult>;
-  getNodes(configurationName: string, nodeIDs?: string[]): Promise<Node[]>;
+  listConfigurations(): Promise<Configuration[]>
+  connect(configurationName: string): Promise<ConnectResult>
+  getNodes(configurationName: string, nodeIDs?: string[]): Promise<Node[]>
   queryExec(
     configurationName: string,
     jobId: string,
     query: string,
     params?: Record<string, unknown>,
-  ): Promise<QueryExecResult>;
-  queryGetResult(jobId: string, limit?: number, offset?: number): Promise<QueryResultView>;
-  openEventStream(onEvent: (event: ServerEvent) => void): () => void;
-};
+  ): Promise<QueryExecResult>
+  queryGetResult(jobId: string, limit?: number, offset?: number): Promise<QueryResultView>
+  openEventStream(onEvent: (event: ServerEvent) => void): () => void
+}
 
 export type CreateClientOptions = {
-  mode: ClientMode;
-  host?: string;
-  port?: number;
-  socketPath?: string;
-  logger: Logger;
-};
+  mode: ClientMode
+  host?: string
+  port?: number
+  socketPath?: string
+  logger: Logger
+}
 
 type HttpClientOptions = {
-  host: string;
-  port: number;
-  logger: Logger;
-};
+  host: string
+  port: number
+  logger: Logger
+}
 
 type UnixClientOptions = {
-  socketPath: string;
-  logger: Logger;
-};
+  socketPath: string
+  logger: Logger
+}
 
 class RestOriClient implements OriClient {
-  private readonly apiConfig: OpenAPIConfig;
-  private readonly httpClient: AxiosInstance;
+  private readonly apiConfig: OpenAPIConfig
+  private readonly httpClient: AxiosInstance
 
   constructor(private readonly options: HttpClientOptions | UnixClientOptions) {
-    this.apiConfig = this.createApiConfig();
-    this.httpClient = this.createHttpClient();
+    this.apiConfig = this.createApiConfig()
+    this.httpClient = this.createHttpClient()
   }
 
   async listConfigurations(): Promise<Configuration[]> {
     const payload = await this.send<ConfigurationsResponse>({
       method: "GET",
       url: "/configurations",
-    });
+    })
     return payload.connections.map((conn: ConfigurationsResponse["connections"][number]) => ({
       name: conn.name,
       type: conn.type,
@@ -111,7 +111,7 @@ class RestOriClient implements OriClient {
       port: conn.port ?? 0,
       database: conn.database,
       username: conn.username ?? "",
-    }));
+    }))
   }
 
   async connect(configurationName: string): Promise<ConnectResult> {
@@ -120,11 +120,11 @@ class RestOriClient implements OriClient {
       url: "/connections",
       body: { configurationName },
       mediaType: "application/json",
-    });
+    })
     return {
       result: payload.result,
       userMessage: payload.userMessage ?? undefined,
-    };
+    }
   }
 
   async getNodes(configurationName: string, nodeIDs?: string[]): Promise<Node[]> {
@@ -133,8 +133,8 @@ class RestOriClient implements OriClient {
       url: "/configurations/{configurationName}/nodes",
       path: { configurationName },
       query: { nodeId: nodeIDs },
-    });
-    return payload.nodes.map(mapNode);
+    })
+    return payload.nodes.map(mapNode)
   }
 
   async queryExec(
@@ -143,21 +143,21 @@ class RestOriClient implements OriClient {
     query: string,
     params?: Record<string, unknown>,
   ): Promise<QueryExecResult> {
-    const request: QueryExecRequest = { configurationName, jobId, query };
+    const request: QueryExecRequest = { configurationName, jobId, query }
     if (params !== undefined) {
-      request.params = params;
+      request.params = params
     }
     const payload = await this.send<QueryExecResponse>({
       method: "POST",
       url: "/queries",
       body: request,
       mediaType: "application/json",
-    });
+    })
     return {
       jobId: payload.jobId,
       status: payload.status,
       message: payload.message ?? undefined,
-    };
+    }
   }
 
   async queryGetResult(jobId: string, limit?: number, offset?: number): Promise<QueryResultView> {
@@ -166,7 +166,7 @@ class RestOriClient implements OriClient {
       url: "/queries/{jobId}/result",
       path: { jobId },
       query: { limit, offset },
-    });
+    })
     return {
       columns: payload.columns.map((col: QueryResultResponse["columns"][number]) => ({
         name: col.name,
@@ -175,7 +175,7 @@ class RestOriClient implements OriClient {
       rows: payload.rows,
       rowCount: payload.rowCount,
       truncated: payload.truncated,
-    };
+    }
   }
 
   openEventStream(onEvent: (event: ServerEvent) => void): () => void {
@@ -187,7 +187,7 @@ class RestOriClient implements OriClient {
           logger: this.options.logger,
         },
         (message) => this.dispatchEvent(message, onEvent),
-      );
+      )
     }
     return createSSEStream(
       {
@@ -197,80 +197,80 @@ class RestOriClient implements OriClient {
         logger: this.options.logger,
       },
       (message) => this.dispatchEvent(message, onEvent),
-    );
+    )
   }
 
   private dispatchEvent(message: SSEMessage, onEvent: (event: ServerEvent) => void) {
     try {
-      const event = decodeServerEvent(message);
+      const event = decodeServerEvent(message)
       if (event) {
-        onEvent(event);
+        onEvent(event)
       }
     } catch (err) {
-      this.options.logger.error({ err }, "failed to decode SSE payload");
+      this.options.logger.error({ err }, "failed to decode SSE payload")
     }
   }
 
   private createApiConfig(): OpenAPIConfig {
-    const baseConfig: OpenAPIConfig = { ...OpenAPI };
-    baseConfig.BASE = this.buildBaseURL();
-    baseConfig.WITH_CREDENTIALS = false;
-    return baseConfig;
+    const baseConfig: OpenAPIConfig = { ...OpenAPI }
+    baseConfig.BASE = this.buildBaseURL()
+    baseConfig.WITH_CREDENTIALS = false
+    return baseConfig
   }
 
   private createHttpClient(): AxiosInstance {
     const client = axios.create({
       baseURL: this.apiConfig.BASE,
-    });
+    })
     if (isUnixOptions(this.options)) {
-      (client.defaults as typeof client.defaults & { socketPath?: string }).socketPath = this.options.socketPath;
+      ;(client.defaults as typeof client.defaults & { socketPath?: string }).socketPath = this.options.socketPath
     }
-    return client;
+    return client
   }
 
   private buildBaseURL(): string {
     if (isUnixOptions(this.options)) {
-      return "http://unix";
+      return "http://unix"
     }
-    return `http://${this.options.host}:${this.options.port}`;
+    return `http://${this.options.host}:${this.options.port}`
   }
 
   private async send<T>(options: ApiRequestOptions): Promise<T> {
-    const result = await contractRequest<T | ErrorPayload>(this.apiConfig, options, this.httpClient);
-    return this.unwrap<T>(result);
+    const result = await contractRequest<T | ErrorPayload>(this.apiConfig, options, this.httpClient)
+    return this.unwrap<T>(result)
   }
 
   private unwrap<T>(result: T | ErrorPayload): T {
     if (isErrorPayload(result)) {
-      throw new Error(result.message ?? "request failed");
+      throw new Error(result.message ?? "request failed")
     }
-    return result;
+    return result
   }
 }
 
 class StubOriClient implements OriClient {
   async listConfigurations(): Promise<Configuration[]> {
-    return STUB_CONFIGURATIONS;
+    return STUB_CONFIGURATIONS
   }
 
   async connect(): Promise<ConnectResult> {
-    return { result: "success" };
+    return { result: "success" }
   }
 
   async getNodes(configurationName: string, nodeIDs?: string[]): Promise<Node[]> {
-    const graph = ensureStubGraph(configurationName);
+    const graph = ensureStubGraph(configurationName)
     if (!nodeIDs || nodeIDs.length === 0) {
-      const root = graph.get(rootNodeId(configurationName));
-      return root ? [root] : [];
+      const root = graph.get(rootNodeId(configurationName))
+      return root ? [root] : []
     }
-    const nodes: Node[] = [];
+    const nodes: Node[] = []
     for (const id of nodeIDs) {
-      const node = graph.get(id);
+      const node = graph.get(id)
       if (node) {
-        nodes.push(node);
+        nodes.push(node)
       }
     }
-    return nodes;
+    return nodes
   }
 
   async queryExec(
@@ -282,7 +282,7 @@ class StubOriClient implements OriClient {
     return {
       jobId,
       status: "running",
-    };
+    }
   }
 
   async queryGetResult(): Promise<QueryResultView> {
@@ -297,11 +297,11 @@ class StubOriClient implements OriClient {
       ],
       rowCount: 2,
       truncated: false,
-    };
+    }
   }
 
   openEventStream(): () => void {
-    return () => undefined;
+    return () => undefined
   }
 }
 
@@ -322,39 +322,39 @@ const STUB_CONFIGURATIONS: Configuration[] = [
     database: "analytics",
     username: "analyst",
   },
-];
+]
 
 export function createOriClient(options: CreateClientOptions): OriClient {
   if (options.mode === "stub") {
-    return new StubOriClient();
+    return new StubOriClient()
   }
 
   if (options.socketPath) {
-    return new RestOriClient({ socketPath: options.socketPath, logger: options.logger });
+    return new RestOriClient({ socketPath: options.socketPath, logger: options.logger })
   }
 
-  const host = options.host ?? "localhost";
-  const port = options.port ?? 8080;
-  return new RestOriClient({ host, port, logger: options.logger });
+  const host = options.host ?? "localhost"
+  const port = options.port ?? 8080
+  return new RestOriClient({ host, port, logger: options.logger })
 }
 
 function isUnixOptions(options: HttpClientOptions | UnixClientOptions): options is UnixClientOptions {
-  return (options as UnixClientOptions).socketPath !== undefined;
+  return (options as UnixClientOptions).socketPath !== undefined
 }
 
 function isErrorPayload(value: unknown): value is ErrorPayload {
-  return typeof value === "object" && value !== null && "code" in value;
+  return typeof value === "object" && value !== null && "code" in value
 }
 
 function mapNode(node: ContractNode): Node {
-  const edges: Record<string, NodeEdge> = {};
+  const edges: Record<string, NodeEdge> = {}
   if (node.edges) {
-    const contractEdges = Object.entries(node.edges) as Array<[string, ContractNodeEdge]>;
+    const contractEdges = Object.entries(node.edges) as Array<[string, ContractNodeEdge]>
     for (const [kind, edge] of contractEdges) {
       edges[kind] = {
         items: edge.items ?? [],
         truncated: edge.truncated ?? false,
-      };
+      }
     }
   }
   return {
@@ -363,32 +363,32 @@ function mapNode(node: ContractNode): Node {
     name: node.name,
     attributes: node.attributes ?? {},
     edges,
-  };
+  }
 }
 
 function rootNodeId(configurationName: string): string {
-  return `${slugify(configurationName)}-database`;
+  return `${slugify(configurationName)}-database`
 }
 
-const stubGraphs = new Map<string, Map<string, Node>>();
+const stubGraphs = new Map<string, Map<string, Node>>()
 
 function ensureStubGraph(configurationName: string): Map<string, Node> {
-  const existing = stubGraphs.get(configurationName);
+  const existing = stubGraphs.get(configurationName)
   if (existing) {
-    return existing;
+    return existing
   }
 
-  const graph = buildStubGraph(configurationName);
-  stubGraphs.set(configurationName, graph);
-  return graph;
+  const graph = buildStubGraph(configurationName)
+  stubGraphs.set(configurationName, graph)
+  return graph
 }
 
 function buildStubGraph(configurationName: string): Map<string, Node> {
-  const connectionSlug = slugify(configurationName);
-  const databaseId = `${connectionSlug}-database`;
-  const tableId = `${connectionSlug}-table`;
-  const columnId = `${connectionSlug}-column`;
-  const databaseName = `${connectionSlug}_db`;
+  const connectionSlug = slugify(configurationName)
+  const databaseId = `${connectionSlug}-database`
+  const tableId = `${connectionSlug}-table`
+  const columnId = `${connectionSlug}-column`
+  const databaseName = `${connectionSlug}_db`
 
   const databaseNode: Node = {
     id: databaseId,
@@ -401,7 +401,7 @@ function buildStubGraph(configurationName: string): Map<string, Node> {
     edges: {
       tables: { items: [tableId], truncated: false },
     },
-  };
+  }
 
   const tableNode: Node = {
     id: tableId,
@@ -415,7 +415,7 @@ function buildStubGraph(configurationName: string): Map<string, Node> {
     edges: {
       columns: { items: [columnId], truncated: false },
     },
-  };
+  }
 
   const columnNode: Node = {
     id: columnId,
@@ -427,13 +427,13 @@ function buildStubGraph(configurationName: string): Map<string, Node> {
       primaryKeyPosition: 1,
     },
     edges: {},
-  };
+  }
 
   return new Map<string, Node>([
     [databaseNode.id, databaseNode],
     [tableNode.id, tableNode],
     [columnNode.id, columnNode],
-  ]);
+  ])
 }
 
 function slugify(input: string): string {
@@ -441,6 +441,6 @@ function slugify(input: string): string {
     .trim()
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-  return normalized || "connection";
+    .replace(/^-+|-+$/g, "")
+  return normalized || "connection"
 }

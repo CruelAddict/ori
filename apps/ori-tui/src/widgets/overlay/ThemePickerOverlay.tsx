@@ -1,11 +1,11 @@
-import type { OverlayComponentProps } from "./overlay-store";
-import { useTheme } from "@app/providers/theme";
-import { DialogSelect, type DialogSelectOption } from "@widgets/dialog-select";
-import { createMemo, onCleanup } from "solid-js";
+import { useTheme } from "@app/providers/theme"
+import { DialogSelect, type DialogSelectOption } from "@widgets/dialog-select"
+import { createMemo, onCleanup } from "solid-js"
+import type { OverlayComponentProps } from "./overlay-store"
 
 export function ThemePickerOverlay(props: OverlayComponentProps) {
-  const { availableThemes, selectedTheme, setTheme } = useTheme();
-  const initialTheme = selectedTheme();
+  const { availableThemes, selectedTheme, setTheme } = useTheme()
+  const initialTheme = selectedTheme()
 
   const options = createMemo<DialogSelectOption<string>[]>(() =>
     availableThemes.map((entry) => ({
@@ -13,49 +13,49 @@ export function ThemePickerOverlay(props: OverlayComponentProps) {
       title: entry.label,
       value: entry.name,
     })),
-  );
+  )
 
-  let previewTimeout: ReturnType<typeof setTimeout> | undefined;
-  let overlayClosed = false;
+  let previewTimeout: ReturnType<typeof setTimeout> | undefined
+  let overlayClosed = false
 
   const clearPreviewTimeout = () => {
-    if (!previewTimeout) return;
-    clearTimeout(previewTimeout);
-    previewTimeout = undefined;
-  };
+    if (!previewTimeout) return
+    clearTimeout(previewTimeout)
+    previewTimeout = undefined
+  }
 
   const handleHighlightChange = (option?: DialogSelectOption<string>) => {
-    clearPreviewTimeout();
-    const scheduledTheme = option?.value ?? initialTheme;
+    clearPreviewTimeout()
+    const scheduledTheme = option?.value ?? initialTheme
     previewTimeout = setTimeout(() => {
-      previewTimeout = undefined;
-      if (overlayClosed) return;
+      previewTimeout = undefined
+      if (overlayClosed) return
       if (selectedTheme() !== scheduledTheme) {
-        setTheme(scheduledTheme);
+        setTheme(scheduledTheme)
       }
-    }, 100);
-  };
+    }, 100)
+  }
 
   const handleCancel = () => {
-    overlayClosed = true;
-    clearPreviewTimeout();
+    overlayClosed = true
+    clearPreviewTimeout()
     if (selectedTheme() !== initialTheme) {
-      setTheme(initialTheme);
+      setTheme(initialTheme)
     }
-    props.close();
-  };
+    props.close()
+  }
 
   const handleSelect = (option: DialogSelectOption<string>) => {
-    overlayClosed = true;
-    clearPreviewTimeout();
-    setTheme(option.value);
-    props.close();
-  };
+    overlayClosed = true
+    clearPreviewTimeout()
+    setTheme(option.value)
+    props.close()
+  }
 
   onCleanup(() => {
-    overlayClosed = true;
-    clearPreviewTimeout();
-  });
+    overlayClosed = true
+    clearPreviewTimeout()
+  })
 
   return (
     <DialogSelect
@@ -69,5 +69,5 @@ export function ThemePickerOverlay(props: OverlayComponentProps) {
       onCancel={handleCancel}
       onHighlightChange={handleHighlightChange}
     />
-  );
+  )
 }

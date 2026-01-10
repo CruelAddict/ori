@@ -1,45 +1,45 @@
-import { ConnectionViewPage } from "@pages/connection-view/connection-view";
-import { WelcomePage } from "@pages/welcome/welcome-page";
-import { KeyScope, type KeyBinding } from "@src/core/services/key-scopes";
-import { createMemo, For } from "solid-js";
-import { useRouteNavigation } from "./router";
-import { connectionRoute, type ConnectionRoute, type RouteLocation } from "./types";
-import { useTheme } from "@app/providers/theme";
+import { useTheme } from "@app/providers/theme"
+import { ConnectionViewPage } from "@pages/connection-view/connection-view"
+import { WelcomePage } from "@pages/welcome/welcome-page"
+import { type KeyBinding, KeyScope } from "@src/core/services/key-scopes"
+import { createMemo, For } from "solid-js"
+import { useRouteNavigation } from "./router"
+import { type ConnectionRoute, connectionRoute, type RouteLocation } from "./types"
 
 export function RouteOutlet() {
-  const navigation = useRouteNavigation();
-  const stack = navigation.stack;
-  const current = navigation.current;
+  const navigation = useRouteNavigation()
+  const stack = navigation.stack
+  const current = navigation.current
 
-  const connections = createMemo(() => stack().filter(isConnectionRoute));
+  const connections = createMemo(() => stack().filter(isConnectionRoute))
   const activeConnectionName = createMemo(() => {
-    const route = current();
+    const route = current()
     if (route.type === "connection") {
-      return route.configurationName;
+      return route.configurationName
     }
-    return null;
-  });
-  const showWelcome = createMemo(() => activeConnectionName() === null);
+    return null
+  })
+  const showWelcome = createMemo(() => activeConnectionName() === null)
   const previousConnectionName = createMemo(() => {
-    const currentName = activeConnectionName();
+    const currentName = activeConnectionName()
     if (!currentName) {
-      return null;
+      return null
     }
-    const list = connections();
-    const index = list.findIndex((route) => route.configurationName === currentName);
+    const list = connections()
+    const index = list.findIndex((route) => route.configurationName === currentName)
     if (index <= 0) {
-      return null;
+      return null
     }
-    return list[index - 1]?.configurationName ?? null;
-  });
+    return list[index - 1]?.configurationName ?? null
+  })
 
   const goToPreviousConnection = () => {
-    const name = previousConnectionName();
+    const name = previousConnectionName()
     if (!name) {
-      return;
+      return
     }
-    navigation.push(connectionRoute(name));
-  };
+    navigation.push(connectionRoute(name))
+  }
 
   const hotkeys: KeyBinding[] = [
     {
@@ -50,12 +50,10 @@ export function RouteOutlet() {
       commandPaletteSection: "Navigation",
       enabled: () => previousConnectionName() !== null,
     },
-  ];
+  ]
 
   return (
-    <KeyScope
-      bindings={hotkeys}
-    >
+    <KeyScope bindings={hotkeys}>
       <box
         flexGrow={1}
         position="relative"
@@ -68,7 +66,7 @@ export function RouteOutlet() {
         </box>
         <For each={connections()}>
           {(route) => {
-            const isActive = () => activeConnectionName() === route.configurationName;
+            const isActive = () => activeConnectionName() === route.configurationName
             return (
               <box
                 flexGrow={1}
@@ -84,14 +82,14 @@ export function RouteOutlet() {
                   isActive={isActive()}
                 />
               </box>
-            );
+            )
           }}
         </For>
       </box>
     </KeyScope>
-  );
+  )
 }
 
 function isConnectionRoute(route: RouteLocation): route is ConnectionRoute {
-  return route.type === "connection";
+  return route.type === "connection"
 }

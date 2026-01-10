@@ -1,44 +1,44 @@
-import { useResourceGraphSnapshot, useSchemaTree } from "@entities/schema-tree";
-import type { PaneFocusController } from "@src/features/connection/view/pane-types";
-import type { Accessor } from "solid-js";
-import { createSignal } from "solid-js";
+import { useResourceGraphSnapshot, useSchemaTree } from "@entities/schema-tree"
+import type { PaneFocusController } from "@src/features/connection/view/pane-types"
+import type { Accessor } from "solid-js"
+import { createSignal } from "solid-js"
 
 export type TreePaneViewModel = {
-  controller: ReturnType<typeof useSchemaTree>;
-  visible: Accessor<boolean>;
-  isFocused: Accessor<boolean>;
-  loading: Accessor<boolean>;
-  error: Accessor<string | null>;
-  focusSelf: () => void;
-  toggleVisible: () => void;
-  refreshGraph: () => Promise<void>;
-};
+  controller: ReturnType<typeof useSchemaTree>
+  visible: Accessor<boolean>
+  isFocused: Accessor<boolean>
+  loading: Accessor<boolean>
+  error: Accessor<string | null>
+  focusSelf: () => void
+  toggleVisible: () => void
+  refreshGraph: () => Promise<void>
+}
 
 type UseTreePaneOptions = {
-  configurationName: Accessor<string>;
-  focus: PaneFocusController;
-};
+  configurationName: Accessor<string>
+  focus: PaneFocusController
+}
 
 export function useTreePane(options: UseTreePaneOptions): TreePaneViewModel {
-  const { snapshot, loading, error, refresh } = useResourceGraphSnapshot(options.configurationName);
-  const controller = useSchemaTree(snapshot);
-  const [visible, setVisible] = createSignal(true);
+  const { snapshot, loading, error, refresh } = useResourceGraphSnapshot(options.configurationName)
+  const controller = useSchemaTree(snapshot)
+  const [visible, setVisible] = createSignal(true)
 
   const toggleVisible = () => {
     setVisible((prev) => {
-      const next = !prev;
+      const next = !prev
       if (next) {
-        options.focus.focusSelf();
+        options.focus.focusSelf()
       } else if (options.focus.isFocused() && options.focus.focusFallback) {
-        options.focus.focusFallback();
+        options.focus.focusFallback()
       }
-      return next;
-    });
-  };
+      return next
+    })
+  }
 
   const refreshGraph = async () => {
-    await refresh();
-  };
+    await refresh()
+  }
 
   return {
     controller,
@@ -49,5 +49,5 @@ export function useTreePane(options: UseTreePaneOptions): TreePaneViewModel {
     error,
     toggleVisible,
     refreshGraph,
-  };
+  }
 }

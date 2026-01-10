@@ -1,1 +1,1 @@
-export type ScrollDelta = { x: number; y: number };
+export type ScrollDelta = { x: number; y: number }

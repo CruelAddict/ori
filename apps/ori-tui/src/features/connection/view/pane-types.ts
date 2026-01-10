@@ -1,7 +1,7 @@
-import type { Accessor } from "solid-js";
+import type { Accessor } from "solid-js"
 
 export type PaneFocusController = {
-  isFocused: Accessor<boolean>;
-  focusSelf: () => void;
-  focusFallback?: () => void;
-};
+  isFocused: Accessor<boolean>
+  focusSelf: () => void
+  focusFallback?: () => void
+}

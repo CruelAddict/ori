@@ -1,6 +1,6 @@
 async function testFetch() {
   try {
-    console.log("Testing fetch...");
+    console.log("Testing fetch...")
     const response = await fetch("http://localhost:8080/rpc", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -10,13 +10,13 @@ async function testFetch() {
         params: {},
         id: 1,
       }),
-    });
-    console.log("Response status:", response.status);
-    const data = await response.json();
-    console.log("Response data:", JSON.stringify(data, null, 2));
+    })
+    console.log("Response status:", response.status)
+    const data = await response.json()
+    console.log("Response data:", JSON.stringify(data, null, 2))
   } catch (err) {
-    console.error("Error:", err);
+    console.error("Error:", err)
   }
 }
 
-void testFetch();
+void testFetch()

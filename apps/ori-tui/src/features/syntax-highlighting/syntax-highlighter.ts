@@ -1,96 +1,96 @@
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
-import { addDefaultParsers, getTreeSitterClient, RGBA, SyntaxStyle } from "@opentui/core";
-import type { Logger } from "pino";
-import { type Accessor, createEffect, createSignal, onCleanup } from "solid-js";
-import sqlHighlights from "../../assets/highlights.scm" with { type: "file" };
-import sqlWasm from "../../assets/tree-sitter-sql.wasm" with { type: "file" };
+import { dirname, resolve } from "node:path"
+import { fileURLToPath } from "node:url"
+import { addDefaultParsers, getTreeSitterClient, RGBA, SyntaxStyle } from "@opentui/core"
+import type { Logger } from "pino"
+import { type Accessor, createEffect, createSignal, onCleanup } from "solid-js"
+import sqlHighlights from "../../assets/highlights.scm" with { type: "file" }
+import sqlWasm from "../../assets/tree-sitter-sql.wasm" with { type: "file" }
 
 export type SyntaxHighlightSpan = {
-  start: number;
-  end: number;
-  styleId: number;
-};
+  start: number
+  end: number
+  styleId: number
+}
 
 export type SyntaxHighlightResult = {
-  version: number | string;
-  syntaxStyle: SyntaxStyle;
-  spans: SyntaxHighlightSpan[];
-};
+  version: number | string
+  syntaxStyle: SyntaxStyle
+  spans: SyntaxHighlightSpan[]
+}
 
 type SyntaxPalette = {
-  primary: string;
-  accent: string;
-  info: string;
-  textMuted: string;
-  text: string;
-  secondary: string;
-};
+  primary: string
+  accent: string
+  info: string
+  textMuted: string
+  text: string
+  secondary: string
+}
 
 type StyleIds = {
-  keyword: number;
-  string: number;
-  number: number;
-  comment: number;
-  identifier: number;
-  operator: number;
-};
+  keyword: number
+  string: number
+  number: number
+  comment: number
+  identifier: number
+  operator: number
+}
 
 type SyntaxStyleBundle = {
-  syntaxStyle: SyntaxStyle;
-  styleIds: StyleIds;
-};
+  syntaxStyle: SyntaxStyle
+  styleIds: StyleIds
+}
 
 type HighlightRequest = {
-  text: string;
-  version: number | string;
-};
+  text: string
+  version: number | string
+}
 
-const FILETYPE_SQL = "sql";
-const ASSET_BASE = dirname(fileURLToPath(import.meta.url));
-const SQL_WASM_PATH = resolve(ASSET_BASE, sqlWasm);
-const SQL_HIGHLIGHTS_URL = resolve(ASSET_BASE, sqlHighlights);
-const SQL_ASSET_LOG = { wasm: SQL_WASM_PATH, highlights: SQL_HIGHLIGHTS_URL };
+const FILETYPE_SQL = "sql"
+const ASSET_BASE = dirname(fileURLToPath(import.meta.url))
+const SQL_WASM_PATH = resolve(ASSET_BASE, sqlWasm)
+const SQL_HIGHLIGHTS_URL = resolve(ASSET_BASE, sqlHighlights)
+const SQL_ASSET_LOG = { wasm: SQL_WASM_PATH, highlights: SQL_HIGHLIGHTS_URL }
 const SQL_PARSER = {
   filetype: FILETYPE_SQL,
   wasm: SQL_WASM_PATH,
   queries: { highlights: [SQL_HIGHLIGHTS_URL] },
-};
+}
 
-let registerPromise: Promise<void> | null = null;
+let registerPromise: Promise<void> | null = null
 
 async function ensureSqlRegistered(logger?: Logger) {
   if (!registerPromise) {
     registerPromise = (async () => {
-      addDefaultParsers([SQL_PARSER]);
-      const client = getTreeSitterClient();
+      addDefaultParsers([SQL_PARSER])
+      const client = getTreeSitterClient()
       try {
-        await client.initialize?.();
+        await client.initialize?.()
       } catch (err) {
-        logger?.warn({ err }, "syntax-highlighter: client initialize failed, continuing");
+        logger?.warn({ err }, "syntax-highlighter: client initialize failed, continuing")
       }
-      logger?.warn({ assets: SQL_ASSET_LOG }, "syntax-highlighter: register default parser assets");
+      logger?.warn({ assets: SQL_ASSET_LOG }, "syntax-highlighter: register default parser assets")
       try {
-        await client.preloadParser?.(FILETYPE_SQL);
+        await client.preloadParser?.(FILETYPE_SQL)
       } catch (err) {
-        logger?.warn({ err }, "syntax-highlighter: preload parser failed");
+        logger?.warn({ err }, "syntax-highlighter: preload parser failed")
       }
     })().catch((err) => {
-      registerPromise = null;
-      throw err;
-    });
+      registerPromise = null
+      throw err
+    })
   }
-  return registerPromise;
+  return registerPromise
 }
 
 function buildSyntaxStyle(palette: SyntaxPalette): SyntaxStyleBundle {
-  const syntaxStyle = SyntaxStyle.create();
-  syntaxStyle.registerStyle("syntax.keyword", { fg: RGBA.fromHex(palette.primary) });
-  syntaxStyle.registerStyle("syntax.string", { fg: RGBA.fromHex(palette.accent) });
-  syntaxStyle.registerStyle("syntax.number", { fg: RGBA.fromHex(palette.info) });
-  syntaxStyle.registerStyle("syntax.comment", { fg: RGBA.fromHex(palette.textMuted) });
-  syntaxStyle.registerStyle("syntax.identifier", { fg: RGBA.fromHex(palette.text) });
-  syntaxStyle.registerStyle("syntax.operator", { fg: RGBA.fromHex(palette.secondary) });
+  const syntaxStyle = SyntaxStyle.create()
+  syntaxStyle.registerStyle("syntax.keyword", { fg: RGBA.fromHex(palette.primary) })
+  syntaxStyle.registerStyle("syntax.string", { fg: RGBA.fromHex(palette.accent) })
+  syntaxStyle.registerStyle("syntax.number", { fg: RGBA.fromHex(palette.info) })
+  syntaxStyle.registerStyle("syntax.comment", { fg: RGBA.fromHex(palette.textMuted) })
+  syntaxStyle.registerStyle("syntax.identifier", { fg: RGBA.fromHex(palette.text) })
+  syntaxStyle.registerStyle("syntax.operator", { fg: RGBA.fromHex(palette.secondary) })
 
   return {
     syntaxStyle,
@@ -102,24 +102,24 @@ function buildSyntaxStyle(palette: SyntaxPalette): SyntaxStyleBundle {
       identifier: syntaxStyle.getStyleId("syntax.identifier") ?? 0,
       operator: syntaxStyle.getStyleId("syntax.operator") ?? 0,
     },
-  };
+  }
 }
 
 function mapGroupToStyleId(group: string, styleIds: StyleIds): number | null {
   switch (group) {
     case "keyword":
     case "keyword.operator":
-      return styleIds.keyword;
+      return styleIds.keyword
     case "string":
-      return styleIds.string;
+      return styleIds.string
     case "comment":
-      return styleIds.comment;
+      return styleIds.comment
     case "number":
     case "float":
     case "boolean":
-      return styleIds.number;
+      return styleIds.number
     case "operator":
-      return styleIds.operator;
+      return styleIds.operator
     case "function.call":
     case "variable":
     case "field":
@@ -130,41 +130,41 @@ function mapGroupToStyleId(group: string, styleIds: StyleIds): number | null {
     case "type":
     case "type.qualifier":
     case "type.builtin":
-      return styleIds.identifier;
+      return styleIds.identifier
     default:
-      return null;
+      return null
   }
 }
 
 async function collectSqlHighlights(text: string, styleIds: StyleIds, logger?: Logger): Promise<SyntaxHighlightSpan[]> {
-  await ensureSqlRegistered(logger);
-  const client = getTreeSitterClient();
+  await ensureSqlRegistered(logger)
+  const client = getTreeSitterClient()
   const result = (await client.highlightOnce(text, FILETYPE_SQL)) as {
-    highlights?: [startIndex: number, endIndex: number, group: string][];
-    warning?: string;
-    error?: string;
-  };
+    highlights?: [startIndex: number, endIndex: number, group: string][]
+    warning?: string
+    error?: string
+  }
 
   if (result.error) {
-    logger?.error({ error: result.error }, "syntax-highlighter: highlightOnce returned issue");
-    return [];
+    logger?.error({ error: result.error }, "syntax-highlighter: highlightOnce returned issue")
+    return []
   }
   if (result.warning) {
-    logger?.warn({ warning: result.warning }, "syntax-highlighter: highlightOnce returned issue");
+    logger?.warn({ warning: result.warning }, "syntax-highlighter: highlightOnce returned issue")
   }
 
-  const highlights = result.highlights ?? [];
-  const spans: SyntaxHighlightSpan[] = [];
+  const highlights = result.highlights ?? []
+  const spans: SyntaxHighlightSpan[] = []
 
   for (const [startIndex, endIndex, group] of highlights) {
-    const styleId = mapGroupToStyleId(String(group), styleIds);
+    const styleId = mapGroupToStyleId(String(group), styleIds)
     if (styleId == null) {
-      continue;
+      continue
     }
-    spans.push({ start: startIndex, end: endIndex, styleId });
+    spans.push({ start: startIndex, end: endIndex, styleId })
   }
 
-  return spans;
+  return spans
 }
 
 async function collectHighlightsByLanguage(
@@ -174,87 +174,87 @@ async function collectHighlightsByLanguage(
   logger?: Logger,
 ): Promise<SyntaxHighlightSpan[]> {
   if (language === FILETYPE_SQL) {
-    return collectSqlHighlights(text, styleIds, logger);
+    return collectSqlHighlights(text, styleIds, logger)
   }
-  logger?.warn({ language }, "syntax-highlighter: unsupported language, returning no highlights");
-  return [];
+  logger?.warn({ language }, "syntax-highlighter: unsupported language, returning no highlights")
+  return []
 }
 
 export function syntaxHighlighter(params: { theme: Accessor<SyntaxPalette>; language: string; logger?: Logger }) {
-  const { theme, language, logger } = params;
-  let disposed = false;
-  let currentStyle = buildSyntaxStyle(theme());
-  let lastRequest: HighlightRequest | null = null;
-  let requestToken = 0;
+  const { theme, language, logger } = params
+  let disposed = false
+  let currentStyle = buildSyntaxStyle(theme())
+  let lastRequest: HighlightRequest | null = null
+  let requestToken = 0
 
   const [highlightResult, setHighlightResult] = createSignal<SyntaxHighlightResult>({
     version: 0,
     syntaxStyle: currentStyle.syntaxStyle,
     spans: [],
-  });
+  })
 
   const runHighlight = async (request: HighlightRequest, style: SyntaxStyleBundle) => {
-    const token = ++requestToken;
+    const token = ++requestToken
     try {
-      const spans = await collectHighlightsByLanguage(request.text, language, style.styleIds, logger);
+      const spans = await collectHighlightsByLanguage(request.text, language, style.styleIds, logger)
       if (disposed || token !== requestToken) {
-        return;
+        return
       }
       setHighlightResult({
         version: request.version,
         syntaxStyle: style.syntaxStyle,
         spans,
-      });
+      })
     } catch (err) {
       if (disposed || token !== requestToken) {
-        return;
+        return
       }
-      logger?.error({ err }, "syntax-highlighter: highlight parse failed");
+      logger?.error({ err }, "syntax-highlighter: highlight parse failed")
       setHighlightResult({
         version: request.version,
         syntaxStyle: style.syntaxStyle,
         spans: [],
-      });
+      })
     }
-  };
+  }
 
   const scheduleHighlight = (text: string, version: number | string) => {
-    const request = { text, version } as HighlightRequest;
-    lastRequest = request;
-    void runHighlight(request, currentStyle);
-  };
+    const request = { text, version } as HighlightRequest
+    lastRequest = request
+    void runHighlight(request, currentStyle)
+  }
 
   createEffect(() => {
-    const palette = theme();
-    const nextStyle = buildSyntaxStyle(palette);
-    const prevStyle = currentStyle;
-    currentStyle = nextStyle;
-    prevStyle.syntaxStyle.destroy();
+    const palette = theme()
+    const nextStyle = buildSyntaxStyle(palette)
+    const prevStyle = currentStyle
+    currentStyle = nextStyle
+    prevStyle.syntaxStyle.destroy()
 
     if (lastRequest) {
-      void runHighlight(lastRequest, currentStyle);
+      void runHighlight(lastRequest, currentStyle)
     } else {
       setHighlightResult((prev) => ({
         version: prev.version,
         syntaxStyle: currentStyle.syntaxStyle,
         spans: prev.spans,
-      }));
+      }))
     }
-  });
+  })
 
   const dispose = () => {
     if (disposed) {
-      return;
+      return
     }
-    disposed = true;
-    currentStyle.syntaxStyle.destroy();
-  };
+    disposed = true
+    currentStyle.syntaxStyle.destroy()
+  }
 
-  onCleanup(dispose);
+  onCleanup(dispose)
 
   return {
     scheduleHighlight,
     highlightResult,
     dispose,
-  };
+  }
 }

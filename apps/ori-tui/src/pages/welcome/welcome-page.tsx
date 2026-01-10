@@ -1,21 +1,21 @@
-import { useTheme } from "@app/providers/theme";
-import { TextAttributes } from "@opentui/core";
-import { createMemo, For } from "solid-js";
+import { useTheme } from "@app/providers/theme"
+import { TextAttributes } from "@opentui/core"
+import { createMemo, For } from "solid-js"
 
 type CommandRowProps = {
-  shortcut: string;
-  label: string;
-};
+  shortcut: string
+  label: string
+}
 
 export function WelcomePage() {
-  const { theme } = useTheme();
-  const palette = theme;
+  const { theme } = useTheme()
+  const palette = theme
 
-  const commands: CommandRowProps[] = [{ shortcut: "ctrl+x c", label: "choose db" }];
+  const commands: CommandRowProps[] = [{ shortcut: "ctrl+x c", label: "choose db" }]
 
   const label = createMemo(() => {
-    return "";
-  });
+    return ""
+  })
 
   return (
     <box
@@ -46,12 +46,12 @@ export function WelcomePage() {
       </box>
       <box height={2} />
     </box>
-  );
+  )
 }
 
 function CommandRow(props: CommandRowProps) {
-  const { theme } = useTheme();
-  const palette = theme;
+  const { theme } = useTheme()
+  const palette = theme
   return (
     <box
       flexDirection="row"
@@ -67,5 +67,5 @@ function CommandRow(props: CommandRowProps) {
         {props.shortcut}
       </text>
     </box>
-  );
+  )
 }

@@ -24,7 +24,7 @@
       "quoteStyle": "double",
       "jsxQuoteStyle": "double",
       "trailingCommas": "all",
-      "semicolons": "always",
+      "semicolons": "asNeeded",
       "attributePosition": "multiline"
     }
   },

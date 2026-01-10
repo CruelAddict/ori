@@ -1,7 +1,7 @@
-import { For, type JSXElement, Show } from "solid-js";
-import { useStatusline } from "./statusline-context";
+import { For, type JSXElement, Show } from "solid-js"
+import { useStatusline } from "./statusline-context"
 
-export { StatuslineProvider } from "./statusline-context";
+export { StatuslineProvider } from "./statusline-context"
 
 function elementsWithDelimiter(elements: JSXElement[], delimiter: string) {
   return (
@@ -15,12 +15,12 @@ function elementsWithDelimiter(elements: JSXElement[], delimiter: string) {
         </>
       )}
     </For>
-  );
+  )
 }
 
 export function Statusline() {
-  const statusline = useStatusline();
-  const state = statusline.state;
+  const statusline = useStatusline()
+  const state = statusline.state
 
   return (
     <box
@@ -36,5 +36,5 @@ export function Statusline() {
       <box flexDirection="row">{elementsWithDelimiter(state().left, "  ")}</box>
       <box flexDirection="row">{elementsWithDelimiter(state().right.reverse(), "  ")}</box>
     </box>
-  );
+  )
 }

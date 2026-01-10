@@ -1,10 +1,10 @@
-import type { OverlayComponentProps } from "@widgets/overlay/overlay-store";
-import { type Command, useActiveCommands } from "@src/core/services/key-scopes";
-import { DialogSelect, type DialogSelectOption } from "@widgets/dialog-select";
-import { createMemo } from "solid-js";
+import { type Command, useActiveCommands } from "@src/core/services/key-scopes"
+import { DialogSelect, type DialogSelectOption } from "@widgets/dialog-select"
+import type { OverlayComponentProps } from "@widgets/overlay/overlay-store"
+import { createMemo } from "solid-js"
 
 export function CommandPalette(props: OverlayComponentProps) {
-  const getCommands = useActiveCommands();
+  const getCommands = useActiveCommands()
 
   const options = createMemo<DialogSelectOption<Command>[]>(() =>
     getCommands()
@@ -16,12 +16,12 @@ export function CommandPalette(props: OverlayComponentProps) {
         category: cmd.section,
         badge: cmd.keyPattern,
       })),
-  );
+  )
 
   const handleSelect = (option: DialogSelectOption<Command>) => {
-    option.value.handler();
-    props.close();
-  };
+    option.value.handler()
+    props.close()
+  }
 
   return (
     <DialogSelect
@@ -34,5 +34,5 @@ export function CommandPalette(props: OverlayComponentProps) {
       onSelect={handleSelect}
       onCancel={props.close}
     />
-  );
+  )
 }

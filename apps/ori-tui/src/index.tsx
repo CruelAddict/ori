@@ -1,7 +1,7 @@
-import { main } from "@cli/main";
+import { main } from "@cli/main"
 
-export { main };
+export { main }
 
 if (import.meta.main) {
-  void main();
+  void main()
 }

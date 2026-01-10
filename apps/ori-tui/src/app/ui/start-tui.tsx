@@ -1,85 +1,85 @@
-import { ConfigurationPickerOverlay } from "@widgets/overlay/ConfigurationPickerOverlay";
-import { OverlayHost } from "@widgets/overlay/OverlayHost";
-import type { OverlayManager } from "@widgets/overlay/overlay-store";
-import { ThemePickerOverlay } from "@widgets/overlay/ThemePickerOverlay";
-import { ClientProvider } from "@app/providers/client";
-import { EventStreamProvider } from "@app/providers/events";
-import { LoggerProvider, useLogger } from "@app/providers/logger";
-import { NavigationProvider } from "@app/providers/navigation";
-import { NotificationsProvider } from "@app/providers/notifications";
-import { OverlayProvider, useOverlayManager } from "@app/providers/overlay";
-import { ThemeProvider, useTheme } from "@app/providers/theme";
-import { RouteOutlet } from "@app/routes/RouteOutlet";
-import { useRouteNavigation } from "@app/routes/router";
-import { render, useRenderer } from "@opentui/solid";
-import { copyTextToClipboard } from "@shared/lib/clipboard";
-import type { ClientMode } from "@shared/lib/configurations-client";
-import type { LogLevel } from "@shared/lib/logger";
-import { KeymapProvider, KeyScope, SYSTEM_LAYER } from "@src/core/services/key-scopes";
-import { ConfigurationEntityProvider } from "@src/entities/configuration/providers/configuration-entity-provider";
-import { ConnectionEntityProvider } from "@src/entities/connection/providers/connection-entity-provider";
-import { QueryJobsProvider } from "@src/entities/query-job/providers/query-jobs-provider";
-import { CommandPalette } from "@src/features/commands-list";
-import type { Logger } from "pino";
-import { createEffect, createSignal } from "solid-js";
+import { ClientProvider } from "@app/providers/client"
+import { EventStreamProvider } from "@app/providers/events"
+import { LoggerProvider, useLogger } from "@app/providers/logger"
+import { NavigationProvider } from "@app/providers/navigation"
+import { NotificationsProvider } from "@app/providers/notifications"
+import { OverlayProvider, useOverlayManager } from "@app/providers/overlay"
+import { ThemeProvider, useTheme } from "@app/providers/theme"
+import { RouteOutlet } from "@app/routes/RouteOutlet"
+import { useRouteNavigation } from "@app/routes/router"
+import { render, useRenderer } from "@opentui/solid"
+import { copyTextToClipboard } from "@shared/lib/clipboard"
+import type { ClientMode } from "@shared/lib/configurations-client"
+import type { LogLevel } from "@shared/lib/logger"
+import { KeymapProvider, KeyScope, SYSTEM_LAYER } from "@src/core/services/key-scopes"
+import { ConfigurationEntityProvider } from "@src/entities/configuration/providers/configuration-entity-provider"
+import { ConnectionEntityProvider } from "@src/entities/connection/providers/connection-entity-provider"
+import { QueryJobsProvider } from "@src/entities/query-job/providers/query-jobs-provider"
+import { CommandPalette } from "@src/features/commands-list"
+import { ConfigurationPickerOverlay } from "@widgets/overlay/ConfigurationPickerOverlay"
+import { OverlayHost } from "@widgets/overlay/OverlayHost"
+import type { OverlayManager } from "@widgets/overlay/overlay-store"
+import { ThemePickerOverlay } from "@widgets/overlay/ThemePickerOverlay"
+import type { Logger } from "pino"
+import { createEffect, createSignal } from "solid-js"
 
-const AUTO_OPEN_WELCOME_PICKER = process.env.ORI_AUTO_OPEN_PICKER !== "0";
+const AUTO_OPEN_WELCOME_PICKER = process.env.ORI_AUTO_OPEN_PICKER !== "0"
 
-type RendererHandle = ReturnType<typeof render>;
+type RendererHandle = ReturnType<typeof render>
 
 type StartTuiOptions = {
-  mode: ClientMode;
-  socketPath?: string;
-  host?: string;
-  port?: number;
-  logLevel: LogLevel;
-  theme?: string;
-  logger: Logger;
-};
+  mode: ClientMode
+  socketPath?: string
+  host?: string
+  port?: number
+  logLevel: LogLevel
+  theme?: string
+  logger: Logger
+}
 
 function openConfigurationPicker(overlays: OverlayManager) {
-  overlays.show({ id: "configuration-picker", render: ConfigurationPickerOverlay });
+  overlays.show({ id: "configuration-picker", render: ConfigurationPickerOverlay })
 }
 
 function App() {
-  const { theme } = useTheme();
-  const palette = theme;
-  const overlays = useOverlayManager();
-  const navigation = useRouteNavigation();
-  const renderer = useRenderer();
-  const logger = useLogger();
-  const [welcomePickerOpened, setWelcomePickerOpened] = createSignal(false);
+  const { theme } = useTheme()
+  const palette = theme
+  const overlays = useOverlayManager()
+  const navigation = useRouteNavigation()
+  const renderer = useRenderer()
+  const logger = useLogger()
+  const [welcomePickerOpened, setWelcomePickerOpened] = createSignal(false)
 
   createEffect(() => {
-    const route = navigation.current();
+    const route = navigation.current()
     if (route.type !== "welcome" || !AUTO_OPEN_WELCOME_PICKER) {
-      setWelcomePickerOpened(false);
-      return;
+      setWelcomePickerOpened(false)
+      return
     }
     if (welcomePickerOpened()) {
-      return;
+      return
     }
-    setWelcomePickerOpened(true);
-    openConfigurationPicker(overlays);
-  });
+    setWelcomePickerOpened(true)
+    openConfigurationPicker(overlays)
+  })
 
   const handleMouseUp = async () => {
-    const text = renderer.getSelection?.()?.getSelectedText?.();
+    const text = renderer.getSelection?.()?.getSelectedText?.()
     if (!text || text.length === 0) {
-      return;
+      return
     }
     try {
-      await copyTextToClipboard(text, { renderer, logger });
+      await copyTextToClipboard(text, { renderer, logger })
     } catch (err) {
-      logger.error({ err }, "copy-on-select: failed to copy selection");
+      logger.error({ err }, "copy-on-select: failed to copy selection")
     } finally {
       try {
-        renderer.clearSelection?.();
+        renderer.clearSelection?.()
       } catch (err) {
-        logger.warn({ err }, "copy-on-select: failed to clear selection");
+        logger.warn({ err }, "copy-on-select: failed to clear selection")
       }
     }
-  };
+  }
 
   return (
     /* biome-ignore lint/a11y/noStaticElementInteractions: root captures mouse selection for clipboard */
@@ -93,24 +93,24 @@ function App() {
       <RouteOutlet />
       <OverlayHost />
     </box>
-  );
+  )
 }
 
 function GlobalHotkeys() {
-  const overlays = useOverlayManager();
-  const renderer = useRenderer();
+  const overlays = useOverlayManager()
+  const renderer = useRenderer()
 
   const openThemePicker = () => {
-    overlays.show({ id: "theme-picker", render: ThemePickerOverlay });
-  };
+    overlays.show({ id: "theme-picker", render: ThemePickerOverlay })
+  }
 
   const openPickerFromHotkey = () => {
-    openConfigurationPicker(overlays);
-  };
+    openConfigurationPicker(overlays)
+  }
 
   const openCommandPalette = () => {
-    overlays.show({ id: "command-palette", render: CommandPalette });
-  };
+    overlays.show({ id: "command-palette", render: CommandPalette })
+  }
 
   return (
     <>
@@ -140,8 +140,8 @@ function GlobalHotkeys() {
           {
             pattern: "ctrl+c",
             handler: () => {
-              renderer.destroy();
-              process.exit(0);
+              renderer.destroy()
+              process.exit(0)
             },
             preventDefault: true,
           },
@@ -153,13 +153,13 @@ function GlobalHotkeys() {
         ]}
       />
     </>
-  );
+  )
 }
 
 export function startTui(options: StartTuiOptions): RendererHandle {
-  const host = options.host ?? "localhost";
-  const port = options.port ?? 8080;
-  const transport = options.socketPath ? "unix" : "tcp";
+  const host = options.host ?? "localhost"
+  const port = options.port ?? 8080
+  const transport = options.socketPath ? "unix" : "tcp"
 
   options.logger.info(
     {
@@ -171,11 +171,11 @@ export function startTui(options: StartTuiOptions): RendererHandle {
       theme: options.theme,
     },
     "tui started",
-  );
+  )
 
   const clientOptions = options.socketPath
     ? { mode: options.mode, socketPath: options.socketPath }
-    : { mode: options.mode, host, port };
+    : { mode: options.mode, host, port }
 
   return render(
     () => (
@@ -204,5 +204,5 @@ export function startTui(options: StartTuiOptions): RendererHandle {
       </LoggerProvider>
     ),
     { exitOnCtrlC: true },
-  );
+  )
 }

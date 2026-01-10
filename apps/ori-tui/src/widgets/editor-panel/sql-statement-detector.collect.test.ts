@@ -1,46 +1,46 @@
-import { describe, expect, test } from "vitest";
-import { buildLineStarts } from "./buffer-model";
-import { collectSqlStatements, type SqlStatement } from "./sql-statement-detector";
+import { describe, expect, test } from "vitest"
+import { buildLineStarts } from "./buffer-model"
+import { collectSqlStatements, type SqlStatement } from "./sql-statement-detector"
 
-type SpanSummary = Pick<SqlStatement, "startLine" | "endLine">;
+type SpanSummary = Pick<SqlStatement, "startLine" | "endLine">
 
 function runTest(sql: string, expected: SpanSummary[]) {
-  const lineStarts = buildLineStarts(sql);
+  const lineStarts = buildLineStarts(sql)
   const spans = collectSqlStatements(sql, lineStarts).map((span) => ({
     startLine: span.startLine,
     endLine: span.endLine,
-  }));
-  expect(spans).toEqual(expected);
+  }))
+  expect(spans).toEqual(expected)
 }
 
 describe("collectSqlStatements", () => {
   test("Leading comment before SQL still yields SQL span", () =>
-    runTest("-- comment\nSELECT 1;\n", [{ startLine: 1, endLine: 1 }]));
+    runTest("-- comment\nSELECT 1;\n", [{ startLine: 1, endLine: 1 }]))
 
   test("Block comment before SQL still yields SQL span", () =>
-    runTest("/* mid; */\nSELECT 2;\n", [{ startLine: 1, endLine: 1 }]));
+    runTest("/* mid; */\nSELECT 2;\n", [{ startLine: 1, endLine: 1 }]))
 
   test("Leading semicolon is ignored when statement follows", () =>
-    runTest("; \nSELECT 1;\n", [{ startLine: 1, endLine: 1 }]));
+    runTest("; \nSELECT 1;\n", [{ startLine: 1, endLine: 1 }]))
 
   test("Block comment with semicolon before SQL still yields SQL span", () =>
-    runTest("/* ; */\nSELECT 1;\n", [{ startLine: 1, endLine: 1 }]));
+    runTest("/* ; */\nSELECT 1;\n", [{ startLine: 1, endLine: 1 }]))
 
   test("Whitespace gap still yields separate SQL spans", () =>
     runTest("SELECT 1;\n\n  \nSELECT 2;\n", [
       { startLine: 0, endLine: 0 },
       { startLine: 3, endLine: 3 },
-    ]));
+    ]))
 
   test("Multiple statements without semicolons are split by leading keywords", () =>
     runTest("SELECT * FROM books\nSELECT * FROM authors", [
       { startLine: 0, endLine: 0 },
       { startLine: 1, endLine: 1 },
-    ]));
+    ]))
 
-  test("Non-SQL leading token is dropped", () => runTest("elect 1;", []));
+  test("Non-SQL leading token is dropped", () => runTest("elect 1;", []))
 
-  test("Comment-only buffer returns nothing", () => runTest("-- hi\n/* test */\n", []));
+  test("Comment-only buffer returns nothing", () => runTest("-- hi\n/* test */\n", []))
 
   test("Detects all configured starters case-insensitively", () =>
     runTest(
@@ -87,13 +87,13 @@ describe("collectSqlStatements", () => {
         { startLine: 18, endLine: 18 },
         { startLine: 19, endLine: 19 },
       ],
-    ));
+    ))
 
   test("Splits multi-line statements on new starters without semicolons", () =>
     runTest("CREATE TABLE a (id int)\nDROP TABLE a", [
       { startLine: 0, endLine: 0 },
       { startLine: 1, endLine: 1 },
-    ]));
+    ]))
 
   test("Detects all configured starters case-insensitively without semicolons", () =>
     runTest(
@@ -143,28 +143,28 @@ describe("collectSqlStatements", () => {
         { startLine: 19, endLine: 20 },
         { startLine: 21, endLine: 21 },
       ],
-    ));
+    ))
 
   test("Flush-left keyword starts a new statement", () =>
     runTest("SELECT 1\nINSERT INTO t VALUES (2)", [
       { startLine: 0, endLine: 0 },
       { startLine: 1, endLine: 1 },
-    ]));
+    ]))
 
   test("Indented keyword does not start new statement", () =>
-    runTest("SELECT 1\n  INSERT INTO t VALUES (2)", [{ startLine: 0, endLine: 1 }]));
+    runTest("SELECT 1\n  INSERT INTO t VALUES (2)", [{ startLine: 0, endLine: 1 }]))
 
   test("WITH CTE stays in one span across newlines", () =>
-    runTest("WITH cte AS (\n  SELECT 1\n)\nSELECT * FROM cte;\n", [{ startLine: 0, endLine: 3 }]));
+    runTest("WITH cte AS (\n  SELECT 1\n)\nSELECT * FROM cte;\n", [{ startLine: 0, endLine: 3 }]))
 
   test("Transaction control statements each parsed separately", () =>
     runTest("BEGIN;\nCOMMIT;\nROLLBACK;\n", [
       { startLine: 0, endLine: 0 },
       { startLine: 1, endLine: 1 },
       { startLine: 2, endLine: 2 },
-    ]));
+    ]))
 
-  test("Keyword-like tokens in complete block comment are ignored", () => runTest("/* SELECT 1 */", []));
+  test("Keyword-like tokens in complete block comment are ignored", () => runTest("/* SELECT 1 */", []))
 
-  test("Unterminated block comment suppresses detection", () => runTest("/* SELECT 1", []));
-});
+  test("Unterminated block comment suppresses detection", () => runTest("/* SELECT 1", []))
+})

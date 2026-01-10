@@ -1,34 +1,34 @@
-import { useTheme } from "@app/providers/theme";
-import { type KeyBinding, KeyScope } from "@src/core/services/key-scopes";
-import type { EditorPaneViewModel } from "@src/features/editor-pane/use-editor-pane";
-import { useStatusline } from "@src/widgets/statusline/statusline-context";
-import { onMount, Show } from "solid-js";
-import { Buffer } from "./buffer";
+import { useTheme } from "@app/providers/theme"
+import { type KeyBinding, KeyScope } from "@src/core/services/key-scopes"
+import type { EditorPaneViewModel } from "@src/features/editor-pane/use-editor-pane"
+import { useStatusline } from "@src/widgets/statusline/statusline-context"
+import { onMount, Show } from "solid-js"
+import { Buffer } from "./buffer"
 
 export type EditorPanelProps = {
-  viewModel: EditorPaneViewModel;
-};
+  viewModel: EditorPaneViewModel
+}
 
 export function EditorPanel(props: EditorPanelProps) {
-  const pane = props.viewModel;
-  const statusline = useStatusline();
-  const { theme } = useTheme();
-  const paletteValue = theme();
+  const pane = props.viewModel
+  const statusline = useStatusline()
+  const { theme } = useTheme()
+  const paletteValue = theme()
 
   onMount(() => {
-    statusline.fileOpenedInBuffer(pane.filePath());
-  });
+    statusline.fileOpenedInBuffer(pane.filePath())
+  })
 
   const handleTextChange = (text: string, info: { modified: boolean }) => {
     if (info.modified) {
-      pane.onQueryChange(text);
-      return;
+      pane.onQueryChange(text)
+      return
     }
-  };
+  }
 
   const handleUnfocus = () => {
-    pane.unfocus();
-  };
+    pane.unfocus()
+  }
 
   const keyBindings: KeyBinding[] = [
     {
@@ -36,12 +36,12 @@ export function EditorPanel(props: EditorPanelProps) {
       mode: "leader",
       description: "Execute query",
       handler: () => {
-        void pane.executeQuery();
+        void pane.executeQuery()
       },
       preventDefault: true,
       commandPaletteSection: "Query",
     },
-  ];
+  ]
 
   return (
     <KeyScope
@@ -68,5 +68,5 @@ export function EditorPanel(props: EditorPanelProps) {
         </Show>
       </box>
     </KeyScope>
-  );
+  )
 }

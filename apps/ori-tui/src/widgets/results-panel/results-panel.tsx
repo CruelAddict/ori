@@ -1,110 +1,109 @@
-import { useTheme } from "@app/providers/theme";
+import { useTheme } from "@app/providers/theme"
 import {
-  TextAttributes,
   type BoxRenderable,
   type KeyEvent,
   type MouseEvent,
   type ScrollBoxRenderable,
-} from "@opentui/core";
-import { type KeyBinding, KeyScope } from "@src/core/services/key-scopes";
-import type { ResultsPaneViewModel } from "@src/features/results-pane/use-results-pane";
-import { createEffect, createMemo, createSignal, For, Show } from "solid-js";
-
+  TextAttributes,
+} from "@opentui/core"
+import { type KeyBinding, KeyScope } from "@src/core/services/key-scopes"
+import type { ResultsPaneViewModel } from "@src/features/results-pane/use-results-pane"
+import { createEffect, createMemo, createSignal, For, Show } from "solid-js"
 
 export type ResultsPanelProps = {
-  viewModel: ResultsPaneViewModel;
-};
+  viewModel: ResultsPaneViewModel
+}
 
 export function ResultsPanel(props: ResultsPanelProps) {
-  const pane = props.viewModel;
-  const job = () => pane.job();
-  const { theme } = useTheme();
-  const palette = theme;
+  const pane = props.viewModel
+  const job = () => pane.job()
+  const { theme } = useTheme()
+  const palette = theme
 
-  let scrollRef: ScrollBoxRenderable | undefined;
-  const rowRenderables = new Map<number, BoxRenderable>();
+  let scrollRef: ScrollBoxRenderable | undefined
+  const rowRenderables = new Map<number, BoxRenderable>()
 
-  const [selectedRow, setSelectedRow] = createSignal(0);
-  const [selectedCol, setSelectedCol] = createSignal(0);
+  const [selectedRow, setSelectedRow] = createSignal(0)
+  const [selectedCol, setSelectedCol] = createSignal(0)
 
   const hasResults = createMemo(() => {
-    const current = job();
-    return current?.status === "success" && current?.result && current.result.rows.length > 0;
-  });
+    const current = job()
+    return current?.status === "success" && current?.result && current.result.rows.length > 0
+  })
 
   const formatCell = (value: unknown, width?: number): string => {
-    return value === null || value === undefined ? "NULL" : String(value);
-  };
+    return value === null || value === undefined ? "NULL" : String(value)
+  }
 
   const columnWidths = createMemo(() => {
-    const current = job();
-    if (!hasResults()) return [];
-    const result = current!.result;
-    const widths = result!.columns.map((column) => column.name.length);
+    const current = job()
+    if (!hasResults()) return []
+    const result = current!.result
+    const widths = result!.columns.map((column) => column.name.length)
     for (const row of result!.rows) {
       for (let i = 0; i < row.length; i++) {
-        widths[i] = Math.max(widths[i], formatCell(row[i]).length);
+        widths[i] = Math.max(widths[i], formatCell(row[i]).length)
       }
     }
-    return widths;
-  });
+    return widths
+  })
 
-  const getViewport = () => (scrollRef as { viewport?: BoxRenderable })?.viewport;
+  const getViewport = () => (scrollRef as { viewport?: BoxRenderable })?.viewport
 
-  const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
+  const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value))
 
   const ensureRowVisible = (rowIndex: number) => {
-    const renderable = rowRenderables.get(rowIndex);
-    const viewport = getViewport();
-    if (!renderable || !viewport) return;
-    const rowTop = renderable.y ?? 0;
-    const rowBottom = rowTop + (renderable.height ?? 1);
-    const viewportTop = viewport.y ?? 0;
-    const viewportBottom = viewportTop + (viewport.height ?? 0);
+    const renderable = rowRenderables.get(rowIndex)
+    const viewport = getViewport()
+    if (!renderable || !viewport) return
+    const rowTop = renderable.y ?? 0
+    const rowBottom = rowTop + (renderable.height ?? 1)
+    const viewportTop = viewport.y ?? 0
+    const viewportBottom = viewportTop + (viewport.height ?? 0)
 
     if (rowBottom > viewportBottom) {
-      scrollRef?.scrollBy({ x: 0, y: rowBottom - viewportBottom });
+      scrollRef?.scrollBy({ x: 0, y: rowBottom - viewportBottom })
     } else if (rowTop < viewportTop) {
-      scrollRef?.scrollBy({ x: 0, y: rowTop - viewportTop });
+      scrollRef?.scrollBy({ x: 0, y: rowTop - viewportTop })
     }
-  };
+  }
 
-  const hasResultData = () => hasResults() && job()?.result;
-  const isActive = () => pane.isFocused();
+  const hasResultData = () => hasResults() && job()?.result
+  const isActive = () => pane.isFocused()
 
   const resetSelection = () => {
-    setSelectedRow(0);
-    setSelectedCol(0);
-  };
+    setSelectedRow(0)
+    setSelectedCol(0)
+  }
 
   createEffect(() => {
-    const current = job();
+    const current = job()
     if (!current?.result || current.status !== "success" || current.result.rows.length === 0) {
-      resetSelection();
-      return;
+      resetSelection()
+      return
     }
-  });
+  })
 
   createEffect(() => {
-    ensureRowVisible(selectedRow());
-  });
+    ensureRowVisible(selectedRow())
+  })
 
   const moveSelection = (rowDelta: number, colDelta: number, event?: KeyEvent) => {
-    if (!hasResultData()) return;
-    event?.preventDefault();
+    if (!hasResultData()) return
+    event?.preventDefault()
     if (!pane.isFocused()) {
-      pane.focusSelf();
+      pane.focusSelf()
     }
-    const result = job()?.result;
-    if (!result) return;
+    const result = job()?.result
+    if (!result) return
 
-    const nextRow = clamp(selectedRow() + rowDelta, 0, result.rows.length - 1);
-    const nextCol = clamp(selectedCol() + colDelta, 0, result.columns.length - 1);
+    const nextRow = clamp(selectedRow() + rowDelta, 0, result.rows.length - 1)
+    const nextCol = clamp(selectedCol() + colDelta, 0, result.columns.length - 1)
 
-    setSelectedRow(nextRow);
-    setSelectedCol(nextCol);
-    ensureRowVisible(nextRow);
-  };
+    setSelectedRow(nextRow)
+    setSelectedCol(nextCol)
+    ensureRowVisible(nextRow)
+  }
 
   const bindings: KeyBinding[] = [
     { pattern: "up", handler: (event) => moveSelection(-1, 0, event), preventDefault: true },
@@ -115,15 +114,15 @@ export function ResultsPanel(props: ResultsPanelProps) {
     { pattern: "h", handler: (event) => moveSelection(0, -1, event), preventDefault: true },
     { pattern: "right", handler: (event) => moveSelection(0, 1, event), preventDefault: true },
     { pattern: "l", handler: (event) => moveSelection(0, 1, event), preventDefault: true },
-  ];
+  ]
 
   const handleCellMouseDown = (rowIndex: number, colIndex: number, event: MouseEvent) => {
-    pane.focusSelf();
-    event.preventDefault();
-    setSelectedRow(rowIndex);
-    setSelectedCol(colIndex);
-    ensureRowVisible(rowIndex);
-  };
+    pane.focusSelf()
+    event.preventDefault()
+    setSelectedRow(rowIndex)
+    setSelectedCol(colIndex)
+    ensureRowVisible(rowIndex)
+  }
 
   return (
     <Show when={pane.visible()}>
@@ -131,7 +130,6 @@ export function ResultsPanel(props: ResultsPanelProps) {
         bindings={bindings}
         enabled={pane.isFocused}
       >
-
         <box
           flexDirection="column"
           flexGrow={1}
@@ -197,7 +195,7 @@ export function ResultsPanel(props: ResultsPanelProps) {
               </box>
               <scrollbox
                 ref={(node: ScrollBoxRenderable | undefined) => {
-                  scrollRef = node ?? undefined;
+                  scrollRef = node ?? undefined
                 }}
                 maxHeight={18}
                 onMouseDown={pane.focusSelf}
@@ -209,10 +207,10 @@ export function ResultsPanel(props: ResultsPanelProps) {
                         flexDirection="row"
                         ref={(ref: BoxRenderable | undefined) => {
                           if (!ref) {
-                            rowRenderables.delete(rowIndex());
-                            return;
+                            rowRenderables.delete(rowIndex())
+                            return
                           }
-                          rowRenderables.set(rowIndex(), ref);
+                          rowRenderables.set(rowIndex(), ref)
                         }}
                       >
                         <For each={row}>
@@ -242,13 +240,15 @@ export function ResultsPanel(props: ResultsPanelProps) {
                                   <text
                                     wrapMode="none"
                                     fg={isSelected() ? palette().background : palette().text}
-                                    onMouseDown={(event: MouseEvent) => handleCellMouseDown(rowIndex(), colIndex(), event)}
+                                    onMouseDown={(event: MouseEvent) =>
+                                      handleCellMouseDown(rowIndex(), colIndex(), event)
+                                    }
                                   >
                                     {formatCell(cell, columnWidths()[colIndex()])}
                                   </text>
                                 </box>
                               </>
-                            );
+                            )
                           }}
                         </For>
                       </box>
@@ -283,5 +283,5 @@ export function ResultsPanel(props: ResultsPanelProps) {
         </box>
       </KeyScope>
     </Show>
-  );
+  )
 }

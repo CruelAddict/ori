@@ -1,17 +1,17 @@
-import { useTheme } from "@app/providers/theme";
-import { RGBA, TextAttributes } from "@opentui/core";
-import { For } from "solid-js";
+import { useTheme } from "@app/providers/theme"
+import { RGBA, TextAttributes } from "@opentui/core"
+import { For } from "solid-js"
 
 type CommandRowProps = {
-  shortcut: string;
-  label: string;
-};
+  shortcut: string
+  label: string
+}
 
 export function WelcomePane() {
-  const { theme } = useTheme();
-  const palette = theme;
+  const { theme } = useTheme()
+  const palette = theme
 
-  const commands: CommandRowProps[] = [{ shortcut: "q", label: "open query console" }];
+  const commands: CommandRowProps[] = [{ shortcut: "q", label: "open query console" }]
 
   return (
     <box
@@ -53,12 +53,12 @@ export function WelcomePane() {
       </box>
       <box height={8} />
     </box>
-  );
+  )
 }
 
 function CommandRow(props: CommandRowProps) {
-  const { theme } = useTheme();
-  const palette = theme;
+  const { theme } = useTheme()
+  const palette = theme
   return (
     <box
       flexDirection="row"
@@ -69,5 +69,5 @@ function CommandRow(props: CommandRowProps) {
       <text fg={palette().text}>{props.label}</text>
       <text fg={palette().accent}>{props.shortcut}</text>
     </box>
-  );
+  )
 }
