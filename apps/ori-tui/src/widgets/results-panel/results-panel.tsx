@@ -236,13 +236,13 @@ export function ResultsPanel(props: ResultsPanelProps) {
                                   flexDirection="row"
                                   width={columnWidths()[colIndex()] + 2}
                                   justifyContent={typeof cell === "number" ? "flex-end" : "flex-start"}
+                                  onMouseDown={(event: MouseEvent) =>
+                                    handleCellMouseDown(rowIndex(), colIndex(), event)
+                                  }
                                 >
                                   <text
                                     wrapMode="none"
                                     fg={isSelected() ? palette().background : palette().text}
-                                    onMouseDown={(event: MouseEvent) =>
-                                      handleCellMouseDown(rowIndex(), colIndex(), event)
-                                    }
                                   >
                                     {formatCell(cell, columnWidths()[colIndex()])}
                                   </text>
