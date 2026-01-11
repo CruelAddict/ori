@@ -45,12 +45,15 @@ export function TreeNode(props: TreeNodeProps) {
 
   const handleMouseDown = (event: MouseEvent) => {
     event.preventDefault()
+    const wasFocused = props.isFocused()
     props.pane.focusSelf()
 
     if (!isSelected()) {
       props.pane.controller.selectNode(props.nodeId)
       return
     }
+
+    if (!wasFocused) return
 
     const details = entity()
     if (!details?.hasChildren) return
