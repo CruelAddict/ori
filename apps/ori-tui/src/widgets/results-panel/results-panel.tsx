@@ -1,11 +1,12 @@
 import { useTheme } from "@app/providers/theme"
 import {
-  type BoxRenderable,
+  BoxRenderable,
   type KeyEvent,
   type MouseEvent,
   type ScrollBoxRenderable,
   TextAttributes,
 } from "@opentui/core"
+import "./table-cell"
 import { type KeyBinding, KeyScope } from "@src/core/services/key-scopes"
 import type { ResultsPaneViewModel } from "@src/features/results-pane/use-results-pane"
 import { createEffect, createMemo, createSignal, For, Show } from "solid-js"
@@ -25,6 +26,7 @@ export function ResultsPanel(props: ResultsPanelProps) {
 
   const [selectedRow, setSelectedRow] = createSignal(0)
   const [selectedCol, setSelectedCol] = createSignal(0)
+  const [selectionCount, setSelectionCount] = createSignal(0)
 
   const hasResults = createMemo(() => {
     const current = job()
@@ -70,10 +72,16 @@ export function ResultsPanel(props: ResultsPanelProps) {
 
   const hasResultData = () => hasResults() && job()?.result
   const isActive = () => pane.isFocused()
+  const hasSelection = () => selectionCount() > 0
+
+  const handleSelectionChange = (selected: boolean) => {
+    setSelectionCount((count) => Math.max(0, count + (selected ? 1 : -1)))
+  }
 
   const resetSelection = () => {
     setSelectedRow(0)
     setSelectedCol(0)
+    setSelectionCount(0)
   }
 
   createEffect(() => {
@@ -166,29 +174,33 @@ export function ResultsPanel(props: ResultsPanelProps) {
             >
               <box
                 flexDirection="row"
-                gap={1}
-                paddingLeft={1}
               >
                 <For each={job()?.result?.columns}>
                   {(column, index) => (
                     <>
                       <Show when={index() > 0}>
-                        <text
+                        <table_cell
+                          width={1}
+                          display="│"
                           fg={palette().textMuted}
                           attributes={TextAttributes.DIM}
-                          wrapMode="none"
-                        >
-                          │
-                        </text>
+                          selectionBg={palette().backgroundElement}
+                          value=""
+                          onSelectionChange={handleSelectionChange}
+                        />
                       </Show>
-                      <text
+
+                      <table_cell
+                        paddingLeft={1}
+                        paddingRight={1}
+                        width={columnWidths()[index()] + 2}
+                        display={formatCell(column.name, columnWidths()[index()])}
                         fg={palette().accent}
                         attributes={TextAttributes.BOLD}
-                        wrapMode="none"
-                        width={columnWidths()[index()]}
-                      >
-                        {formatCell(column.name, columnWidths()[index()])}
-                      </text>
+                        selectionBg={palette().backgroundElement}
+                        value={String(column.name)}
+                        onSelectionChange={handleSelectionChange}
+                      />
                     </>
                   )}
                 </For>
@@ -221,32 +233,33 @@ export function ResultsPanel(props: ResultsPanelProps) {
                             return (
                               <>
                                 <Show when={colIndex() > 0}>
-                                  <text
+                                  <table_cell
+                                    width={1}
+                                    display="│"
                                     fg={palette().textMuted}
                                     attributes={TextAttributes.DIM}
-                                    wrapMode="none"
-                                  >
-                                    │
-                                  </text>
+                                    selectionBg={palette().backgroundElement}
+                                    value=""
+                                    onSelectionChange={handleSelectionChange}
+                                  />
                                 </Show>
-                                <box
+                                <table_cell
                                   backgroundColor={isSelected() ? palette().primary : undefined}
                                   paddingLeft={1}
                                   paddingRight={1}
                                   flexDirection="row"
                                   width={columnWidths()[colIndex()] + 2}
-                                  justifyContent={typeof cell === "number" ? "flex-end" : "flex-start"}
+                                  align={typeof cell === "number" ? "right" : "left"}
                                   onMouseDown={(event: MouseEvent) =>
                                     handleCellMouseDown(rowIndex(), colIndex(), event)
                                   }
-                                >
-                                  <text
-                                    wrapMode="none"
-                                    fg={isSelected() ? palette().background : palette().text}
-                                  >
-                                    {formatCell(cell, columnWidths()[colIndex()])}
-                                  </text>
-                                </box>
+                                  selectionBg={palette().backgroundElement}
+                                  value={String(cell)}
+                                  display={formatCell(cell, columnWidths()[colIndex()])}
+                                  fg={isSelected() && !hasSelection() ? palette().background : palette().text}
+                                  onSelectionChange={handleSelectionChange}
+                                />
+
                               </>
                             )
                           }}
