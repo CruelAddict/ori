@@ -127,6 +127,7 @@ export function TreePanel(props: TreePanelProps) {
             border={["right"]}
             borderColor={theme().backgroundElement}
             onMouseDown={handleEmptySpaceClick}
+            borderStyle="heavy"
           >
             <Show when={pane.loading()}>
               <text fg={theme().text}>Loading schema graph...</text>

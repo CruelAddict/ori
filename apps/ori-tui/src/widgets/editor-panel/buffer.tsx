@@ -318,6 +318,7 @@ export function Buffer(props: BufferProps) {
                     }}
                     flexDirection="row"
                     width="100%"
+                    backgroundColor={lineBg(indexAccessor())}
                   >
                     {/* Line info (number, indicators) */}
                     <box
