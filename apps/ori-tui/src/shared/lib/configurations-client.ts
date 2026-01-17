@@ -224,7 +224,7 @@ class RestOriClient implements OriClient {
       baseURL: this.apiConfig.BASE,
     })
     if (isUnixOptions(this.options)) {
-      ;(client.defaults as typeof client.defaults & { socketPath?: string }).socketPath = this.options.socketPath
+      ; (client.defaults as typeof client.defaults & { socketPath?: string }).socketPath = this.options.socketPath
     }
     return client
   }
@@ -373,6 +373,7 @@ function rootNodeId(configurationName: string): string {
 
 const stubGraphs = new Map<string, Map<string, Node>>()
 
+// TODO: remove this garbage
 function ensureStubGraph(configurationName: string): Map<string, Node> {
   const existing = stubGraphs.get(configurationName)
   if (existing) {
@@ -389,6 +390,8 @@ function buildStubGraph(configurationName: string): Map<string, Node> {
   const databaseId = `${connectionSlug}-database`
   const tableId = `${connectionSlug}-table`
   const columnId = `${connectionSlug}-column`
+  const indexId = `${connectionSlug}-index`
+  const triggerId = `${connectionSlug}-trigger`
   const databaseName = `${connectionSlug}_db`
 
   const databaseNode: Node = {
@@ -415,6 +418,8 @@ function buildStubGraph(configurationName: string): Map<string, Node> {
     },
     edges: {
       columns: { items: [columnId], truncated: false },
+      indexes: { items: [indexId], truncated: false },
+      triggers: { items: [triggerId], truncated: false },
     },
   }
 
@@ -430,10 +435,37 @@ function buildStubGraph(configurationName: string): Map<string, Node> {
     edges: {},
   }
 
+  const indexNode: Node = {
+    id: indexId,
+    type: "index",
+    name: "sample_idx",
+    attributes: {
+      indexName: "sample_idx",
+      unique: true,
+      primary: false,
+      columns: ["id"],
+    },
+    edges: {},
+  }
+
+  const triggerNode: Node = {
+    id: triggerId,
+    type: "trigger",
+    name: "sample_trigger",
+    attributes: {
+      timing: "BEFORE",
+      events: ["INSERT"],
+      orientation: "ROW",
+    },
+    edges: {},
+  }
+
   return new Map<string, Node>([
     [databaseNode.id, databaseNode],
     [tableNode.id, tableNode],
     [columnNode.id, columnNode],
+    [indexNode.id, indexNode],
+    [triggerNode.id, triggerNode],
   ])
 }
 

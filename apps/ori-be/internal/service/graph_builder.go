@@ -55,6 +55,22 @@ func (b *GraphBuilder) ConstraintNodeID(scope model.ScopeID, relation, constrain
 	return stringutil.Slug(b.engine, b.connectionName, "constraint", *scope.Schema, relation, constraintName)
 }
 
+// IndexNodeID generates a unique ID for an index node.
+func (b *GraphBuilder) IndexNodeID(scope model.ScopeID, relation, indexName string) string {
+	if scope.Schema == nil {
+		return stringutil.Slug(b.engine, b.connectionName, "index", scope.Database, relation, indexName)
+	}
+	return stringutil.Slug(b.engine, b.connectionName, "index", *scope.Schema, relation, indexName)
+}
+
+// TriggerNodeID generates a unique ID for a trigger node.
+func (b *GraphBuilder) TriggerNodeID(scope model.ScopeID, relation, triggerName string) string {
+	if scope.Schema == nil {
+		return stringutil.Slug(b.engine, b.connectionName, "trigger", scope.Database, relation, triggerName)
+	}
+	return stringutil.Slug(b.engine, b.connectionName, "trigger", *scope.Schema, relation, triggerName)
+}
+
 // BuildScopeNode creates a node for a scope.
 func (b *GraphBuilder) BuildScopeNode(scope model.Scope) *model.Node {
 	var nodeType string
@@ -215,6 +231,107 @@ func (b *GraphBuilder) BuildConstraintNodes(scope model.ScopeID, relation string
 			ID:         b.ConstraintNodeID(scope, relation, c.Name),
 			Type:       "constraint",
 			Name:       c.Name,
+			Scope:      scope,
+			Attributes: attrs,
+			Edges:      make(map[string]model.EdgeList),
+			Hydrated:   true,
+		}
+		nodes = append(nodes, node)
+		edge.Items = append(edge.Items, node.ID)
+	}
+
+	return nodes, edge
+}
+
+// BuildIndexNodes creates nodes for table/view indexes.
+func (b *GraphBuilder) BuildIndexNodes(scope model.ScopeID, relation string, indexes []model.Index) ([]*model.Node, model.EdgeList) {
+	sorted := make([]model.Index, len(indexes))
+	copy(sorted, indexes)
+	sort.Slice(sorted, func(i, j int) bool {
+		return sorted[i].Name < sorted[j].Name
+	})
+
+	nodes := make([]*model.Node, 0, len(sorted))
+	edge := model.EdgeList{Items: make([]string, 0, len(sorted))}
+
+	for _, idx := range sorted {
+		attrs := map[string]any{
+			"connection": b.connectionName,
+			"table":      relation,
+			"indexName":  idx.Name,
+			"unique":     idx.Unique,
+			"primary":    idx.Primary,
+		}
+
+		if len(idx.Columns) > 0 {
+			attrs["columns"] = stringutil.CopyStrings(idx.Columns)
+		}
+		if idx.Definition != "" {
+			attrs["definition"] = idx.Definition
+		}
+		if idx.Method != "" {
+			attrs["method"] = idx.Method
+		}
+		if idx.Predicate != "" {
+			attrs["predicate"] = idx.Predicate
+		}
+
+		node := &model.Node{
+			ID:         b.IndexNodeID(scope, relation, idx.Name),
+			Type:       "index",
+			Name:       idx.Name,
+			Scope:      scope,
+			Attributes: attrs,
+			Edges:      make(map[string]model.EdgeList),
+			Hydrated:   true,
+		}
+		nodes = append(nodes, node)
+		edge.Items = append(edge.Items, node.ID)
+	}
+
+	return nodes, edge
+}
+
+// BuildTriggerNodes creates nodes for table/view triggers.
+func (b *GraphBuilder) BuildTriggerNodes(scope model.ScopeID, relation string, triggers []model.Trigger) ([]*model.Node, model.EdgeList) {
+	sorted := make([]model.Trigger, len(triggers))
+	copy(sorted, triggers)
+	sort.Slice(sorted, func(i, j int) bool {
+		return sorted[i].Name < sorted[j].Name
+	})
+
+	nodes := make([]*model.Node, 0, len(sorted))
+	edge := model.EdgeList{Items: make([]string, 0, len(sorted))}
+
+	for _, trg := range sorted {
+		attrs := map[string]any{
+			"connection":  b.connectionName,
+			"table":       relation,
+			"triggerName": trg.Name,
+			"timing":      trg.Timing,
+			"orientation": trg.Orientation,
+		}
+
+		if len(trg.Events) > 0 {
+			attrs["events"] = stringutil.CopyStrings(trg.Events)
+		}
+		if trg.Statement != "" {
+			attrs["statement"] = trg.Statement
+		}
+		if trg.Condition != "" {
+			attrs["condition"] = trg.Condition
+		}
+		if trg.Enabled != nil {
+			attrs["enabled"] = *trg.Enabled
+		}
+		if trg.Definition != "" {
+			attrs["definition"] = trg.Definition
+		}
+
+		node := &model.Node{
+			ID:         b.TriggerNodeID(scope, relation, trg.Name),
+			Type:       "trigger",
+			Name:       trg.Name,
 			Scope:      scope,
 			Attributes: attrs,
 			Edges:      make(map[string]model.EdgeList),

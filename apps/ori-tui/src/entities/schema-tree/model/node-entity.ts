@@ -61,7 +61,6 @@ function createSnapshotNodeEntity(node: Node): SnapshotNodeEntity {
     kind: "node",
     node,
     label: node.name,
-    icon: iconForNode(node),
     description: describeNode(node),
     badges: nodeBadges(node),
     childIds: [],
@@ -112,34 +111,21 @@ function formatEdgeCount(count: number, truncated: boolean): string {
   return "0"
 }
 
-function iconForNode(node: Node): string {
-  switch (node.type) {
-    case "database":
-      return ""
-    case "table":
-      return "▥"
-    case "view":
-      return "▥"
-    case "column":
-      return "≡"
-    case "constraint":
-      return "▸"
-    default:
-      return "▸"
-  }
-}
-
 function describeNode(node: Node): string | undefined {
   switch (node.type) {
     case "database":
       return "database"
     case "table":
     case "view":
-      return node.attributes?.table ?? undefined
+      return typeof node.attributes?.table === "string" ? node.attributes.table : undefined
     case "column":
-      return node.attributes?.dataType ?? undefined
+      return typeof node.attributes?.dataType === "string" ? node.attributes.dataType : undefined
     case "constraint":
-      return node.attributes?.constraintType ?? undefined
+      return typeof node.attributes?.constraintType === "string" ? node.attributes.constraintType : undefined
+    case "index":
+      return node.attributes?.unique === true ? "unique" : "index"
+    case "trigger":
+      return typeof node.attributes?.timing === "string" ? node.attributes.timing : undefined
     default:
       return undefined
   }
@@ -148,7 +134,8 @@ function describeNode(node: Node): string | undefined {
 function nodeBadges(node: Node): string | undefined {
   if (node.type === "column") {
     const badges: string[] = []
-    if (node.attributes?.primaryKeyPosition && node.attributes.primaryKeyPosition > 0) {
+    const position = typeof node.attributes?.primaryKeyPosition === "number" ? node.attributes.primaryKeyPosition : 0
+    if (position > 0) {
       badges.push("PK")
     }
     if (node.attributes?.notNull) {

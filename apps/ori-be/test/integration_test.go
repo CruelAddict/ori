@@ -146,6 +146,16 @@ func TestListConfigurationsAndConnectSQLiteOverUDS(t *testing.T) {
 	if edge, ok := tNode.Edges["constraints"]; !ok || len(edge.Items) == 0 {
 		t.Fatalf("expected at least one constraint edge")
 	}
+	if edge, ok := tNode.Edges["indexes"]; !ok {
+		t.Fatalf("expected indexes edge")
+	} else if edge.Items == nil {
+		t.Fatalf("expected indexes edge items")
+	}
+	if edge, ok := tNode.Edges["triggers"]; !ok {
+		t.Fatalf("expected triggers edge")
+	} else if edge.Items == nil {
+		t.Fatalf("expected triggers edge items")
+	}
 }
 
 func TestQueryExecAndGetResult(t *testing.T) {

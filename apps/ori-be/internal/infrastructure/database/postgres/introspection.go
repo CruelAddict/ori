@@ -10,12 +10,17 @@ import (
 
 func (a *Adapter) GetScopes(ctx context.Context) ([]model.Scope, error) {
 	query := `
-		SELECT schema_name 
-		FROM information_schema.schemata 
-		WHERE schema_name NOT IN ('pg_catalog', 'information_schema', 'pg_toast')
-		  AND schema_name NOT LIKE 'pg_temp_%'
-		  AND schema_name NOT LIKE 'pg_toast_temp_%'
-		ORDER BY schema_name
+		SELECT s.schema_name
+		FROM information_schema.schemata s
+		WHERE s.schema_name NOT IN ('pg_catalog', 'information_schema', 'pg_toast')
+		  AND s.schema_name NOT LIKE 'pg_temp_%'
+		  AND s.schema_name NOT LIKE 'pg_toast_temp_%'
+		  AND s.schema_name NOT IN (
+			SELECT n.nspname
+			FROM pg_extension e
+			JOIN pg_namespace n ON n.oid = e.extnamespace
+		  )
+		ORDER BY s.schema_name
 	`
 	rows, err := a.db.QueryxContext(ctx, query)
 	if err != nil {
@@ -163,6 +168,208 @@ func (a *Adapter) GetConstraints(ctx context.Context, scope model.ScopeID, relat
 	}
 
 	return append(constraints, checkConstraints...), nil
+}
+
+func (a *Adapter) GetIndexes(ctx context.Context, scope model.ScopeID, relation string) ([]model.Index, error) {
+	if scope.Schema == nil {
+		return nil, fmt.Errorf("postgres requires schema in scope")
+	}
+
+	query := `
+		SELECT 
+			idx.indexname,
+			idx.indexdef,
+			am.amname,
+			pg_get_expr(i.indpred, i.indrelid) as predicate,
+			array_to_string(array_agg(att.attname ORDER BY cols.ordinality), ',') as columns,
+			i.indisunique,
+			i.indisprimary
+		FROM pg_indexes idx
+		JOIN pg_namespace n ON n.nspname = idx.schemaname
+		JOIN pg_class ic ON ic.relname = idx.indexname AND ic.relnamespace = n.oid
+		JOIN pg_index i ON i.indexrelid = ic.oid
+		JOIN pg_class c ON c.oid = i.indrelid
+		JOIN pg_am am ON am.oid = ic.relam
+		LEFT JOIN LATERAL unnest(i.indkey) WITH ORDINALITY cols(attnum, ordinality)
+			ON true
+		LEFT JOIN pg_attribute att
+			ON att.attrelid = c.oid
+			AND att.attnum = cols.attnum
+		WHERE idx.schemaname = $1
+			AND idx.tablename = $2
+			AND c.relname = idx.tablename
+		GROUP BY idx.indexname, idx.indexdef, am.amname, predicate, i.indisunique, i.indisprimary
+		ORDER BY idx.indexname
+	`
+
+	type row struct {
+		name       string
+		definition string
+		method     string
+		predicate  *string
+		columns    string
+		unique     bool
+		primary    bool
+	}
+
+	rows, err := a.db.QueryxContext(ctx, query, *scope.Schema, relation)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read indexes: %w", err)
+	}
+	defer func() {
+		_ = rows.Close()
+	}()
+
+	var indexes []model.Index
+	for rows.Next() {
+		var entry row
+		if err := rows.Scan(
+			&entry.name,
+			&entry.definition,
+			&entry.method,
+			&entry.predicate,
+			&entry.columns,
+			&entry.unique,
+			&entry.primary,
+		); err != nil {
+			return nil, fmt.Errorf("failed to scan index: %w", err)
+		}
+		columns := splitCSV(entry.columns)
+		predicate := ""
+		if entry.predicate != nil {
+			predicate = *entry.predicate
+		}
+		indexes = append(indexes, model.Index{
+			Name:       entry.name,
+			Unique:     entry.unique,
+			Primary:    entry.primary,
+			Columns:    columns,
+			Definition: entry.definition,
+			Method:     entry.method,
+			Predicate:  predicate,
+		})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating indexes: %w", err)
+	}
+	return indexes, nil
+}
+
+func (a *Adapter) GetTriggers(ctx context.Context, scope model.ScopeID, relation string) ([]model.Trigger, error) {
+	if scope.Schema == nil {
+		return nil, fmt.Errorf("postgres requires schema in scope")
+	}
+
+	query := `
+		SELECT 
+			tg.tgname,
+			CASE
+				WHEN (tg.tgtype & 2) = 2 THEN 'BEFORE'
+				WHEN (tg.tgtype & 64) = 64 THEN 'INSTEAD OF'
+				ELSE 'AFTER'
+			END as timing,
+			CASE WHEN (tg.tgtype & 4) = 4 THEN true ELSE false END as row_level,
+			(tg.tgtype & 28) as event_bits,
+			tg.tgenabled,
+			pg_get_triggerdef(tg.oid, true) as definition
+		FROM pg_trigger tg
+		JOIN pg_class c ON c.oid = tg.tgrelid
+		JOIN pg_namespace n ON n.oid = c.relnamespace
+		WHERE n.nspname = $1
+			AND c.relname = $2
+			AND NOT tg.tgisinternal
+		ORDER BY tg.tgname
+	`
+
+	rows, err := a.db.QueryxContext(ctx, query, *scope.Schema, relation)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read triggers: %w", err)
+	}
+	defer func() {
+		_ = rows.Close()
+	}()
+
+	var triggers []model.Trigger
+	for rows.Next() {
+		var name, timing, enabledFlag, definition string
+		var rowLevel bool
+		var eventBits int
+		if err := rows.Scan(&name, &timing, &rowLevel, &eventBits, &enabledFlag, &definition); err != nil {
+			return nil, fmt.Errorf("failed to scan trigger: %w", err)
+		}
+		enabled := parsePostgresTriggerEnabled(enabledFlag)
+		triggers = append(triggers, model.Trigger{
+			Name:        name,
+			Timing:      timing,
+			Events:      triggerEventsFromBits(eventBits),
+			Orientation: triggerOrientation(rowLevel),
+			Enabled:     enabled,
+			Definition:  definition,
+		})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating triggers: %w", err)
+	}
+	return triggers, nil
+}
+
+// TODO: remove defensive slop?
+func splitCSV(input string) []string {
+	if input == "" {
+		return nil
+	}
+	parts := strings.Split(input, ",")
+	values := make([]string, 0, len(parts))
+	for _, part := range parts {
+		trimmed := strings.TrimSpace(part)
+		if trimmed == "" {
+			continue
+		}
+		values = append(values, trimmed)
+	}
+	if len(values) == 0 {
+		return nil
+	}
+	return values
+}
+
+func parsePostgresTriggerEnabled(flag string) *bool {
+	if flag == "O" {
+		enabled := true
+		return &enabled
+	}
+	if flag == "D" {
+		enabled := false
+		return &enabled
+	}
+	return nil
+}
+
+func triggerEventsFromBits(bits int) []string {
+	events := []string{}
+	if bits&4 != 0 {
+		events = append(events, "INSERT")
+	}
+	if bits&8 != 0 {
+		events = append(events, "DELETE")
+	}
+	if bits&16 != 0 {
+		events = append(events, "UPDATE")
+	}
+	if bits&32 != 0 {
+		events = append(events, "TRUNCATE")
+	}
+	if len(events) == 0 {
+		return nil
+	}
+	return events
+}
+
+func triggerOrientation(rowLevel bool) string {
+	if rowLevel {
+		return "ROW"
+	}
+	return "STATEMENT"
 }
 
 func (a *Adapter) getKeyConstraints(ctx context.Context, schema, table string) ([]model.Constraint, error) {

@@ -34,6 +34,10 @@ type Introspector interface {
 
 	// GetConstraints returns constraints for a relation within a scope.
 	GetConstraints(ctx context.Context, scope model.ScopeID, relation string) ([]model.Constraint, error)
+	// GetIndexes returns indexes for a relation within a scope.
+	GetIndexes(ctx context.Context, scope model.ScopeID, relation string) ([]model.Index, error)
+	// GetTriggers returns triggers for a relation within a scope.
+	GetTriggers(ctx context.Context, scope model.ScopeID, relation string) ([]model.Trigger, error)
 }
 
 // ConnectionAdapter represents a database-specific implementation capable of metadata discovery and query execution.

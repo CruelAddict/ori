@@ -176,18 +176,34 @@ func (ns *NodeService) hydrateRelation(ctx context.Context, handle *ConnectionHa
 		return nil, err
 	}
 
+	indexes, err := handle.Adapter.GetIndexes(ctx, scope, relation)
+	if err != nil {
+		return nil, err
+	}
+
+	triggers, err := handle.Adapter.GetTriggers(ctx, scope, relation)
+	if err != nil {
+		return nil, err
+	}
+
 	builder := NewGraphBuilder(handle)
 
 	columnNodes, columnEdge := builder.BuildColumnNodes(scope, relation, columns)
 	constraintNodes, constraintEdge := builder.BuildConstraintNodes(scope, relation, constraints)
+	indexNodes, indexEdge := builder.BuildIndexNodes(scope, relation, indexes)
+	triggerNodes, triggerEdge := builder.BuildTriggerNodes(scope, relation, triggers)
 
 	node.Edges["columns"] = columnEdge
 	node.Edges["constraints"] = constraintEdge
+	node.Edges["indexes"] = indexEdge
+	node.Edges["triggers"] = triggerEdge
 	node.Hydrated = true
 
 	nodes := []*model.Node{node}
 	nodes = append(nodes, columnNodes...)
 	nodes = append(nodes, constraintNodes...)
+	nodes = append(nodes, indexNodes...)
+	nodes = append(nodes, triggerNodes...)
 
 	return nodes, nil
 }

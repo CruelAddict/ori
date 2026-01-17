@@ -46,3 +46,26 @@ type Constraint struct {
 	CheckClause       string   // CHECK: the check expression
 	UnderlyingIndex   *string  // UNIQUE: underlying index name
 }
+
+// Index describes a table/view index.
+type Index struct {
+	Name       string
+	Unique     bool
+	Primary    bool
+	Columns    []string
+	Definition string
+	Method     string
+	Predicate  string
+}
+
+// Trigger describes a table/view trigger.
+type Trigger struct {
+	Name        string
+	Timing      string
+	Events      []string
+	Orientation string
+	Statement   string
+	Condition   string
+	Enabled     *bool
+	Definition  string
+}
