@@ -7,6 +7,7 @@ import (
 
 	"github.com/crueladdict/ori/apps/ori-server/internal/pkg/sqlutil"
 	"github.com/crueladdict/ori/apps/ori-server/internal/service"
+	"github.com/jmoiron/sqlx"
 )
 
 // ExecuteQuery runs a query and returns the result
@@ -16,11 +17,11 @@ func (a *Adapter) ExecuteQuery(ctx context.Context, query string, params any, op
 	}
 
 	// Prepare the query if we have parameters
-	var stmt *sql.Stmt
+	var stmt *sqlx.Stmt
 	var err error
 
 	if params != nil {
-		stmt, err = a.db.PrepareContext(ctx, query)
+		stmt, err = a.db.PreparexContext(ctx, query)
 		if err != nil {
 			return nil, fmt.Errorf("failed to prepare query: %w", err)
 		}
@@ -37,15 +38,15 @@ func (a *Adapter) ExecuteQuery(ctx context.Context, query string, params any, op
 }
 
 // executeSelect executes a SELECT query
-func (a *Adapter) executeSelect(ctx context.Context, stmt *sql.Stmt, query string, params any, options *service.QueryExecOptions) (*service.QueryResult, error) {
-	var rows *sql.Rows
+func (a *Adapter) executeSelect(ctx context.Context, stmt *sqlx.Stmt, query string, params any, options *service.QueryExecOptions) (*service.QueryResult, error) {
+	var rows *sqlx.Rows
 	var err error
 
 	// Execute the query
 	if stmt != nil {
 		rows, err = queryWithParams(ctx, stmt, params)
 	} else {
-		rows, err = a.db.QueryContext(ctx, query)
+		rows, err = a.db.QueryxContext(ctx, query)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("query execution failed: %w", err)
@@ -130,7 +131,7 @@ func (a *Adapter) executeSelect(ctx context.Context, stmt *sql.Stmt, query strin
 }
 
 // executeStatement executes a non-SELECT statement (INSERT, UPDATE, DELETE, etc.)
-func (a *Adapter) executeStatement(ctx context.Context, stmt *sql.Stmt, query string, params any) (*service.QueryResult, error) {
+func (a *Adapter) executeStatement(ctx context.Context, stmt *sqlx.Stmt, query string, params any) (*service.QueryResult, error) {
 	var result sql.Result
 	var err error
 
@@ -153,22 +154,22 @@ func (a *Adapter) executeStatement(ctx context.Context, stmt *sql.Stmt, query st
 }
 
 // queryWithParams executes a query with parameters
-func queryWithParams(ctx context.Context, stmt *sql.Stmt, params any) (*sql.Rows, error) {
+func queryWithParams(ctx context.Context, stmt *sqlx.Stmt, params any) (*sqlx.Rows, error) {
 	switch p := params.(type) {
 	case map[string]any:
 		// Named parameters - not supported yet for prepared statements
 		return nil, fmt.Errorf("named parameters not yet supported in prepared statements")
 	case []any:
 		// Positional parameters
-		return stmt.QueryContext(ctx, p...)
+		return stmt.QueryxContext(ctx, p...)
 	default:
 		// No parameters or unsupported type
-		return stmt.QueryContext(ctx)
+		return stmt.QueryxContext(ctx)
 	}
 }
 
 // execWithParams executes a statement with parameters
-func execWithParams(ctx context.Context, stmt *sql.Stmt, params any) (sql.Result, error) {
+func execWithParams(ctx context.Context, stmt *sqlx.Stmt, params any) (sql.Result, error) {
 	switch p := params.(type) {
 	case map[string]any:
 		// Named parameters - not supported yet

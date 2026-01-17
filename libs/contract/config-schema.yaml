@@ -11,6 +11,11 @@ connections:
     password:                 # Password retrieval configuration
       type: string            # Password provider type (plain_text, shell, keychain)
       key: string             # Provider-specific value (password text, shell command, or keychain account)
+    tls:                      # TLS configuration (optional)
+      mode: string            # TLS mode (e.g. disable, require, verify-ca, verify-full)
+      caCertPath: string      # CA certificate path
+      certPath: string        # Client certificate path
+      keyPath: string         # Client key path
 
 # Example:
 # connections:

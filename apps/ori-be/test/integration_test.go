@@ -214,7 +214,9 @@ func TestQueryExecAndGetResult(t *testing.T) {
 		JobId:             uuid.New(),
 		Query:             "SELECT id, name, email FROM authors",
 	}
-	execResp, err := client.ExecQueryWithResponse(ctx, execReq)
+	requestCtx, cancel := context.WithCancel(ctx)
+	execResp, err := client.ExecQueryWithResponse(requestCtx, execReq)
+	cancel()
 	if err != nil {
 		t.Fatalf("QueryExec failed: %v", err)
 	}

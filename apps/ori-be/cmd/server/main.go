@@ -15,6 +15,7 @@ import (
 	httpapi "github.com/crueladdict/ori/apps/ori-server/internal/httpapi"
 	postgresadapter "github.com/crueladdict/ori/apps/ori-server/internal/infrastructure/database/postgres"
 	sqliteadapter "github.com/crueladdict/ori/apps/ori-server/internal/infrastructure/database/sqlite"
+	"github.com/crueladdict/ori/apps/ori-server/internal/pkg/logctx"
 	"github.com/crueladdict/ori/apps/ori-server/internal/service"
 )
 
@@ -44,7 +45,7 @@ func run() int {
 	flag.Parse()
 
 	level := parseLevel(*logLevelFlag, slog.LevelInfo)
-	logger := newFileLogger("ori-be", level)
+	logger := logctx.WrapLogger(newFileLogger("ori-be", level))
 	slog.SetDefault(logger)
 
 	// Handle SIGHUP to reopen log file after external rotation
@@ -55,7 +56,7 @@ func run() int {
 			if currentLogFile != nil {
 				_ = currentLogFile.Close()
 			}
-			newLogger := newFileLogger(currentApp, currentLogLevel)
+			newLogger := logctx.WrapLogger(newFileLogger(currentApp, currentLogLevel))
 			slog.SetDefault(newLogger)
 			slog.Info("log file reopened", slog.String("path", currentLogPath))
 		}
@@ -70,17 +71,17 @@ func run() int {
 		parentDone = ch
 		go monitorParentAlive(ch, cancel)
 	} else {
-		slog.Info("standalone mode: parent monitor disabled")
+		slog.InfoContext(ctx, "standalone mode: parent monitor disabled")
 	}
 
 	configService := service.NewConfigService(*configPath)
 
-	slog.Info("loading configuration", slog.String("path", *configPath))
+	slog.InfoContext(ctx, "loading configuration", slog.String("path", *configPath))
 	if err := configService.LoadConfig(); err != nil {
-		slog.Error("failed to load configuration", slog.Any("err", err))
+		slog.ErrorContext(ctx, "failed to load configuration", slog.Any("err", err))
 		return 1
 	}
-	slog.Info("configuration loaded")
+	slog.InfoContext(ctx, "configuration loaded")
 
 	eventHub := events.NewHub()
 	connectionService := service.NewConnectionService(configService, eventHub)
@@ -100,17 +101,17 @@ func run() int {
 	if *socketPath != "" {
 		server, err = httpapi.NewUnixServer(ctx, handler, eventHub, *socketPath)
 		if err != nil {
-			slog.Error("failed to create unix socket server", slog.Any("err", err))
+			slog.ErrorContext(ctx, "failed to create unix socket server", slog.Any("err", err))
 			return 1
 		}
-		slog.Info("server started", slog.String("transport", "unix"), slog.String("socket", *socketPath))
+		slog.InfoContext(ctx, "server started", slog.String("transport", "unix"), slog.String("socket", *socketPath))
 	} else {
 		server, err = httpapi.NewServer(ctx, handler, eventHub, *port)
 		if err != nil {
-			slog.Error("failed to create TCP server", slog.Any("err", err))
+			slog.ErrorContext(ctx, "failed to create TCP server", slog.Any("err", err))
 			return 1
 		}
-		slog.Info("server started", slog.String("transport", "tcp"), slog.Int("port", *port))
+		slog.InfoContext(ctx, "server started", slog.String("transport", "tcp"), slog.Int("port", *port))
 	}
 
 	quit := make(chan os.Signal, 1)
@@ -118,24 +119,24 @@ func run() int {
 	select {
 	case <-quit:
 	case <-parentDone:
-		slog.Warn("parent process died, shutting down")
+		slog.WarnContext(ctx, "parent process died, shutting down")
 	}
 
-	slog.Info("shutting down")
+	slog.InfoContext(ctx, "shutting down")
 
 	// Stop query service to cancel running jobs
 	queryService.Stop()
 
 	if err := server.Shutdown(); err != nil {
-		slog.Error("server forced to shutdown", slog.Any("err", err))
+		slog.ErrorContext(ctx, "server forced to shutdown", slog.Any("err", err))
 		return 1
 	}
 
 	if err := server.Wait(); err != nil {
-		slog.Warn("server wait error", slog.Any("err", err))
+		slog.WarnContext(ctx, "server wait error", slog.Any("err", err))
 	}
 
-	slog.Info("server stopped")
+	slog.InfoContext(ctx, "server stopped")
 	return 0
 }
 
@@ -162,6 +163,7 @@ func monitorParentAlive(done chan<- struct{}, cancel context.CancelFunc) {
 	}
 }
 
+// TODO: cleanup up it's a bad func
 func newFileLogger(app string, level slog.Leveler) *slog.Logger {
 	logDir := defaultLogDir()
 	if err := os.MkdirAll(logDir, 0o755); err != nil {

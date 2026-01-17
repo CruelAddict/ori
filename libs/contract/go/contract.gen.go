@@ -44,6 +44,7 @@ type Configuration struct {
 	Name     string          `json:"name"`
 	Password *PasswordConfig `json:"password,omitempty"`
 	Port     *int            `json:"port"`
+	Tls      *TlsConfig      `json:"tls,omitempty"`
 	Type     string          `json:"type"`
 	Username *string         `json:"username"`
 }
@@ -101,6 +102,20 @@ type PasswordConfig struct {
 
 	// Type Password provider type
 	Type PasswordConfigType `json:"type"`
+}
+
+type TlsConfig struct {
+	// CACertPath CA certificate path
+	CACertPath *string `json:"caCertPath,omitempty"`
+
+	// CertPath Client certificate path
+	CertPath *string `json:"certPath,omitempty"`
+
+	// KeyPath Client key path
+	KeyPath *string `json:"keyPath,omitempty"`
+
+	// Mode TLS mode (e.g. require, verify-ca, verify-full)
+	Mode *string `json:"mode,omitempty"`
 }
 
 // PasswordConfigType Password provider type

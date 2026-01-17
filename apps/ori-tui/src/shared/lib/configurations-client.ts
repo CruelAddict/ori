@@ -111,6 +111,7 @@ class RestOriClient implements OriClient {
       port: conn.port ?? 0,
       database: conn.database,
       username: conn.username ?? "",
+      tls: conn.tls ?? undefined,
     }))
   }
 

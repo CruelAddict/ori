@@ -198,6 +198,25 @@ components:
       required:
         - type
         - key
+    TlsConfig:
+      type: object
+      properties:
+        mode:
+          type: string
+          nullable: true
+          description: TLS mode (e.g. require, verify-ca, verify-full)
+        caCertPath:
+          type: string
+          nullable: true
+          description: CA certificate path
+        certPath:
+          type: string
+          nullable: true
+          description: Client certificate path
+        keyPath:
+          type: string
+          nullable: true
+          description: Client key path
     Configuration:
       type: object
       properties:
@@ -218,6 +237,8 @@ components:
           nullable: true
         password:
           $ref: '#/components/schemas/PasswordConfig'
+        tls:
+          $ref: '#/components/schemas/TlsConfig'
       required:
         - name
         - type

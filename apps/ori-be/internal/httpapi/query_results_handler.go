@@ -28,7 +28,7 @@ func (h *Handler) getQueryResult(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	view, err := h.queries.BuildResultView(jobID, limit, offset)
+	view, err := h.queries.BuildResultView(r.Context(), jobID, limit, offset)
 	if err != nil {
 		switch {
 		case errors.Is(err, service.ErrNotFound):

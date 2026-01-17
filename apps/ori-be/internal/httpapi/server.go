@@ -137,8 +137,9 @@ func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
 	}
 
 	rc := http.NewResponseController(w)
+	ctx := r.Context()
 	if err := rc.SetWriteDeadline(time.Time{}); err != nil {
-		slog.Warn("failed to disable write deadline for SSE", slog.Any("err", err))
+		slog.WarnContext(ctx, "failed to disable write deadline for SSE", slog.Any("err", err))
 	}
 
 	w.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
@@ -149,7 +150,6 @@ func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
 	eventCh, unsubscribe := s.events.Subscribe()
 	defer unsubscribe()
 
-	ctx := r.Context()
 	heartbeat := time.NewTicker(15 * time.Second)
 	defer heartbeat.Stop()
 
@@ -163,7 +163,7 @@ func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
 			return
 		case <-heartbeat.C:
 			if _, err := w.Write([]byte(": ping\n\n")); err != nil {
-				slog.Debug("sse heartbeat write failed", slog.Any("err", err))
+				slog.DebugContext(ctx, "sse heartbeat write failed", slog.Any("err", err))
 				return
 			}
 			flusher.Flush()
@@ -173,23 +173,23 @@ func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
 			}
 			payload, err := json.Marshal(evt.Payload)
 			if err != nil {
-				slog.Error("failed to marshal sse payload", slog.Any("err", err))
+				slog.ErrorContext(ctx, "failed to marshal sse payload", slog.Any("err", err))
 				continue
 			}
 			if !evt.Timestamp.IsZero() {
 				if _, err := fmt.Fprintf(w, "id: %d\n", evt.Timestamp.UnixNano()); err != nil {
-					slog.Debug("failed to write sse id", slog.Any("err", err))
+					slog.DebugContext(ctx, "failed to write sse id", slog.Any("err", err))
 					return
 				}
 			}
 			if evt.Name != "" {
 				if _, err := fmt.Fprintf(w, "event: %s\n", evt.Name); err != nil {
-					slog.Debug("failed to write sse event", slog.Any("err", err))
+					slog.DebugContext(ctx, "failed to write sse event", slog.Any("err", err))
 					return
 				}
 			}
 			if _, err := fmt.Fprintf(w, "data: %s\n\n", payload); err != nil {
-				slog.Debug("failed to write sse data", slog.Any("err", err))
+				slog.DebugContext(ctx, "failed to write sse data", slog.Any("err", err))
 				return
 			}
 			flusher.Flush()

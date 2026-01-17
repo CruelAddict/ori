@@ -5,4 +5,10 @@ export type Configuration = {
   port: number
   database: string
   username: string
+  tls?: {
+    mode?: string | null
+    caCertPath?: string | null
+    certPath?: string | null
+    keyPath?: string | null
+  }
 }

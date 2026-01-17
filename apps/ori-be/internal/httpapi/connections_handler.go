@@ -5,6 +5,8 @@ import (
 	"strings"
 
 	dto "github.com/crueladdict/ori/libs/contract/go"
+
+	"github.com/crueladdict/ori/apps/ori-server/internal/pkg/logctx"
 )
 
 func (h *Handler) startConnection(w http.ResponseWriter, r *http.Request) {
@@ -25,7 +27,8 @@ func (h *Handler) startConnection(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	outcome := h.connections.Connect(r.Context(), name)
+	ctx := logctx.WithField(r.Context(), "connection", name)
+	outcome := h.connections.Connect(ctx, name)
 	result := dto.ConnectionResult{Result: dto.ConnectionResultResult(outcome.Result)}
 	if outcome.UserMessage != "" {
 		result.UserMessage = &outcome.UserMessage

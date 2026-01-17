@@ -9,6 +9,7 @@ import (
 	dto "github.com/crueladdict/ori/libs/contract/go"
 
 	"github.com/crueladdict/ori/apps/ori-server/internal/model"
+	"github.com/crueladdict/ori/apps/ori-server/internal/pkg/logctx"
 	"github.com/crueladdict/ori/apps/ori-server/internal/service"
 )
 
@@ -44,7 +45,8 @@ func (h *Handler) getConfigurationNodes(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	nodes, err := h.nodes.GetNodes(r.Context(), configurationName, nodeIDs)
+	ctx := logctx.WithField(r.Context(), "connection", configurationName)
+	nodes, err := h.nodes.GetNodes(ctx, configurationName, nodeIDs)
 	if err != nil {
 		switch {
 		case errors.Is(err, service.ErrConnectionUnavailable):

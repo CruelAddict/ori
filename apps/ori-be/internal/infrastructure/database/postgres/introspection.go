@@ -17,7 +17,7 @@ func (a *Adapter) GetScopes(ctx context.Context) ([]model.Scope, error) {
 		  AND schema_name NOT LIKE 'pg_toast_temp_%'
 		ORDER BY schema_name
 	`
-	rows, err := a.db.QueryContext(ctx, query)
+	rows, err := a.db.QueryxContext(ctx, query)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list schemas: %w", err)
 	}
@@ -61,7 +61,7 @@ func (a *Adapter) GetRelations(ctx context.Context, scope model.ScopeID) ([]mode
 		WHERE t.table_schema = $1
 		ORDER BY t.table_name
 	`
-	rows, err := a.db.QueryContext(ctx, query, *scope.Schema)
+	rows, err := a.db.QueryxContext(ctx, query, *scope.Schema)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch relations: %w", err)
 	}
@@ -112,7 +112,7 @@ func (a *Adapter) GetColumns(ctx context.Context, scope model.ScopeID, relation 
 		WHERE table_schema = $1 AND table_name = $2
 		ORDER BY ordinal_position
 	`
-	rows, err := a.db.QueryContext(ctx, query, *scope.Schema, relation)
+	rows, err := a.db.QueryxContext(ctx, query, *scope.Schema, relation)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read columns: %w", err)
 	}
@@ -218,7 +218,7 @@ func (a *Adapter) getKeyConstraints(ctx context.Context, schema, table string) (
 		ORDER BY cc.constraint_type, cc.constraint_name
 	`
 
-	rows, err := a.db.QueryContext(ctx, query, schema, table)
+	rows, err := a.db.QueryxContext(ctx, query, schema, table)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read constraints: %w", err)
 	}
@@ -287,7 +287,7 @@ func (a *Adapter) getCheckConstraints(ctx context.Context, schema, table string)
 		ORDER BY cc.constraint_name
 	`
 
-	rows, err := a.db.QueryContext(ctx, query, schema, table)
+	rows, err := a.db.QueryxContext(ctx, query, schema, table)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read check constraints: %w", err)
 	}

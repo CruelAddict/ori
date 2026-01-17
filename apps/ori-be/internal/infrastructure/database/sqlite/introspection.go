@@ -12,7 +12,7 @@ import (
 )
 
 func (a *Adapter) GetScopes(ctx context.Context) ([]model.Scope, error) {
-	rows, err := a.db.QueryContext(ctx, "PRAGMA database_list")
+	rows, err := a.db.QueryxContext(ctx, "PRAGMA database_list")
 	if err != nil {
 		return nil, err
 	}
@@ -60,14 +60,14 @@ func (a *Adapter) GetScopes(ctx context.Context) ([]model.Scope, error) {
 func (a *Adapter) pragmaInt(ctx context.Context, schema, pragma string) (int64, error) {
 	query := fmt.Sprintf(`PRAGMA "%s".%s`, stringutil.EscapeIdentifier(schema), pragma)
 	var value int64
-	err := a.db.QueryRowContext(ctx, query).Scan(&value)
+	err := a.db.GetContext(ctx, &value, query)
 	return value, err
 }
 
 func (a *Adapter) pragmaText(ctx context.Context, schema, pragma string) (string, error) {
 	query := fmt.Sprintf(`PRAGMA "%s".%s`, stringutil.EscapeIdentifier(schema), pragma)
 	var value string
-	err := a.db.QueryRowContext(ctx, query).Scan(&value)
+	err := a.db.GetContext(ctx, &value, query)
 	return value, err
 }
 
@@ -76,7 +76,7 @@ func (a *Adapter) GetRelations(ctx context.Context, scope model.ScopeID) ([]mode
 		`SELECT name, type, COALESCE(sql, '') as sql FROM "%s".sqlite_master WHERE type IN ('table', 'view') AND name NOT LIKE 'sqlite_%%' ORDER BY name`,
 		stringutil.EscapeIdentifier(scope.Database),
 	)
-	rows, err := a.db.QueryContext(ctx, query)
+	rows, err := a.db.QueryxContext(ctx, query)
 	if err != nil {
 		return nil, err
 	}
@@ -105,7 +105,7 @@ func (a *Adapter) GetColumns(ctx context.Context, scope model.ScopeID, relation 
 		stringutil.EscapeIdentifier(scope.Database),
 		stringutil.QuoteLiteral(relation),
 	)
-	rows, err := a.db.QueryContext(ctx, query)
+	rows, err := a.db.QueryxContext(ctx, query)
 	if err != nil {
 		return nil, err
 	}
@@ -174,7 +174,7 @@ func (a *Adapter) getPrimaryKeyConstraint(ctx context.Context, database, table s
 		stringutil.EscapeIdentifier(database),
 		stringutil.QuoteLiteral(table),
 	)
-	rows, err := a.db.QueryContext(ctx, query)
+	rows, err := a.db.QueryxContext(ctx, query)
 	if err != nil {
 		return nil, err
 	}
@@ -228,7 +228,7 @@ func (a *Adapter) getUniqueConstraints(ctx context.Context, database, table stri
 		stringutil.EscapeIdentifier(database),
 		stringutil.QuoteLiteral(table),
 	)
-	rows, err := a.db.QueryContext(ctx, query)
+	rows, err := a.db.QueryxContext(ctx, query)
 	if err != nil {
 		return nil, err
 	}
@@ -286,7 +286,7 @@ func (a *Adapter) getIndexColumns(ctx context.Context, database, indexName strin
 		stringutil.EscapeIdentifier(database),
 		stringutil.QuoteLiteral(indexName),
 	)
-	rows, err := a.db.QueryContext(ctx, query)
+	rows, err := a.db.QueryxContext(ctx, query)
 	if err != nil {
 		return nil, err
 	}
@@ -326,7 +326,7 @@ func (a *Adapter) getForeignKeyConstraints(ctx context.Context, database, table 
 		stringutil.EscapeIdentifier(database),
 		stringutil.QuoteLiteral(table),
 	)
-	rows, err := a.db.QueryContext(ctx, query)
+	rows, err := a.db.QueryxContext(ctx, query)
 	if err != nil {
 		return nil, err
 	}

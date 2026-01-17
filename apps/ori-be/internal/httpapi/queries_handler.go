@@ -8,6 +8,7 @@ import (
 	dto "github.com/crueladdict/ori/libs/contract/go"
 	"github.com/google/uuid"
 
+	"github.com/crueladdict/ori/apps/ori-server/internal/pkg/logctx"
 	"github.com/crueladdict/ori/apps/ori-server/internal/service"
 )
 
@@ -55,7 +56,8 @@ func (h *Handler) execQuery(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	job, err := h.queries.Exec(payload.ConfigurationName, jobID, payload.Query, params, options)
+	ctx := logctx.WithField(r.Context(), "connection", payload.ConfigurationName)
+	job, err := h.queries.Exec(ctx, payload.ConfigurationName, jobID, payload.Query, params, options)
 	if err != nil {
 		switch {
 		case errors.Is(err, service.ErrConnectionUnavailable):

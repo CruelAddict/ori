@@ -3,6 +3,7 @@
 /* tslint:disable */
 /* eslint-disable */
 import type { PasswordConfig } from './PasswordConfig';
+import type { TlsConfig } from './TlsConfig';
 export type Configuration = {
     name: string;
     type: string;
@@ -11,5 +12,6 @@ export type Configuration = {
     database: string;
     username?: string | null;
     password?: PasswordConfig;
+    tls?: TlsConfig;
 };
 

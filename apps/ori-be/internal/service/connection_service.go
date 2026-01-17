@@ -93,7 +93,7 @@ func (cs *ConnectionService) Connect(ctx context.Context, name string) ConnectOu
 			cs.emitConnectionEvent(name, events.ConnectionStateConnected, fmt.Sprintf("connection '%s' ready", name), nil)
 			return ConnectOutcome{Result: ConnectResultSuccess}
 		}
-		slog.Info("connection ping failed; reopening", slog.String("configuration", name))
+		slog.InfoContext(ctx, "connection ping failed; reopening", slog.String("configuration", name))
 		cs.removeConnection(name)
 	}
 
@@ -110,7 +110,7 @@ func (cs *ConnectionService) openInBackground(name string) {
 	cfg, err := cs.configs.ByName(name)
 	if err != nil {
 		cs.emitConnectionEvent(name, events.ConnectionStateFailed, "", err)
-		slog.Error("database connect failed", slog.String("configuration", name), slog.Any("err", err))
+		slog.ErrorContext(ctx, "database connect failed", slog.String("configuration", name), slog.Any("err", err))
 		return
 	}
 
@@ -119,7 +119,7 @@ func (cs *ConnectionService) openInBackground(name string) {
 	if !ok {
 		openErr := fmt.Errorf("unsupported database type: %s", cfg.Type)
 		cs.emitConnectionEvent(name, events.ConnectionStateFailed, "", openErr)
-		slog.Error("database connect failed", slog.String("configuration", name), slog.Any("err", openErr))
+		slog.ErrorContext(ctx, "database connect failed", slog.String("configuration", name), slog.Any("err", openErr))
 		return
 	}
 
@@ -132,21 +132,21 @@ func (cs *ConnectionService) openInBackground(name string) {
 	adapter, err := factory(params)
 	if err != nil {
 		cs.emitConnectionEvent(name, events.ConnectionStateFailed, "", err)
-		slog.Error("database connect failed", slog.String("configuration", name), slog.Any("err", err))
+		slog.ErrorContext(ctx, "database connect failed", slog.String("configuration", name), slog.Any("err", err))
 		return
 	}
 
 	if err := adapter.Connect(ctx); err != nil {
 		_ = adapter.Close()
 		cs.emitConnectionEvent(name, events.ConnectionStateFailed, "", err)
-		slog.Error("database connect failed", slog.String("configuration", name), slog.Any("err", err))
+		slog.ErrorContext(ctx, "database connect failed", slog.String("configuration", name), slog.Any("err", err))
 		return
 	}
 
 	if err := adapter.Ping(ctx); err != nil {
 		_ = adapter.Close()
 		cs.emitConnectionEvent(name, events.ConnectionStateFailed, "", err)
-		slog.Error("database ping failed", slog.String("configuration", name), slog.Any("err", err))
+		slog.ErrorContext(ctx, "database ping failed", slog.String("configuration", name), slog.Any("err", err))
 		return
 	}
 
@@ -165,11 +165,11 @@ func (cs *ConnectionService) openInBackground(name string) {
 
 	if previous != nil {
 		if err := previous.Close(); err != nil {
-			slog.Warn("failed to close previous connection adapter", slog.String("configuration", name), slog.Any("err", err))
+			slog.WarnContext(ctx, "failed to close previous connection adapter", slog.String("configuration", name), slog.Any("err", err))
 		}
 	}
 
-	slog.Info("database connected", slog.String("configuration", name), slog.String("driver", cfg.Type))
+	slog.InfoContext(ctx, "database connected", slog.String("configuration", name), slog.String("driver", cfg.Type))
 	cs.emitConnectionEvent(name, events.ConnectionStateConnected, fmt.Sprintf("connected to '%s'", name), nil)
 }
 

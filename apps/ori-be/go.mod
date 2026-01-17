@@ -8,6 +8,7 @@ require (
 	github.com/crueladdict/ori/libs/contract/go v0.0.0
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.7.6
+	github.com/jmoiron/sqlx v1.4.0
 	gopkg.in/yaml.v3 v3.0.1
 	modernc.org/sqlite v1.31.0
 )

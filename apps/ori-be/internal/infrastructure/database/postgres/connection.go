@@ -2,15 +2,17 @@ package postgres
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
+
+	"github.com/crueladdict/ori/apps/ori-server/internal/infrastructure/database/dblogged"
 )
 
 // Connect establishes the database connection
 func (a *Adapter) Connect(ctx context.Context) error {
-	db, err := sql.Open("pgx", a.connString)
+	// TODO: replace with DI
+	db, err := dblogged.Open(ctx, "pgx", a.connString)
 	if err != nil {
 		return fmt.Errorf("failed to open postgresql database: %w", err)
 	}

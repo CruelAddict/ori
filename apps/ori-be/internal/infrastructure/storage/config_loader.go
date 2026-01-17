@@ -2,6 +2,7 @@ package storage
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 
 	"gopkg.in/yaml.v3"
@@ -64,7 +65,9 @@ func (cl *ConfigLoader) validate(config *model.Config) error {
 		switch conn.Type {
 		case "sqlite":
 			// For sqlite, database is a file path; other fields optional
-			// no-op
+			if conn.TLS != nil {
+				slog.Warn("tls settings ignored for sqlite connection", slog.String("connection", conn.Name))
+			}
 		default:
 			if conn.Host == nil || *conn.Host == "" {
 				return fmt.Errorf("connection '%s': host is required", conn.Name)
@@ -86,7 +89,7 @@ func (cl *ConfigLoader) validate(config *model.Config) error {
 
 func (cl *ConfigLoader) validatePassword(connName string, cfg *model.PasswordConfig) error {
 	if cfg == nil {
-		return fmt.Errorf("connection '%s': password configuration is required", connName)
+		return nil
 	}
 	if cfg.Type == "" {
 		return fmt.Errorf("connection '%s': password.type is required", connName)

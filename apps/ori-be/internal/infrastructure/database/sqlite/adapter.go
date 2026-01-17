@@ -1,12 +1,12 @@
 package sqlite
 
 import (
-	"database/sql"
 	"fmt"
 	"path/filepath"
 
 	_ "modernc.org/sqlite"
 
+	"github.com/crueladdict/ori/apps/ori-server/internal/infrastructure/database"
 	"github.com/crueladdict/ori/apps/ori-server/internal/model"
 	"github.com/crueladdict/ori/apps/ori-server/internal/service"
 )
@@ -16,7 +16,7 @@ type Adapter struct {
 	connectionName string
 	config         *model.Configuration
 	dbPath         string
-	db             *sql.DB
+	db             database.DB
 }
 
 // NewAdapter creates a factory that builds SQLite connection adapters

@@ -7,6 +7,7 @@ import (
 
 	"github.com/crueladdict/ori/apps/ori-server/internal/pkg/sqlutil"
 	"github.com/crueladdict/ori/apps/ori-server/internal/service"
+	"github.com/jmoiron/sqlx"
 )
 
 // ExecuteQuery runs a query and returns the result
@@ -24,15 +25,15 @@ func (a *Adapter) ExecuteQuery(ctx context.Context, query string, params any, op
 
 // executeSelect executes a SELECT query
 func (a *Adapter) executeSelect(ctx context.Context, query string, params any, options *service.QueryExecOptions) (*service.QueryResult, error) {
-	var rows *sql.Rows
+	var rows *sqlx.Rows
 	var err error
 
 	// Execute the query with parameters
 	args := toArgs(params)
 	if len(args) > 0 {
-		rows, err = a.db.QueryContext(ctx, query, args...)
+		rows, err = a.db.QueryxContext(ctx, query, args...)
 	} else {
-		rows, err = a.db.QueryContext(ctx, query)
+		rows, err = a.db.QueryxContext(ctx, query)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("query execution failed: %w", err)

@@ -2,13 +2,14 @@ package sqlite
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
+
+	"github.com/crueladdict/ori/apps/ori-server/internal/infrastructure/database/dblogged"
 )
 
 // Connect establishes the database connection
 func (a *Adapter) Connect(ctx context.Context) error {
-	db, err := sql.Open("sqlite", a.dbPath)
+	db, err := dblogged.Open(ctx, "sqlite", a.dbPath)
 	if err != nil {
 		return fmt.Errorf("failed to open sqlite database: %w", err)
 	}

@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/crueladdict/ori/apps/ori-server/internal/events"
+	"github.com/crueladdict/ori/apps/ori-server/internal/pkg/logctx"
 )
 
 var (
@@ -47,8 +48,19 @@ func NewQueryService(connectionService *ConnectionService, eventHub *events.Hub,
 	}
 }
 
+func (qs *QueryService) newJobContext(ctx context.Context) context.Context {
+	jobCtx := qs.rootCtx
+	if jobCtx == nil {
+		jobCtx = context.Background()
+	}
+	for _, attr := range logctx.Attrs(ctx) {
+		jobCtx = logctx.WithAttrs(jobCtx, attr)
+	}
+	return jobCtx
+}
+
 // Exec starts execution of a database query asynchronously
-func (qs *QueryService) Exec(configurationName, jobID, query string, params interface{}, options *QueryExecOptions) (*QueryJob, error) {
+func (qs *QueryService) Exec(ctx context.Context, configurationName, jobID, query string, params interface{}, options *QueryExecOptions) (*QueryJob, error) {
 	jobID = strings.TrimSpace(jobID)
 	if jobID == "" {
 		return nil, fmt.Errorf("job ID cannot be empty")
@@ -86,8 +98,9 @@ func (qs *QueryService) Exec(configurationName, jobID, query string, params inte
 		CreatedAt:         time.Now(),
 	}
 
-	// Create cancellable context for this job
-	jobCtx, cancel := context.WithCancel(qs.rootCtx)
+	// Create cancellable context for this job, independent of request lifecycle
+	jobCtx := qs.newJobContext(ctx)
+	jobCtx, cancel := context.WithCancel(jobCtx)
 	job.Cancel = cancel
 
 	// Store job
@@ -115,7 +128,7 @@ func (qs *QueryService) GetActiveJob(jobID string) (*QueryJob, bool) {
 }
 
 // BuildResultView builds a paginated view of a stored query result
-func (qs *QueryService) BuildResultView(jobID string, limit, offset *int) (*QueryResultView, error) {
+func (qs *QueryService) BuildResultView(ctx context.Context, jobID string, limit, offset *int) (*QueryResultView, error) {
 	result, exists := qs.resultStore.Get(jobID)
 	if !exists {
 		return nil, ErrNotFound
