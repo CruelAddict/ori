@@ -11,6 +11,7 @@ export type EditorPaneViewModel = {
   filePath: Accessor<string>
   onQueryChange: (text: string) => void
   executeQuery: () => Promise<void>
+  cancelQuery: () => Promise<void>
   saveQuery: () => boolean
   isFocused: Accessor<boolean>
   focusSelf: () => void
@@ -42,6 +43,10 @@ export function useEditorPane(options: UseEditorPaneOptions): EditorPaneViewMode
     await queryJobs.executeQuery(options.configurationName(), text)
   }
 
+  const cancelQuery = async () => {
+    await queryJobs.cancelQuery(options.configurationName())
+  }
+
   const saveQuery = (): boolean => {
     const text = queryText()
     return writeConsoleQuery(options.configurationName(), text)
@@ -68,6 +73,7 @@ export function useEditorPane(options: UseEditorPaneOptions): EditorPaneViewMode
     filePath,
     onQueryChange,
     executeQuery,
+    cancelQuery,
     saveQuery,
     isFocused: options.focus.isFocused,
     focusSelf: options.focus.focusSelf,

@@ -61,11 +61,6 @@ export function EditorPanel(props: EditorPanelProps) {
           onUnfocus={handleUnfocus}
           focusSelf={pane.focusSelf}
         />
-        <Show when={pane.isExecuting()}>
-          <box paddingTop={1}>
-            <text fg={paletteValue.warning}>Executing query...</text>
-          </box>
-        </Show>
       </box>
     </KeyScope>
   )

@@ -17,6 +17,7 @@ import (
 var (
 	ErrNotFound         = errors.New("query result not found")
 	ErrJobAlreadyExists = errors.New("query job already exists")
+	ErrJobNotFound      = errors.New("query job not found")
 )
 
 // QueryResultView represents a paginated view of query results
@@ -180,6 +181,26 @@ func (qs *QueryService) BuildResultView(ctx context.Context, jobID string, limit
 	}
 
 	return view, nil
+}
+
+// Cancel cancels a running job.
+func (qs *QueryService) Cancel(jobID string) (*QueryJob, error) {
+	qs.mu.Lock()
+	job, ok := qs.activeJobs[jobID]
+	if !ok {
+		qs.mu.Unlock()
+		return nil, ErrJobNotFound
+	}
+	if job.Status != JobStatusRunning {
+		qs.mu.Unlock()
+		return job, nil
+	}
+	job.Status = JobStatusCanceled
+	cancel := job.Cancel
+	qs.mu.Unlock()
+
+	cancel()
+	return job, nil
 }
 
 // Stop cancels all running jobs

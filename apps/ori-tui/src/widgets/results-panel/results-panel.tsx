@@ -161,7 +161,7 @@ export function ResultsPanel(props: ResultsPanelProps) {
           </Show>
 
           <Show when={job()?.status === "running"}>
-            <text fg={palette().warning}>Query is running...</text>
+            <text fg={palette().text}>Query is running... (Ctrl+G to cancel)</text>
           </Show>
 
           <Show when={job()?.status === "failed"}>

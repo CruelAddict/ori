@@ -17,6 +17,7 @@ export type ConnectionViewActions = {
   toggleResultsVisible: () => void
   onQueryChange: (text: string) => void
   executeQuery: () => Promise<void>
+  cancelQuery: () => Promise<void>
   refreshGraph: () => Promise<void>
   moveFocusLeft: () => void
   moveFocusRight: () => void
@@ -169,6 +170,7 @@ export function useConnectionView(options: UseConnectionViewOptions): Connection
       toggleResultsVisible,
       onQueryChange: editorPane.onQueryChange,
       executeQuery: editorPane.executeQuery,
+      cancelQuery: editorPane.cancelQuery,
       refreshGraph: treePane.refreshGraph,
       moveFocusLeft,
       moveFocusRight,

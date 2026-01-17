@@ -26,6 +26,7 @@ type QueryJobsStoreState = {
 type QueryJobsActions = {
   setQueryText(configurationName: string, text: string): void
   executeQuery(configurationName: string, query: string): Promise<void>
+  cancelQuery(configurationName: string): Promise<void>
   clearQuery(configurationName: string): void
 }
 
@@ -113,6 +114,21 @@ export function QueryJobsStoreProvider(props: QueryJobsStoreProviderProps) {
     }
   }
 
+  const cancelQuery = async (configurationName: string) => {
+    const currentJob = state.jobsByConfiguration[configurationName]
+    if (!currentJob || currentJob.status !== "running") {
+      return
+    }
+
+    try {
+      await api.cancelQuery(currentJob.jobId)
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : String(err)
+      notifyError(errorMessage)
+      logger.error({ err, configurationName, jobId: currentJob.jobId }, "query-jobs-store: cancel failed")
+    }
+  }
+
   const handleQueryJobCompleted = async (event: QueryJobCompletedEvent) => {
     const { jobId, configurationName, status, error, message, stored, durationMs } = event.payload
     logger.debug({ jobId, configurationName, status, stored }, "query-jobs-store: received job completed event")
@@ -175,6 +191,7 @@ export function QueryJobsStoreProvider(props: QueryJobsStoreProviderProps) {
     getQueryText,
     setQueryText,
     executeQuery,
+    cancelQuery,
     clearQuery,
   }
 

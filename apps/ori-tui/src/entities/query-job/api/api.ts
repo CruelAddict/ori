@@ -9,6 +9,7 @@ import { createComponent, createContext, onCleanup, useContext } from "solid-js"
 export type QueryJobsApi = {
   executeQuery(configurationName: string, query: string, jobId: string): Promise<QueryExecResult>
   fetchQueryResult(jobId: string): Promise<QueryResultView>
+  cancelQuery(jobId: string): Promise<void>
   onJobCompleted(listener: (event: QueryJobCompletedEvent) => void): () => void
 }
 
@@ -42,6 +43,15 @@ export function QueryJobsApiProvider(props: QueryJobsApiProviderProps) {
     }
   }
 
+  const cancelQuery = async (jobId: string) => {
+    try {
+      await client.queryCancel(jobId)
+    } catch (err) {
+      logger.error({ err, jobId }, "failed to cancel query")
+      throw err
+    }
+  }
+
   const onJobCompleted = (listener: (event: QueryJobCompletedEvent) => void) => {
     listeners.add(listener)
     return () => {
@@ -70,6 +80,7 @@ export function QueryJobsApiProvider(props: QueryJobsApiProviderProps) {
   const api: QueryJobsApi = {
     executeQuery,
     fetchQueryResult,
+    cancelQuery,
     onJobCompleted,
   }
 

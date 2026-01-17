@@ -69,6 +69,7 @@ export type OriClient = {
     params?: Record<string, unknown>,
   ): Promise<QueryExecResult>
   queryGetResult(jobId: string, limit?: number, offset?: number): Promise<QueryResultView>
+  queryCancel(jobId: string): Promise<void>
   openEventStream(onEvent: (event: ServerEvent) => void): () => void
 }
 
@@ -179,6 +180,14 @@ class RestOriClient implements OriClient {
       truncated: payload.truncated,
       rowsAffected: payload.rowsAffected ?? undefined,
     }
+  }
+
+  async queryCancel(jobId: string): Promise<void> {
+    await this.send<void>({
+      method: "POST",
+      url: "/queries/{jobId}/cancel",
+      path: { jobId },
+    })
   }
 
   openEventStream(onEvent: (event: ServerEvent) => void): () => void {
@@ -301,6 +310,10 @@ class StubOriClient implements OriClient {
       rowCount: 2,
       truncated: false,
     }
+  }
+
+  async queryCancel(): Promise<void> {
+    return
   }
 
   openEventStream(): () => void {

@@ -75,3 +75,24 @@ func (h *Handler) execQuery(w http.ResponseWriter, r *http.Request) {
 		Status: dto.Running,
 	})
 }
+
+func (h *Handler) cancelQuery(w http.ResponseWriter, r *http.Request) {
+	jobID, err := decodePathParam(r, "jobID")
+	if err != nil {
+		respondError(w, http.StatusBadRequest, "invalid_job", err.Error(), nil)
+		return
+	}
+
+	job, err := h.queries.Cancel(jobID)
+	if err != nil {
+		switch {
+		case errors.Is(err, service.ErrJobNotFound):
+			respondError(w, http.StatusNotFound, "job_not_found", err.Error(), nil)
+		default:
+			respondError(w, http.StatusInternalServerError, "query_cancel_failed", err.Error(), nil)
+		}
+		return
+	}
+
+	respondJSON(w, http.StatusAccepted, map[string]string{"status": string(job.Status)})
+}

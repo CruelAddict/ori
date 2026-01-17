@@ -62,6 +62,16 @@ export function ConnectionViewPage(props: ConnectionViewPageProps) {
       preventDefault: true,
     },
     {
+      pattern: "ctrl+g",
+      description: "Cancel running query",
+      handler: () => {
+        void vm.actions.cancelQuery()
+      },
+      enabled: () => vm.editorPane.isExecuting(),
+      preventDefault: true,
+      commandPaletteSection: "Query",
+    },
+    {
       pattern: "h",
       mode: "leader",
       handler: vm.actions.moveFocusLeft,
