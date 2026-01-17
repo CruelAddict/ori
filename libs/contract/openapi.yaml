@@ -382,6 +382,9 @@ components:
           type: integer
         truncated:
           type: boolean
+        rowsAffected:
+          type: integer
+          nullable: true
       required:
         - columns
         - rows

@@ -45,9 +45,10 @@ func (h *Handler) getQueryResult(w http.ResponseWriter, r *http.Request) {
 	}
 
 	respondJSON(w, http.StatusOK, dto.QueryResultResponse{
-		Columns:   columns,
-		Rows:      view.Rows,
-		RowCount:  view.RowCount,
-		Truncated: view.Truncated,
+		Columns:      columns,
+		Rows:         view.Rows,
+		RowCount:     view.RowCount,
+		Truncated:    view.Truncated,
+		RowsAffected: view.RowsAffected,
 	})
 }

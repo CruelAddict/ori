@@ -21,10 +21,11 @@ var (
 
 // QueryResultView represents a paginated view of query results
 type QueryResultView struct {
-	Columns   []QueryColumn `json:"columns"`
-	Rows      [][]any       `json:"rows"`
-	RowCount  int           `json:"rowCount"`
-	Truncated bool          `json:"truncated"`
+	Columns      []QueryColumn `json:"columns"`
+	Rows         [][]any       `json:"rows"`
+	RowCount     int           `json:"rowCount"`
+	Truncated    bool          `json:"truncated"`
+	RowsAffected *int64        `json:"rowsAffected,omitempty"`
 }
 
 // QueryService manages query job execution
@@ -160,16 +161,22 @@ func (qs *QueryService) BuildResultView(ctx context.Context, jobID string, limit
 		end = result.RowCount
 	}
 
-	var paginatedRows [][]any
+	paginatedRows := make([][]any, 0)
 	if start < result.RowCount {
 		paginatedRows = result.Rows[start:end]
 	}
 
+	columns := result.Columns
+	if columns == nil {
+		columns = make([]QueryColumn, 0)
+	}
+
 	view := &QueryResultView{
-		Columns:   result.Columns,
-		Rows:      paginatedRows,
-		RowCount:  result.RowCount,
-		Truncated: result.Truncated,
+		Columns:      columns,
+		Rows:         paginatedRows,
+		RowCount:     result.RowCount,
+		Truncated:    result.Truncated,
+		RowsAffected: result.RowsAffected,
 	}
 
 	return view, nil

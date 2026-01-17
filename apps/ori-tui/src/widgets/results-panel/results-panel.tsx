@@ -28,10 +28,16 @@ export function ResultsPanel(props: ResultsPanelProps) {
   const [selectedCol, setSelectedCol] = createSignal(0)
   const [selectionCount, setSelectionCount] = createSignal(0)
 
+  const resultRows = () => job()?.result?.rows ?? []
+  const resultColumns = () => job()?.result?.columns ?? []
+
   const hasResults = createMemo(() => {
     const current = job()
-    return current?.status === "success" && current?.result && current.result.rows.length > 0
+    return current?.status === "success" && current?.result && resultRows().length > 0
   })
+
+  const hasRowCount = () => (job()?.result?.rowCount ?? 0) > 0
+  const rowsAffected = () => job()?.result?.rowsAffected
 
   const formatCell = (value: unknown, width?: number): string => {
     return value === null || value === undefined ? "NULL" : String(value)
@@ -41,8 +47,8 @@ export function ResultsPanel(props: ResultsPanelProps) {
     const current = job()
     if (!hasResults()) return []
     const result = current!.result
-    const widths = result!.columns.map((column) => column.name.length)
-    for (const row of result!.rows) {
+    const widths = resultColumns().map((column) => column.name.length)
+    for (const row of resultRows()) {
       for (let i = 0; i < row.length; i++) {
         widths[i] = Math.max(widths[i], formatCell(row[i]).length)
       }
@@ -86,7 +92,7 @@ export function ResultsPanel(props: ResultsPanelProps) {
 
   createEffect(() => {
     const current = job()
-    if (!current?.result || current.status !== "success" || current.result.rows.length === 0) {
+    if (!current?.result || current.status !== "success" || resultRows().length === 0) {
       resetSelection()
       return
     }
@@ -105,8 +111,8 @@ export function ResultsPanel(props: ResultsPanelProps) {
     const result = job()?.result
     if (!result) return
 
-    const nextRow = clamp(selectedRow() + rowDelta, 0, result.rows.length - 1)
-    const nextCol = clamp(selectedCol() + colDelta, 0, result.columns.length - 1)
+    const nextRow = clamp(selectedRow() + rowDelta, 0, resultRows().length - 1)
+    const nextCol = clamp(selectedCol() + colDelta, 0, resultColumns().length - 1)
 
     setSelectedRow(nextRow)
     setSelectedCol(nextCol)
@@ -175,7 +181,7 @@ export function ResultsPanel(props: ResultsPanelProps) {
               <box
                 flexDirection="row"
               >
-                <For each={job()?.result?.columns}>
+                <For each={resultColumns()}>
                   {(column, index) => (
                     <>
                       <Show when={index() > 0}>
@@ -213,7 +219,7 @@ export function ResultsPanel(props: ResultsPanelProps) {
                 onMouseDown={pane.focusSelf}
               >
                 <box flexDirection="column">
-                  <For each={job()?.result?.rows}>
+                  <For each={resultRows()}>
                     {(row, rowIndex) => (
                       <box
                         flexDirection="row"
@@ -228,7 +234,7 @@ export function ResultsPanel(props: ResultsPanelProps) {
                         <For each={row}>
                           {(cell, colIndex) => {
                             const isSelected = () => {
-                              return isActive() && selectedRow() == rowIndex() && selectedCol() == colIndex()
+                              return isActive() && selectedRow() === rowIndex() && selectedCol() === colIndex()
                             }
                             return (
                               <>
@@ -271,6 +277,7 @@ export function ResultsPanel(props: ResultsPanelProps) {
               </scrollbox>
             </box>
           </Show>
+
           <box
             height={1}
             flexDirection="row"
@@ -280,19 +287,20 @@ export function ResultsPanel(props: ResultsPanelProps) {
             paddingRight={3}
           >
             <Show when={hasResults() && pane.isFocused()}>
-              <text fg={palette().textMuted}>{`row ${selectedRow() + 1} / ${job()?.result?.rows.length}`}</text>
+              <text fg={palette().textMuted}>{`row ${selectedRow() + 1} / ${resultRows().length}`}</text>
             </Show>
           </box>
 
           <Show when={job()?.status === "success" && !hasResults()}>
             <text
               attributes={TextAttributes.DIM}
-              fg={palette().textMuted}
             >
-              Query completed successfully with no results
-              {job()?.durationMs ? ` (${job()?.durationMs}ms)` : ""}
+              Query completed successfully in
+              {job()?.durationMs ? ` ${job()?.durationMs}ms` : ""}
+              {rowsAffected() !== undefined ? `; ${rowsAffected()} rows affected` : ""}
             </text>
           </Show>
+
         </box>
       </KeyScope>
     </Show>

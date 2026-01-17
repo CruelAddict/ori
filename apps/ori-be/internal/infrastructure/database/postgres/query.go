@@ -16,8 +16,8 @@ func (a *Adapter) ExecuteQuery(ctx context.Context, query string, params any, op
 		return nil, fmt.Errorf("database not connected")
 	}
 
-	// Check if it's a SELECT query or other statement
-	if sqlutil.IsSQLSelectQuery(query) {
+	// Check if the query returns rows or is a statement
+	if sqlutil.IsRowReturningQuery(query) {
 		return a.executeSelect(ctx, query, params, options)
 	}
 	return a.executeStatement(ctx, query, params)

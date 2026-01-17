@@ -55,6 +55,7 @@ export type QueryResultView = {
   rows: unknown[][]
   rowCount: number
   truncated: boolean
+  rowsAffected?: number | null
 }
 
 export type OriClient = {
@@ -176,6 +177,7 @@ class RestOriClient implements OriClient {
       rows: payload.rows,
       rowCount: payload.rowCount,
       truncated: payload.truncated,
+      rowsAffected: payload.rowsAffected ?? undefined,
     }
   }
 

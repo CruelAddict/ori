@@ -164,10 +164,11 @@ type QueryResultColumn struct {
 
 // QueryResultResponse defines model for QueryResultResponse.
 type QueryResultResponse struct {
-	Columns   []QueryResultColumn `json:"columns"`
-	RowCount  int                 `json:"rowCount"`
-	Rows      [][]interface{}     `json:"rows"`
-	Truncated bool                `json:"truncated"`
+	Columns      []QueryResultColumn `json:"columns"`
+	RowCount     int                 `json:"rowCount"`
+	Rows         [][]interface{}     `json:"rows"`
+	Truncated    bool                `json:"truncated"`
+	RowsAffected *int64              `json:"rowsAffected,omitempty"`
 }
 
 // ErrorResponse defines model for ErrorResponse.

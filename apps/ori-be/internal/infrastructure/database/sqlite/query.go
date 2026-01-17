@@ -30,8 +30,8 @@ func (a *Adapter) ExecuteQuery(ctx context.Context, query string, params any, op
 		}()
 	}
 
-	// Check if it's a SELECT query or other statement
-	if sqlutil.IsSQLSelectQuery(query) {
+	// Check if the query returns rows or is a statement
+	if sqlutil.IsRowReturningQuery(query) {
 		return a.executeSelect(ctx, stmt, query, params, options)
 	}
 	return a.executeStatement(ctx, stmt, query, params)

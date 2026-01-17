@@ -8,5 +8,6 @@ export type QueryResultResponse = {
     rows: Array<Array<any>>;
     rowCount: number;
     truncated: boolean;
+    rowsAffected?: number | null;
 };
 

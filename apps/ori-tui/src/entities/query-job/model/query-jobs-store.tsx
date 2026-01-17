@@ -188,8 +188,12 @@ function formatSuccessNotification(result?: QueryResultView, durationMs?: number
     const durationText = ` in ${durationMs}ms`
     return `${rowsText}${truncatedText}${durationText}`
   }
+  if (result?.rowsAffected !== undefined) {
+    const durationText = durationMs ? ` in ${durationMs}ms` : ""
+    return `${result.rowsAffected} row${result.rowsAffected === 1 ? "" : "s"} affected${durationText}`
+  }
   const durationText = durationMs ? ` (${durationMs}ms)` : ""
-  return `${durationText}`
+  return `Query completed successfully${durationText}`
 }
 
 function resolveCompletedStatus(status: string): QueryJob["status"] {
