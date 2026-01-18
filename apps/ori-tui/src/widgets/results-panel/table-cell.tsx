@@ -52,16 +52,17 @@ export class TableCellRenderable extends BoxRenderable {
     const height = renderableOptions.height ?? 1
     const minHeight = renderableOptions.minHeight ?? 1
     super(ctx, { ...renderableOptions, height, minHeight } as BoxOptions)
-    this.valueText = value ?? ""
-    this.displayText = display ?? ""
-    this.textColor = fg ? parseColor(fg) : undefined
-    this.textAttributes = attributes
-    this.alignment = align ?? "left"
-    this.paddingLeftValue = paddingLeft ?? 0
-    this.paddingRightValue = paddingRight ?? 0
-    this.selectionColor = selectionBg ? parseColor(selectionBg) : undefined
+    this.value = value ?? ""
+    this.display = display
+    this.fg = fg
+    this.attributes = attributes
+    this.align = align
+    this.selectionBg = selectionBg
+    this.paddingLeft = paddingLeft ?? 1
+    this.paddingRight = paddingRight ?? 1
     this.onSelectionChange = onSelectionChange
   }
+
 
   set value(value: string) {
     if (this.valueText === value) return
@@ -102,6 +103,28 @@ export class TableCellRenderable extends BoxRenderable {
     if (this.selected) {
       this.requestRender()
     }
+  }
+
+  set paddingLeft(value: number | undefined) {
+    const next = value ?? 1
+    if (this.paddingLeftValue === next) return
+    this.paddingLeftValue = next
+    this.requestRender()
+  }
+
+  set paddingRight(value: number | undefined) {
+    const next = value ?? 1
+    if (this.paddingRightValue === next) return
+    this.paddingRightValue = next
+    this.requestRender()
+  }
+
+  set bg(value: string | RGBA | undefined) {
+    if (value === undefined) {
+      this.backgroundColor = "transparent"
+      return
+    }
+    this.backgroundColor = value
   }
 
   shouldStartSelection(x: number, y: number) {

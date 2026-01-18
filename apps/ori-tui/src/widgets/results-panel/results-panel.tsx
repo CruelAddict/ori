@@ -24,8 +24,8 @@ export function ResultsPanel(props: ResultsPanelProps) {
   let scrollRef: ScrollBoxRenderable | undefined
   const rowRenderables = new Map<number, BoxRenderable>()
 
-  const [selectedRow, setSelectedRow] = createSignal(0)
-  const [selectedCol, setSelectedCol] = createSignal(0)
+  const [cursorRow, setCursorRow] = createSignal(0)
+  const [cursorCol, setCursorCol] = createSignal(0)
   const [selectionCount, setSelectionCount] = createSignal(0)
 
   const resultRows = () => job()?.result?.rows ?? []
@@ -36,7 +36,6 @@ export function ResultsPanel(props: ResultsPanelProps) {
     return current?.status === "success" && current?.result && resultRows().length > 0
   })
 
-  const hasRowCount = () => (job()?.result?.rowCount ?? 0) > 0
   const rowsAffected = () => job()?.result?.rowsAffected
 
   const formatCell = (value: unknown, width?: number): string => {
@@ -44,9 +43,7 @@ export function ResultsPanel(props: ResultsPanelProps) {
   }
 
   const columnWidths = createMemo(() => {
-    const current = job()
     if (!hasResults()) return []
-    const result = current!.result
     const widths = resultColumns().map((column) => column.name.length)
     for (const row of resultRows()) {
       for (let i = 0; i < row.length; i++) {
@@ -84,9 +81,23 @@ export function ResultsPanel(props: ResultsPanelProps) {
     setSelectionCount((count) => Math.max(0, count + (selected ? 1 : -1)))
   }
 
+  const SeparatorCell = (props: { selectionBg: string; bg?: string; fg?: string }) => (
+    <table_cell
+      width={1}
+      display="│"
+      fg={props.fg ?? palette().backgroundElement}
+      backgroundColor={props.bg}
+      attributes={TextAttributes.BOLD}
+      selectionBg={props.selectionBg}
+      paddingLeft={0}
+      paddingRight={0}
+      onSelectionChange={handleSelectionChange}
+    />
+  )
+
   const resetSelection = () => {
-    setSelectedRow(0)
-    setSelectedCol(0)
+    setCursorRow(0)
+    setCursorCol(0)
     setSelectionCount(0)
   }
 
@@ -99,7 +110,7 @@ export function ResultsPanel(props: ResultsPanelProps) {
   })
 
   createEffect(() => {
-    ensureRowVisible(selectedRow())
+    ensureRowVisible(cursorRow())
   })
 
   const moveSelection = (rowDelta: number, colDelta: number, event?: KeyEvent) => {
@@ -111,11 +122,11 @@ export function ResultsPanel(props: ResultsPanelProps) {
     const result = job()?.result
     if (!result) return
 
-    const nextRow = clamp(selectedRow() + rowDelta, 0, resultRows().length - 1)
-    const nextCol = clamp(selectedCol() + colDelta, 0, resultColumns().length - 1)
+    const nextRow = clamp(cursorRow() + rowDelta, 0, resultRows().length - 1)
+    const nextCol = clamp(cursorCol() + colDelta, 0, resultColumns().length - 1)
 
-    setSelectedRow(nextRow)
-    setSelectedCol(nextCol)
+    setCursorRow(nextRow)
+    setCursorCol(nextCol)
     ensureRowVisible(nextRow)
   }
 
@@ -133,8 +144,8 @@ export function ResultsPanel(props: ResultsPanelProps) {
   const handleCellMouseDown = (rowIndex: number, colIndex: number, event: MouseEvent) => {
     pane.focusSelf()
     event.preventDefault()
-    setSelectedRow(rowIndex)
-    setSelectedCol(colIndex)
+    setCursorRow(rowIndex)
+    setCursorCol(colIndex)
     ensureRowVisible(rowIndex)
   }
 
@@ -178,29 +189,30 @@ export function ResultsPanel(props: ResultsPanelProps) {
               onMouseDown={pane.focusSelf}
               paddingRight={1}
             >
+              {/* Header */}
               <box
                 flexDirection="row"
               >
+                <SeparatorCell
+                  fg={palette().backgroundPanel}
+                  bg={palette().backgroundElement}
+                  selectionBg={palette().backgroundElement}
+                />
                 <For each={resultColumns()}>
                   {(column, index) => (
                     <>
-                      <Show when={index() > 0}>
-                        <table_cell
-                          width={1}
-                          display="│"
-                          fg={palette().textMuted}
-                          attributes={TextAttributes.DIM}
+                      {index() > 0 && (
+                        <SeparatorCell
+                          fg={palette().backgroundPanel}
+                          bg={palette().backgroundElement}
                           selectionBg={palette().backgroundElement}
-                          value=""
-                          onSelectionChange={handleSelectionChange}
                         />
-                      </Show>
+                      )}
 
                       <table_cell
-                        paddingLeft={1}
-                        paddingRight={1}
                         width={columnWidths()[index()] + 2}
                         display={formatCell(column.name, columnWidths()[index()])}
+                        backgroundColor={palette().backgroundElement}
                         fg={palette().accent}
                         attributes={TextAttributes.BOLD}
                         selectionBg={palette().backgroundElement}
@@ -210,7 +222,13 @@ export function ResultsPanel(props: ResultsPanelProps) {
                     </>
                   )}
                 </For>
+                <SeparatorCell
+                  fg={palette().backgroundPanel}
+                  bg={palette().backgroundElement}
+                  selectionBg={palette().backgroundElement}
+                />
               </box>
+              { /* Rows */}
               <scrollbox
                 ref={(node: ScrollBoxRenderable | undefined) => {
                   scrollRef = node ?? undefined
@@ -233,26 +251,21 @@ export function ResultsPanel(props: ResultsPanelProps) {
                       >
                         <For each={row}>
                           {(cell, colIndex) => {
-                            const isSelected = () => {
-                              return isActive() && selectedRow() === rowIndex() && selectedCol() === colIndex()
+                            const isCursorOn = () => {
+                              return isActive() && cursorRow() === rowIndex() && cursorCol() === colIndex()
+                            }
+                            const rowBg = () => {
+                              if (isCursorOn()) {
+                                return palette().primary
+                              }
+
+                              return undefined
                             }
                             return (
                               <>
-                                <Show when={colIndex() > 0}>
-                                  <table_cell
-                                    width={1}
-                                    display="│"
-                                    fg={palette().textMuted}
-                                    attributes={TextAttributes.DIM}
-                                    selectionBg={palette().backgroundElement}
-                                    value=""
-                                    onSelectionChange={handleSelectionChange}
-                                  />
-                                </Show>
+                                <SeparatorCell selectionBg={palette().backgroundElement} />
                                 <table_cell
-                                  backgroundColor={isSelected() ? palette().primary : undefined}
-                                  paddingLeft={1}
-                                  paddingRight={1}
+                                  backgroundColor={rowBg()}
                                   flexDirection="row"
                                   width={columnWidths()[colIndex()] + 2}
                                   align={typeof cell === "number" ? "right" : "left"}
@@ -262,14 +275,18 @@ export function ResultsPanel(props: ResultsPanelProps) {
                                   selectionBg={palette().backgroundElement}
                                   value={String(cell)}
                                   display={formatCell(cell, columnWidths()[colIndex()])}
-                                  fg={isSelected() && !hasSelection() ? palette().background : palette().text}
+                                  fg={isCursorOn() && !hasSelection() ? palette().background : palette().text}
                                   onSelectionChange={handleSelectionChange}
                                 />
-
+                                {colIndex() === row.length - 1 && <SeparatorCell
+                                  bg={rowBg()}
+                                  selectionBg={palette().backgroundElement}
+                                />}
                               </>
                             )
                           }}
                         </For>
+
                       </box>
                     )}
                   </For>
@@ -287,7 +304,7 @@ export function ResultsPanel(props: ResultsPanelProps) {
             paddingRight={3}
           >
             <Show when={hasResults() && pane.isFocused()}>
-              <text fg={palette().textMuted}>{`row ${selectedRow() + 1} / ${resultRows().length}`}</text>
+              <text fg={palette().textMuted}>{`row ${cursorRow() + 1} / ${resultRows().length}`}</text>
             </Show>
           </box>
 
