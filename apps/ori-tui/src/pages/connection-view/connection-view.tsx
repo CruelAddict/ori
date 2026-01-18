@@ -142,7 +142,6 @@ export function ConnectionViewPage(props: ConnectionViewPageProps) {
               flexDirection="column"
               flexGrow={1}
               marginLeft={vm.treePane.visible() ? 1 : 0}
-              zIndex={2}
               justifyContent="space-between"
             >
               <Show
