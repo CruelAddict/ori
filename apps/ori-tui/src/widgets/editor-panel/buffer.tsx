@@ -1,6 +1,6 @@
 import { useLogger } from "@app/providers/logger"
 import { useTheme } from "@app/providers/theme"
-import type { BoxRenderable, KeyEvent, MouseEvent, ScrollBoxRenderable, TextareaRenderable } from "@opentui/core"
+import { type BoxRenderable, KeyEvent, MouseEvent, ScrollBoxRenderable, TextareaRenderable } from "@opentui/core"
 import { type KeyBinding, KeyScope } from "@src/core/services/key-scopes"
 import { type Accessor, createEffect, createMemo, For, onCleanup, onMount, Show } from "solid-js"
 import { syntaxHighlighter } from "../../features/syntax-highlighting/syntax-highlighter"
@@ -104,12 +104,13 @@ export function Buffer(props: BufferProps) {
   })
 
   const focusLineEnd = (index: number) => {
-    const line = bufferModel.lines()[index]
-    if (!line) {
+    const lineRef = bufferModel.getLineRef?.(index)
+    if (!lineRef) {
       return
     }
+    const eolCol = lineRef.editorView.getVisualEOL().logicalCol
     bufferModel.setFocusedRow(index)
-    bufferModel.setNavColumn(line.text.length)
+    bufferModel.setNavColumn(eolCol)
     bufferModel.focusCurrent()
   }
 
@@ -205,7 +206,9 @@ export function Buffer(props: BufferProps) {
       pattern: "right",
       handler: withCursor((ctx, event) => {
         bufferModel.setNavColumn(ctx.cursorCol)
-        const atEnd = ctx.cursorCol === ctx.text.length && ctx.cursorRow === 0
+        const lineRef = bufferModel.getLineRef?.(ctx.index)
+        const eolCol = lineRef?.editorView.getVisualEOL().logicalCol ?? ctx.cursorCol
+        const atEnd = ctx.cursorCol === eolCol && ctx.cursorRow === 0
         if (atEnd) {
           event.preventDefault()
           bufferModel.handleHorizontalJump(ctx.index, false)
@@ -228,7 +231,9 @@ export function Buffer(props: BufferProps) {
       pattern: "delete",
       handler: withCursor((ctx, event) => {
         bufferModel.setNavColumn(ctx.cursorCol)
-        const atEnd = ctx.cursorCol === ctx.text.length && ctx.cursorRow === 0
+        const lineRef = bufferModel.getLineRef?.(ctx.index)
+        const eolCol = lineRef?.editorView.getVisualEOL().logicalCol ?? ctx.cursorCol
+        const atEnd = ctx.cursorCol === eolCol && ctx.cursorRow === 0
         if (atEnd) {
           event.preventDefault()
           bufferModel.handleForwardMerge(ctx.index)
@@ -263,7 +268,9 @@ export function Buffer(props: BufferProps) {
       pattern: "ctrl+d",
       handler: withCursor((ctx, event) => {
         bufferModel.setNavColumn(ctx.cursorCol)
-        const atEnd = ctx.cursorCol === ctx.text.length && ctx.cursorRow === 0
+        const lineRef = bufferModel.getLineRef?.(ctx.index)
+        const eolCol = lineRef?.editorView.getVisualEOL().logicalCol ?? ctx.cursorCol
+        const atEnd = ctx.cursorCol === eolCol && ctx.cursorRow === 0
         if (atEnd) {
           event.preventDefault()
           bufferModel.handleForwardMerge(ctx.index)

@@ -1,4 +1,4 @@
-import type { TextareaRenderable } from "@opentui/core"
+import { resolveRenderLib, type TextareaRenderable, type WidthMethod } from "@opentui/core"
 import { debounce } from "@shared/lib/debounce"
 import type { Logger } from "pino"
 import { type Accessor, createEffect, createSignal, on } from "solid-js"
@@ -7,6 +7,44 @@ import type { SyntaxHighlightResult } from "../../features/syntax-highlighting/s
 import { applySyntaxHighlights } from "./sql-highlighter"
 
 const DEBOUNCE_DEFAULT_MS = 20
+let cachedWidthMethod: WidthMethod | undefined
+
+function extractWidthMethod(ref: TextareaRenderable | undefined): void {
+  if (ref?.ctx?.widthMethod) {
+    cachedWidthMethod = ref.ctx.widthMethod
+  }
+}
+
+function widthMethod(): WidthMethod {
+  return cachedWidthMethod ?? "unicode"
+}
+
+
+function toDisplayColumn(text: string, column: number): number {
+  if (column <= 0) {
+    return 0
+  }
+  const end = Math.min(column, text.length)
+  const prefix = text.slice(0, end)
+  if (!prefix) {
+    return 0
+  }
+  const renderLib = resolveRenderLib()
+  const encoded = renderLib.encodeUnicode(prefix, widthMethod())
+  if (!encoded) {
+    return 0
+  }
+  let width = 0
+  for (const entry of encoded.data) {
+    width += entry.width
+  }
+  renderLib.freeUnicode(encoded)
+  return width
+}
+
+function lineDisplayWidth(text: string): number {
+  return toDisplayColumn(text, text.length)
+}
 
 export type CursorContext = {
   index: number
@@ -105,8 +143,13 @@ export function createBufferModel(options: BufferModelOptions) {
       if (start.line !== end.line) {
         continue
       }
+      const lineText = state.lines[start.line]?.text ?? ""
       const spans = highlightSpansByLine.get(start.line) ?? []
-      spans.push({ start: start.col, end: end.col, styleId: span.styleId })
+      spans.push({
+        start: toDisplayColumn(lineText, start.col),
+        end: toDisplayColumn(lineText, end.col),
+        styleId: span.styleId,
+      })
       highlightSpansByLine.set(start.line, spans)
     }
 
@@ -123,9 +166,13 @@ export function createBufferModel(options: BufferModelOptions) {
       return
     }
     lineRefs.set(lineId, ref)
+    if (!cachedWidthMethod) {
+      extractWidthMethod(ref)
+      requestHighlights()
+    }
   }
 
-  const getTextArea = (index: number) => {
+  const getLineRef = (index: number) => {
     const line = state.lines[index]
     if (!line) {
       return undefined
@@ -143,7 +190,7 @@ export function createBufferModel(options: BufferModelOptions) {
         spansByLine,
         syntaxStyle: highlight.syntaxStyle,
         lineCount: state.lines.length,
-        getLineRef: getTextArea,
+        getLineRef: getLineRef,
       })
     }),
   )
@@ -163,6 +210,14 @@ export function createBufferModel(options: BufferModelOptions) {
       return ""
     }
     return line.text
+  }
+
+  const getLineDisplayWidth = (index: number): number => {
+    const ref = getLineRef(index)
+    if (ref) {
+      return ref.editorView.getVisualEOL().logicalCol
+    }
+    return lineDisplayWidth(getLineText(index))
   }
 
   const emitPush = () => {
@@ -189,7 +244,7 @@ export function createBufferModel(options: BufferModelOptions) {
   }
 
   const focusLine = (index: number, column: number) => {
-    const node = getTextArea(index)
+    const node = getLineRef(index)
     if (!node) {
       return
     }
@@ -197,14 +252,14 @@ export function createBufferModel(options: BufferModelOptions) {
       return
     }
     node.focus()
-    const targetCol = Math.min(column, node.plainText.length)
+    const targetCol = Math.min(column, getLineDisplayWidth(index))
     node.editBuffer.setCursorToLineCol(0, targetCol)
     setFocusedRow(index)
   }
 
   const clampFocus = (lines: Line[] = state.lines) => {
     const targetRow = Math.min(focusedRow(), Math.max(0, lines.length - 1))
-    const targetCol = Math.min(navColumn(), lines[targetRow]?.text.length ?? 0)
+    const targetCol = Math.min(navColumn(), getLineDisplayWidth(targetRow))
     setFocusedRow(targetRow)
     setNavColumn(targetCol)
     queueMicrotask(() => focusLine(targetRow, targetCol))
@@ -223,7 +278,7 @@ export function createBufferModel(options: BufferModelOptions) {
   }
 
   const handleFocusChange = (isFocused: boolean) => {
-    const target = getTextArea(focusedRow())
+    const target = getLineRef(focusedRow())
     if (!target) {
       return
     }
@@ -236,7 +291,7 @@ export function createBufferModel(options: BufferModelOptions) {
 
   const getCursorContext = (): CursorContext | undefined => {
     const index = focusedRow()
-    const node = getTextArea(index)
+    const node = getLineRef(index)
     if (!node) {
       return undefined
     }
@@ -267,7 +322,7 @@ export function createBufferModel(options: BufferModelOptions) {
     syncRefsWithLines(state.lines)
     setState("contentModified", true)
     const targetIndex = index + tail.length
-    const targetCol = tail[tail.length - 1]?.length ?? head.length
+    const targetCol = getLineDisplayWidth(targetIndex)
     setFocusedRow(targetIndex)
     setNavColumn(targetCol)
     schedulePush()
@@ -281,7 +336,7 @@ export function createBufferModel(options: BufferModelOptions) {
   }
 
   const handleTextAreaChange = (index: number) => {
-    const node = getTextArea(index)
+    const node = getLineRef(index)
     const line = state.lines[index]
     if (!node || !line) {
       return
@@ -307,7 +362,7 @@ export function createBufferModel(options: BufferModelOptions) {
   }
 
   const handleEnter = (index: number) => {
-    const node = getTextArea(index)
+    const node = getLineRef(index)
     if (!node) {
       return
     }
@@ -354,7 +409,7 @@ export function createBufferModel(options: BufferModelOptions) {
     })
     syncRefsWithLines(state.lines)
     setState("contentModified", true)
-    const newCol = prevText.length
+    const newCol = getLineDisplayWidth(prevIndex)
     setFocusedRow(prevIndex)
     setNavColumn(newCol)
     schedulePush()
@@ -381,7 +436,7 @@ export function createBufferModel(options: BufferModelOptions) {
     })
     syncRefsWithLines(state.lines)
     setState("contentModified", true)
-    const newCol = currentText.length
+    const newCol = getLineDisplayWidth(index)
     setFocusedRow(index)
     setNavColumn(newCol)
     schedulePush()
@@ -394,7 +449,7 @@ export function createBufferModel(options: BufferModelOptions) {
     if (targetLine === undefined) {
       return
     }
-    const targetCol = Math.min(navColumn(), getLineText(targetIndex).length)
+    const targetCol = Math.min(navColumn(), getLineDisplayWidth(targetIndex))
     setFocusedRow(targetIndex)
     setNavColumn(targetCol)
     queueMicrotask(() => focusLine(targetIndex, targetCol))
@@ -406,8 +461,7 @@ export function createBufferModel(options: BufferModelOptions) {
       if (targetIndex < 0) {
         return
       }
-      const targetText = getLineText(targetIndex)
-      const targetCol = targetText.length
+      const targetCol = getLineDisplayWidth(targetIndex)
       setNavColumn(targetCol)
       setFocusedRow(targetIndex)
       queueMicrotask(() => focusLine(targetIndex, targetCol))
@@ -432,6 +486,7 @@ export function createBufferModel(options: BufferModelOptions) {
     focusedRow,
     navColumn,
     setLineRef,
+    getLineRef,
     setFocusedRow,
     setNavColumn,
     setText,
