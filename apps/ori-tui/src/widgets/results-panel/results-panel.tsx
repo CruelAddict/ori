@@ -7,9 +7,10 @@ import {
   TextAttributes,
 } from "@opentui/core"
 import "./table-cell"
+import { setSelectionOverride } from "@shared/lib/clipboard"
 import { type KeyBinding, KeyScope } from "@src/core/services/key-scopes"
 import type { ResultsPaneViewModel } from "@src/features/results-pane/use-results-pane"
-import { createEffect, createMemo, createSignal, For, Show } from "solid-js"
+import { createEffect, createMemo, createSignal, For, onCleanup, Show } from "solid-js"
 
 export type ResultsPanelProps = {
   viewModel: ResultsPaneViewModel
@@ -27,6 +28,9 @@ export function ResultsPanel(props: ResultsPanelProps) {
   const [cursorRow, setCursorRow] = createSignal(0)
   const [cursorCol, setCursorCol] = createSignal(0)
   const [selectionCount, setSelectionCount] = createSignal(0)
+
+  const selectedHeaderCols = new Set<number>()
+  const selectedRowCols = new Map<number, Set<number>>()
 
   const resultRows = () => job()?.result?.rows ?? []
   const resultColumns = () => job()?.result?.columns ?? []
@@ -77,8 +81,64 @@ export function ResultsPanel(props: ResultsPanelProps) {
   const isActive = () => pane.isFocused()
   const hasSelection = () => selectionCount() > 0
 
-  const handleSelectionChange = (selected: boolean) => {
+  const handleHeaderSelectionChange = (colIndex: number, selected: boolean) => {
+    if (selected) {
+      selectedHeaderCols.add(colIndex)
+    } else {
+      selectedHeaderCols.delete(colIndex)
+    }
     setSelectionCount((count) => Math.max(0, count + (selected ? 1 : -1)))
+  }
+
+  const handleRowSelectionChange = (rowIndex: number, colIndex: number, selected: boolean) => {
+    if (selected) {
+      let rowSelection = selectedRowCols.get(rowIndex)
+      if (!rowSelection) {
+        rowSelection = new Set()
+        selectedRowCols.set(rowIndex, rowSelection)
+      }
+      rowSelection.add(colIndex)
+    } else {
+      const rowSelection = selectedRowCols.get(rowIndex)
+      rowSelection?.delete(colIndex)
+      if (rowSelection && rowSelection.size === 0) {
+        selectedRowCols.delete(rowIndex)
+      }
+    }
+    setSelectionCount((count) => Math.max(0, count + (selected ? 1 : -1)))
+  }
+
+  const buildSelectedTsv = (): string | undefined => {
+    if (selectedHeaderCols.size === 0 && selectedRowCols.size === 0) {
+      return
+    }
+    const columnIndexes = resultColumns()
+      .map((_, index) => index)
+      .filter((index) => {
+        if (selectedHeaderCols.has(index)) return true
+        for (const cols of selectedRowCols.values()) {
+          if (cols.has(index)) return true
+        }
+        return false
+      })
+    if (columnIndexes.length === 0) {
+      return
+    }
+    const lines: string[] = []
+    if (selectedHeaderCols.size > 0) {
+      const header = columnIndexes.map((index) => String(resultColumns()[index]?.name ?? "")).join("\t")
+      lines.push(header)
+    }
+    const rowIndexes = Array.from(selectedRowCols.keys()).sort((a, b) => a - b)
+    for (const rowIndex of rowIndexes) {
+      const row = resultRows()[rowIndex] ?? []
+      const line = columnIndexes.map((colIndex) => String(row[colIndex])).join("\t")
+      lines.push(line)
+    }
+    if (lines.length === 0) {
+      return
+    }
+    return lines.join("\n")
   }
 
   const SeparatorCell = (props: { selectionBg: string; bg?: string; fg?: string }) => (
@@ -91,7 +151,6 @@ export function ResultsPanel(props: ResultsPanelProps) {
       selectionBg={props.selectionBg}
       paddingLeft={0}
       paddingRight={0}
-      onSelectionChange={handleSelectionChange}
     />
   )
 
@@ -99,6 +158,8 @@ export function ResultsPanel(props: ResultsPanelProps) {
     setCursorRow(0)
     setCursorCol(0)
     setSelectionCount(0)
+    selectedHeaderCols.clear()
+    selectedRowCols.clear()
   }
 
   createEffect(() => {
@@ -111,6 +172,11 @@ export function ResultsPanel(props: ResultsPanelProps) {
 
   createEffect(() => {
     ensureRowVisible(cursorRow())
+  })
+
+  setSelectionOverride(() => buildSelectedTsv())
+  onCleanup(() => {
+    setSelectionOverride()
   })
 
   const moveSelection = (rowDelta: number, colDelta: number, event?: KeyEvent) => {
@@ -217,8 +283,11 @@ export function ResultsPanel(props: ResultsPanelProps) {
                         attributes={TextAttributes.BOLD}
                         selectionBg={palette().backgroundElement}
                         value={String(column.name)}
-                        onSelectionChange={handleSelectionChange}
+                        onSelectionChange={(selected: boolean) =>
+                          handleHeaderSelectionChange(index(), selected)
+                        }
                       />
+
                     </>
                   )}
                 </For>
@@ -276,7 +345,9 @@ export function ResultsPanel(props: ResultsPanelProps) {
                                   value={String(cell)}
                                   display={formatCell(cell, columnWidths()[colIndex()])}
                                   fg={isCursorOn() && !hasSelection() ? palette().background : palette().text}
-                                  onSelectionChange={handleSelectionChange}
+                                  onSelectionChange={(selected: boolean) =>
+                                    handleRowSelectionChange(rowIndex(), colIndex(), selected)
+                                  }
                                 />
                                 {colIndex() === row.length - 1 && <SeparatorCell
                                   bg={rowBg()}

@@ -8,8 +8,7 @@ import { ThemeProvider, useTheme } from "@app/providers/theme"
 import { RouteOutlet } from "@app/routes/RouteOutlet"
 import { useRouteNavigation } from "@app/routes/router"
 import { render, useRenderer } from "@opentui/solid"
-import { installScrollboxHitTest } from "./scrollbox-hit-test"
-import { copyTextToClipboard } from "@shared/lib/clipboard"
+import { copyTextToClipboard, getSelectionOverrideText } from "@shared/lib/clipboard"
 import type { ClientMode } from "@shared/lib/configurations-client"
 import type { LogLevel } from "@shared/lib/logger"
 import { KeymapProvider, KeyScope, SYSTEM_LAYER } from "@src/core/services/key-scopes"
@@ -67,7 +66,9 @@ function App() {
   })
 
   const handleMouseUp = async () => {
-    const text = renderer.getSelection?.()?.getSelectedText?.()
+    const overrideText = getSelectionOverrideText()
+    const selectionText = renderer.getSelection?.()?.getSelectedText?.()
+    const text = overrideText ?? selectionText
     if (!text || text.length === 0) {
       return
     }

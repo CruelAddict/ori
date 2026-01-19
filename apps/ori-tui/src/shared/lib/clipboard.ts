@@ -5,6 +5,18 @@ export type RendererLike = {
   writeOut?: (data: string) => void
 }
 
+type SelectionOverride = () => string | undefined
+
+let selectionOverride: SelectionOverride | undefined
+
+export function setSelectionOverride(provider?: SelectionOverride) {
+  selectionOverride = provider
+}
+
+export function getSelectionOverrideText(): string | undefined {
+  return selectionOverride?.()
+}
+
 const hasBunRuntime = typeof Bun !== "undefined"
 
 function buildOsc52Payload(text: string): string {
