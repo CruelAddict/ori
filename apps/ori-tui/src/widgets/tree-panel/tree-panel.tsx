@@ -124,10 +124,7 @@ export function TreePanel(props: TreePanelProps) {
             flexDirection="column"
             flexGrow={1}
             height="100%"
-            border={["right"]}
-            borderColor={theme().backgroundElement}
             onMouseDown={handleEmptySpaceClick}
-            borderStyle="heavy"
           >
             <Show when={pane.loading()}>
               <text fg={theme().text}>Loading schema graph...</text>

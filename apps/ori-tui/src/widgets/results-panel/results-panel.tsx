@@ -224,8 +224,6 @@ export function ResultsPanel(props: ResultsPanelProps) {
         <box
           flexDirection="column"
           flexGrow={1}
-          border={["top"]}
-          borderColor={palette().backgroundElement}
           justifyContent="space-between"
         >
           <Show when={!job()}>
