@@ -2,10 +2,9 @@ import { useLogger } from "@app/providers/logger"
 import { useTheme } from "@app/providers/theme"
 import { type BoxRenderable, KeyEvent, MouseEvent, ScrollBoxRenderable, TextareaRenderable } from "@opentui/core"
 import { type KeyBinding, KeyScope } from "@src/core/services/key-scopes"
-import { type Accessor, createEffect, createMemo, For, on, onCleanup, onMount, Show, untrack } from "solid-js"
+import { type Accessor, createEffect, For, on, onCleanup, onMount, Show, untrack } from "solid-js"
 import { syntaxHighlighter } from "../../features/syntax-highlighting/syntax-highlighter"
-import { buildLineStarts, type CursorContext, createBufferModel } from "./buffer-model"
-import { collectSqlStatements } from "./sql-statement-detector"
+import { type CursorContext, createBufferModel } from "./buffer-model"
 
 const DEBOUNCE_MS = 200
 
@@ -75,18 +74,6 @@ export function Buffer(props: BufferProps) {
     }
   }
 
-  const lineTexts = createMemo(() => bufferModel.lines().map((entry) => entry.text))
-  const lineIds = createMemo(() => bufferModel.lines().map((entry) => entry.id))
-  const linesById = createMemo(() => new Map(bufferModel.lines().map((entry) => [entry.id, entry])))
-  const fullText = createMemo(() => lineTexts().join("\n"))
-  const lineStarts = createMemo(() => buildLineStarts(fullText()))
-  const statementsMemo = createMemo(() => collectSqlStatements(fullText(), lineStarts()))
-  const statementAtCursor = createMemo(() => {
-    return statementsMemo().find(
-      (stmt) => stmt.startLine <= bufferModel.focusedRow() && stmt.endLine >= bufferModel.focusedRow(),
-    )
-  })
-
   const focus = () => {
     bufferModel.focusCurrent()
   }
@@ -106,11 +93,7 @@ export function Buffer(props: BufferProps) {
   })
 
   const focusLineEnd = (index: number) => {
-    const lineRef = bufferModel.getLineRef?.(index)
-    if (!lineRef) {
-      return
-    }
-    const eolCol = lineRef.editorView.getVisualEOL().logicalCol
+    const eolCol = bufferModel.getVisualEOLColumn(index)
     bufferModel.setFocusedRow(index)
     bufferModel.setNavColumn(eolCol)
     bufferModel.focusCurrent()
@@ -222,8 +205,7 @@ export function Buffer(props: BufferProps) {
       pattern: "right",
       handler: withCursor((ctx, event) => {
         bufferModel.setNavColumn(ctx.cursorCol)
-        const lineRef = bufferModel.getLineRef?.(ctx.index)
-        const eolCol = lineRef?.editorView.getVisualEOL().logicalCol ?? ctx.cursorCol
+        const eolCol = bufferModel.getVisualEOLColumn(ctx.index)
         const atEnd = ctx.cursorCol === eolCol && ctx.cursorRow === 0
         if (atEnd) {
           event.preventDefault()
@@ -247,8 +229,7 @@ export function Buffer(props: BufferProps) {
       pattern: "delete",
       handler: withCursor((ctx, event) => {
         bufferModel.setNavColumn(ctx.cursorCol)
-        const lineRef = bufferModel.getLineRef?.(ctx.index)
-        const eolCol = lineRef?.editorView.getVisualEOL().logicalCol ?? ctx.cursorCol
+        const eolCol = bufferModel.getVisualEOLColumn(ctx.index)
         const atEnd = ctx.cursorCol === eolCol && ctx.cursorRow === 0
         if (atEnd) {
           event.preventDefault()
@@ -284,8 +265,7 @@ export function Buffer(props: BufferProps) {
       pattern: "ctrl+d",
       handler: withCursor((ctx, event) => {
         bufferModel.setNavColumn(ctx.cursorCol)
-        const lineRef = bufferModel.getLineRef?.(ctx.index)
-        const eolCol = lineRef?.editorView.getVisualEOL().logicalCol ?? ctx.cursorCol
+        const eolCol = bufferModel.getVisualEOLColumn(ctx.index)
         const atEnd = ctx.cursorCol === eolCol && ctx.cursorRow === 0
         if (atEnd) {
           event.preventDefault()
@@ -329,9 +309,9 @@ export function Buffer(props: BufferProps) {
             flexGrow={1}
             onMouseDown={handleBufferMouseDown}
           >
-            <For each={lineIds()}>
+            <For each={bufferModel.lineIds()}>
               {(lineId, indexAccessor) => {
-                const line = () => linesById().get(lineId)
+                const line = () => bufferModel.linesById().get(lineId)
                 const initialText = untrack(line)?.text
                 return (
                   // Wrapper for the whole line
@@ -363,14 +343,14 @@ export function Buffer(props: BufferProps) {
                         bg={lineBg(indexAccessor())}
                       >
                         {(() => {
-                          if (statementsMemo().length < 2) {
+                          if (bufferModel.statements().length < 2) {
                             return ""
                           }
-                          const target = statementAtCursor()
+                          const target = bufferModel.statementAtCursor()
                           if (target?.startLine === indexAccessor()) {
                             return "󰻃 "
                           }
-                          const hasStart = statementsMemo().some((statement) => statement.startLine === indexAccessor())
+                          const hasStart = bufferModel.statements().some((statement) => statement.startLine === indexAccessor())
                           return hasStart ? "• " : ""
                         })()}
                       </text>

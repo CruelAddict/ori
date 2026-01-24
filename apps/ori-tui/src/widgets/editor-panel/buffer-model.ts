@@ -1,10 +1,11 @@
 import { resolveRenderLib, type TextareaRenderable, type WidthMethod } from "@opentui/core"
 import { debounce } from "@shared/lib/debounce"
 import type { Logger } from "pino"
-import { type Accessor, createEffect, createSignal, on } from "solid-js"
+import { type Accessor, createEffect, createMemo, createSignal, on } from "solid-js"
 import { createStore } from "solid-js/store"
 import type { SyntaxHighlightResult } from "../../features/syntax-highlighting/syntax-highlighter"
 import { applySyntaxHighlights } from "./sql-highlighter"
+import { collectSqlStatements, type SqlStatement } from "./sql-statement-detector"
 
 const DEBOUNCE_DEFAULT_MS = 20
 let cachedWidthMethod: WidthMethod | undefined
@@ -174,6 +175,18 @@ export function createBufferModel(options: BufferModelOptions) {
   const [navColumn, setNavColumn] = createSignal(0)
 
   const lineRefs = new Map<string, TextareaRenderable | undefined>()
+
+  const lineTexts = createMemo(() => state.lines.map((entry) => entry.text))
+  const lineIds = createMemo(() => state.lines.map((entry) => entry.id))
+  const linesById = createMemo(() => new Map(state.lines.map((entry) => [entry.id, entry])))
+  const fullText = createMemo(() => lineTexts().join("\n"))
+  const lineStarts = createMemo(() => buildLineStarts(fullText()))
+  const statements = createMemo(() => collectSqlStatements(fullText(), lineStarts()))
+  const statementAtCursor = createMemo(() => {
+    return statements().find(
+      (stmt) => stmt.startLine <= focusedRow() && stmt.endLine >= focusedRow(),
+    )
+  })
   let highlightRequestVersion = 0
 
   const requestHighlights = () => {
@@ -228,6 +241,14 @@ export function createBufferModel(options: BufferModelOptions) {
       return undefined
     }
     return lineRefs.get(line.id)
+  }
+
+  const getVisualEOLColumn = (index: number): number => {
+    const ref = getLineRef(index)
+    if (!ref) {
+      return 0
+    }
+    return ref.editorView.getVisualEOL().logicalCol
   }
 
   createEffect(
@@ -555,10 +576,15 @@ export function createBufferModel(options: BufferModelOptions) {
 
   return {
     lines: () => state.lines,
+    lineIds,
+    linesById,
+    statements,
+    statementAtCursor,
     focusedRow,
     navColumn,
     setLineRef,
     getLineRef,
+    getVisualEOLColumn,
     setFocusedRow,
     setNavColumn,
     setText,
