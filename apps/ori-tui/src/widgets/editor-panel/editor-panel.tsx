@@ -12,8 +12,6 @@ export type EditorPanelProps = {
 export function EditorPanel(props: EditorPanelProps) {
   const pane = props.viewModel
   const statusline = useStatusline()
-  const { theme } = useTheme()
-  const paletteValue = theme()
 
   onMount(() => {
     statusline.fileOpenedInBuffer(pane.filePath())

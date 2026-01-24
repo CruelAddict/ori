@@ -8,6 +8,7 @@ import { applySyntaxHighlights } from "./sql-highlighter"
 
 const DEBOUNCE_DEFAULT_MS = 20
 let cachedWidthMethod: WidthMethod | undefined
+const graphemeSegmenter = new Intl.Segmenter(undefined, { granularity: "grapheme" })
 
 function extractWidthMethod(ref: TextareaRenderable | undefined): void {
   if (ref?.ctx?.widthMethod) {
@@ -44,6 +45,55 @@ function toDisplayColumn(text: string, column: number): number {
 
 function lineDisplayWidth(text: string): number {
   return toDisplayColumn(text, text.length)
+}
+
+function getTabWidth(node: TextareaRenderable): number {
+  const renderLib = resolveRenderLib() as unknown as { textBufferGetTabWidth?: (ptr: unknown) => number }
+  const textBufferPtr = (node.editBuffer as unknown as { textBufferPtr?: unknown }).textBufferPtr
+  if (!textBufferPtr || typeof renderLib.textBufferGetTabWidth !== "function") {
+    return 4
+  }
+  const width = renderLib.textBufferGetTabWidth(textBufferPtr)
+  return width > 0 ? width : 4
+}
+
+function graphemeWidth(grapheme: string, displayCol: number, tabWidth: number): number {
+  if (grapheme === "\t") {
+    if (tabWidth <= 0) {
+      return 0
+    }
+    return tabWidth - (displayCol % tabWidth)
+  }
+  const renderLib = resolveRenderLib()
+  const encoded = renderLib.encodeUnicode(grapheme, widthMethod())
+  if (!encoded) {
+    return 0
+  }
+  let width = 0
+  for (const entry of encoded.data) {
+    width += entry.width
+  }
+  renderLib.freeUnicode(encoded)
+  return width
+}
+
+function displayColumnToCharIndex(text: string, targetCol: number, tabWidth: number): number {
+  if (targetCol <= 0) {
+    return 0
+  }
+  let displayCol = 0
+  for (const segment of graphemeSegmenter.segment(text)) {
+    if (targetCol <= displayCol) {
+      return segment.index
+    }
+    const width = graphemeWidth(segment.segment, displayCol, tabWidth)
+    const nextCol = displayCol + width
+    if (targetCol <= nextCol) {
+      return segment.index + segment.segment.length
+    }
+    displayCol = nextCol
+  }
+  return text.length
 }
 
 export type CursorContext = {
@@ -195,7 +245,7 @@ export function createBufferModel(options: BufferModelOptions) {
     }),
   )
 
-  const syncRefsWithLines = (lines: Line[]) => {
+  const deleteStaleRefs = (lines: Line[]) => {
     const ids = new Set(lines.map((line) => line.id))
     for (const id of lineRefs.keys()) {
       if (!ids.has(id)) {
@@ -213,10 +263,6 @@ export function createBufferModel(options: BufferModelOptions) {
   }
 
   const getLineDisplayWidth = (index: number): number => {
-    const ref = getLineRef(index)
-    if (ref) {
-      return ref.editorView.getVisualEOL().logicalCol
-    }
     return lineDisplayWidth(getLineText(index))
   }
 
@@ -268,7 +314,7 @@ export function createBufferModel(options: BufferModelOptions) {
   const setText = (text: string) => {
     const nextLines = makeLinesFromText(text, false)
     setState({ lines: nextLines, contentModified: false })
-    syncRefsWithLines(nextLines)
+    deleteStaleRefs(nextLines)
     clampFocus(nextLines)
     schedulePush()
   }
@@ -304,28 +350,61 @@ export function createBufferModel(options: BufferModelOptions) {
     setState("lines", index, { ...line, text, rendered: true })
   }
 
+  const updateLines = (mutate: (prev: Line[]) => { nextLines: Line[]; syncIds: string[] }) => {
+    let result: { nextLines: Line[]; syncIds: string[] } | undefined
+    setState("lines", (prev) => {
+      result = mutate(prev)
+      return result.nextLines
+    })
+    if (!result) {
+      return
+    }
+    deleteStaleRefs(result.nextLines)
+    setState("contentModified", true)
+    schedulePush()
+    const ids = result?.syncIds ?? []
+    const lines = result?.nextLines ?? []
+    if (ids.length == 0) {
+      return
+    }
+    queueMicrotask(() => {
+      for (const id of ids) {
+        const line = lines.find((entry) => entry.id === id)
+        if (!line) {
+          continue
+        }
+        const ref = lineRefs.get(id)
+        if (!ref) {
+          continue
+        }
+        if (ref.plainText !== line.text) {
+          ref.setText(line.text)
+        }
+        setState("contentModified", true)
+        schedulePush()
+      }
+    })
+  }
+
   const handleMultilineChange = (index: number, _line: Line, text: string) => {
     const pieces = text.split("\n")
     const head = pieces[0] ?? ""
     const tail = pieces.slice(1)
     const tailLines = tail.map((segment) => makeLine(segment, false))
-    setState("lines", (prev) => {
+    updateLines((prev) => {
       const next = [...prev]
       const current = next[index]
       if (!current) {
-        return prev
+        return { nextLines: prev, syncIds: [] }
       }
       const headLine: Line = { ...current, text: head, rendered: false }
       next.splice(index, 1, headLine, ...tailLines)
-      return next
+      return { nextLines: next, syncIds: [headLine.id] }
     })
-    syncRefsWithLines(state.lines)
-    setState("contentModified", true)
     const targetIndex = index + tail.length
     const targetCol = getLineDisplayWidth(targetIndex)
     setFocusedRow(targetIndex)
     setNavColumn(targetCol)
-    schedulePush()
     queueMicrotask(() => focusLine(targetIndex, targetCol))
   }
 
@@ -367,26 +446,25 @@ export function createBufferModel(options: BufferModelOptions) {
       return
     }
     const cursor = node.logicalCursor
-    const value = getLineText(index)
-    const before = value.slice(0, cursor.col)
-    const after = value.slice(cursor.col)
+    const value = node.plainText
+    const tabWidth = getTabWidth(node)
+    const splitIndex = displayColumnToCharIndex(value, cursor.col, tabWidth)
+    const before = value.slice(0, splitIndex)
+    const after = value.slice(splitIndex)
     const nextIndex = index + 1
     const tailLine = makeLine(after, false)
-    setState("lines", (prev) => {
+    updateLines((prev) => {
       const next = [...prev]
       const current = next[index]
       if (!current) {
-        return prev
+        return { nextLines: prev, syncIds: [] }
       }
       const headLine: Line = { ...current, text: before, rendered: false }
       next.splice(index, 1, headLine, tailLine)
-      return next
+      return { nextLines: next, syncIds: [headLine.id] }
     })
-    syncRefsWithLines(state.lines)
-    setState("contentModified", true)
     setFocusedRow(nextIndex)
     setNavColumn(0)
-    schedulePush()
     queueMicrotask(() => focusLine(nextIndex, 0))
   }
 
@@ -397,22 +475,19 @@ export function createBufferModel(options: BufferModelOptions) {
     }
     const currentText = getLineText(index)
     const prevText = getLineText(prevIndex)
-    setState("lines", (prev) => {
+    const newCol = getLineDisplayWidth(prevIndex)
+    updateLines((prev) => {
       const next = [...prev]
       const prevLine = next[prevIndex]
       if (!prevLine) {
-        return prev
+        return { nextLines: prev, syncIds: [] }
       }
       const mergedLine: Line = { ...prevLine, text: prevText + currentText, rendered: false }
       next.splice(prevIndex, 2, mergedLine)
-      return next
+      return { nextLines: next, syncIds: [mergedLine.id] }
     })
-    syncRefsWithLines(state.lines)
-    setState("contentModified", true)
-    const newCol = getLineDisplayWidth(prevIndex)
     setFocusedRow(prevIndex)
     setNavColumn(newCol)
-    schedulePush()
     queueMicrotask(() => focusLine(prevIndex, newCol))
   }
 
@@ -424,22 +499,19 @@ export function createBufferModel(options: BufferModelOptions) {
     }
     const currentText = getLineText(index)
     const followingText = getLineText(nextIndex)
-    setState("lines", (prev) => {
+    const newCol = getLineDisplayWidth(index)
+    updateLines((prev) => {
       const next = [...prev]
       const currentLine = next[index]
       if (!currentLine) {
-        return prev
+        return { nextLines: prev, syncIds: [] }
       }
       const mergedLine: Line = { ...currentLine, text: currentText + followingText, rendered: false }
       next.splice(index, 2, mergedLine)
-      return next
+      return { nextLines: next, syncIds: [mergedLine.id] }
     })
-    syncRefsWithLines(state.lines)
-    setState("contentModified", true)
-    const newCol = getLineDisplayWidth(index)
     setFocusedRow(index)
     setNavColumn(newCol)
-    schedulePush()
     queueMicrotask(() => focusLine(index, newCol))
   }
 

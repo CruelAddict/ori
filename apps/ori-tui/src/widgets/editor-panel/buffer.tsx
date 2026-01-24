@@ -2,7 +2,7 @@ import { useLogger } from "@app/providers/logger"
 import { useTheme } from "@app/providers/theme"
 import { type BoxRenderable, KeyEvent, MouseEvent, ScrollBoxRenderable, TextareaRenderable } from "@opentui/core"
 import { type KeyBinding, KeyScope } from "@src/core/services/key-scopes"
-import { type Accessor, createEffect, createMemo, For, onCleanup, onMount, Show } from "solid-js"
+import { type Accessor, createEffect, createMemo, For, on, onCleanup, onMount, Show, untrack } from "solid-js"
 import { syntaxHighlighter } from "../../features/syntax-highlighting/syntax-highlighter"
 import { buildLineStarts, type CursorContext, createBufferModel } from "./buffer-model"
 import { collectSqlStatements } from "./sql-statement-detector"
@@ -76,6 +76,8 @@ export function Buffer(props: BufferProps) {
   }
 
   const lineTexts = createMemo(() => bufferModel.lines().map((entry) => entry.text))
+  const lineIds = createMemo(() => bufferModel.lines().map((entry) => entry.id))
+  const linesById = createMemo(() => new Map(bufferModel.lines().map((entry) => [entry.id, entry])))
   const fullText = createMemo(() => lineTexts().join("\n"))
   const lineStarts = createMemo(() => buildLineStarts(fullText()))
   const statementsMemo = createMemo(() => collectSqlStatements(fullText(), lineStarts()))
@@ -171,6 +173,20 @@ export function Buffer(props: BufferProps) {
       handler: withCursor((ctx, event) => {
         event.preventDefault()
         bufferModel.handleEnter(ctx.index)
+      }),
+    },
+    {
+      pattern: "tab",
+      handler: withCursor((ctx, event) => {
+        event.preventDefault()
+        const lineRef = bufferModel.getLineRef?.(ctx.index)
+        if (!lineRef) {
+          return
+        }
+        lineRef.insertText("\t")
+        const cursor = lineRef.logicalCursor
+        bufferModel.setFocusedRow(ctx.index)
+        bufferModel.setNavColumn(cursor.col)
       }),
     },
     {
@@ -279,9 +295,11 @@ export function Buffer(props: BufferProps) {
     },
   ]
 
-  createEffect(() => {
-    bufferModel.handleFocusChange(props.isFocused())
-  })
+  createEffect(
+    on(props.isFocused, (isFocused) => {
+      bufferModel.handleFocusChange(isFocused)
+    })
+  )
 
   const lineBg = (row: number) => {
     return props.isFocused() && bufferModel.focusedRow() === row ? palette().editorBackgroundFocused : undefined
@@ -311,17 +329,19 @@ export function Buffer(props: BufferProps) {
             flexGrow={1}
             onMouseDown={handleBufferMouseDown}
           >
-            <For each={bufferModel.lines()}>
-              {(line, indexAccessor) => {
+            <For each={lineIds()}>
+              {(lineId, indexAccessor) => {
+                const line = () => linesById().get(lineId)
+                const initialText = untrack(line)?.text
                 return (
                   // Wrapper for the whole line
                   <box
                     ref={(ref: BoxRenderable | undefined) => {
                       if (!ref) {
-                        lineRenderables.delete(line.id)
+                        lineRenderables.delete(lineId)
                         return
                       }
-                      lineRenderables.set(line.id, ref)
+                      lineRenderables.set(lineId, ref)
                     }}
                     flexDirection="row"
                     width="100%"
@@ -367,7 +387,11 @@ export function Buffer(props: BufferProps) {
                       backgroundColor={lineBg(indexAccessor())}
                       focusedBackgroundColor={lineBg(indexAccessor())}
                       ref={(renderable: TextareaRenderable | undefined) => {
-                        bufferModel.setLineRef(line.id, renderable)
+                        const lineValue = untrack(line)
+                        if (!lineValue) {
+                          return
+                        }
+                        bufferModel.setLineRef(lineValue.id, renderable)
                       }}
                       textColor={palette().editorText}
                       focusedTextColor={palette().editorText}
@@ -378,8 +402,8 @@ export function Buffer(props: BufferProps) {
                       onMouseDown={(event: MouseEvent) => {
                         handleMouseDown(indexAccessor(), event)
                       }}
+                      initialValue={initialText}
                       onContentChange={() => bufferModel.handleTextAreaChange(indexAccessor())}
-                      initialValue={line.text}
                     />
                     {/* Fills the rest of the line to handle mouse clicks */}
                     <box
