@@ -45,7 +45,7 @@ export function ConnectionViewPage(props: ConnectionViewPageProps) {
 
   const screenKeyBindings: KeyBinding[] = [
     {
-      pattern: "ctrl+e",
+      pattern: "ctrl+t",
       handler: vm.actions.toggleTreeVisible,
       preventDefault: true,
     },
