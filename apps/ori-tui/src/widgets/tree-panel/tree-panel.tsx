@@ -11,7 +11,7 @@ const HORIZONTAL_SCROLL_STEP = 6
 
 const MIN_FOCUSED_COLUMN_WIDTH = 50
 const MIN_FOCUSED_PERCENT = 0.2
-const MAX_FOCUSED_PERCENT = 0.5
+const MAX_FOCUSED_PERCENT = 0.4
 const FOCUSED_WIDTH_PADDING = 5
 
 export type TreePanelProps = {
@@ -88,19 +88,9 @@ export function TreePanel(props: TreePanelProps) {
   const enabled = () => pane.visible() && pane.isFocused()
 
   const paneWidthProps = () => {
-    if (pane.isFocused()) {
-      const width = focusedPaneWidth()
-      return {
-        width,
-        minWidth: width,
-        maxWidth: width,
-        flexGrow: 0,
-        flexShrink: 0,
-      } as const
-    }
     return {
-      width: MIN_FOCUSED_COLUMN_WIDTH,
-      maxWidth: MIN_FOCUSED_COLUMN_WIDTH,
+      width: focusedPaneWidth(),
+      maxWidth: focusedPaneWidth(),
       minWidth: MIN_FOCUSED_COLUMN_WIDTH,
       flexGrow: 0,
       flexShrink: 0,
