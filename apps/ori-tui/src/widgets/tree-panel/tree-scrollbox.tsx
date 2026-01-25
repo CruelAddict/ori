@@ -1,4 +1,5 @@
 import type { BoxRenderable, MouseEvent, ScrollBoxRenderable } from "@opentui/core"
+import { createScrollSpeedHandler, getScrollDirection } from "@shared/lib/scroll-speed"
 import { type Accessor, createContext, createEffect, onCleanup, type ParentProps, useContext } from "solid-js"
 import { createAutoscrollService } from "./tree-scroll/autoscroll-service.ts"
 import { createOverflowTracker } from "./tree-scroll/overflow-tracker.ts"
@@ -10,6 +11,11 @@ type TreeScrollboxContextValue = {
 }
 
 const TreeScrollboxContext = createContext<TreeScrollboxContextValue | null>(null)
+
+const treeScrollSpeed = {
+  horizontal: 3,
+  vertical: 1,
+}
 
 type OverflowTrackerHookOptions = {
   rows: Accessor<readonly RowDescriptor[]>
@@ -126,13 +132,14 @@ export function TreeScrollbox(props: TreeScrollboxProps) {
     if (!scrollBox) return
     // @ts-expect-error onMouseEvent is protected in typings
     const originalOnMouseEvent = scrollBox.onMouseEvent?.bind(scrollBox)
+    const handleMouseEvent = createScrollSpeedHandler(originalOnMouseEvent, treeScrollSpeed)
     // @ts-expect-error override protected handler to gate horizontal wheel
     scrollBox.onMouseEvent = (event: MouseEvent) => {
-      const direction = event.scroll?.direction
+      const direction = getScrollDirection(event)
       if ((event.type === "scroll" && (direction === "left" || direction === "right")) || event.isSelecting) {
         if (!overflowTracker.horizontalOverflow()) return
       }
-      originalOnMouseEvent?.(event)
+      handleMouseEvent(event)
     }
     applyContentWidth(rowMetrics.contentWidth())
   }

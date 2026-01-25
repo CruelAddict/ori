@@ -8,12 +8,18 @@ import {
 } from "@opentui/core"
 import "./table-cell"
 import { setSelectionOverride } from "@shared/lib/clipboard"
+import { createScrollSpeedHandler } from "@shared/lib/scroll-speed"
 import { type KeyBinding, KeyScope } from "@src/core/services/key-scopes"
 import type { ResultsPaneViewModel } from "@src/features/results-pane/use-results-pane"
 import { createEffect, createMemo, createSignal, For, onCleanup, Show } from "solid-js"
 
 export type ResultsPanelProps = {
   viewModel: ResultsPaneViewModel
+}
+
+const resultsScrollSpeed = {
+  horizontal: 3.5,
+  vertical: 2,
 }
 
 export function ResultsPanel(props: ResultsPanelProps) {
@@ -341,9 +347,10 @@ export function ResultsPanel(props: ResultsPanelProps) {
                   if (!scrollRef) return
                   // @ts-expect-error onMouseEvent is protected in typings
                   const originalOnMouseEvent = scrollRef.onMouseEvent?.bind(scrollRef)
+                  const handleMouseEvent = createScrollSpeedHandler(originalOnMouseEvent, resultsScrollSpeed)
                   // @ts-expect-error override protected handler to track horizontal scroll
                   scrollRef.onMouseEvent = (event: MouseEvent) => {
-                    originalOnMouseEvent?.(event)
+                    handleMouseEvent(event)
                     setScrollLeft(scrollRef?.scrollLeft ?? 0)
                   }
                 }}
