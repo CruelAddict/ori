@@ -1,10 +1,8 @@
 import { useResourceGraphSnapshot, useSchemaTree } from "@entities/schema-tree"
-import type { PaneFocusController } from "@src/features/connection/view/pane-types"
 import type { Accessor } from "solid-js"
 
 export type TreePaneViewModel = {
   controller: ReturnType<typeof useSchemaTree>
-  visible: Accessor<boolean>
   isFocused: Accessor<boolean>
   loading: Accessor<boolean>
   error: Accessor<string | null>
@@ -14,8 +12,8 @@ export type TreePaneViewModel = {
 
 type UseTreePaneOptions = {
   configurationName: Accessor<string>
-  focus: PaneFocusController
-  isVisible: Accessor<boolean>
+  isFocused: Accessor<boolean>
+  focusSelf: () => void
 }
 
 export function useTreePane(options: UseTreePaneOptions): TreePaneViewModel {
@@ -28,9 +26,8 @@ export function useTreePane(options: UseTreePaneOptions): TreePaneViewModel {
 
   return {
     controller,
-    visible: options.isVisible,
-    isFocused: options.focus.isFocused,
-    focusSelf: options.focus.focusSelf,
+    isFocused: options.isFocused,
+    focusSelf: options.focusSelf,
     loading,
     error,
     refreshGraph,

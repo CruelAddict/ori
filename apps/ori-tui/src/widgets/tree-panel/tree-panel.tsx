@@ -85,7 +85,7 @@ export function TreePanel(props: TreePanelProps) {
     { pattern: "space", handler: () => pane.controller.activateSelection(), preventDefault: true },
   ]
 
-  const enabled = () => pane.visible() && pane.isFocused()
+  const enabled = () => pane.isFocused()
 
   const paneWidthProps = () => {
     return {
@@ -98,69 +98,67 @@ export function TreePanel(props: TreePanelProps) {
   }
 
   return (
-    <Show when={pane.visible()}>
-      <KeyScope
-        bindings={bindings}
-        enabled={enabled}
+    <KeyScope
+      bindings={bindings}
+      enabled={enabled}
+    >
+      <box
+        flexDirection="column"
+        {...paneWidthProps()}
+        height="100%"
+        flexShrink={0}
       >
         <box
+          padding={1}
           flexDirection="column"
-          {...paneWidthProps()}
+          flexGrow={1}
           height="100%"
-          flexShrink={0}
+          onMouseDown={handleEmptySpaceClick}
         >
-          <box
-            padding={1}
-            flexDirection="column"
-            flexGrow={1}
-            height="100%"
-            onMouseDown={handleEmptySpaceClick}
-          >
-            <Show when={pane.loading()}>
-              <text fg={theme().text}>Loading schema graph...</text>
-            </Show>
-            <Show when={!pane.loading() && pane.error()}>
-              {(message: Accessor<string | null>) => <text fg={theme().error}>Failed to load graph: {message()}</text>}
-            </Show>
-            <Show when={!pane.loading() && !pane.error()}>
-              <TreeScrollbox
-                rows={rows}
-                measureRowWidth={measureRowWidth}
-                selectedRowId={selectedId}
-                isFocused={pane.isFocused}
-                onApiReady={handleScrollboxApi}
-                onNaturalWidthChange={handleNaturalWidthChange}
+          <Show when={pane.loading()}>
+            <text fg={theme().text}>Loading schema graph...</text>
+          </Show>
+          <Show when={!pane.loading() && pane.error()}>
+            {(message: Accessor<string | null>) => <text fg={theme().error}>Failed to load graph: {message()}</text>}
+          </Show>
+          <Show when={!pane.loading() && !pane.error()}>
+            <TreeScrollbox
+              rows={rows}
+              measureRowWidth={measureRowWidth}
+              selectedRowId={selectedId}
+              isFocused={pane.isFocused}
+              onApiReady={handleScrollboxApi}
+              onNaturalWidthChange={handleNaturalWidthChange}
+            >
+              <Show
+                when={rootIds().length > 0}
+                fallback={
+                  <text
+                    attributes={TextAttributes.DIM}
+                    fg={theme().textMuted}
+                    selectable={false}
+                  >
+                    Graph is empty. Try refreshing later.
+                  </text>
+                }
               >
-                <Show
-                  when={rootIds().length > 0}
-                  fallback={
-                    <text
-                      attributes={TextAttributes.DIM}
-                      fg={theme().textMuted}
-                      selectable={false}
-                    >
-                      Graph is empty. Try refreshing later.
-                    </text>
-                  }
-                >
-                  <For each={rootIds()}>
-                    {(id) => (
-                      <TreeNode
-                        nodeId={id}
-                        depth={0}
-                        isFocused={pane.isFocused}
-                        pane={pane}
-                        isRowSelected={isRowSelected}
-                      />
-                    )}
-                  </For>
-                </Show>
-              </TreeScrollbox>
-            </Show>
-          </box>
+                <For each={rootIds()}>
+                  {(id) => (
+                    <TreeNode
+                      nodeId={id}
+                      depth={0}
+                      isFocused={pane.isFocused}
+                      pane={pane}
+                      isRowSelected={isRowSelected}
+                    />
+                  )}
+                </For>
+              </Show>
+            </TreeScrollbox>
+          </Show>
         </box>
-      </KeyScope>
-    </Show>
+      </box>
+    </KeyScope>
   )
 }
 

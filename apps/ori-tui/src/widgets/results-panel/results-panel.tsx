@@ -258,16 +258,15 @@ export function ResultsPanel(props: ResultsPanelProps) {
   }
 
   return (
-    <Show when={pane.visible()}>
-      <KeyScope
-        bindings={bindings}
-        enabled={pane.isFocused}
+    <KeyScope
+      bindings={bindings}
+      enabled={pane.isFocused}
+    >
+      <box
+        flexDirection="column"
+        flexGrow={1}
+        justifyContent="space-between"
       >
-        <box
-          flexDirection="column"
-          flexGrow={1}
-          justifyContent="space-between"
-        >
           <Show when={!job()}>
             <text
               attributes={TextAttributes.DIM}
@@ -454,8 +453,7 @@ export function ResultsPanel(props: ResultsPanelProps) {
             </text>
           </Show>
 
-        </box >
-      </KeyScope >
-    </Show >
+      </box>
+    </KeyScope>
   )
 }

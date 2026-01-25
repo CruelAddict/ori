@@ -75,7 +75,6 @@ export function ConnectionViewPage(props: ConnectionViewPageProps) {
       pattern: "h",
       mode: "leader",
       handler: vm.actions.moveFocusLeft,
-      enabled: () => vm.treePane.visible(),
       preventDefault: true,
     },
     {
@@ -88,14 +87,12 @@ export function ConnectionViewPage(props: ConnectionViewPageProps) {
       pattern: "j",
       mode: "leader",
       handler: vm.actions.moveFocusDown,
-      enabled: () => vm.resultsPane.visible(),
       preventDefault: true,
     },
     {
       pattern: "k",
       mode: "leader",
       handler: vm.actions.moveFocusUp,
-      enabled: () => vm.resultsPane.isFocused(),
       preventDefault: true,
     },
     {
@@ -108,7 +105,7 @@ export function ConnectionViewPage(props: ConnectionViewPageProps) {
     {
       pattern: "q",
       handler: () => {
-        if (!vm.editorPane.visible()) {
+        if (!vm.isPaneVisible("editor")) {
           vm.actions.openEditor()
           return
         }
@@ -136,21 +133,23 @@ export function ConnectionViewPage(props: ConnectionViewPageProps) {
             flexDirection="row"
             flexGrow={1}
           >
-            <TreePanel viewModel={vm.treePane} />
+            <box visible={vm.isPaneVisible("tree")}>
+              <TreePanel viewModel={vm.treePane} />
+            </box>
 
             <box
               flexDirection="column"
               flexGrow={1}
-              marginLeft={vm.treePane.visible() ? 1 : 0}
+              marginLeft={vm.isPaneVisible("tree") ? 1 : 0}
               justifyContent="space-between"
             >
               <Show
-                when={vm.editorPane.visible()}
+                when={vm.isPaneVisible("editor")}
                 fallback={<WelcomePane />}
               >
                 <EditorPanel viewModel={vm.editorPane} />
               </Show>
-              <Show when={vm.resultsPane.visible()}>
+              <Show when={vm.isPaneVisible("results")}>
                 <ResultsPanel viewModel={vm.resultsPane} />
               </Show>
             </box>

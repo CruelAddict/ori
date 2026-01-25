@@ -1,5 +1,4 @@
 import { useConfigurationByName } from "@src/entities/configuration/model/configuration-list-store"
-import type { PaneFocusController } from "@src/features/connection/view/pane-types"
 import { useEditorPane } from "@src/features/editor-pane/use-editor-pane"
 import { useResultsPane } from "@src/features/results-pane/use-results-pane"
 import { useTreePane } from "@src/features/tree-pane/use-tree-pane"
@@ -105,28 +104,25 @@ export function useConnectionView(options: UseConnectionViewOptions) {
     focusEditor()
   }
 
-  const createFocusController = (pane: Pane): PaneFocusController => ({
+  const paneFocusFuncs = (pane: Pane) => ({
     isFocused: () => isActive() && focusedPane() === pane && isPaneVisible(pane),
     focusSelf: () => focusPane(pane),
   })
 
   treePane = useTreePane({
     configurationName: options.configurationName,
-    focus: createFocusController("tree"),
-    isVisible: () => isPaneVisible("tree"),
+    ...paneFocusFuncs("tree"),
   })
 
   const editorPane = useEditorPane({
     configurationName: options.configurationName,
-    focus: createFocusController("editor"),
+    ...paneFocusFuncs("editor"),
     unfocus: focusPreviousVisiblePane,
-    isVisible: () => isPaneVisible("editor"),
   })
 
   resultsPane = useResultsPane({
     job: editorPane.currentJob,
-    focus: createFocusController("results"),
-    isVisible: () => isPaneVisible("results"),
+    ...paneFocusFuncs("results"),
   })
 
   const hasResults = () => {
@@ -190,6 +186,7 @@ export function useConnectionView(options: UseConnectionViewOptions) {
     treePane,
     editorPane,
     resultsPane,
+    isPaneVisible,
     actions: {
       toggleTreeVisible,
       toggleResultsVisible,
@@ -213,6 +210,3 @@ export function useConnectionView(options: UseConnectionViewOptions) {
     },
   }
 }
-
-export type ConnectionViewModel = ReturnType<typeof useConnectionView>
-export type ConnectionViewActions = ConnectionViewModel["actions"]
