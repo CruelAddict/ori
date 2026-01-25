@@ -139,38 +139,6 @@ export function useConnectionView(options: UseConnectionViewOptions) {
     return !!(job?.result || job?.error || job?.status === "running")
   }
 
-  // Can only leave tree if editor is open OR results are available
-  const canLeaveTree = () => isPaneVisible("editor") || hasResults()
-
-  const moveFocusLeft = () => {
-    if (focusedPane() === "editor" && treePane.visible()) {
-      focusTree()
-    } else if (focusedPane() === "results" && treePane.visible()) {
-      focusTree()
-    }
-  }
-
-  const moveFocusRight = () => {
-    if (focusedPane() === "tree") {
-      if (!canLeaveTree()) return
-      focusEditor()
-    } else if (focusedPane() === "editor" && resultsPane.visible()) {
-      focusResults()
-    }
-  }
-
-  const moveFocusUp = () => {
-    if (focusedPane() === "results") {
-      focusEditor()
-    }
-  }
-
-  const moveFocusDown = () => {
-    if (focusedPane() === "editor" && resultsPane.visible()) {
-      focusResults()
-    }
-  }
-
   const setActive = (active: boolean) => {
     setIsActive(active)
     if (!active) {
@@ -229,13 +197,18 @@ export function useConnectionView(options: UseConnectionViewOptions) {
       executeQuery: editorPane.executeQuery,
       cancelQuery: editorPane.cancelQuery,
       refreshGraph: treePane.refreshGraph,
-      moveFocusLeft,
-      moveFocusRight,
-      moveFocusUp,
-      moveFocusDown,
+      moveFocusLeft: () => {
+        if (isPaneVisible("tree")) focusPane("tree")
+      },
+      moveFocusRight: () => {
+        if (focusedPane() !== "tree") return
+        if (isPaneVisible("editor")) focusPane("editor")
+        else if (isPaneVisible("results")) focusPane("results")
+      },
+      moveFocusUp: () => { if (focusedPane() === "results") focusPane("editor") },
+      moveFocusDown: () => { if (focusedPane() === "editor") focusPane("results") },
       openEditor,
-      focusTree,
-      focusEditor,
+      focusPane,
       setActive,
     },
   }

@@ -30,13 +30,13 @@ export function ConnectionViewPage(props: ConnectionViewPageProps) {
       if (!vm.editorPane.isFocused()) {
         return
       }
-      vm.actions.focusTree()
+      vm.actions.focusPane("tree")
 
       const timeoutId = setTimeout(() => {
         if (!scopeEnabled()) {
           return
         }
-        vm.actions.focusEditor()
+        vm.actions.focusPane("editor")
       }, 10)
 
       onCleanup(() => clearTimeout(timeoutId))
@@ -112,7 +112,7 @@ export function ConnectionViewPage(props: ConnectionViewPageProps) {
           vm.actions.openEditor()
           return
         }
-        vm.actions.focusEditor()
+        vm.actions.focusPane("editor")
       },
       enabled: () => !vm.editorPane.isFocused(),
       preventDefault: true,
