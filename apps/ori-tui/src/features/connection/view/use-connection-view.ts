@@ -1,8 +1,8 @@
 import { useConfigurationByName } from "@src/entities/configuration/model/configuration-list-store"
 import type { PaneFocusController } from "@src/features/connection/view/pane-types"
-import { type EditorPaneViewModel, useEditorPane } from "@src/features/editor-pane/use-editor-pane"
-import { type ResultsPaneViewModel, useResultsPane } from "@src/features/results-pane/use-results-pane"
-import { type TreePaneViewModel, useTreePane } from "@src/features/tree-pane/use-tree-pane"
+import { useEditorPane } from "@src/features/editor-pane/use-editor-pane"
+import { useResultsPane } from "@src/features/results-pane/use-results-pane"
+import { useTreePane } from "@src/features/tree-pane/use-tree-pane"
 import type { Accessor } from "solid-js"
 import { createEffect, createMemo, createSignal } from "solid-js"
 
@@ -12,34 +12,9 @@ export type UseConnectionViewOptions = {
   configurationName: Accessor<string>
 }
 
-export type ConnectionViewActions = {
-  toggleTreeVisible: () => void
-  toggleResultsVisible: () => void
-  onQueryChange: (text: string) => void
-  executeQuery: () => Promise<void>
-  cancelQuery: () => Promise<void>
-  refreshGraph: () => Promise<void>
-  moveFocusLeft: () => void
-  moveFocusRight: () => void
-  moveFocusUp: () => void
-  moveFocusDown: () => void
-  openEditor: () => void
-  focusTree: () => void
-  focusEditor: () => void
-  setActive: (active: boolean) => void
-}
-
-export type ConnectionViewModel = {
-  title: Accessor<string>
-  treePane: TreePaneViewModel
-  editorPane: EditorPaneViewModel
-  resultsPane: ResultsPaneViewModel
-  actions: ConnectionViewActions
-}
-
 const DEFAULT_PANE: Pane = "tree"
 
-export function useConnectionView(options: UseConnectionViewOptions): ConnectionViewModel {
+export function useConnectionView(options: UseConnectionViewOptions) {
   const configuration = useConfigurationByName(options.configurationName)
   const title = createMemo(() => configuration()?.name ?? options.configurationName())
   const [focusedPane, setFocusedPane] = createSignal<Pane | null>(DEFAULT_PANE)
@@ -51,8 +26,8 @@ export function useConnectionView(options: UseConnectionViewOptions): Connection
     results: false,
   })
 
-  let treePane: TreePaneViewModel
-  let resultsPane: ResultsPaneViewModel
+  let treePane: ReturnType<typeof useTreePane>
+  let resultsPane: ReturnType<typeof useResultsPane>
 
   const isPaneVisible = (pane: Pane) => visiblePanes()[pane]
   const setPaneVisible = (pane: Pane, next: boolean) => {
@@ -265,3 +240,6 @@ export function useConnectionView(options: UseConnectionViewOptions): Connection
     },
   }
 }
+
+export type ConnectionViewModel = ReturnType<typeof useConnectionView>
+export type ConnectionViewActions = ConnectionViewModel["actions"]
