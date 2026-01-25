@@ -23,6 +23,7 @@ export function ConnectionViewPage(props: ConnectionViewPageProps) {
 
   createEffect(
     on(scopeEnabled, (active) => {
+      // a hack to make textarea in the editor receive focus
       vm.actions.setActive(active)
       if (!active) {
         return
@@ -30,11 +31,18 @@ export function ConnectionViewPage(props: ConnectionViewPageProps) {
       if (!vm.editorPane.isFocused()) {
         return
       }
+      const treeWasOpen = vm.isPaneVisible("tree")
+      if (!treeWasOpen) {
+        vm.actions.toggleTreeVisible()
+      }
       vm.actions.focusPane("tree")
 
       const timeoutId = setTimeout(() => {
         if (!scopeEnabled()) {
           return
+        }
+        if (!treeWasOpen) {
+          vm.actions.toggleTreeVisible()
         }
         vm.actions.focusPane("editor")
       }, 10)
