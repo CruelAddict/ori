@@ -3,7 +3,7 @@ import {
   BoxRenderable,
   type KeyEvent,
   type MouseEvent,
-  type ScrollBoxRenderable,
+  ScrollBoxRenderable,
   TextAttributes,
 } from "@opentui/core"
 import "./table-cell"
@@ -24,6 +24,8 @@ export function ResultsPanel(props: ResultsPanelProps) {
 
   let scrollRef: ScrollBoxRenderable | undefined
   const rowRenderables = new Map<number, BoxRenderable>()
+
+  const [scrollLeft, setScrollLeft] = createSignal(0)
 
   const [cursorRow, setCursorRow] = createSignal(0)
   const [cursorCol, setCursorCol] = createSignal(0)
@@ -74,6 +76,36 @@ export function ResultsPanel(props: ResultsPanelProps) {
       scrollRef?.scrollBy({ x: 0, y: rowBottom - viewportBottom })
     } else if (rowTop < viewportTop) {
       scrollRef?.scrollBy({ x: 0, y: rowTop - viewportTop })
+    }
+  }
+
+  const ensureColumnVisible = (colIndex: number) => {
+    if (!scrollRef) return
+    const viewport = getViewport()
+    if (!viewport) return
+
+    const widths = columnWidths()
+    // Calculate the x position of the column (sum of previous column widths + separators)
+    let colLeft = 1 // Initial separator
+    for (let i = 0; i < colIndex; i++) {
+      colLeft += widths[i] + 2 + 1 // width + padding + separator
+    }
+    const colWidth = widths[colIndex] + 2
+    const colRight = colLeft + colWidth
+
+    const viewportWidth = viewport.width ?? 0
+    const currentScrollLeft = scrollRef.scrollLeft ?? 0
+    const viewportLeft = currentScrollLeft
+    const viewportRight = currentScrollLeft + viewportWidth
+
+    if (colRight > viewportRight) {
+      const delta = colRight - viewportRight
+      scrollRef.scrollBy({ x: delta, y: 0 })
+      setScrollLeft(scrollRef.scrollLeft ?? 0)
+    } else if (colLeft < viewportLeft) {
+      const delta = colLeft - viewportLeft
+      scrollRef.scrollBy({ x: delta, y: 0 })
+      setScrollLeft(scrollRef.scrollLeft ?? 0)
     }
   }
 
@@ -158,6 +190,7 @@ export function ResultsPanel(props: ResultsPanelProps) {
     setCursorRow(0)
     setCursorCol(0)
     setSelectionCount(0)
+    setScrollLeft(0)
     selectedHeaderCols.clear()
     selectedRowCols.clear()
   }
@@ -194,6 +227,9 @@ export function ResultsPanel(props: ResultsPanelProps) {
     setCursorRow(nextRow)
     setCursorCol(nextCol)
     ensureRowVisible(nextRow)
+    if (colDelta !== 0) {
+      ensureColumnVisible(nextCol)
+    }
   }
 
   const bindings: KeyBinding[] = [
@@ -254,56 +290,80 @@ export function ResultsPanel(props: ResultsPanelProps) {
               paddingRight={1}
             >
               {/* Header */}
-              <box
-                flexDirection="row"
-              >
-                <SeparatorCell
-                  fg={palette().backgroundPanel}
-                  bg={palette().backgroundElement}
-                  selectionBg={palette().backgroundElement}
-                />
-                <For each={resultColumns()}>
-                  {(column, index) => (
-                    <>
-                      {index() > 0 && (
-                        <SeparatorCell
-                          fg={palette().backgroundPanel}
-                          bg={palette().backgroundElement}
+              <box overflow="hidden">
+                <box
+                  flexDirection="row"
+                  marginLeft={-scrollLeft()}
+                >
+                  <SeparatorCell
+                    fg={palette().backgroundPanel}
+                    bg={palette().backgroundElement}
+                    selectionBg={palette().backgroundElement}
+                  />
+                  <For each={resultColumns()}>
+                    {(column, index) => (
+                      <>
+                        {index() > 0 && (
+                          <SeparatorCell
+                            fg={palette().backgroundPanel}
+                            bg={palette().backgroundElement}
+                            selectionBg={palette().backgroundElement}
+                          />
+                        )}
+
+                        <table_cell
+                          width={columnWidths()[index()] + 2}
+                          display={formatCell(column.name, columnWidths()[index()])}
+                          backgroundColor={palette().backgroundElement}
+                          fg={palette().accent}
+                          attributes={TextAttributes.BOLD}
                           selectionBg={palette().backgroundElement}
+                          value={String(column.name)}
+                          onSelectionChange={(selected: boolean) =>
+                            handleHeaderSelectionChange(index(), selected)
+                          }
                         />
-                      )}
 
-                      <table_cell
-                        width={columnWidths()[index()] + 2}
-                        display={formatCell(column.name, columnWidths()[index()])}
-                        backgroundColor={palette().backgroundElement}
-                        fg={palette().accent}
-                        attributes={TextAttributes.BOLD}
-                        selectionBg={palette().backgroundElement}
-                        value={String(column.name)}
-                        onSelectionChange={(selected: boolean) =>
-                          handleHeaderSelectionChange(index(), selected)
-                        }
-                      />
-
-                    </>
-                  )}
-                </For>
-                <SeparatorCell
-                  fg={palette().backgroundPanel}
-                  bg={palette().backgroundElement}
-                  selectionBg={palette().backgroundElement}
-                />
+                      </>
+                    )}
+                  </For>
+                  <SeparatorCell
+                    fg={palette().backgroundPanel}
+                    bg={palette().backgroundElement}
+                    selectionBg={palette().backgroundElement}
+                  />
+                </box>
               </box>
               { /* Rows */}
               <scrollbox
                 ref={(node: ScrollBoxRenderable | undefined) => {
                   scrollRef = node ?? undefined
+                  if (!scrollRef) return
+                  // @ts-expect-error onMouseEvent is protected in typings
+                  const originalOnMouseEvent = scrollRef.onMouseEvent?.bind(scrollRef)
+                  // @ts-expect-error override protected handler to track horizontal scroll
+                  scrollRef.onMouseEvent = (event: MouseEvent) => {
+                    originalOnMouseEvent?.(event)
+                    setScrollLeft(scrollRef?.scrollLeft ?? 0)
+                  }
                 }}
                 maxHeight={18}
                 onMouseDown={pane.focusSelf}
+                scrollX={true}
+                scrollY={true}
+                horizontalScrollbarOptions={{
+                  showArrows: true,
+                  trackOptions: {
+                    foregroundColor: theme().backgroundPanel,
+                    backgroundColor: theme().backgroundPanel,
+                  },
+                }}
+                contentOptions={{
+                  maxWidth: undefined,
+                  width: "auto",
+                }}
               >
-                <box flexDirection="column">
+                <box flexDirection="column" width={"auto"}>
                   <For each={resultRows()}>
                     {(row, rowIndex) => (
                       <box
@@ -387,8 +447,8 @@ export function ResultsPanel(props: ResultsPanelProps) {
             </text>
           </Show>
 
-        </box>
-      </KeyScope>
-    </Show>
+        </box >
+      </KeyScope >
+    </Show >
   )
 }
