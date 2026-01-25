@@ -108,7 +108,7 @@ export function ConnectionViewPage(props: ConnectionViewPageProps) {
     {
       pattern: "q",
       handler: () => {
-        if (!vm.editorOpen()) {
+        if (!vm.editorPane.visible()) {
           vm.actions.openEditor()
           return
         }
@@ -145,7 +145,7 @@ export function ConnectionViewPage(props: ConnectionViewPageProps) {
               justifyContent="space-between"
             >
               <Show
-                when={vm.editorOpen()}
+                when={vm.editorPane.visible()}
                 fallback={<WelcomePane />}
               >
                 <EditorPanel viewModel={vm.editorPane} />

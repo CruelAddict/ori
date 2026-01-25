@@ -13,6 +13,7 @@ export type EditorPaneViewModel = {
   executeQuery: () => Promise<void>
   cancelQuery: () => Promise<void>
   saveQuery: () => boolean
+  visible: Accessor<boolean>
   isFocused: Accessor<boolean>
   focusSelf: () => void
   unfocus: () => void
@@ -22,6 +23,7 @@ type UseEditorPaneOptions = {
   configurationName: Accessor<string>
   focus: PaneFocusController
   unfocus: () => void
+  isVisible: Accessor<boolean>
 }
 
 export function useEditorPane(options: UseEditorPaneOptions): EditorPaneViewModel {
@@ -75,6 +77,7 @@ export function useEditorPane(options: UseEditorPaneOptions): EditorPaneViewMode
     executeQuery,
     cancelQuery,
     saveQuery,
+    visible: options.isVisible,
     isFocused: options.focus.isFocused,
     focusSelf: options.focus.focusSelf,
     unfocus: options.unfocus,

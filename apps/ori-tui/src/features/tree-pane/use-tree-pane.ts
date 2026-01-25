@@ -1,7 +1,6 @@
 import { useResourceGraphSnapshot, useSchemaTree } from "@entities/schema-tree"
 import type { PaneFocusController } from "@src/features/connection/view/pane-types"
 import type { Accessor } from "solid-js"
-import { createSignal } from "solid-js"
 
 export type TreePaneViewModel = {
   controller: ReturnType<typeof useSchemaTree>
@@ -10,31 +9,18 @@ export type TreePaneViewModel = {
   loading: Accessor<boolean>
   error: Accessor<string | null>
   focusSelf: () => void
-  toggleVisible: () => void
   refreshGraph: () => Promise<void>
 }
 
 type UseTreePaneOptions = {
   configurationName: Accessor<string>
   focus: PaneFocusController
+  isVisible: Accessor<boolean>
 }
 
 export function useTreePane(options: UseTreePaneOptions): TreePaneViewModel {
   const { snapshot, loading, error, refresh } = useResourceGraphSnapshot(options.configurationName)
   const controller = useSchemaTree(snapshot)
-  const [visible, setVisible] = createSignal(true)
-
-  const toggleVisible = () => {
-    setVisible((prev) => {
-      const next = !prev
-      if (next) {
-        options.focus.focusSelf()
-      } else if (options.focus.isFocused() && options.focus.focusFallback) {
-        options.focus.focusFallback()
-      }
-      return next
-    })
-  }
 
   const refreshGraph = async () => {
     await refresh()
@@ -42,12 +28,11 @@ export function useTreePane(options: UseTreePaneOptions): TreePaneViewModel {
 
   return {
     controller,
-    visible,
+    visible: options.isVisible,
     isFocused: options.focus.isFocused,
     focusSelf: options.focus.focusSelf,
     loading,
     error,
-    toggleVisible,
     refreshGraph,
   }
 }

@@ -4,9 +4,9 @@ import { type EditorPaneViewModel, useEditorPane } from "@src/features/editor-pa
 import { type ResultsPaneViewModel, useResultsPane } from "@src/features/results-pane/use-results-pane"
 import { type TreePaneViewModel, useTreePane } from "@src/features/tree-pane/use-tree-pane"
 import type { Accessor } from "solid-js"
-import { createMemo, createSignal } from "solid-js"
+import { createEffect, createMemo, createSignal } from "solid-js"
 
-export type FocusPane = "tree" | "editor" | "results"
+export type Pane = "tree" | "editor" | "results"
 
 export type UseConnectionViewOptions = {
   configurationName: Accessor<string>
@@ -31,30 +31,79 @@ export type ConnectionViewActions = {
 
 export type ConnectionViewModel = {
   title: Accessor<string>
-  editorOpen: Accessor<boolean>
   treePane: TreePaneViewModel
   editorPane: EditorPaneViewModel
   resultsPane: ResultsPaneViewModel
   actions: ConnectionViewActions
 }
 
-const DEFAULT_PANE: FocusPane = "tree"
+const DEFAULT_PANE: Pane = "tree"
 
 export function useConnectionView(options: UseConnectionViewOptions): ConnectionViewModel {
   const configuration = useConfigurationByName(options.configurationName)
   const title = createMemo(() => configuration()?.name ?? options.configurationName())
-  const [focusedPane, setFocusedPane] = createSignal<FocusPane>(DEFAULT_PANE)
-  const [editorOpen, setEditorOpen] = createSignal(false)
+  const [focusedPane, setFocusedPane] = createSignal<Pane | null>(DEFAULT_PANE)
   const [isActive, setIsActive] = createSignal(true)
-  let previousFocusedPane: FocusPane = DEFAULT_PANE
+  const focusHistory: Pane[] = [DEFAULT_PANE]
+  const [visiblePanes, setVisiblePanes] = createSignal<Record<Pane, boolean>>({
+    tree: true,
+    editor: false,
+    results: false,
+  })
 
-  const focusPane = (pane: FocusPane) => {
-    setFocusedPane((current) => {
-      if (current === pane) {
+  let treePane: TreePaneViewModel
+  let resultsPane: ResultsPaneViewModel
+
+  const isPaneVisible = (pane: Pane) => visiblePanes()[pane]
+  const setPaneVisible = (pane: Pane, next: boolean) => {
+    setVisiblePanes((current) => {
+      if (current[pane] === next) {
         return current
       }
-      previousFocusedPane = current
-      return pane
+      return { ...current, [pane]: next }
+    })
+  }
+
+  const updateFocusHistory = (pane: Pane) => {
+    const index = focusHistory.indexOf(pane)
+    if (index === 0) {
+      return
+    }
+    if (index > -1) {
+      focusHistory.splice(index, 1)
+    }
+    focusHistory.unshift(pane)
+  }
+
+  const findPreviousVisiblePane = (exclude?: Pane | null) => {
+    for (const pane of focusHistory) {
+      if (pane === exclude) {
+        continue
+      }
+      if (isPaneVisible(pane)) {
+        return pane
+      }
+    }
+    return null
+  }
+
+  const focusPane = (target: Pane | null) => {
+    setFocusedPane((current) => {
+      if (target === null) {
+        return null
+      }
+      if (!isPaneVisible(target)) {
+        const fallback = findPreviousVisiblePane(target)
+        if (!fallback) {
+          return null
+        }
+        target = fallback
+      }
+      if (current === target) {
+        return current
+      }
+      updateFocusHistory(target)
+      return target
     })
   }
 
@@ -62,51 +111,61 @@ export function useConnectionView(options: UseConnectionViewOptions): Connection
   const focusEditor = () => focusPane("editor")
   const focusResults = () => focusPane("results")
 
+  const focusPreviousVisiblePane = () => {
+    const current = focusedPane()
+    const next = findPreviousVisiblePane(current)
+    if (next) {
+      focusPane(next)
+      return
+    }
+    if (current && isPaneVisible(current)) {
+      focusPane(current)
+      return
+    }
+    setFocusedPane(null)
+  }
+
   const openEditor = () => {
-    setEditorOpen(true)
+    setPaneVisible("editor", true)
     focusEditor()
   }
 
-  const createFocusController = (pane: FocusPane, fallback?: () => void): PaneFocusController => ({
-    isFocused: () => isActive() && focusedPane() === pane,
+  const createFocusController = (pane: Pane): PaneFocusController => ({
+    isFocused: () => isActive() && focusedPane() === pane && isPaneVisible(pane),
     focusSelf: () => focusPane(pane),
-    focusFallback: fallback,
   })
 
-  const treePane = useTreePane({
+  treePane = useTreePane({
     configurationName: options.configurationName,
-    focus: createFocusController("tree", () => focusPane(DEFAULT_PANE)),
+    focus: createFocusController("tree"),
+    isVisible: () => isPaneVisible("tree"),
   })
 
   const editorPane = useEditorPane({
     configurationName: options.configurationName,
     focus: createFocusController("editor"),
-    unfocus: restorePreviousPaneFocus,
+    unfocus: focusPreviousVisiblePane,
+    isVisible: () => isPaneVisible("editor"),
   })
 
-  const resultsPane = useResultsPane({
+  resultsPane = useResultsPane({
     job: editorPane.currentJob,
-    focus: createFocusController("results", () => focusPane(DEFAULT_PANE)),
+    focus: createFocusController("results"),
+    isVisible: () => isPaneVisible("results"),
   })
-
-  function restorePreviousPaneFocus() {
-    if (focusedPane() !== "editor") {
-      return
-    }
-    if (previousFocusedPane === "results" && resultsPane.visible()) {
-      focusResults()
-      return
-    }
-    focusTree()
-  }
 
   const hasResults = () => {
     const job = editorPane.currentJob()
     return !!(job?.result || job?.error)
   }
 
+  const shouldShowResults = () => {
+    const job = editorPane.currentJob()
+    return !!(job?.result || job?.error || job?.status === "running")
+  }
+
   // Can only leave tree if editor is open OR results are available
-  const canLeaveTree = () => editorOpen() || hasResults()
+  const canLeaveTree = () => isPaneVisible("editor") || hasResults()
 
   const moveFocusLeft = () => {
     if (focusedPane() === "editor" && treePane.visible()) {
@@ -143,30 +202,53 @@ export function useConnectionView(options: UseConnectionViewOptions): Connection
       return
     }
     const pane = focusedPane()
-    if (pane === "editor" && editorOpen()) {
-      focusEditor()
+    if (pane && isPaneVisible(pane)) {
+      focusPane(pane)
       return
     }
-    if (pane === "results" && resultsPane.visible()) {
-      focusResults()
-      return
-    }
-    focusTree()
+    focusPreviousVisiblePane()
   }
 
   const toggleResultsVisible = () => {
     if (!hasResults()) return
-    resultsPane.toggleVisible()
+    const wasFocused = focusedPane() === "results"
+    const next = !isPaneVisible("results")
+    setPaneVisible("results", next)
+    if (next) {
+      focusResults()
+      return
+    }
+    if (wasFocused) {
+      focusPreviousVisiblePane()
+    }
   }
+
+  const toggleTreeVisible = () => {
+    const wasFocused = focusedPane() === "tree"
+    const next = !isPaneVisible("tree")
+    setPaneVisible("tree", next)
+    if (next) {
+      focusTree()
+      return
+    }
+    if (wasFocused) {
+      focusPreviousVisiblePane()
+    }
+  }
+
+  createEffect(() => {
+    if (shouldShowResults()) {
+      setPaneVisible("results", true)
+    }
+  })
 
   return {
     title,
-    editorOpen,
     treePane,
     editorPane,
     resultsPane,
     actions: {
-      toggleTreeVisible: treePane.toggleVisible,
+      toggleTreeVisible,
       toggleResultsVisible,
       onQueryChange: editorPane.onQueryChange,
       executeQuery: editorPane.executeQuery,
