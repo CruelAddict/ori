@@ -81,10 +81,6 @@ export function useConnectionView(options: UseConnectionViewOptions) {
     })
   }
 
-  const focusTree = () => focusPane("tree")
-  const focusEditor = () => focusPane("editor")
-  const focusResults = () => focusPane("results")
-
   const focusPreviousVisiblePane = () => {
     const current = focusedPane()
     const next = findPreviousVisiblePane(current)
@@ -101,7 +97,7 @@ export function useConnectionView(options: UseConnectionViewOptions) {
 
   const openEditor = () => {
     setPaneVisible("editor", true)
-    focusEditor()
+    focusPane("editor")
   }
 
   const paneFocusFuncs = (pane: Pane) => ({
@@ -125,11 +121,6 @@ export function useConnectionView(options: UseConnectionViewOptions) {
     ...paneFocusFuncs("results"),
   })
 
-  const hasResults = () => {
-    const job = editorPane.currentJob()
-    return !!(job?.result || job?.error)
-  }
-
   const shouldShowResults = () => {
     const job = editorPane.currentJob()
     return !!(job?.result || job?.error || job?.status === "running")
@@ -149,12 +140,12 @@ export function useConnectionView(options: UseConnectionViewOptions) {
   }
 
   const toggleResultsVisible = () => {
-    if (!hasResults()) return
+    if (!editorPane.currentJob()?.result) return
     const wasFocused = focusedPane() === "results"
     const next = !isPaneVisible("results")
     setPaneVisible("results", next)
     if (next) {
-      focusResults()
+      focusPane("results")
       return
     }
     if (wasFocused) {
@@ -167,7 +158,7 @@ export function useConnectionView(options: UseConnectionViewOptions) {
     const next = !isPaneVisible("tree")
     setPaneVisible("tree", next)
     if (next) {
-      focusTree()
+      focusPane("tree")
       return
     }
     if (wasFocused) {
