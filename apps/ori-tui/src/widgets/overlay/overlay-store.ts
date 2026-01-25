@@ -77,7 +77,8 @@ export function createOverlayManager(): OverlayManager {
     }
 
     if (renderer && overlays().length === 0) {
-      previousFocus = renderer.currentFocusedRenderable ?? null
+      const current = renderer.currentFocusedRenderable
+      previousFocus = current?.focused ? current : null
     }
 
     const zIndex = options.zIndex ?? nextLayer++
