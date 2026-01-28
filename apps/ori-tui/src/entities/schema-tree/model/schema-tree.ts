@@ -1,8 +1,8 @@
 import type { Accessor } from "solid-js"
 import { batch, createEffect, createMemo, createSignal } from "solid-js"
 import { createStore, produce, type SetStoreFunction } from "solid-js/store"
-import type { GraphSnapshot } from "../api/graph"
-import { buildNodeEntityMap, type NodeEntity } from "./node-entity"
+import type { Node } from "@shared/lib/configurations-client"
+import { createEdgeNodeEntity, createSnapshotNodeEntity, type NodeEntity } from "./node-entity"
 
 const CHILD_BATCH_SIZE = 10
 
@@ -12,14 +12,12 @@ export type VisibleRow = {
   depth: number
 }
 
-export function useSchemaTree(snapshot: Accessor<GraphSnapshot | null>) {
-  const entityMap = createMemo(() => {
-    const snap = snapshot()
-    if (!snap) {
-      return new Map<string, NodeEntity>()
-    }
-    return buildNodeEntityMap(snap.nodes)
-  })
+export function useSchemaTree(nodesById: Accessor<Record<string, Node>>, rootIds: Accessor<string[]>) {
+  const [entitiesById, setEntitiesById] = createStore<Record<string, NodeEntity>>({})
+  const processedNodeIds = new Set<string>()
+  const edgeIdsByChildId = new Map<string, Set<string>>()
+
+  const getEntity = (id: string) => entitiesById[id]
 
   // Fine-grained per-node stores for expansion and loaded-children counts
   const [expandedNodes, setExpandedNodes] = createStore<Record<string, true>>({})
@@ -29,10 +27,12 @@ export function useSchemaTree(snapshot: Accessor<GraphSnapshot | null>) {
   const isNodeExpanded = (nodeId: string | null) => (nodeId ? Boolean(expandedNodes[nodeId]) : false)
   const getVisibleCount = (nodeId: string) => visibleChildCounts[nodeId] ?? 0
 
-  const rootIds = createMemo(() => snapshot()?.rootIds ?? [])
+  const rootIdsMemo = createMemo(() => rootIds())
 
   // Derived flat rows for navigation/scroll. Rendering can be recursive and read helpers directly.
-  const visibleRows = createMemo(() => buildVisibleRows(rootIds(), entityMap(), isNodeExpanded, getVisibleCount))
+  const visibleRows = createMemo(() =>
+    buildVisibleRows(rootIdsMemo(), getEntity, isNodeExpanded, getVisibleCount),
+  )
 
   const rowIndexMap = createMemo(() => {
     const list = visibleRows()
@@ -52,8 +52,8 @@ export function useSchemaTree(snapshot: Accessor<GraphSnapshot | null>) {
   })
 
   setupTreeEffects({
-    snapshot,
-    entityMap,
+    rootIds: rootIdsMemo,
+    getEntity,
     setExpandedNodes,
     setVisibleChildCounts,
     selectedId,
@@ -63,17 +63,79 @@ export function useSchemaTree(snapshot: Accessor<GraphSnapshot | null>) {
   })
 
   const childVisibility = createChildVisibilityManager({
-    entityMap,
+    getEntity,
     isNodeExpanded,
     getVisibleCount,
     setVisibleChildCounts,
+  })
+
+  const registerEdgeChildren = (edgeId: string, childIds: string[]) => {
+    for (const childId of childIds) {
+      const entry = edgeIdsByChildId.get(childId)
+      if (entry) {
+        entry.add(edgeId)
+      } else {
+        edgeIdsByChildId.set(childId, new Set([edgeId]))
+      }
+    }
+  }
+
+  const updateEdgesForChild = (childId: string) => {
+    const edgeIds = edgeIdsByChildId.get(childId)
+    if (!edgeIds) return
+    for (const edgeId of edgeIds) {
+      const edgeEntity = getEntity(edgeId)
+      if (!edgeEntity) continue
+      if (!edgeEntity.hasChildren) {
+        setEntitiesById(edgeId, "hasChildren", true)
+      }
+      if (isNodeExpanded(edgeId)) {
+        childVisibility.ensureInitialChildren(edgeId)
+        childVisibility.scheduleAutoLoad(edgeId)
+      }
+    }
+  }
+
+  createEffect(() => {
+    const nodes = nodesById()
+    const ids = Object.keys(nodes)
+    if (ids.length === 0) {
+      if (processedNodeIds.size > 0) {
+        processedNodeIds.clear()
+        edgeIdsByChildId.clear()
+        setEntitiesById({})
+      }
+      return
+    }
+
+    for (const id of ids) {
+      if (processedNodeIds.has(id)) continue
+      const node = nodes[id]
+      if (!node) continue
+      processedNodeIds.add(id)
+
+      const nodeEntity = createSnapshotNodeEntity(node)
+      for (const [edgeName, edge] of Object.entries(node.edges ?? {})) {
+        if (!edge.items || edge.items.length === 0) {
+          continue
+        }
+        const edgeEntity = createEdgeNodeEntity(node, edgeName, edge)
+        registerEdgeChildren(edgeEntity.id, edgeEntity.childIds)
+        edgeEntity.hasChildren = edgeEntity.childIds.some((childId) => Boolean(nodes[childId]))
+        nodeEntity.childIds.push(edgeEntity.id)
+        nodeEntity.hasChildren = nodeEntity.childIds.length > 0
+        setEntitiesById(edgeEntity.id, edgeEntity)
+      }
+      setEntitiesById(node.id, nodeEntity)
+      updateEdgesForChild(node.id)
+    }
   })
 
   const selectNode = (nodeId: string | null) => setSelectedId(nodeId)
 
   const expandNode = (nodeId: string | null) => {
     if (!nodeId) return
-    const entity = entityMap().get(nodeId)
+    const entity = getEntity(nodeId)
     if (!entity?.hasChildren) return
     if (isNodeExpanded(nodeId)) return
     setExpandedNodes(nodeId, true)
@@ -100,7 +162,7 @@ export function useSchemaTree(snapshot: Accessor<GraphSnapshot | null>) {
 
   const focusFirstChild = createFocusFirstChildAction({
     selectedRow,
-    entityMap,
+    getEntity,
     expandNode,
     ensureInitialChildren: childVisibility.ensureInitialChildren,
     selectNode,
@@ -108,7 +170,7 @@ export function useSchemaTree(snapshot: Accessor<GraphSnapshot | null>) {
 
   const collapseCurrentOrParent = createCollapseCurrentOrParentAction({
     selectedRow,
-    entityMap,
+    getEntity,
     collapseNode,
     selectNode,
     isNodeExpanded,
@@ -116,7 +178,7 @@ export function useSchemaTree(snapshot: Accessor<GraphSnapshot | null>) {
 
   const activateSelection = createActivateSelectionAction({
     selectedRow,
-    entityMap,
+    getEntity,
     collapseNode,
     expandNode,
     isNodeExpanded,
@@ -134,7 +196,7 @@ export function useSchemaTree(snapshot: Accessor<GraphSnapshot | null>) {
     collapseCurrentOrParent,
     selectNode,
     isExpanded: (nodeId: string | null) => isNodeExpanded(nodeId),
-    getEntity: (nodeId: string | null) => (nodeId ? entityMap().get(nodeId) : undefined),
+    getEntity: (nodeId: string | null) => (nodeId ? entitiesById[nodeId] : undefined),
     getVisibleChildIds: childVisibility.getVisibleChildIds,
     getRenderableChildIds: childVisibility.getRenderableChildIds,
     activateSelection,
@@ -143,17 +205,17 @@ export function useSchemaTree(snapshot: Accessor<GraphSnapshot | null>) {
 
 function buildVisibleRows(
   rootIds: readonly string[],
-  entities: Map<string, NodeEntity>,
+  getEntity: (id: string) => NodeEntity | undefined,
   isExpanded: (id: string) => boolean,
   getVisibleCount: (id: string) => number,
 ): VisibleRow[] {
   const rows: VisibleRow[] = []
   for (const rootId of rootIds) {
-    const entity = entities.get(rootId)
+    const entity = getEntity(rootId)
     if (!entity) continue
     rows.push({ id: entity.id, depth: 0 })
     if (entity.hasChildren && isExpanded(entity.id)) {
-      appendVisibleChildren(rows, entity.id, 1, entities, isExpanded, getVisibleCount)
+      appendVisibleChildren(rows, entity.id, 1, getEntity, isExpanded, getVisibleCount)
     }
   }
   return rows
@@ -163,28 +225,28 @@ function appendVisibleChildren(
   list: VisibleRow[],
   parentId: string,
   depth: number,
-  entities: Map<string, NodeEntity>,
+  getEntity: (id: string) => NodeEntity | undefined,
   isExpanded: (id: string) => boolean,
   getVisibleCount: (id: string) => number,
 ) {
-  const parent = entities.get(parentId)
+  const parent = getEntity(parentId)
   if (!parent) return
   const visibleCount = Math.min(getVisibleCount(parentId), parent.childIds.length)
   for (let index = 0; index < visibleCount; index += 1) {
     const childId = parent.childIds[index]
     if (!childId) continue
-    const child = entities.get(childId)
+    const child = getEntity(childId)
     if (!child) continue
     list.push({ id: child.id, depth, parentId })
     if (child.hasChildren && isExpanded(child.id)) {
-      appendVisibleChildren(list, child.id, depth + 1, entities, isExpanded, getVisibleCount)
+      appendVisibleChildren(list, child.id, depth + 1, getEntity, isExpanded, getVisibleCount)
     }
   }
 }
 
 type TreeEffectsOptions = {
-  snapshot: Accessor<GraphSnapshot | null>
-  entityMap: Accessor<Map<string, NodeEntity>>
+  rootIds: Accessor<string[]>
+  getEntity: (id: string) => NodeEntity | undefined
   setExpandedNodes: SetStoreFunction<Record<string, true>>
   setVisibleChildCounts: SetStoreFunction<Record<string, number>>
   selectedId: Accessor<string | null>
@@ -195,26 +257,25 @@ type TreeEffectsOptions = {
 
 function setupTreeEffects(options: TreeEffectsOptions) {
   createEffect(() => {
-    const map = options.entityMap()
     options.setExpandedNodes(
       produce<Record<string, true>>((state) => {
         for (const id of Object.keys(state)) {
-          if (!map.has(id)) delete state[id]
+          if (!options.getEntity(id)) delete state[id]
         }
       }),
     )
     options.setVisibleChildCounts(
       produce<Record<string, number>>((counts) => {
         for (const id of Object.keys(counts)) {
-          if (!map.has(id)) delete counts[id]
+          if (!options.getEntity(id)) delete counts[id]
         }
       }),
     )
   })
 
   createEffect(() => {
-    const snap = options.snapshot()
-    if (!snap) {
+    const rootIds = options.rootIds()
+    if (rootIds.length === 0) {
       batch(() => {
         options.setSelectedId(null)
       })
@@ -234,7 +295,7 @@ function setupTreeEffects(options: TreeEffectsOptions) {
     if (rowIndex !== undefined) {
       return
     }
-    if (options.entityMap().has(current)) {
+    if (options.getEntity(current)) {
       return
     }
     options.setSelectedId(rows[0]?.id ?? null)
@@ -242,7 +303,7 @@ function setupTreeEffects(options: TreeEffectsOptions) {
 }
 
 type ChildVisibilityOptions = {
-  entityMap: Accessor<Map<string, NodeEntity>>
+  getEntity: (id: string) => NodeEntity | undefined
   isNodeExpanded: (nodeId: string | null) => boolean
   getVisibleCount: (nodeId: string) => number
   setVisibleChildCounts: SetStoreFunction<Record<string, number>>
@@ -253,7 +314,7 @@ function createChildVisibilityManager(options: ChildVisibilityOptions) {
   let handle: ReturnType<typeof setTimeout> | null = null
 
   const ensureInitialChildren = (nodeId: string) => {
-    const entity = options.entityMap().get(nodeId)
+    const entity = options.getEntity(nodeId)
     if (!entity?.hasChildren) return
     const limit = Math.min(entity.childIds.length, CHILD_BATCH_SIZE)
     options.setVisibleChildCounts(nodeId, (currentValue: number | undefined) => {
@@ -263,7 +324,7 @@ function createChildVisibilityManager(options: ChildVisibilityOptions) {
   }
 
   const scheduleAutoLoad = (nodeId: string) => {
-    const entity = options.entityMap().get(nodeId)
+    const entity = options.getEntity(nodeId)
     if (!entity?.hasChildren) return
     if (options.getVisibleCount(nodeId) >= entity.childIds.length) return
     queue.add(nodeId)
@@ -275,11 +336,10 @@ function createChildVisibilityManager(options: ChildVisibilityOptions) {
   const runAutoLoadCycle = () => {
     handle = null
     if (queue.size === 0) return
-    const entities = options.entityMap()
     const pending = new Set<string>()
     for (const nodeId of queue) {
       if (!options.isNodeExpanded(nodeId)) continue
-      const entity = entities.get(nodeId)
+      const entity = options.getEntity(nodeId)
       if (!entity?.childIds.length) continue
       const baseline = options.getVisibleCount(nodeId)
       if (baseline >= entity.childIds.length) continue
@@ -297,11 +357,18 @@ function createChildVisibilityManager(options: ChildVisibilityOptions) {
   }
 
   const sliceChildren = (nodeId: string) => {
-    const entity = options.entityMap().get(nodeId)
+    const entity = options.getEntity(nodeId)
     if (!entity) return [] as string[]
     const count = options.getVisibleCount(nodeId)
     if (count <= 0) return [] as string[]
-    return entity.childIds.slice(0, Math.min(count, entity.childIds.length))
+    const result: string[] = []
+    for (const childId of entity.childIds) {
+      if (!childId) continue
+      if (!options.getEntity(childId)) continue
+      result.push(childId)
+      if (result.length >= count) break
+    }
+    return result
   }
 
   return {
@@ -336,7 +403,7 @@ function createMoveSelectionAction(options: MoveSelectionOptions) {
 
 type FocusFirstChildOptions = {
   selectedRow: Accessor<VisibleRow | null>
-  entityMap: Accessor<Map<string, NodeEntity>>
+  getEntity: (id: string) => NodeEntity | undefined
   expandNode: (nodeId: string | null) => void
   ensureInitialChildren: (nodeId: string) => void
   selectNode: (nodeId: string | null) => void
@@ -346,9 +413,16 @@ function createFocusFirstChildAction(options: FocusFirstChildOptions) {
   return () => {
     const row = options.selectedRow()
     if (!row) return
-    const entity = options.entityMap().get(row.id)
-    const firstChildId = entity?.childIds[0]
-    if (!entity?.hasChildren || !firstChildId) return
+    const entity = options.getEntity(row.id)
+    if (!entity?.hasChildren) return
+    let firstChildId: string | undefined
+    for (const childId of entity.childIds) {
+      if (options.getEntity(childId)) {
+        firstChildId = childId
+        break
+      }
+    }
+    if (!firstChildId) return
     batch(() => {
       options.expandNode(row.id)
       options.ensureInitialChildren(row.id)
@@ -359,7 +433,7 @@ function createFocusFirstChildAction(options: FocusFirstChildOptions) {
 
 type CollapseCurrentOrParentOptions = {
   selectedRow: Accessor<VisibleRow | null>
-  entityMap: Accessor<Map<string, NodeEntity>>
+  getEntity: (id: string) => NodeEntity | undefined
   collapseNode: (nodeId: string | null) => void
   selectNode: (nodeId: string | null) => void
   isNodeExpanded: (nodeId: string | null) => boolean
@@ -369,7 +443,7 @@ function createCollapseCurrentOrParentAction(options: CollapseCurrentOrParentOpt
   return () => {
     const row = options.selectedRow()
     if (!row) return
-    const entity = options.entityMap().get(row.id)
+    const entity = options.getEntity(row.id)
     const expanded = entity?.hasChildren && options.isNodeExpanded(row.id)
     if (expanded) {
       options.collapseNode(row.id)
@@ -384,7 +458,7 @@ function createCollapseCurrentOrParentAction(options: CollapseCurrentOrParentOpt
 
 type ActivateSelectionOptions = {
   selectedRow: Accessor<VisibleRow | null>
-  entityMap: Accessor<Map<string, NodeEntity>>
+  getEntity: (id: string) => NodeEntity | undefined
   collapseNode: (nodeId: string | null) => void
   expandNode: (nodeId: string | null) => void
   isNodeExpanded: (nodeId: string | null) => boolean
@@ -394,7 +468,7 @@ function createActivateSelectionAction(options: ActivateSelectionOptions) {
   return () => {
     const row = options.selectedRow()
     if (!row) return
-    const entity = options.entityMap().get(row.id)
+    const entity = options.getEntity(row.id)
     if (!entity?.hasChildren) return
     if (options.isNodeExpanded(row.id)) {
       options.collapseNode(row.id)

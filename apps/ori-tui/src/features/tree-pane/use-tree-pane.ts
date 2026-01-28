@@ -17,8 +17,8 @@ type UseTreePaneOptions = {
 }
 
 export function useTreePane(options: UseTreePaneOptions): TreePaneViewModel {
-  const { snapshot, loading, error, refresh } = useResourceGraphSnapshot(options.configurationName)
-  const controller = useSchemaTree(snapshot)
+  const { nodesById, rootIds, loading, error, refresh } = useResourceGraphSnapshot(options.configurationName)
+  const controller = useSchemaTree(nodesById, rootIds)
 
   const refreshGraph = async () => {
     await refresh()

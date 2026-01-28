@@ -55,7 +55,7 @@ export function buildNodeEntityMap(nodes: Map<string, Node>): Map<string, NodeEn
   return map
 }
 
-function createSnapshotNodeEntity(node: Node): SnapshotNodeEntity {
+export function createSnapshotNodeEntity(node: Node): SnapshotNodeEntity {
   return {
     id: node.id,
     kind: "node",
@@ -68,7 +68,7 @@ function createSnapshotNodeEntity(node: Node): SnapshotNodeEntity {
   }
 }
 
-function createEdgeNodeEntity(node: Node, edgeName: string, edge: NodeEdge): EdgeNodeEntity {
+export function createEdgeNodeEntity(node: Node, edgeName: string, edge: NodeEdge): EdgeNodeEntity {
   const childIds = edge.items.slice()
   return {
     id: edgeEntityId(node.id, edgeName),

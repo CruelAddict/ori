@@ -118,21 +118,21 @@ export function TreePanel(props: TreePanelProps) {
           <Show when={pane.loading()}>
             <text fg={theme().text}>Loading schema graph...</text>
           </Show>
-          <Show when={!pane.loading() && pane.error()}>
+          <Show when={pane.error()}>
             {(message: Accessor<string | null>) => <text fg={theme().error}>Failed to load graph: {message()}</text>}
           </Show>
-          <Show when={!pane.loading() && !pane.error()}>
-            <TreeScrollbox
-              rows={rows}
-              measureRowWidth={measureRowWidth}
-              selectedRowId={selectedId}
-              isFocused={pane.isFocused}
-              onApiReady={handleScrollboxApi}
-              onNaturalWidthChange={handleNaturalWidthChange}
-            >
-              <Show
-                when={rootIds().length > 0}
-                fallback={
+          <TreeScrollbox
+            rows={rows}
+            measureRowWidth={measureRowWidth}
+            selectedRowId={selectedId}
+            isFocused={pane.isFocused}
+            onApiReady={handleScrollboxApi}
+            onNaturalWidthChange={handleNaturalWidthChange}
+          >
+            <Show
+              when={rootIds().length > 0}
+              fallback={
+                <Show when={!pane.loading() && !pane.error()}>
                   <text
                     attributes={TextAttributes.DIM}
                     fg={theme().textMuted}
@@ -140,22 +140,22 @@ export function TreePanel(props: TreePanelProps) {
                   >
                     Graph is empty. Try refreshing later.
                   </text>
-                }
-              >
-                <For each={rootIds()}>
-                  {(id) => (
-                    <TreeNode
-                      nodeId={id}
-                      depth={0}
-                      isFocused={pane.isFocused}
-                      pane={pane}
-                      isRowSelected={isRowSelected}
-                    />
-                  )}
-                </For>
-              </Show>
-            </TreeScrollbox>
-          </Show>
+                </Show>
+              }
+            >
+              <For each={rootIds()}>
+                {(id) => (
+                  <TreeNode
+                    nodeId={id}
+                    depth={0}
+                    isFocused={pane.isFocused}
+                    pane={pane}
+                    isRowSelected={isRowSelected}
+                  />
+                )}
+              </For>
+            </Show>
+          </TreeScrollbox>
         </box>
       </box>
     </KeyScope>

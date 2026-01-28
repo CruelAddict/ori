@@ -2,7 +2,7 @@ import type { Node, OriClient } from "@shared/lib/configurations-client"
 import type { Logger } from "pino"
 
 export type GraphSnapshot = {
-  nodes: Map<string, Node>
+  nodesById: Record<string, Node>
   rootIds: string[]
 }
 
@@ -49,8 +49,71 @@ export async function loadFullGraph(
   }
 
   const result = {
-    nodes,
+    nodesById: Object.fromEntries(nodes.entries()),
     rootIds: rootNodes.map((node) => node.id),
+  }
+  logger?.debug(
+    { configuration: configurationName, totalNodes: nodes.size, rootCount: result.rootIds.length },
+    "schema load completed",
+  )
+  return result
+}
+
+type GraphIncrementalHandlers = {
+  onRoots?: (nodes: Node[], rootIds: string[]) => void
+  onNode?: (node: Node) => void
+}
+
+export async function loadGraphIncremental(
+  client: OriClient,
+  configurationName: string,
+  handlers: GraphIncrementalHandlers,
+  logger?: Logger,
+): Promise<GraphSnapshot> {
+  logger?.debug({ configuration: configurationName }, "schema load starting")
+  const nodes = new Map<string, Node>()
+  const queue = new Set<string>()
+
+  logger?.debug({ configuration: configurationName }, "fetching root nodes")
+  const rootNodes = await client.getNodes(configurationName)
+  logger?.debug({ configuration: configurationName, rootCount: rootNodes.length }, "fetched root nodes")
+
+  const rootIds = rootNodes.map((node) => node.id)
+  handlers.onRoots?.(rootNodes, rootIds)
+
+  for (const node of rootNodes) {
+    nodes.set(node.id, node)
+    handlers.onNode?.(node)
+    enqueueEdges(node, queue, nodes)
+  }
+
+  while (queue.size > 0) {
+    const batch = Array.from(queue).slice(0, BATCH_SIZE)
+    for (const id of batch) {
+      queue.delete(id)
+    }
+
+    try {
+      logger?.debug(
+        { configuration: configurationName, batchSize: batch.length, queueRemaining: queue.size },
+        "fetching node batch",
+      )
+      const fetched = await client.getNodes(configurationName, batch)
+      logger?.debug({ configuration: configurationName, fetchedCount: fetched.length }, "fetched node batch")
+      for (const node of fetched) {
+        nodes.set(node.id, node)
+        handlers.onNode?.(node)
+        enqueueEdges(node, queue, nodes)
+      }
+    } catch (err) {
+      logger?.error({ err, batchSize: batch.length }, "failed to hydrate graph batch")
+      throw err
+    }
+  }
+
+  const result = {
+    nodesById: Object.fromEntries(nodes.entries()),
+    rootIds,
   }
   logger?.debug(
     { configuration: configurationName, totalNodes: nodes.size, rootCount: result.rootIds.length },

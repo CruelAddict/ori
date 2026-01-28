@@ -18,7 +18,7 @@ export type ResultsPanelProps = {
 }
 
 const resultsScrollSpeed = {
-  horizontal: 3.5,
+  horizontal: 4,
   vertical: 2,
 }
 
@@ -266,192 +266,193 @@ export function ResultsPanel(props: ResultsPanelProps) {
         flexDirection="column"
         flexGrow={1}
         justifyContent="space-between"
+        backgroundColor={palette().backgroundPanel}
       >
-          <Show when={!job()}>
-            <text
-              attributes={TextAttributes.DIM}
-              fg={palette().textMuted}
-            >
-              No query executed yet
-            </text>
-          </Show>
-
-          <Show when={job()?.status === "running"}>
-            <text fg={palette().text}>Query is running... (Ctrl+G to cancel)</text>
-          </Show>
-
-          <Show when={job()?.status === "failed"}>
-            <box flexDirection="column">
-              <text fg={palette().error}>Query failed:</text>
-              <text fg={palette().error}>{job()?.error || job()?.message || "Unknown error"}</text>
-            </box>
-          </Show>
-
-          <Show when={hasResults()}>
-            <box
-              flexDirection="column"
-              justifyContent="flex-start"
-              onMouseDown={pane.focusSelf}
-              paddingRight={1}
-            >
-              {/* Header */}
-              <box overflow="hidden">
-                <box
-                  flexDirection="row"
-                  marginLeft={-scrollLeft()}
-                >
-                  <SeparatorCell
-                    fg={palette().backgroundPanel}
-                    bg={palette().backgroundElement}
-                    selectionBg={palette().backgroundElement}
-                  />
-                  <For each={resultColumns()}>
-                    {(column, index) => (
-                      <>
-                        {index() > 0 && (
-                          <SeparatorCell
-                            fg={palette().backgroundPanel}
-                            bg={palette().backgroundElement}
-                            selectionBg={palette().backgroundElement}
-                          />
-                        )}
-
-                        <table_cell
-                          width={columnWidths()[index()] + 2}
-                          display={formatCell(column.name, columnWidths()[index()])}
-                          backgroundColor={palette().backgroundElement}
-                          fg={palette().accent}
-                          attributes={TextAttributes.BOLD}
-                          selectionBg={palette().backgroundElement}
-                          value={String(column.name)}
-                          onSelectionChange={(selected: boolean) =>
-                            handleHeaderSelectionChange(index(), selected)
-                          }
-                        />
-
-                      </>
-                    )}
-                  </For>
-                  <SeparatorCell
-                    fg={palette().backgroundPanel}
-                    bg={palette().backgroundElement}
-                    selectionBg={palette().backgroundElement}
-                  />
-                </box>
-              </box>
-              { /* Rows */}
-              <scrollbox
-                ref={(node: ScrollBoxRenderable | undefined) => {
-                  scrollRef = node ?? undefined
-                  if (!scrollRef) return
-                  // @ts-expect-error onMouseEvent is protected in typings
-                  const originalOnMouseEvent = scrollRef.onMouseEvent?.bind(scrollRef)
-                  const handleMouseEvent = createScrollSpeedHandler(originalOnMouseEvent, resultsScrollSpeed)
-                  // @ts-expect-error override protected handler to track horizontal scroll
-                  scrollRef.onMouseEvent = (event: MouseEvent) => {
-                    handleMouseEvent(event)
-                    setScrollLeft(scrollRef?.scrollLeft ?? 0)
-                  }
-                }}
-                maxHeight={18}
-                onMouseDown={pane.focusSelf}
-                scrollX={true}
-                scrollY={true}
-                horizontalScrollbarOptions={{
-                  showArrows: true,
-                  trackOptions: {
-                    foregroundColor: theme().backgroundPanel,
-                    backgroundColor: theme().backgroundPanel,
-                  },
-                }}
-                contentOptions={{
-                  maxWidth: undefined,
-                  width: "auto",
-                }}
-              >
-                <box flexDirection="column" width={"auto"}>
-                  <For each={resultRows()}>
-                    {(row, rowIndex) => (
-                      <box
-                        flexDirection="row"
-                        ref={(ref: BoxRenderable | undefined) => {
-                          if (!ref) {
-                            rowRenderables.delete(rowIndex())
-                            return
-                          }
-                          rowRenderables.set(rowIndex(), ref)
-                        }}
-                      >
-                        <For each={row}>
-                          {(cell, colIndex) => {
-                            const isCursorOn = () => {
-                              return isActive() && cursorRow() === rowIndex() && cursorCol() === colIndex()
-                            }
-                            const rowBg = () => {
-                              if (isCursorOn()) {
-                                return palette().primary
-                              }
-
-                              return undefined
-                            }
-                            return (
-                              <>
-                                <SeparatorCell selectionBg={palette().backgroundElement} />
-                                <table_cell
-                                  backgroundColor={rowBg()}
-                                  flexDirection="row"
-                                  width={columnWidths()[colIndex()] + 2}
-                                  align={typeof cell === "number" ? "right" : "left"}
-                                  onMouseDown={(event: MouseEvent) =>
-                                    handleCellMouseDown(rowIndex(), colIndex(), event)
-                                  }
-                                  selectionBg={palette().backgroundElement}
-                                  value={String(cell)}
-                                  display={formatCell(cell, columnWidths()[colIndex()])}
-                                  fg={isCursorOn() && !hasSelection() ? palette().background : palette().text}
-                                  onSelectionChange={(selected: boolean) =>
-                                    handleRowSelectionChange(rowIndex(), colIndex(), selected)
-                                  }
-                                />
-                                {colIndex() === row.length - 1 && <SeparatorCell
-                                  bg={rowBg()}
-                                  selectionBg={palette().backgroundElement}
-                                />}
-                              </>
-                            )
-                          }}
-                        </For>
-
-                      </box>
-                    )}
-                  </For>
-                </box>
-              </scrollbox>
-            </box>
-          </Show>
-
-          <box
-            height={1}
-            flexDirection="row"
-            justifyContent="flex-end"
-            width="100%"
-            gap={1}
-            paddingRight={3}
+        <Show when={!job()}>
+          <text
+            attributes={TextAttributes.DIM}
+            fg={palette().textMuted}
           >
-            <Show when={hasResults() && pane.isFocused()}>
-              <text fg={palette().textMuted}>{`row ${cursorRow() + 1} / ${resultRows().length}`}</text>
-            </Show>
-          </box>
+            No query executed yet
+          </text>
+        </Show>
 
-          <Show when={job()?.status === "success" && !hasResults()}>
-            <text
-              attributes={TextAttributes.DIM}
+        <Show when={job()?.status === "running"}>
+          <text fg={palette().text}>Query is running... (Ctrl+G to cancel)</text>
+        </Show>
+
+        <Show when={job()?.status === "failed"}>
+          <box flexDirection="column">
+            <text fg={palette().error}>Query failed:</text>
+            <text fg={palette().error}>{job()?.error || job()?.message || "Unknown error"}</text>
+          </box>
+        </Show>
+
+        <Show when={hasResults()}>
+          <box
+            flexDirection="column"
+            justifyContent="flex-start"
+            onMouseDown={pane.focusSelf}
+            paddingRight={1}
+          >
+            {/* Header */}
+            <box overflow="hidden">
+              <box
+                flexDirection="row"
+                marginLeft={-scrollLeft()}
+              >
+                <SeparatorCell
+                  fg={palette().backgroundPanel}
+                  bg={palette().backgroundElement}
+                  selectionBg={palette().backgroundElement}
+                />
+                <For each={resultColumns()}>
+                  {(column, index) => (
+                    <>
+                      {index() > 0 && (
+                        <SeparatorCell
+                          fg={palette().backgroundPanel}
+                          bg={palette().backgroundElement}
+                          selectionBg={palette().backgroundElement}
+                        />
+                      )}
+
+                      <table_cell
+                        width={columnWidths()[index()] + 2}
+                        display={formatCell(column.name, columnWidths()[index()])}
+                        backgroundColor={palette().backgroundElement}
+                        fg={palette().accent}
+                        attributes={TextAttributes.BOLD}
+                        selectionBg={palette().backgroundElement}
+                        value={String(column.name)}
+                        onSelectionChange={(selected: boolean) =>
+                          handleHeaderSelectionChange(index(), selected)
+                        }
+                      />
+
+                    </>
+                  )}
+                </For>
+                <SeparatorCell
+                  fg={palette().backgroundPanel}
+                  bg={palette().backgroundElement}
+                  selectionBg={palette().backgroundElement}
+                />
+              </box>
+            </box>
+            { /* Rows */}
+            <scrollbox
+              ref={(node: ScrollBoxRenderable | undefined) => {
+                scrollRef = node ?? undefined
+                if (!scrollRef) return
+                // @ts-expect-error onMouseEvent is protected in typings
+                const originalOnMouseEvent = scrollRef.onMouseEvent?.bind(scrollRef)
+                const handleMouseEvent = createScrollSpeedHandler(originalOnMouseEvent, resultsScrollSpeed)
+                // @ts-expect-error override protected handler to track horizontal scroll
+                scrollRef.onMouseEvent = (event: MouseEvent) => {
+                  handleMouseEvent(event)
+                  setScrollLeft(scrollRef?.scrollLeft ?? 0)
+                }
+              }}
+              maxHeight={18}
+              onMouseDown={pane.focusSelf}
+              scrollX={true}
+              scrollY={true}
+              horizontalScrollbarOptions={{
+                showArrows: true,
+                trackOptions: {
+                  foregroundColor: theme().backgroundPanel,
+                  backgroundColor: theme().backgroundPanel,
+                },
+              }}
+              contentOptions={{
+                maxWidth: undefined,
+                width: "auto",
+              }}
             >
-              Query completed successfully in
-              {job()?.durationMs ? ` ${job()?.durationMs}ms` : ""}
-              {rowsAffected() !== undefined ? `; ${rowsAffected()} rows affected` : ""}
-            </text>
+              <box flexDirection="column" width={"auto"}>
+                <For each={resultRows()}>
+                  {(row, rowIndex) => (
+                    <box
+                      flexDirection="row"
+                      ref={(ref: BoxRenderable | undefined) => {
+                        if (!ref) {
+                          rowRenderables.delete(rowIndex())
+                          return
+                        }
+                        rowRenderables.set(rowIndex(), ref)
+                      }}
+                    >
+                      <For each={row}>
+                        {(cell, colIndex) => {
+                          const isCursorOn = () => {
+                            return isActive() && cursorRow() === rowIndex() && cursorCol() === colIndex()
+                          }
+                          const rowBg = () => {
+                            if (isCursorOn()) {
+                              return palette().primary
+                            }
+
+                            return undefined
+                          }
+                          return (
+                            <>
+                              <SeparatorCell selectionBg={palette().backgroundElement} />
+                              <table_cell
+                                backgroundColor={rowBg()}
+                                flexDirection="row"
+                                width={columnWidths()[colIndex()] + 2}
+                                align={typeof cell === "number" ? "right" : "left"}
+                                onMouseDown={(event: MouseEvent) =>
+                                  handleCellMouseDown(rowIndex(), colIndex(), event)
+                                }
+                                selectionBg={palette().backgroundElement}
+                                value={String(cell)}
+                                display={formatCell(cell, columnWidths()[colIndex()])}
+                                fg={isCursorOn() && !hasSelection() ? palette().background : palette().text}
+                                onSelectionChange={(selected: boolean) =>
+                                  handleRowSelectionChange(rowIndex(), colIndex(), selected)
+                                }
+                              />
+                              {colIndex() === row.length - 1 && <SeparatorCell
+                                bg={rowBg()}
+                                selectionBg={palette().backgroundElement}
+                              />}
+                            </>
+                          )
+                        }}
+                      </For>
+
+                    </box>
+                  )}
+                </For>
+              </box>
+            </scrollbox>
+          </box>
+        </Show>
+
+        <box
+          height={1}
+          flexDirection="row"
+          justifyContent="flex-end"
+          width="100%"
+          gap={1}
+          paddingRight={3}
+        >
+          <Show when={hasResults() && pane.isFocused()}>
+            <text fg={palette().textMuted}>{`row ${cursorRow() + 1} / ${resultRows().length}`}</text>
           </Show>
+        </box>
+
+        <Show when={job()?.status === "success" && !hasResults()}>
+          <text
+            attributes={TextAttributes.DIM}
+          >
+            Query completed successfully in
+            {job()?.durationMs ? ` ${job()?.durationMs}ms` : ""}
+            {rowsAffected() !== undefined ? `; ${rowsAffected()} rows affected` : ""}
+          </text>
+        </Show>
 
       </box>
     </KeyScope>
