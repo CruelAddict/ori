@@ -106,7 +106,7 @@ export function TreePanel(props: TreePanelProps) {
         flexDirection="column"
         {...paneWidthProps()}
         height="100%"
-        flexShrink={0}
+        flexGrow={1}
       >
         <box
           padding={1}

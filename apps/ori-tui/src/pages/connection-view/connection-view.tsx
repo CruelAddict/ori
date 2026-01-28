@@ -131,36 +131,30 @@ export function ConnectionViewPage(props: ConnectionViewPageProps) {
         enabled={scopeEnabled}
       >
         <box
-          flexDirection="column"
-          flexGrow={1}
+          flexDirection="row"
           backgroundColor={palette().backgroundPanel}
           marginTop={1}
           marginLeft={2}
         >
-          <box
-            flexDirection="row"
-            flexGrow={1}
-          >
-            <box visible={vm.isPaneVisible("tree")}>
-              <TreePanel viewModel={vm.treePane} />
-            </box>
+          <Show when={vm.isPaneVisible("tree")}>
+            <TreePanel viewModel={vm.treePane} />
+          </Show>
 
-            <box
-              flexDirection="column"
-              flexGrow={1}
-              marginLeft={vm.isPaneVisible("tree") ? 1 : 0}
-              justifyContent="space-between"
+          <box
+            flexDirection="column"
+            flexGrow={1}
+            marginLeft={vm.isPaneVisible("tree") ? 1 : 0}
+            justifyContent="space-between"
+          >
+            <Show
+              when={vm.isPaneVisible("editor")}
+              fallback={<WelcomePane />}
             >
-              <Show
-                when={vm.isPaneVisible("editor")}
-                fallback={<WelcomePane />}
-              >
-                <EditorPanel viewModel={vm.editorPane} />
-              </Show>
-              <Show when={vm.isPaneVisible("results")}>
-                <ResultsPanel viewModel={vm.resultsPane} />
-              </Show>
-            </box>
+              <EditorPanel viewModel={vm.editorPane} />
+            </Show>
+            <Show when={vm.isPaneVisible("results")}>
+              <ResultsPanel viewModel={vm.resultsPane} />
+            </Show>
           </box>
         </box>
         <Statusline />
