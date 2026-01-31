@@ -17,11 +17,6 @@ connections:
     password:
       type: "plain_text"
       key: "testpassword123"
-    tls:
-      mode: "verify-full"
-      caCertPath: "./certs/ca.pem"
-      certPath: "./certs/client.pem"
-      keyPath: "./certs/client-key.pem"
   - name: "pg-keychain"
     type: "postgresql"
     host: "localhost"

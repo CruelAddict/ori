@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"strings"
 
@@ -12,14 +13,8 @@ func (a *Adapter) GetScopes(ctx context.Context) ([]model.Scope, error) {
 	query := `
 		SELECT s.schema_name
 		FROM information_schema.schemata s
-		WHERE s.schema_name NOT IN ('pg_catalog', 'information_schema', 'pg_toast')
-		  AND s.schema_name NOT LIKE 'pg_temp_%'
-		  AND s.schema_name NOT LIKE 'pg_toast_temp_%'
-		  AND s.schema_name NOT IN (
-			SELECT n.nspname
-			FROM pg_extension e
-			JOIN pg_namespace n ON n.oid = e.extnamespace
-		  )
+		WHERE s.schema_name != 'information_schema'
+		  AND s.schema_name NOT LIKE 'pg_%'
 		ORDER BY s.schema_name
 	`
 	rows, err := a.db.QueryxContext(ctx, query)
@@ -104,18 +99,32 @@ func (a *Adapter) GetColumns(ctx context.Context, scope model.ScopeID, relation 
 	}
 
 	query := `
-		SELECT 
-			column_name,
-			ordinal_position,
-			data_type,
-			CASE WHEN is_nullable = 'YES' THEN false ELSE true END as not_null,
-			column_default,
-			character_maximum_length,
-			numeric_precision,
-			numeric_scale
-		FROM information_schema.columns
-		WHERE table_schema = $1 AND table_name = $2
-		ORDER BY ordinal_position
+		WITH pk_columns AS (
+			SELECT
+				kcu.column_name,
+				kcu.ordinal_position
+			FROM information_schema.table_constraints tc
+			JOIN information_schema.key_column_usage kcu
+				ON tc.constraint_name = kcu.constraint_name
+				AND tc.table_schema = kcu.table_schema
+			WHERE tc.table_schema = $1
+				AND tc.table_name = $2
+				AND tc.constraint_type = 'PRIMARY KEY'
+		)
+		SELECT
+			c.column_name,
+			c.ordinal_position,
+			c.data_type,
+			CASE WHEN c.is_nullable = 'YES' THEN false ELSE true END as not_null,
+			c.column_default,
+			c.character_maximum_length,
+			c.numeric_precision,
+			c.numeric_scale,
+			COALESCE(pk.ordinal_position, 0) as pk_position
+		FROM information_schema.columns c
+		LEFT JOIN pk_columns pk ON pk.column_name = c.column_name
+		WHERE c.table_schema = $1 AND c.table_name = $2
+		ORDER BY c.ordinal_position
 	`
 	rows, err := a.db.QueryxContext(ctx, query, *scope.Schema, relation)
 	if err != nil {
@@ -128,7 +137,11 @@ func (a *Adapter) GetColumns(ctx context.Context, scope model.ScopeID, relation 
 	var columns []model.Column
 	for rows.Next() {
 		var col model.Column
-		var defaultValue, charMaxLen, numPrecision, numScale *string
+		var defaultValue sql.NullString
+		var charMaxLen sql.NullInt64
+		var numPrecision sql.NullInt64
+		var numScale sql.NullInt64
+		var pkPos sql.NullInt64
 		if err := rows.Scan(
 			&col.Name,
 			&col.Ordinal,
@@ -138,12 +151,25 @@ func (a *Adapter) GetColumns(ctx context.Context, scope model.ScopeID, relation 
 			&charMaxLen,
 			&numPrecision,
 			&numScale,
+			&pkPos,
 		); err != nil {
 			return nil, fmt.Errorf("failed to scan column: %w", err)
 		}
-		col.DefaultValue = defaultValue
-		// Note: These are scanned as strings from nullable int columns
-		// A cleaner approach would use sql.NullInt64 but this works for now
+		if defaultValue.Valid {
+			col.DefaultValue = &defaultValue.String
+		}
+		if charMaxLen.Valid {
+			col.CharMaxLength = &charMaxLen.Int64
+		}
+		if numPrecision.Valid {
+			col.NumericPrecision = &numPrecision.Int64
+		}
+		if numScale.Valid {
+			col.NumericScale = &numScale.Int64
+		}
+		if pkPos.Valid {
+			col.PrimaryKeyPos = int(pkPos.Int64)
+		}
 		columns = append(columns, col)
 	}
 	if err := rows.Err(); err != nil {
@@ -157,17 +183,7 @@ func (a *Adapter) GetConstraints(ctx context.Context, scope model.ScopeID, relat
 		return nil, fmt.Errorf("postgres requires schema in scope")
 	}
 
-	constraints, err := a.getKeyConstraints(ctx, *scope.Schema, relation)
-	if err != nil {
-		return nil, err
-	}
-
-	checkConstraints, err := a.getCheckConstraints(ctx, *scope.Schema, relation)
-	if err != nil {
-		return nil, err
-	}
-
-	return append(constraints, checkConstraints...), nil
+	return a.getConstraintsFromCatalog(ctx, *scope.Schema, relation)
 }
 
 func (a *Adapter) GetIndexes(ctx context.Context, scope model.ScopeID, relation string) ([]model.Index, error) {
@@ -176,40 +192,56 @@ func (a *Adapter) GetIndexes(ctx context.Context, scope model.ScopeID, relation 
 	}
 
 	query := `
-		SELECT 
-			idx.indexname,
-			idx.indexdef,
+		WITH index_columns AS (
+			SELECT
+				i.indexrelid,
+				i.indnkeyatts,
+				cols.ordinality as pos,
+				pg_get_indexdef(i.indexrelid, cols.ordinality::int, true) as column_def
+			FROM pg_index i
+			JOIN pg_class c ON c.oid = i.indrelid
+			JOIN pg_namespace n ON n.oid = c.relnamespace
+			JOIN unnest(i.indkey) WITH ORDINALITY as cols(attnum, ordinality) ON true
+			WHERE n.nspname = $1
+				AND c.relname = $2
+		),
+		index_column_lists AS (
+			SELECT
+				indexrelid,
+				string_agg(column_def, ',' ORDER BY pos) FILTER (WHERE pos <= indnkeyatts) as columns,
+				string_agg(column_def, ',' ORDER BY pos) FILTER (WHERE pos > indnkeyatts) as include_columns
+			FROM index_columns
+			GROUP BY indexrelid
+		)
+		SELECT
+			ic.relname as index_name,
+			pg_get_indexdef(i.indexrelid) as indexdef,
 			am.amname,
 			pg_get_expr(i.indpred, i.indrelid) as predicate,
-			array_to_string(array_agg(att.attname ORDER BY cols.ordinality), ',') as columns,
+			COALESCE(icl.columns, '') as columns,
+			COALESCE(icl.include_columns, '') as include_columns,
 			i.indisunique,
 			i.indisprimary
-		FROM pg_indexes idx
-		JOIN pg_namespace n ON n.nspname = idx.schemaname
-		JOIN pg_class ic ON ic.relname = idx.indexname AND ic.relnamespace = n.oid
-		JOIN pg_index i ON i.indexrelid = ic.oid
+		FROM pg_index i
 		JOIN pg_class c ON c.oid = i.indrelid
+		JOIN pg_namespace n ON n.oid = c.relnamespace
+		JOIN pg_class ic ON ic.oid = i.indexrelid
 		JOIN pg_am am ON am.oid = ic.relam
-		LEFT JOIN LATERAL unnest(i.indkey) WITH ORDINALITY cols(attnum, ordinality)
-			ON true
-		LEFT JOIN pg_attribute att
-			ON att.attrelid = c.oid
-			AND att.attnum = cols.attnum
-		WHERE idx.schemaname = $1
-			AND idx.tablename = $2
-			AND c.relname = idx.tablename
-		GROUP BY idx.indexname, idx.indexdef, am.amname, predicate, i.indisunique, i.indisprimary
-		ORDER BY idx.indexname
+		LEFT JOIN index_column_lists icl ON icl.indexrelid = i.indexrelid
+		WHERE n.nspname = $1
+			AND c.relname = $2
+		ORDER BY ic.relname
 	`
 
 	type row struct {
-		name       string
-		definition string
-		method     string
-		predicate  *string
-		columns    string
-		unique     bool
-		primary    bool
+		name           string
+		definition     string
+		method         string
+		predicate      *string
+		columns        string
+		includeColumns string
+		unique         bool
+		primary        bool
 	}
 
 	rows, err := a.db.QueryxContext(ctx, query, *scope.Schema, relation)
@@ -229,24 +261,27 @@ func (a *Adapter) GetIndexes(ctx context.Context, scope model.ScopeID, relation 
 			&entry.method,
 			&entry.predicate,
 			&entry.columns,
+			&entry.includeColumns,
 			&entry.unique,
 			&entry.primary,
 		); err != nil {
 			return nil, fmt.Errorf("failed to scan index: %w", err)
 		}
 		columns := splitCSV(entry.columns)
+		includeColumns := splitCSV(entry.includeColumns)
 		predicate := ""
 		if entry.predicate != nil {
 			predicate = *entry.predicate
 		}
 		indexes = append(indexes, model.Index{
-			Name:       entry.name,
-			Unique:     entry.unique,
-			Primary:    entry.primary,
-			Columns:    columns,
-			Definition: entry.definition,
-			Method:     entry.method,
-			Predicate:  predicate,
+			Name:           entry.name,
+			Unique:         entry.unique,
+			Primary:        entry.primary,
+			Columns:        columns,
+			IncludeColumns: includeColumns,
+			Definition:     entry.definition,
+			Method:         entry.method,
+			Predicate:      predicate,
 		})
 	}
 	if err := rows.Err(); err != nil {
@@ -297,14 +332,14 @@ func (a *Adapter) GetTriggers(ctx context.Context, scope model.ScopeID, relation
 		if err := rows.Scan(&name, &timing, &rowLevel, &eventBits, &enabledFlag, &definition); err != nil {
 			return nil, fmt.Errorf("failed to scan trigger: %w", err)
 		}
-		enabled := parsePostgresTriggerEnabled(enabledFlag)
+		enabledState := parsePostgresTriggerEnabledState(enabledFlag)
 		triggers = append(triggers, model.Trigger{
-			Name:        name,
-			Timing:      timing,
-			Events:      triggerEventsFromBits(eventBits),
-			Orientation: triggerOrientation(rowLevel),
-			Enabled:     enabled,
-			Definition:  definition,
+			Name:         name,
+			Timing:       timing,
+			Events:       triggerEventsFromBits(eventBits),
+			Orientation:  triggerOrientation(rowLevel),
+			EnabledState: enabledState,
+			Definition:   definition,
 		})
 	}
 	if err := rows.Err(); err != nil {
@@ -333,16 +368,19 @@ func splitCSV(input string) []string {
 	return values
 }
 
-func parsePostgresTriggerEnabled(flag string) *bool {
-	if flag == "O" {
-		enabled := true
-		return &enabled
+func parsePostgresTriggerEnabledState(flag string) string {
+	switch flag {
+	case "O":
+		return "enabled"
+	case "D":
+		return "disabled"
+	case "R":
+		return "replica"
+	case "A":
+		return "always"
+	default:
+		return ""
 	}
-	if flag == "D" {
-		enabled := false
-		return &enabled
-	}
-	return nil
 }
 
 func triggerEventsFromBits(bits int) []string {
@@ -372,57 +410,120 @@ func triggerOrientation(rowLevel bool) string {
 	return "STATEMENT"
 }
 
-func (a *Adapter) getKeyConstraints(ctx context.Context, schema, table string) ([]model.Constraint, error) {
+func constraintTypeFromCode(code string) string {
+	switch code {
+	case "p":
+		return "PRIMARY KEY"
+	case "u":
+		return "UNIQUE"
+	case "f":
+		return "FOREIGN KEY"
+	case "c":
+		return "CHECK"
+	default:
+		return code
+	}
+}
+
+func fkActionFromCode(code string) string {
+	switch code {
+	case "a":
+		return "NO ACTION"
+	case "r":
+		return "RESTRICT"
+	case "c":
+		return "CASCADE"
+	case "n":
+		return "SET NULL"
+	case "d":
+		return "SET DEFAULT"
+	default:
+		return code
+	}
+}
+
+func fkMatchFromCode(code string) string {
+	switch code {
+	case "s":
+		return "SIMPLE"
+	case "f":
+		return "FULL"
+	case "p":
+		return "PARTIAL"
+	default:
+		return code
+	}
+}
+
+func (a *Adapter) getConstraintsFromCatalog(ctx context.Context, schema, table string) ([]model.Constraint, error) {
 	query := `
-		WITH constraint_columns AS (
-			SELECT 
-				tc.constraint_name,
-				tc.constraint_type,
-				tc.table_schema,
-				tc.table_name,
-				array_to_string(array_agg(kcu.column_name ORDER BY kcu.ordinal_position), ',') as columns
-			FROM information_schema.table_constraints tc
-			JOIN information_schema.key_column_usage kcu 
-				ON tc.constraint_name = kcu.constraint_name 
-				AND tc.table_schema = kcu.table_schema
-			WHERE tc.table_schema = $1 
-				AND tc.table_name = $2
-				AND tc.constraint_type IN ('PRIMARY KEY', 'UNIQUE', 'FOREIGN KEY')
-			GROUP BY tc.constraint_name, tc.constraint_type, tc.table_schema, tc.table_name
+		WITH constraints AS (
+			SELECT
+				con.oid,
+				con.conname,
+				con.contype,
+				con.conindid,
+				con.confrelid,
+				con.confupdtype,
+				con.confdeltype,
+				con.confmatchtype,
+				con.conrelid,
+				con.conbin
+			FROM pg_constraint con
+			JOIN pg_class c ON con.conrelid = c.oid
+			JOIN pg_namespace n ON n.oid = c.relnamespace
+			WHERE n.nspname = $1
+				AND c.relname = $2
+				AND con.contype IN ('p', 'u', 'f', 'c')
 		),
-		foreign_key_refs AS (
-			SELECT 
-				tc.constraint_name,
-				ccu.table_schema as ref_schema,
-				ccu.table_name as ref_table,
-				array_to_string(array_agg(ccu.column_name ORDER BY kcu.ordinal_position), ',') as ref_columns,
-				rc.update_rule,
-				rc.delete_rule
-			FROM information_schema.table_constraints tc
-			JOIN information_schema.key_column_usage kcu 
-				ON tc.constraint_name = kcu.constraint_name 
-				AND tc.table_schema = kcu.table_schema
-			JOIN information_schema.constraint_column_usage ccu 
-				ON tc.constraint_name = ccu.constraint_name
-			JOIN information_schema.referential_constraints rc
-				ON tc.constraint_name = rc.constraint_name
-			WHERE tc.table_schema = $1 
-				AND tc.table_name = $2
-				AND tc.constraint_type = 'FOREIGN KEY'
-			GROUP BY tc.constraint_name, ccu.table_schema, ccu.table_name, rc.update_rule, rc.delete_rule
+		constraint_columns AS (
+			SELECT
+				con.oid,
+				string_agg(att.attname, ',' ORDER BY cols.ordinality) as columns
+			FROM pg_constraint con
+			JOIN pg_class c ON con.conrelid = c.oid
+			JOIN pg_namespace n ON n.oid = c.relnamespace
+			JOIN unnest(con.conkey) WITH ORDINALITY cols(attnum, ordinality) ON true
+			JOIN pg_attribute att ON att.attrelid = c.oid AND att.attnum = cols.attnum
+			WHERE n.nspname = $1
+				AND c.relname = $2
+				AND con.contype IN ('p', 'u', 'f', 'c')
+			GROUP BY con.oid
+		),
+		foreign_refs AS (
+			SELECT
+				con.oid,
+				nref.nspname as ref_schema,
+				cref.relname as ref_table,
+				string_agg(att.attname, ',' ORDER BY cols.ordinality) as ref_columns
+			FROM pg_constraint con
+			JOIN pg_class c ON con.conrelid = c.oid
+			JOIN pg_namespace n ON n.oid = c.relnamespace
+			JOIN pg_class cref ON con.confrelid = cref.oid
+			JOIN pg_namespace nref ON nref.oid = cref.relnamespace
+			JOIN unnest(con.confkey) WITH ORDINALITY cols(attnum, ordinality) ON true
+			JOIN pg_attribute att ON att.attrelid = cref.oid AND att.attnum = cols.attnum
+			WHERE n.nspname = $1
+				AND c.relname = $2
+				AND con.contype = 'f'
+			GROUP BY con.oid, nref.nspname, cref.relname
 		)
-		SELECT 
-			cc.constraint_name,
-			cc.constraint_type,
-			cc.columns,
-			COALESCE(fkr.ref_schema, '') as ref_schema,
-			COALESCE(fkr.ref_table, '') as ref_table,
-			COALESCE(fkr.ref_columns, '') as ref_columns,
-			COALESCE(fkr.update_rule, '') as update_rule,
-			COALESCE(fkr.delete_rule, '') as delete_rule
-		FROM constraint_columns cc
-		LEFT JOIN foreign_key_refs fkr ON cc.constraint_name = fkr.constraint_name
-		ORDER BY cc.constraint_type, cc.constraint_name
+		SELECT
+			con.conname,
+			con.contype,
+			COALESCE(cc.columns, '') as columns,
+			COALESCE(fr.ref_schema, '') as ref_schema,
+			COALESCE(fr.ref_table, '') as ref_table,
+			COALESCE(fr.ref_columns, '') as ref_columns,
+			con.confupdtype,
+			con.confdeltype,
+			con.confmatchtype,
+			COALESCE(pg_get_expr(con.conbin, con.conrelid, true), '') as check_clause,
+			nullif(con.conindid, 0)::regclass::text as underlying_index
+		FROM constraints con
+		LEFT JOIN constraint_columns cc ON con.oid = cc.oid
+		LEFT JOIN foreign_refs fr ON con.oid = fr.oid
+		ORDER BY con.contype, con.conname
 	`
 
 	rows, err := a.db.QueryxContext(ctx, query, schema, table)
@@ -435,27 +536,33 @@ func (a *Adapter) getKeyConstraints(ctx context.Context, schema, table string) (
 
 	var constraints []model.Constraint
 	for rows.Next() {
-		var name, constraintType, columnsStr string
+		var name, contype, columnsStr string
 		var refSchema, refTable, refColumnsStr string
-		var updateRule, deleteRule string
+		var updateCode, deleteCode, matchCode string
+		var checkClause string
+		var underlyingIndex sql.NullString
 
 		if err := rows.Scan(
 			&name,
-			&constraintType,
+			&contype,
 			&columnsStr,
 			&refSchema,
 			&refTable,
 			&refColumnsStr,
-			&updateRule,
-			&deleteRule,
+			&updateCode,
+			&deleteCode,
+			&matchCode,
+			&checkClause,
+			&underlyingIndex,
 		); err != nil {
 			return nil, fmt.Errorf("failed to scan constraint: %w", err)
 		}
 
+		constraintType := constraintTypeFromCode(contype)
 		c := model.Constraint{
 			Name:    name,
 			Type:    constraintType,
-			Columns: strings.Split(columnsStr, ","),
+			Columns: splitCSV(columnsStr),
 		}
 
 		if constraintType == "FOREIGN KEY" {
@@ -464,9 +571,18 @@ func (a *Adapter) getKeyConstraints(ctx context.Context, schema, table string) (
 				Schema:   &refSchema,
 			}
 			c.ReferencedTable = refTable
-			c.ReferencedColumns = strings.Split(refColumnsStr, ",")
-			c.OnUpdate = updateRule
-			c.OnDelete = deleteRule
+			c.ReferencedColumns = splitCSV(refColumnsStr)
+			c.OnUpdate = fkActionFromCode(updateCode)
+			c.OnDelete = fkActionFromCode(deleteCode)
+			c.Match = fkMatchFromCode(matchCode)
+		}
+
+		if constraintType == "CHECK" {
+			c.CheckClause = checkClause
+		}
+
+		if underlyingIndex.Valid {
+			c.UnderlyingIndex = &underlyingIndex.String
 		}
 
 		constraints = append(constraints, c)
@@ -475,47 +591,5 @@ func (a *Adapter) getKeyConstraints(ctx context.Context, schema, table string) (
 		return nil, fmt.Errorf("error iterating constraints: %w", err)
 	}
 
-	return constraints, nil
-}
-
-func (a *Adapter) getCheckConstraints(ctx context.Context, schema, table string) ([]model.Constraint, error) {
-	query := `
-		SELECT 
-			cc.constraint_name,
-			cc.check_clause
-		FROM information_schema.check_constraints cc
-		JOIN information_schema.table_constraints tc 
-			ON cc.constraint_name = tc.constraint_name
-			AND cc.constraint_schema = tc.table_schema
-		WHERE tc.table_schema = $1 
-			AND tc.table_name = $2
-			AND tc.constraint_type = 'CHECK'
-			AND cc.constraint_name NOT LIKE '%_not_null'
-		ORDER BY cc.constraint_name
-	`
-
-	rows, err := a.db.QueryxContext(ctx, query, schema, table)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read check constraints: %w", err)
-	}
-	defer func() {
-		_ = rows.Close()
-	}()
-
-	var constraints []model.Constraint
-	for rows.Next() {
-		var name, checkClause string
-		if err := rows.Scan(&name, &checkClause); err != nil {
-			return nil, fmt.Errorf("failed to scan check constraint: %w", err)
-		}
-		constraints = append(constraints, model.Constraint{
-			Name:        name,
-			Type:        "CHECK",
-			CheckClause: checkClause,
-		})
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("error iterating check constraints: %w", err)
-	}
 	return constraints, nil
 }

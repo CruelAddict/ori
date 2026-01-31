@@ -266,6 +266,9 @@ func (b *GraphBuilder) BuildIndexNodes(scope model.ScopeID, relation string, ind
 		if len(idx.Columns) > 0 {
 			attrs["columns"] = stringutil.CopyStrings(idx.Columns)
 		}
+		if len(idx.IncludeColumns) > 0 {
+			attrs["includeColumns"] = stringutil.CopyStrings(idx.IncludeColumns)
+		}
 		if idx.Definition != "" {
 			attrs["definition"] = idx.Definition
 		}
@@ -321,8 +324,8 @@ func (b *GraphBuilder) BuildTriggerNodes(scope model.ScopeID, relation string, t
 		if trg.Condition != "" {
 			attrs["condition"] = trg.Condition
 		}
-		if trg.Enabled != nil {
-			attrs["enabled"] = *trg.Enabled
+		if trg.EnabledState != "" {
+			attrs["enabledState"] = trg.EnabledState
 		}
 		if trg.Definition != "" {
 			attrs["definition"] = trg.Definition
