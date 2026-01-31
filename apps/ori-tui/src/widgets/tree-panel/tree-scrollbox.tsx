@@ -1,11 +1,10 @@
 import type { BoxRenderable, MouseEvent, ScrollBoxRenderable } from "@opentui/core"
 import { enforceHorizontalScrollbarMinThumbWidth } from "@shared/lib/opentui-scrollbar-min-width"
-import { createScrollSpeedHandler, getScrollDirection } from "@shared/lib/scroll-speed"
+import { createScrollSpeedHandler } from "@shared/lib/scroll-speed"
 import { type Accessor, createContext, createEffect, onCleanup, type ParentProps, useContext } from "solid-js"
 import { createAutoscrollService } from "./tree-scroll/autoscroll-service.ts"
-import { createOverflowTracker } from "./tree-scroll/overflow-tracker.ts"
-import { createRowMetrics, type MeasureRowWidth, type RowDescriptor } from "./tree-scroll/row-metrics.ts"
 import type { ScrollDelta } from "./tree-scroll/types.ts"
+import { useTheme } from "@app/providers/theme.tsx"
 
 type TreeScrollboxContextValue = {
   registerRowNode: (rowId: string, node: BoxRenderable | undefined) => void
@@ -18,26 +17,9 @@ const treeScrollSpeed = {
   vertical: 1,
 }
 
-type OverflowTrackerHookOptions = {
-  rows: Accessor<readonly RowDescriptor[]>
-  isFocused: Accessor<boolean>
-  selectedRowId: Accessor<string | null>
-  getNaturalWidth: () => number
-  requestHorizontalReset: () => void
-  hasPendingHorizontalReset: () => boolean
-}
-
-function useTreeRowMetrics(
-  rows: Accessor<readonly RowDescriptor[]>,
-  measureRowWidth: MeasureRowWidth,
-  applyContentWidth: (width: number) => void,
-) {
-  const rowMetrics = createRowMetrics(measureRowWidth, applyContentWidth)
-  createEffect(() => {
-    rowMetrics.syncRows(rows())
-  })
-  onCleanup(() => rowMetrics.dispose())
-  return rowMetrics
+export type RowDescriptor = {
+  id: string
+  depth: number
 }
 
 function useTreeAutoscroll(rows: Accessor<readonly RowDescriptor[]>, selectedRowId: Accessor<string | null>) {
@@ -48,21 +30,6 @@ function useTreeAutoscroll(rows: Accessor<readonly RowDescriptor[]>, selectedRow
   })
   onCleanup(() => autoscroll.dispose())
   return autoscroll
-}
-
-function useTreeOverflowTracker(options: OverflowTrackerHookOptions) {
-  const tracker = createOverflowTracker({
-    getNaturalWidth: options.getNaturalWidth,
-    requestHorizontalReset: options.requestHorizontalReset,
-    hasPendingHorizontalReset: options.hasPendingHorizontalReset,
-  })
-  createEffect(() => {
-    options.rows()
-    options.isFocused()
-    tracker.refresh()
-  })
-  onCleanup(() => tracker.dispose())
-  return tracker
 }
 
 export function useTreeScrollRegistration() {
@@ -78,72 +45,32 @@ export type TreeScrollboxApi = {
 
 interface TreeScrollboxProps extends ParentProps {
   rows: Accessor<readonly RowDescriptor[]>
-  measureRowWidth: MeasureRowWidth
   selectedRowId: Accessor<string | null>
-  isFocused: Accessor<boolean>
   onApiReady?: (api: TreeScrollboxApi | undefined) => void
-  onNaturalWidthChange?: (width: number) => void
 }
 
 export function TreeScrollbox(props: TreeScrollboxProps) {
   let scrollBox: ScrollBoxRenderable | undefined
-  let overflowTrackerRef: ReturnType<typeof createOverflowTracker> | null = null
 
   const autoscroll = useTreeAutoscroll(props.rows, props.selectedRowId)
-
-  const applyContentWidth = (width: number) => {
-    if (!scrollBox) {
-      overflowTrackerRef?.refresh()
-      return
-    }
-    scrollBox.content.minWidth = width
-    scrollBox.content.width = width
-    scrollBox.content.maxWidth = width
-    scrollBox.content.flexGrow = 0
-    scrollBox.content.flexShrink = 0
-    scrollBox.requestRender()
-    overflowTrackerRef?.refresh()
-  }
-
-  const rowMetrics = useTreeRowMetrics(props.rows, props.measureRowWidth, applyContentWidth)
-
-  const overflowTracker = useTreeOverflowTracker({
-    rows: props.rows,
-    isFocused: props.isFocused,
-    selectedRowId: props.selectedRowId,
-    getNaturalWidth: rowMetrics.naturalWidth,
-    requestHorizontalReset: autoscroll.requestHorizontalReset,
-    hasPendingHorizontalReset: autoscroll.hasPendingHorizontalReset,
-  })
-  overflowTrackerRef = overflowTracker
 
   props.onApiReady?.({ scrollBy: autoscroll.scrollBy, ensureRowVisible: autoscroll.ensureRowVisible })
   onCleanup(() => {
     props.onApiReady?.(undefined)
   })
 
-  createEffect(() => {
-    props.onNaturalWidthChange?.(rowMetrics.naturalWidth())
-  })
-
   const handleScrollboxRef = (node: ScrollBoxRenderable | undefined) => {
     scrollBox = node
     autoscroll.setScrollBox(node)
-    overflowTracker.setScrollBox(node)
     if (!scrollBox) return
     enforceHorizontalScrollbarMinThumbWidth(scrollBox, 5)
     // @ts-expect-error onMouseEvent is protected in typings
     const originalOnMouseEvent = scrollBox.onMouseEvent?.bind(scrollBox)
     const handleMouseEvent = createScrollSpeedHandler(originalOnMouseEvent, treeScrollSpeed)
-    // @ts-expect-error override protected handler to gate horizontal wheel
+    // @ts-expect-error override protected handler to apply scroll speed
     scrollBox.onMouseEvent = (event: MouseEvent) => {
-      const direction = getScrollDirection(event)
-      if ((event.type === "scroll" && (direction === "left" || direction === "right")) || event.isSelecting) {
-        if (!overflowTracker.horizontalOverflow()) return
-      }
       handleMouseEvent(event)
     }
-    applyContentWidth(rowMetrics.contentWidth())
   }
 
   const contextValue: TreeScrollboxContextValue = {
@@ -153,20 +80,33 @@ export function TreeScrollbox(props: TreeScrollboxProps) {
   return (
     <scrollbox
       ref={handleScrollboxRef}
-      flexDirection="column"
-      flexGrow={1}
       height="100%"
-      scrollbarOptions={{ visible: false }}
-      horizontalScrollbarOptions={{ visible: overflowTracker.horizontalOverflow() }}
       scrollY={true}
       scrollX={true}
+      contentOptions={{
+        maxWidth: undefined,
+        width: "auto",
+        minHeight: "100%",
+        flexGrow: 1,
+        flexShrink: 0
+      }}
+      verticalScrollbarOptions={{
+        trackOptions: {
+          backgroundColor: useTheme().theme().backgroundPanel,
+        },
+      }}
+      horizontalScrollbarOptions={{
+        trackOptions: {
+          backgroundColor: useTheme().theme().backgroundPanel,
+        },
+      }}
     >
       <TreeScrollboxContext.Provider value={contextValue}>
         <box
           flexDirection="column"
-          width={rowMetrics.contentWidth()}
-          flexShrink={0}
           alignItems="flex-start"
+          width="auto"
+          minHeight={"100%"}
         >
           {props.children}
         </box>
@@ -175,4 +115,4 @@ export function TreeScrollbox(props: TreeScrollboxProps) {
   )
 }
 
-export type { RowDescriptor, MeasureRowWidth, ScrollDelta }
+export type { ScrollDelta }

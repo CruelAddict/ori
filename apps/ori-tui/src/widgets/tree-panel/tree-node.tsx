@@ -6,7 +6,7 @@ import type { TreePaneViewModel } from "@src/features/tree-pane/use-tree-pane"
 import { type Accessor, createEffect, createMemo, createSignal, For, Show } from "solid-js"
 import type { TreeRowSegment } from "./tree-row-renderable.ts"
 import "./tree-row-renderable.ts"
-import { type RowDescriptor, useTreeScrollRegistration } from "./tree-scrollbox.tsx"
+import { useTreeScrollRegistration } from "./tree-scrollbox.tsx"
 
 const ROW_LEFT_PADDING = 2
 const GLYPH_SEPARATOR_WIDTH = 1
@@ -107,8 +107,10 @@ export function TreeNode(props: TreeNodeProps) {
             id={`tree-row-${rowId()}`}
             flexDirection="row"
             paddingLeft={ROW_LEFT_PADDING + props.depth * 2}
-            minWidth="100%"
-            flexShrink={0}
+            paddingRight={1}
+            minWidth={30}
+            width={"100%"}
+            flexShrink={1}
             ref={(node: BoxRenderable | undefined) => registerRowNode(rowId(), node)}
             backgroundColor={bg()}
             onMouseOver={() => setHovered(true)}
@@ -172,31 +174,4 @@ function calculateRowTextWidth(parts: RowTextParts): number {
   if (parts.description) width += 1 + parts.description.length
   if (parts.badges) width += 1 + parts.badges.length
   return width
-}
-
-function calculateRowWidth(parts: RowTextParts, depth: number): number {
-  return ROW_LEFT_PADDING + depth * 2 + calculateRowTextWidth(parts)
-}
-
-export function createRowWidthAccessor(options: {
-  getEntity: (id: string) => NodeEntity | undefined
-  isExpanded: (id: string) => boolean
-}) {
-  const { getEntity, isExpanded } = options
-  const cache = new Map<string, number>()
-
-  return (row: RowDescriptor): number => {
-    const expanded = isExpanded(row.id)
-    const key = `${row.id}@${row.depth}:${expanded ? 1 : 0}`
-
-    const cached = cache.get(key)
-    if (cached !== undefined) return cached
-
-    const entity = getEntity(row.id)
-    const parts = buildRowTextParts(entity, expanded)
-    const width = calculateRowWidth(parts, row.depth)
-
-    cache.set(key, width)
-    return width
-  }
 }

@@ -10,8 +10,6 @@ export type AutoscrollService = {
   registerRowNode(rowId: string, node: BoxRenderable | undefined): void
   ensureRowVisible(rowId: string | null): void
   scrollBy(delta: ScrollDelta): void
-  requestHorizontalReset(): void
-  hasPendingHorizontalReset(): boolean
   dispose(): void
 }
 
@@ -21,7 +19,6 @@ export function createAutoscrollService(): AutoscrollService {
   let ensureTarget: string | null = null
   let ensureAttempts = 0
   let ensureHandle: ReturnType<typeof setTimeout> | null = null
-  let horizontalResetPending = false
 
   const registerRowNode = (rowId: string, node: BoxRenderable | undefined) => {
     if (!node) {
@@ -34,11 +31,7 @@ export function createAutoscrollService(): AutoscrollService {
 
   const setScrollBox = (node: ScrollBoxRenderable | undefined) => {
     scrollBox = node
-    if (!scrollBox) {
-      horizontalResetPending = false
-      return
-    }
-    if (horizontalResetPending) requestHorizontalReset()
+    if (!scrollBox) return
     if (ensureTarget) scheduleEnsureTask()
   }
 
@@ -107,25 +100,6 @@ export function createAutoscrollService(): AutoscrollService {
     ensureAttempts = 0
   }
 
-  const tryResetHorizontalScroll = () => {
-    if (!scrollBox) return false
-    const viewportWidth = scrollBox.viewport?.width ?? 0
-    if (viewportWidth === 0) return false
-    if (scrollBox.scrollLeft === 0) return true
-    scrollBox.scrollLeft = 0
-    return true
-  }
-
-  const requestHorizontalReset = () => {
-    if (!scrollBox) {
-      horizontalResetPending = true
-      return
-    }
-    horizontalResetPending = !tryResetHorizontalScroll()
-  }
-
-  const hasPendingHorizontalReset = () => horizontalResetPending
-
   const dispose = () => {
     if (ensureHandle) {
       clearTimeout(ensureHandle)
@@ -133,7 +107,6 @@ export function createAutoscrollService(): AutoscrollService {
     }
     rowNodes.clear()
     ensureTarget = null
-    horizontalResetPending = false
   }
 
   return {
@@ -141,8 +114,6 @@ export function createAutoscrollService(): AutoscrollService {
     registerRowNode,
     ensureRowVisible,
     scrollBy,
-    requestHorizontalReset,
-    hasPendingHorizontalReset,
     dispose,
   }
 }

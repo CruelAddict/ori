@@ -2,17 +2,11 @@ import { useTheme } from "@app/providers/theme"
 import { TextAttributes } from "@opentui/core"
 import { type KeyBinding, KeyScope } from "@src/core/services/key-scopes"
 import type { TreePaneViewModel } from "@src/features/tree-pane/use-tree-pane"
-import { type Accessor, createMemo, createSelector, createSignal, For, onCleanup, onMount, Show } from "solid-js"
-import { createRowWidthAccessor, TreeNode } from "./tree-node.tsx"
-import { MIN_VIEWPORT_WIDTH } from "./tree-scroll/row-metrics.ts"
+import { type Accessor, createSelector, For, Show } from "solid-js"
+import { TreeNode } from "./tree-node.tsx"
 import { TreeScrollbox, type TreeScrollboxApi } from "./tree-scrollbox.tsx"
 
 const HORIZONTAL_SCROLL_STEP = 6
-
-const MIN_FOCUSED_COLUMN_WIDTH = 50
-const MIN_FOCUSED_PERCENT = 0.2
-const MAX_FOCUSED_PERCENT = 0.4
-const FOCUSED_WIDTH_PADDING = 5
 
 export type TreePanelProps = {
   viewModel: TreePaneViewModel
@@ -26,39 +20,10 @@ export function TreePanel(props: TreePanelProps) {
   const isRowSelected = createSelector(selectedId)
   const { theme } = useTheme()
 
-  const measureRowWidth = createRowWidthAccessor({
-    getEntity: pane.controller.getEntity,
-    isExpanded: pane.controller.isExpanded,
-  })
-  const [treeNaturalWidth, setTreeNaturalWidth] = createSignal(MIN_VIEWPORT_WIDTH)
   let treeScrollboxApi: TreeScrollboxApi | null = null
   const handleScrollboxApi = (api?: TreeScrollboxApi) => {
     treeScrollboxApi = api ?? null
   }
-  const handleNaturalWidthChange = (width: number) => {
-    setTreeNaturalWidth(width)
-  }
-
-  const [terminalWidth, setTerminalWidth] = createSignal(readTerminalWidth())
-  const handleResize = () => setTerminalWidth(readTerminalWidth())
-
-  const focusedPaneWidth = createMemo(() => {
-    const natural = treeNaturalWidth() + FOCUSED_WIDTH_PADDING
-    const terminal = terminalWidth()
-    if (terminal <= 0) return natural
-    const minWidth = Math.max(MIN_FOCUSED_COLUMN_WIDTH, terminal * MIN_FOCUSED_PERCENT)
-    const maxWidth = Math.max(minWidth, terminal * MAX_FOCUSED_PERCENT)
-    const bounded = Math.min(natural, maxWidth)
-    return Math.floor(Math.max(minWidth, bounded))
-  })
-
-  onMount(() => {
-    process.stdout?.on?.("resize", handleResize)
-  })
-
-  onCleanup(() => {
-    process.stdout?.off?.("resize", handleResize)
-  })
 
   const handleManualHorizontalScroll = (direction: "left" | "right") => {
     const delta = direction === "left" ? -HORIZONTAL_SCROLL_STEP : HORIZONTAL_SCROLL_STEP
@@ -87,16 +52,6 @@ export function TreePanel(props: TreePanelProps) {
 
   const enabled = () => pane.isFocused()
 
-  const paneWidthProps = () => {
-    return {
-      width: focusedPaneWidth(),
-      maxWidth: focusedPaneWidth(),
-      minWidth: MIN_FOCUSED_COLUMN_WIDTH,
-      flexGrow: 0,
-      flexShrink: 0,
-    } as const
-  }
-
   return (
     <KeyScope
       bindings={bindings}
@@ -104,12 +59,14 @@ export function TreePanel(props: TreePanelProps) {
     >
       <box
         flexDirection="column"
-        {...paneWidthProps()}
         height="100%"
-        flexGrow={1}
+        maxWidth={"44%"}
+        flexGrow={0}
+        flexShrink={0}
       >
         <box
-          padding={1}
+          paddingLeft={1}
+          paddingTop={1}
           flexDirection="column"
           flexGrow={1}
           height="100%"
@@ -123,11 +80,8 @@ export function TreePanel(props: TreePanelProps) {
           </Show>
           <TreeScrollbox
             rows={rows}
-            measureRowWidth={measureRowWidth}
             selectedRowId={selectedId}
-            isFocused={pane.isFocused}
             onApiReady={handleScrollboxApi}
-            onNaturalWidthChange={handleNaturalWidthChange}
           >
             <Show
               when={rootIds().length > 0}
@@ -160,10 +114,4 @@ export function TreePanel(props: TreePanelProps) {
       </box>
     </KeyScope>
   )
-}
-
-function readTerminalWidth() {
-  if (typeof process === "undefined") return 0
-  const columns = process.stdout?.columns
-  return columns ?? 0
 }
