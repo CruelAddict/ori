@@ -1,4 +1,5 @@
 import type { BoxRenderable, MouseEvent, ScrollBoxRenderable } from "@opentui/core"
+import { enforceHorizontalScrollbarMinThumbWidth } from "@shared/lib/opentui-scrollbar-min-width"
 import { createScrollSpeedHandler, getScrollDirection } from "@shared/lib/scroll-speed"
 import { type Accessor, createContext, createEffect, onCleanup, type ParentProps, useContext } from "solid-js"
 import { createAutoscrollService } from "./tree-scroll/autoscroll-service.ts"
@@ -130,6 +131,7 @@ export function TreeScrollbox(props: TreeScrollboxProps) {
     autoscroll.setScrollBox(node)
     overflowTracker.setScrollBox(node)
     if (!scrollBox) return
+    enforceHorizontalScrollbarMinThumbWidth(scrollBox, 5)
     // @ts-expect-error onMouseEvent is protected in typings
     const originalOnMouseEvent = scrollBox.onMouseEvent?.bind(scrollBox)
     const handleMouseEvent = createScrollSpeedHandler(originalOnMouseEvent, treeScrollSpeed)
