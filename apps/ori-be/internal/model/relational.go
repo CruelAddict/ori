@@ -14,9 +14,12 @@ type Scope struct {
 
 // Relation describes a table or view.
 type Relation struct {
-	Name       string
-	Type       string // "table" or "view"
-	Definition string // View definition SQL, if applicable
+	Name         string
+	Type         string  // "table" or "view"
+	Definition   string  // View definition SQL, if applicable
+	Schema       *string // Relation schema (Postgres), if applicable
+	ParentSchema *string // Partition parent schema (Postgres), if applicable
+	ParentTable  *string // Partition parent table name (Postgres), if applicable
 }
 
 // Column describes a table/view column.

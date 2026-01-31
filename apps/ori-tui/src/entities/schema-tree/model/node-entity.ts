@@ -121,11 +121,11 @@ function describeNode(node: Node): string | undefined {
     case "column":
       return typeof node.attributes?.dataType === "string" ? node.attributes.dataType : undefined
     case "constraint":
-      return typeof node.attributes?.constraintType === "string" ? node.attributes.constraintType : undefined
+      return describeConstraint(node)
     case "index":
-      return node.attributes?.unique === true ? "unique" : "index"
+      return describeIndex(node)
     case "trigger":
-      return typeof node.attributes?.timing === "string" ? node.attributes.timing : undefined
+      return describeTrigger(node)
     default:
       return undefined
   }
@@ -143,5 +143,90 @@ function nodeBadges(node: Node): string | undefined {
     }
     return badges.length > 0 ? badges.join(" • ") : undefined
   }
+  if (node.type === "constraint") {
+    return constraintBadges(node)
+  }
+  if (node.type === "index") {
+    return indexBadges(node)
+  }
+  if (node.type === "trigger") {
+    const state = typeof node.attributes?.enabledState === "string" ? node.attributes.enabledState : ""
+    if (!state) return undefined
+    return state.toUpperCase()
+  }
   return undefined
+}
+
+function describeConstraint(node: Node): string | undefined {
+  const constraintType = typeof node.attributes?.constraintType === "string" ? node.attributes.constraintType : ""
+  if (!constraintType) return undefined
+  if (constraintType === "CHECK") {
+    return typeof node.attributes?.checkClause === "string" ? node.attributes.checkClause : constraintType
+  }
+  if (constraintType === "FOREIGN KEY") {
+    const refSchema = typeof node.attributes?.referencedSchema === "string" ? node.attributes.referencedSchema : ""
+    const refTable = typeof node.attributes?.referencedTable === "string" ? node.attributes.referencedTable : ""
+    const reference = [refSchema, refTable].filter(Boolean).join(".")
+    if (reference) {
+      return `FOREIGN KEY -> ${reference}`
+    }
+  }
+  if (constraintType === "UNIQUE") {
+    const indexName = typeof node.attributes?.indexName === "string" ? node.attributes.indexName : ""
+    if (indexName) {
+      return `UNIQUE (index ${indexName})`
+    }
+  }
+  return constraintType
+}
+
+function constraintBadges(node: Node): string | undefined {
+  const constraintType = typeof node.attributes?.constraintType === "string" ? node.attributes.constraintType : ""
+  if (constraintType !== "FOREIGN KEY") return undefined
+  const badges: string[] = []
+  const match = typeof node.attributes?.match === "string" ? node.attributes.match : ""
+  const onUpdate = typeof node.attributes?.onUpdate === "string" ? node.attributes.onUpdate : ""
+  const onDelete = typeof node.attributes?.onDelete === "string" ? node.attributes.onDelete : ""
+  if (match) badges.push(`MATCH ${match}`)
+  if (onUpdate) badges.push(`ON UPDATE ${onUpdate}`)
+  if (onDelete) badges.push(`ON DELETE ${onDelete}`)
+  return badges.length > 0 ? badges.join(" • ") : undefined
+}
+
+function describeIndex(node: Node): string | undefined {
+  const predicate = typeof node.attributes?.predicate === "string" ? node.attributes.predicate : ""
+  if (predicate) {
+    return `where ${predicate}`
+  }
+  return node.attributes?.unique === true ? "unique" : "index"
+}
+
+function describeTrigger(node: Node): string | undefined {
+  const timing = typeof node.attributes?.timing === "string" ? node.attributes.timing : ""
+  const rawEvents = node.attributes?.events
+  const events = Array.isArray(rawEvents)
+    ? rawEvents.filter((event): event is string => typeof event === "string" && event.length > 0)
+    : []
+  const eventsLabel = events.join(" OR ")
+  if (timing && eventsLabel) {
+    return `${timing} ${eventsLabel}`
+  }
+  if (timing) {
+    return timing
+  }
+  if (eventsLabel) {
+    return eventsLabel
+  }
+  return undefined
+}
+
+function indexBadges(node: Node): string | undefined {
+  const badges: string[] = []
+  if (node.attributes?.primary === true) {
+    badges.push("PRIMARY")
+  }
+  if (node.attributes?.unique === true) {
+    badges.push("UNIQUE")
+  }
+  return badges.length > 0 ? badges.join(" • ") : undefined
 }

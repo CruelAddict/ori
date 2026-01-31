@@ -51,15 +51,24 @@ func (a *Adapter) GetRelations(ctx context.Context, scope model.ScopeID) ([]mode
 	}
 
 	query := `
-		SELECT 
-			t.table_name,
-			t.table_type,
-			COALESCE(v.view_definition, '')
-		FROM information_schema.tables t
-		LEFT JOIN information_schema.views v 
-			ON t.table_schema = v.table_schema AND t.table_name = v.table_name
-		WHERE t.table_schema = $1
-		ORDER BY t.table_name
+		SELECT
+			n.nspname as schema_name,
+			c.relname as table_name,
+			c.relkind,
+			CASE WHEN c.relkind = 'v' THEN pg_get_viewdef(c.oid, true) ELSE '' END as definition,
+			pn.nspname as parent_schema,
+			pc.relname as parent_name
+		FROM pg_catalog.pg_class c
+		JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+		LEFT JOIN pg_catalog.pg_inherits i ON i.inhrelid = c.oid
+		LEFT JOIN pg_catalog.pg_class pc ON pc.oid = i.inhparent
+		LEFT JOIN pg_catalog.pg_namespace pn ON pn.oid = pc.relnamespace
+		WHERE (
+				n.nspname = $1 AND c.relkind IN ('r', 'p', 'v')
+			) OR (
+				pn.nspname = $1 AND c.relkind = 'r'
+			)
+		ORDER BY n.nspname, c.relname
 	`
 	rows, err := a.db.QueryxContext(ctx, query, *scope.Schema)
 	if err != nil {
@@ -71,20 +80,39 @@ func (a *Adapter) GetRelations(ctx context.Context, scope model.ScopeID) ([]mode
 
 	var relations []model.Relation
 	for rows.Next() {
-		var name, tableType, definition string
-		if err := rows.Scan(&name, &tableType, &definition); err != nil {
+		var schemaName, name, relkind, definition string
+		var parentSchema sql.NullString
+		var parentTable sql.NullString
+		if err := rows.Scan(&schemaName, &name, &relkind, &definition, &parentSchema, &parentTable); err != nil {
 			return nil, fmt.Errorf("failed to scan relation: %w", err)
 		}
 
 		relType := "table"
-		if tableType == "VIEW" {
+		if relkind == "v" {
 			relType = "view"
 		}
 
+		schemaValue := schemaName
+		schemaPtr := &schemaValue
+
+		var parentSchemaPtr *string
+		var parentTablePtr *string
+		if parentTable.Valid && parentTable.String != "" {
+			value := parentTable.String
+			parentTablePtr = &value
+			if parentSchema.Valid && parentSchema.String != "" {
+				schemaValue := parentSchema.String
+				parentSchemaPtr = &schemaValue
+			}
+		}
+
 		relations = append(relations, model.Relation{
-			Name:       name,
-			Type:       relType,
-			Definition: definition,
+			Name:         name,
+			Type:         relType,
+			Definition:   definition,
+			Schema:       schemaPtr,
+			ParentSchema: parentSchemaPtr,
+			ParentTable:  parentTablePtr,
 		})
 	}
 	if err := rows.Err(); err != nil {

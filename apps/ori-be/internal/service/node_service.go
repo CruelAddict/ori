@@ -138,15 +138,40 @@ func (ns *NodeService) hydrateScope(ctx context.Context, handle *ConnectionHandl
 	childNodes := []*model.Node{node}
 	tableEdge := model.EdgeList{Items: make([]string, 0)}
 	viewEdge := model.EdgeList{Items: make([]string, 0)}
+	partitionEdges := make(map[string][]string)
+	relationNodes := make(map[string]*model.Node, len(relations))
 
 	for _, rel := range relations {
-		relNode := builder.BuildRelationNode(scope, rel)
+		relScope := scope
+		if rel.Schema != nil && *rel.Schema != "" {
+			relScope.Schema = rel.Schema
+		}
+		relNode := builder.BuildRelationNode(relScope, rel)
 		childNodes = append(childNodes, relNode)
+		relationNodes[relNode.ID] = relNode
 		if rel.Type == "table" {
-			tableEdge.Items = append(tableEdge.Items, relNode.ID)
+			if rel.ParentTable != nil {
+				parentScope := scope
+				if rel.ParentSchema != nil && *rel.ParentSchema != "" {
+					parentScope.Schema = rel.ParentSchema
+				}
+				parentRel := model.Relation{Name: *rel.ParentTable, Type: "table"}
+				parentID := builder.RelationNodeID(parentScope, parentRel)
+				partitionEdges[parentID] = append(partitionEdges[parentID], relNode.ID)
+			} else {
+				tableEdge.Items = append(tableEdge.Items, relNode.ID)
+			}
 		} else {
 			viewEdge.Items = append(viewEdge.Items, relNode.ID)
 		}
+	}
+
+	for parentID, childIDs := range partitionEdges {
+		parentNode := relationNodes[parentID]
+		if parentNode == nil {
+			continue
+		}
+		parentNode.Edges["partitions"] = model.EdgeList{Items: childIDs}
 	}
 
 	node.Edges["tables"] = tableEdge

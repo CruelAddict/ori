@@ -115,6 +115,52 @@ export function useSchemaTree(nodesById: Accessor<Record<string, Node>>, rootIds
       processedNodeIds.add(id)
 
       const nodeEntity = createSnapshotNodeEntity(node)
+      const attachEdgeEntity = (edgeEntity: ReturnType<typeof createEdgeNodeEntity>) => {
+        registerEdgeChildren(edgeEntity.id, edgeEntity.childIds)
+        nodeEntity.childIds.push(edgeEntity.id)
+        nodeEntity.hasChildren = nodeEntity.childIds.length > 0
+        edgeEntity.hasChildren = edgeEntity.childIds.length > 0
+        setEntitiesById(edgeEntity.id, edgeEntity)
+      }
+
+      const attachSyntheticEdge = (edgeName: string, labels: string[]) => {
+        if (labels.length === 0) return
+        const childEntities = labels.map((label, index) => {
+          const childId = `synthetic:${node.id}:${edgeName}:${index}`
+          const childNode: Node = {
+            id: childId,
+            type: "column",
+            name: label,
+            attributes: {},
+            edges: {},
+          }
+          const childEntity = createSnapshotNodeEntity(childNode)
+          childEntity.hasChildren = false
+          setEntitiesById(childEntity.id, childEntity)
+          return childEntity
+        })
+
+        const edgeEntity = createEdgeNodeEntity(node, edgeName, {
+          items: childEntities.map((child) => child.id),
+          truncated: false,
+        })
+        attachEdgeEntity(edgeEntity)
+      }
+
+      if (node.type === "index") {
+        const columns = toStringArray(node.attributes?.columns)
+        const includeColumns = toStringArray(node.attributes?.includeColumns)
+        attachSyntheticEdge("columns", columns)
+        attachSyntheticEdge("include", includeColumns)
+      }
+
+      if (node.type === "constraint") {
+        const columns = toStringArray(node.attributes?.columns)
+        const references = toStringArray(node.attributes?.referencedColumns)
+        attachSyntheticEdge("columns", columns)
+        attachSyntheticEdge("references", references)
+      }
+
       for (const [edgeName, edge] of Object.entries(node.edges ?? {})) {
         if (!edge.items || edge.items.length === 0) {
           continue
@@ -307,6 +353,11 @@ type ChildVisibilityOptions = {
   isNodeExpanded: (nodeId: string | null) => boolean
   getVisibleCount: (nodeId: string) => number
   setVisibleChildCounts: SetStoreFunction<Record<string, number>>
+}
+
+function toStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return []
+  return value.filter((entry): entry is string => typeof entry === "string")
 }
 
 function createChildVisibilityManager(options: ChildVisibilityOptions) {
