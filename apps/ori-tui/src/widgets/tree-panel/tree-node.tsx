@@ -109,7 +109,7 @@ export function TreeNode(props: TreeNodeProps) {
             paddingLeft={ROW_LEFT_PADDING + props.depth * 2}
             paddingRight={1}
             minWidth={30}
-            width={"100%"}
+            alignSelf="stretch"
             flexShrink={1}
             ref={(node: BoxRenderable | undefined) => registerRowNode(rowId(), node)}
             backgroundColor={bg()}

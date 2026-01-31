@@ -104,7 +104,7 @@ export function TreeScrollbox(props: TreeScrollboxProps) {
       <TreeScrollboxContext.Provider value={contextValue}>
         <box
           flexDirection="column"
-          alignItems="flex-start"
+          alignItems="stretch"
           width="auto"
           minHeight={"100%"}
         >
