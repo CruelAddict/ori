@@ -44,7 +44,7 @@ export function TreePanel(props: TreePanelProps) {
     { pattern: "l", handler: () => pane.controller.focusFirstChild(), preventDefault: true },
     { pattern: "left", handler: () => pane.controller.collapseCurrentOrParent(), preventDefault: true },
     { pattern: "h", handler: () => pane.controller.collapseCurrentOrParent(), preventDefault: true },
-    { pattern: "ctrl+h", handler: () => handleManualHorizontalScroll("left"), preventDefault: true },
+    { pattern: ["ctrl+h", "backspace"], handler: () => handleManualHorizontalScroll("left"), preventDefault: true },
     { pattern: "ctrl+l", handler: () => handleManualHorizontalScroll("right"), preventDefault: true },
     { pattern: "enter", handler: () => pane.controller.activateSelection(), preventDefault: true },
     { pattern: "space", handler: () => pane.controller.activateSelection(), preventDefault: true },

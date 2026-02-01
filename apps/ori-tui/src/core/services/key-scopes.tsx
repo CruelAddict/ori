@@ -125,7 +125,7 @@ function dispatchScopes({ scopes, parsed, mode, evt, awaitingLeader }: DispatchS
       if (binding.enabled && !binding.enabled()) {
         continue
       }
-      if (!Keybind.match(binding.pattern, parsed)) {
+      if (!matchesBindingPattern(binding.pattern, parsed)) {
         continue
       }
       if (binding.preventDefault || awaitingLeader) {
@@ -140,6 +140,13 @@ function dispatchScopes({ scopes, parsed, mode, evt, awaitingLeader }: DispatchS
 
 function shouldAwaitLeader(parsed: ParsedKeybind, awaitingLeader: boolean): boolean {
   return !awaitingLeader && Keybind.match(LEADER_KEY_PATTERN, parsed)
+}
+
+function matchesBindingPattern(pattern: string | string[], parsed: ParsedKeybind): boolean {
+  if (Array.isArray(pattern)) {
+    return pattern.some((candidate) => Keybind.match(candidate, parsed))
+  }
+  return Keybind.match(pattern, parsed)
 }
 
 function useKeymapRuntime(): KeymapRuntime {

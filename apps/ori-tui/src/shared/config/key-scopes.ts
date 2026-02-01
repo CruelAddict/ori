@@ -4,7 +4,7 @@ import { LEADER_KEY_PATTERN } from "@src/core/services/key-scopes"
 export type CommandPaletteSection = "System" | "Navigation" | "Connection" | "Query"
 
 export type KeyBinding = {
-  pattern: string
+  pattern: string | string[]
   handler: (event: KeyEvent) => void
   description?: string
   enabled?: () => boolean
@@ -121,11 +121,15 @@ export class KeyScopeStore {
               Boolean(binding.commandPaletteSection) && (binding.enabled?.() ?? true),
           )
           .map((binding, i): Command => {
+            const patternLabel = Array.isArray(binding.pattern)
+              ? binding.pattern.join(" | ")
+              : binding.pattern
+            const leaderPrefix = binding.mode === "leader" ? `${LEADER_KEY_PATTERN} ` : ""
             return {
               id: `${scope.id}-${i}`,
               title: binding.description ?? "unnamed command",
               section: binding.commandPaletteSection,
-              keyPattern: `${binding.mode === "leader" ? LEADER_KEY_PATTERN : ""} ${binding.pattern}`,
+              keyPattern: `${leaderPrefix}${patternLabel}`.trim(),
               handler: () => binding.handler({} as KeyEvent),
             }
           }),
