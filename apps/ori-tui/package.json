@@ -22,8 +22,8 @@
     "typescript": "^5"
   },
   "dependencies": {
-    "@opentui/core": "0.1.74",
-    "@opentui/solid": "0.1.74",
+    "@opentui/core": "0.1.77",
+    "@opentui/solid": "0.1.77",
     "axios": "^1.7.7",
     "contract": "file:../../libs/contract/typescript",
     "fuzzysort": "^3.1.0",
