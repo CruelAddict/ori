@@ -1,6 +1,6 @@
 import {
-  BoxRenderable,
   type BoxOptions,
+  BoxRenderable,
   type OptimizedBuffer,
   parseColor,
   type RenderContext,
@@ -62,7 +62,6 @@ export class TableCellRenderable extends BoxRenderable {
     this.paddingRight = paddingRight ?? 1
     this.onSelectionChange = onSelectionChange
   }
-
 
   set value(value: string) {
     if (this.valueText === value) return
@@ -193,14 +192,23 @@ export class TableCellRenderable extends BoxRenderable {
     const padRight = this.alignment === "right" ? 0 : padTotal
     const text = `${" ".repeat(padLeft)}${trimmed}${" ".repeat(padRight)}`
 
-    buffer.drawText(
-      text,
-      this.x + this.paddingLeftValue,
-      this.y,
-      this.textColor ?? parseColor("#ffffff"),
-      undefined,
-      this.textAttributes,
-    )
+    const startX = this.x + this.paddingLeftValue
+    if (startX >= buffer.width) return
+
+    const hiddenLeft = Math.max(0, -startX)
+    if (hiddenLeft >= text.length) return
+
+    const drawX = Math.max(0, startX)
+    const maxVisible = buffer.width - drawX
+    if (maxVisible <= 0) return
+
+    const clippedLeft = text.slice(hiddenLeft)
+    if (clippedLeft.length === 0) return
+
+    const visibleText = clippedLeft.length > maxVisible ? clippedLeft.slice(0, maxVisible) : clippedLeft
+    if (visibleText.length === 0) return
+
+    buffer.drawText(visibleText, drawX, this.y, this.textColor ?? parseColor("#ffffff"), undefined, this.textAttributes)
   }
 }
 
