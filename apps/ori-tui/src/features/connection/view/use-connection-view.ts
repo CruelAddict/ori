@@ -117,8 +117,19 @@ export function useConnectionView(options: UseConnectionViewOptions) {
     focusPreviousVisiblePane()
   }
 
+  const hasResultsPaneContent = () => {
+    const job = editorPane.currentJob()
+    if (!job) {
+      return false
+    }
+    if (job.result) {
+      return true
+    }
+    return job.status === "failed" || job.status === "success"
+  }
+
   const toggleResultsVisible = () => {
-    if (!editorPane.currentJob()?.result) return
+    if (!hasResultsPaneContent()) return
     const wasFocused = focusedPane() === "results"
     const next = !isPaneVisible("results")
     setPaneVisible("results", next)
@@ -145,7 +156,7 @@ export function useConnectionView(options: UseConnectionViewOptions) {
   }
 
   createEffect(() => {
-    if (editorPane.currentJob()?.result) {
+    if (hasResultsPaneContent()) {
       setPaneVisible("results", true)
     }
   })
@@ -171,8 +182,12 @@ export function useConnectionView(options: UseConnectionViewOptions) {
         if (isPaneVisible("editor")) tryFocusPane("editor")
         else tryFocusPane("results")
       },
-      moveFocusUp: () => { if (focusedPane() === "results") tryFocusPane("editor") },
-      moveFocusDown: () => { if (focusedPane() === "editor") tryFocusPane("results") },
+      moveFocusUp: () => {
+        if (focusedPane() === "results") tryFocusPane("editor")
+      },
+      moveFocusDown: () => {
+        if (focusedPane() === "editor") tryFocusPane("results")
+      },
       openEditor,
       focusPane: tryFocusPane,
       setActive,
