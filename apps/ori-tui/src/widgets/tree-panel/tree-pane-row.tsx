@@ -85,7 +85,7 @@ export function TreePaneRow(props: TreePaneRowProps) {
         attributes: TextAttributes.DIM,
       })
     }
-    if (parts.badges) {
+    if (parts.badges.length > 0) {
       const badges = parts.badges.join(" • ")
       segments.push({
         text: ` ${badges}`,
@@ -154,7 +154,7 @@ type RowTextParts = {
   glyph: string
   main: string
   description?: string
-  badges?: string[]
+  badges: string[]
 }
 
 function buildRowTextParts(details: TreePaneNode | undefined, expanded: boolean): RowTextParts {
@@ -165,14 +165,14 @@ function buildRowTextParts(details: TreePaneNode | undefined, expanded: boolean)
     glyph,
     main: label,
     description: details?.description,
-    badges: details?.badges,
+    badges: details?.badges ?? [],
   }
 }
 
 function calculateRowTextWidth(parts: RowTextParts): number {
   let width = parts.glyph.length + GLYPH_SEPARATOR_WIDTH + parts.main.length
   if (parts.description) width += 1 + parts.description.length
-  if (parts.badges) {
+  if (parts.badges.length > 0) {
     const badges = parts.badges.join(" • ")
     width += 1 + badges.length
   }

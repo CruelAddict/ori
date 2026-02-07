@@ -36,7 +36,7 @@ describe("createSnapshotTreePaneNode", () => {
       node,
       label: "public.users",
       description: "users",
-      badges: undefined,
+      badges: [],
       childIds: [],
       hasChildren: false,
     })
@@ -95,8 +95,8 @@ describe("createSnapshotTreePaneNode", () => {
         },
       }),
     )
-    expect(entity.description).toBe("FOREIGN KEY -> public.users")
-    expect(entity.badges).toEqual(["MATCH FULL", "ON UPDATE CASCADE", "ON DELETE RESTRICT"])
+    expect(entity.description).toBe("foreigh key: public.users")
+    expect(entity.badges).toEqual(["match FULL", "on update CASCADE", "on delete RESTRICT"])
   })
 
   test("describes UNIQUE constraints with index name", () => {
@@ -108,7 +108,7 @@ describe("createSnapshotTreePaneNode", () => {
         attributes: { constraintType: "UNIQUE", indexName: "users_email_idx" },
       }),
     )
-    expect(entity.description).toBe("UNIQUE (index users_email_idx)")
+    expect(entity.description).toBe("unique (index users_email_idx)")
   })
 
   test("describes indexes with predicate and badges", () => {
@@ -121,7 +121,7 @@ describe("createSnapshotTreePaneNode", () => {
       }),
     )
     expect(entity.description).toBe("where active = true")
-    expect(entity.badges).toEqual(["PRIMARY", "UNIQUE"])
+    expect(entity.badges).toEqual(["primary", "unique"])
   })
 
   test("describes triggers and badges", () => {
@@ -133,7 +133,7 @@ describe("createSnapshotTreePaneNode", () => {
         attributes: { timing: "BEFORE", events: ["INSERT", "UPDATE"], enabledState: "enabled" },
       }),
     )
-    expect(entity.description).toBe("BEFORE INSERT OR UPDATE")
+    expect(entity.description).toBe("BEFORE INSERT or UPDATE")
     expect(entity.badges).toEqual(["ENABLED"])
   })
 })

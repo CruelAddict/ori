@@ -8,7 +8,7 @@ type BaseTreePaneNode = {
   label: string
   icon?: string
   description?: string
-  badges?: string[]
+  badges: string[]
   childIds: string[]
   hasChildren: boolean
 }
@@ -28,6 +28,25 @@ export interface EdgeTreePaneNode extends BaseTreePaneNode {
   edgeName: string
   truncated: boolean
 }
+
+type NormalizedNode =
+  | { kind: "database" }
+  | { kind: "tableView"; name: string; table?: string }
+  | { kind: "column"; dataType?: string; primaryKeyPosition?: number; notNull?: boolean }
+  | {
+    kind: "constraint"
+    constraintType?: string
+    checkClause?: string
+    referencedSchema?: string
+    referencedTable?: string
+    indexName?: string
+    match?: string
+    onUpdate?: string
+    onDelete?: string
+  }
+  | { kind: "index"; predicate?: string; primary?: boolean; unique?: boolean }
+  | { kind: "trigger"; timing?: string; events: string[]; enabledState?: string }
+  | { kind: "other" }
 
 export function buildTreePaneNodeMap(nodes: Map<string, Node>): Map<string, TreePaneNode> {
   const map = new Map<string, TreePaneNode>()
@@ -56,13 +75,14 @@ export function buildTreePaneNodeMap(nodes: Map<string, Node>): Map<string, Tree
 }
 
 export function createSnapshotTreePaneNode(node: Node): SnapshotTreePaneNode {
+  const normalized = normalizeNode(node)
   return {
     id: node.id,
     kind: "node",
     node,
     label: node.name,
-    description: describeNode(node),
-    badges: nodeBadges(node),
+    description: describeNode(normalized),
+    badges: nodeBadges(normalized),
     childIds: [],
     hasChildren: false,
   }
@@ -77,6 +97,7 @@ export function createEdgeTreePaneNode(node: Node, edgeName: string, edge: NodeE
     edgeName,
     label: edgeLabel(edgeName),
     description: describeEdge(edge),
+    badges: [],
     childIds,
     hasChildren: childIds.length > 0,
     truncated: edge.truncated,
@@ -96,30 +117,19 @@ function describeEdge(edge: NodeEdge): string | undefined {
   if (count === 0 && !edge.truncated) {
     return undefined
   }
-  const baseCount = formatEdgeCount(count, edge.truncated)
+  const baseCount = count > 0 ? (edge.truncated ? `${count}+` : String(count)) : "+"
   if (edge.truncated) {
     return `${baseCount} (truncated)`
   }
   return baseCount
 }
 
-function formatEdgeCount(count: number, truncated: boolean): string {
-  if (count > 0) {
-    return truncated ? `${count}+` : String(count)
-  }
-  if (truncated) {
-    return "+"
-  }
-  return "0"
-}
-
-function describeNode(node: Node): string | undefined {
-  switch (node.type) {
+function describeNode(node: NormalizedNode): string | undefined {
+  switch (node.kind) {
     case "database":
       return "database"
-    case "table":
-    case "view": {
-      const table = typeof node.attributes?.table === "string" ? node.attributes.table : ""
+    case "tableView": {
+      const table = node.table ?? ""
       if (!table) {
         return undefined
       }
@@ -129,7 +139,7 @@ function describeNode(node: Node): string | undefined {
       return table
     }
     case "column":
-      return typeof node.attributes?.dataType === "string" ? node.attributes.dataType : undefined
+      return node.dataType?.toLowerCase()
     case "constraint":
       return describeConstraint(node)
     case "index":
@@ -141,102 +151,179 @@ function describeNode(node: Node): string | undefined {
   }
 }
 
-function nodeBadges(node: Node): string[] | undefined {
-  if (node.type === "column") {
+function nodeBadges(node: NormalizedNode): string[] {
+  if (node.kind === "column") {
     const badges: string[] = []
-    const position = typeof node.attributes?.primaryKeyPosition === "number" ? node.attributes.primaryKeyPosition : 0
-    if (position > 0) {
+    if ((node.primaryKeyPosition ?? 0) > 0) {
       badges.push("PK")
     }
-    if (node.attributes?.notNull) {
+    if (node.notNull) {
       badges.push("NOT NULL")
     }
-    return badges.length > 0 ? badges : undefined
+    return badges
   }
-  if (node.type === "constraint") {
+  if (node.kind === "constraint") {
     return constraintBadges(node)
   }
-  if (node.type === "index") {
+  if (node.kind === "index") {
     return indexBadges(node)
   }
-  if (node.type === "trigger") {
-    const state = typeof node.attributes?.enabledState === "string" ? node.attributes.enabledState : ""
-    if (!state) return undefined
+  if (node.kind === "trigger") {
+    const state = node.enabledState ?? ""
+    if (!state) return []
     return [state.toUpperCase()]
   }
-  return undefined
+  return []
 }
 
-function describeConstraint(node: Node): string | undefined {
-  const constraintType = typeof node.attributes?.constraintType === "string" ? node.attributes.constraintType : ""
+function describeConstraint(node: Extract<NormalizedNode, { kind: "constraint" }>): string | undefined {
+  const constraintType = node.constraintType ?? ""
   if (!constraintType) return undefined
   if (constraintType === "CHECK") {
-    return typeof node.attributes?.checkClause === "string" ? node.attributes.checkClause : constraintType
+    return node.checkClause
   }
   if (constraintType === "FOREIGN KEY") {
-    const refSchema = typeof node.attributes?.referencedSchema === "string" ? node.attributes.referencedSchema : ""
-    const refTable = typeof node.attributes?.referencedTable === "string" ? node.attributes.referencedTable : ""
+    const refSchema = node.referencedSchema ?? ""
+    const refTable = node.referencedTable ?? ""
     const reference = [refSchema, refTable].filter(Boolean).join(".")
     if (reference) {
-      return `FOREIGN KEY -> ${reference}`
+      return `foreigh key: ${reference}`
     }
   }
   if (constraintType === "UNIQUE") {
-    const indexName = typeof node.attributes?.indexName === "string" ? node.attributes.indexName : ""
+    const indexName = node.indexName ?? ""
     if (indexName) {
-      return `UNIQUE (index ${indexName})`
+      return `unique (index ${indexName})`
     }
   }
-  return constraintType
+  return constraintType.toLowerCase()
 }
 
-function constraintBadges(node: Node): string[] | undefined {
-  const constraintType = typeof node.attributes?.constraintType === "string" ? node.attributes.constraintType : ""
-  if (constraintType !== "FOREIGN KEY") return undefined
+function constraintBadges(node: Extract<NormalizedNode, { kind: "constraint" }>): string[] {
+  const constraintType = node.constraintType ?? ""
+  if (constraintType !== "FOREIGN KEY") return []
   const badges: string[] = []
-  const match = typeof node.attributes?.match === "string" ? node.attributes.match : ""
-  const onUpdate = typeof node.attributes?.onUpdate === "string" ? node.attributes.onUpdate : ""
-  const onDelete = typeof node.attributes?.onDelete === "string" ? node.attributes.onDelete : ""
-  if (match) badges.push(`MATCH ${match}`)
-  if (onUpdate) badges.push(`ON UPDATE ${onUpdate}`)
-  if (onDelete) badges.push(`ON DELETE ${onDelete}`)
-  return badges.length > 0 ? badges : undefined
+  const match = node.match ?? ""
+  const onUpdate = node.onUpdate ?? ""
+  const onDelete = node.onDelete ?? ""
+  if (match) badges.push(`match ${match}`)
+  if (onUpdate) badges.push(`on update ${onUpdate}`)
+  if (onDelete) badges.push(`on delete ${onDelete}`)
+  return badges
 }
 
-function describeIndex(node: Node): string | undefined {
-  const predicate = typeof node.attributes?.predicate === "string" ? node.attributes.predicate : ""
+function describeIndex(node: Extract<NormalizedNode, { kind: "index" }>): string | undefined {
+  const predicate = node.predicate ?? ""
   if (predicate) {
     return `where ${predicate}`
   }
-  return node.attributes?.unique === true ? "unique" : "index"
+  return node.unique ? "unique" : "index"
 }
 
-function describeTrigger(node: Node): string | undefined {
-  const timing = typeof node.attributes?.timing === "string" ? node.attributes.timing : ""
-  const rawEvents = node.attributes?.events
-  const events = Array.isArray(rawEvents)
-    ? rawEvents.filter((event): event is string => typeof event === "string" && event.length > 0)
-    : []
-  const eventsLabel = events.join(" OR ")
+function describeTrigger(node: Extract<NormalizedNode, { kind: "trigger" }>): string | undefined {
+  const timing = node.timing ?? ""
+  const events = node.events.filter((event) => event.length > 0)
+  const eventsLabel = events.join(" or ")
   if (timing && eventsLabel) {
     return `${timing} ${eventsLabel}`
   }
-  if (timing) {
-    return timing
-  }
-  if (eventsLabel) {
-    return eventsLabel
-  }
-  return undefined
+  return timing || eventsLabel || undefined
 }
 
-function indexBadges(node: Node): string[] | undefined {
+function indexBadges(node: Extract<NormalizedNode, { kind: "index" }>): string[] {
   const badges: string[] = []
-  if (node.attributes?.primary === true) {
-    badges.push("PRIMARY")
+  if (node.primary) { badges.push("primary") }
+  if (node.unique) { badges.push("unique") }
+  return badges
+}
+
+function normalizeNode(node: Node): NormalizedNode {
+  const attrs = node.attributes
+
+  const str = (key: string): string | undefined => {
+    const value = attrs[key]
+    if (typeof value === "string") {
+      return value
+    }
+    return undefined
   }
-  if (node.attributes?.unique === true) {
-    badges.push("UNIQUE")
+
+  const num = (key: string): number | undefined => {
+    const value = attrs[key]
+    if (typeof value === "number") {
+      return value
+    }
+    return undefined
   }
-  return badges.length > 0 ? badges : undefined
+
+  const bool = (key: string): boolean | undefined => {
+    const value = attrs[key]
+    if (typeof value === "boolean") {
+      return value
+    }
+    return undefined
+  }
+
+  const strArray = (key: string): string[] => {
+    const value = attrs[key]
+    if (!Array.isArray(value)) {
+      return []
+    }
+    return value.filter((item): item is string => typeof item === "string")
+  }
+
+  if (node.type === "database") {
+    return { kind: "database" }
+  }
+
+  if (node.type === "table" || node.type === "view") {
+    return {
+      kind: "tableView",
+      name: node.name,
+      table: str("table"),
+    }
+  }
+
+  if (node.type === "column") {
+    return {
+      kind: "column",
+      dataType: str("dataType"),
+      primaryKeyPosition: num("primaryKeyPosition"),
+      notNull: bool("notNull"),
+    }
+  }
+
+  if (node.type === "constraint") {
+    return {
+      kind: "constraint",
+      constraintType: str("constraintType"),
+      checkClause: str("checkClause"),
+      referencedSchema: str("referencedSchema"),
+      referencedTable: str("referencedTable"),
+      indexName: str("indexName"),
+      match: str("match"),
+      onUpdate: str("onUpdate"),
+      onDelete: str("onDelete"),
+    }
+  }
+
+  if (node.type === "index") {
+    return {
+      kind: "index",
+      predicate: str("predicate"),
+      primary: bool("primary"),
+      unique: bool("unique"),
+    }
+  }
+
+  if (node.type === "trigger") {
+    return {
+      kind: "trigger",
+      timing: str("timing"),
+      events: strArray("events"),
+      enabledState: str("enabledState"),
+    }
+  }
+
+  return { kind: "other" }
 }
