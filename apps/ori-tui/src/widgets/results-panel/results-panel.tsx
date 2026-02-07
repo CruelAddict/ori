@@ -1,9 +1,9 @@
 import { useTheme } from "@app/providers/theme"
 import {
-  BoxRenderable,
+  type BoxRenderable,
   type KeyEvent,
   type MouseEvent,
-  ScrollBoxRenderable,
+  type ScrollBoxRenderable,
   TextAttributes,
 } from "@opentui/core"
 import "./table-cell"
@@ -21,6 +21,8 @@ const resultsScrollSpeed = {
   horizontal: 4,
   vertical: 2,
 }
+
+const HORIZONTAL_SCROLL_STEP = 6
 
 export function ResultsPanel(props: ResultsPanelProps) {
   const pane = props.viewModel
@@ -85,7 +87,7 @@ export function ResultsPanel(props: ResultsPanelProps) {
     }
   }
 
-  const ensureColumnVisible = (colIndex: number) => {
+  const ensureColumnVisible = (colIndex: number, direction: "left" | "right") => {
     if (!scrollRef) return
     const viewport = getViewport()
     if (!viewport) return
@@ -113,6 +115,13 @@ export function ResultsPanel(props: ResultsPanelProps) {
       scrollRef.scrollBy({ x: delta, y: 0 })
       setScrollLeft(scrollRef.scrollLeft ?? 0)
     }
+  }
+
+  const handleManualHorizontalScroll = (direction: "left" | "right") => {
+    if (!hasResults()) return
+    const delta = direction === "left" ? -HORIZONTAL_SCROLL_STEP : HORIZONTAL_SCROLL_STEP
+    scrollRef?.scrollBy({ x: delta, y: 0 })
+    setScrollLeft(scrollRef?.scrollLeft ?? 0)
   }
 
   const hasResultData = () => hasResults() && job()?.result
@@ -234,7 +243,7 @@ export function ResultsPanel(props: ResultsPanelProps) {
     setCursorCol(nextCol)
     ensureRowVisible(nextRow)
     if (colDelta !== 0) {
-      ensureColumnVisible(nextCol)
+      ensureColumnVisible(nextCol, colDelta < 0 ? "left" : "right")
     }
   }
 
@@ -245,8 +254,10 @@ export function ResultsPanel(props: ResultsPanelProps) {
     { pattern: "j", handler: (event) => moveSelection(1, 0, event), preventDefault: true },
     { pattern: "left", handler: (event) => moveSelection(0, -1, event), preventDefault: true },
     { pattern: "h", handler: (event) => moveSelection(0, -1, event), preventDefault: true },
+    { pattern: ["ctrl+h", "backspace"], handler: () => handleManualHorizontalScroll("left"), preventDefault: true },
     { pattern: "right", handler: (event) => moveSelection(0, 1, event), preventDefault: true },
     { pattern: "l", handler: (event) => moveSelection(0, 1, event), preventDefault: true },
+    { pattern: "ctrl+l", handler: () => handleManualHorizontalScroll("right"), preventDefault: true },
   ]
 
   const handleCellMouseDown = (rowIndex: number, colIndex: number, event: MouseEvent) => {
@@ -325,11 +336,8 @@ export function ResultsPanel(props: ResultsPanelProps) {
                         attributes={TextAttributes.BOLD}
                         selectionBg={palette().backgroundElement}
                         value={String(column.name)}
-                        onSelectionChange={(selected: boolean) =>
-                          handleHeaderSelectionChange(index(), selected)
-                        }
+                        onSelectionChange={(selected: boolean) => handleHeaderSelectionChange(index(), selected)}
                       />
-
                     </>
                   )}
                 </For>
@@ -340,7 +348,7 @@ export function ResultsPanel(props: ResultsPanelProps) {
                 />
               </box>
             </box>
-            { /* Rows */}
+            {/* Rows */}
             <scrollbox
               ref={(node: ScrollBoxRenderable | undefined) => {
                 scrollRef = node ?? undefined
@@ -370,7 +378,10 @@ export function ResultsPanel(props: ResultsPanelProps) {
                 width: "auto",
               }}
             >
-              <box flexDirection="column" width={"auto"}>
+              <box
+                flexDirection="column"
+                width={"auto"}
+              >
                 <For each={resultRows()}>
                   {(row, rowIndex) => (
                     <box
@@ -403,9 +414,7 @@ export function ResultsPanel(props: ResultsPanelProps) {
                                 flexDirection="row"
                                 width={columnWidths()[colIndex()] + 2}
                                 align={typeof cell === "number" ? "right" : "left"}
-                                onMouseDown={(event: MouseEvent) =>
-                                  handleCellMouseDown(rowIndex(), colIndex(), event)
-                                }
+                                onMouseDown={(event: MouseEvent) => handleCellMouseDown(rowIndex(), colIndex(), event)}
                                 selectionBg={palette().backgroundElement}
                                 value={String(cell)}
                                 display={formatCell(cell, columnWidths()[colIndex()])}
@@ -414,15 +423,16 @@ export function ResultsPanel(props: ResultsPanelProps) {
                                   handleRowSelectionChange(rowIndex(), colIndex(), selected)
                                 }
                               />
-                              {colIndex() === row.length - 1 && <SeparatorCell
-                                bg={rowBg()}
-                                selectionBg={palette().backgroundElement}
-                              />}
+                              {colIndex() === row.length - 1 && (
+                                <SeparatorCell
+                                  bg={rowBg()}
+                                  selectionBg={palette().backgroundElement}
+                                />
+                              )}
                             </>
                           )
                         }}
                       </For>
-
                     </box>
                   )}
                 </For>
@@ -445,15 +455,12 @@ export function ResultsPanel(props: ResultsPanelProps) {
         </box>
 
         <Show when={job()?.status === "success" && !hasResults()}>
-          <text
-            attributes={TextAttributes.DIM}
-          >
+          <text attributes={TextAttributes.DIM}>
             Query completed successfully in
             {job()?.durationMs ? ` ${job()?.durationMs}ms` : ""}
             {rowsAffected() !== undefined ? `; ${rowsAffected()} rows affected` : ""}
           </text>
         </Show>
-
       </box>
     </KeyScope>
   )
