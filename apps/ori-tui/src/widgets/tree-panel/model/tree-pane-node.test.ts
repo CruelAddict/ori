@@ -21,15 +21,28 @@ describe("createSnapshotTreePaneNode", () => {
     expect(entity.description).toBe("database")
   })
 
-  test("describes table and view nodes from attributes", () => {
-    const table = createSnapshotTreePaneNode(
-      makeNode({
-        id: "table-1",
-        type: "table",
-        name: "public.users",
-        attributes: { table: "users" },
-      }),
-    )
+  test("builds table snapshot node", () => {
+    const node = makeNode({
+      id: "table-1",
+      type: "table",
+      name: "public.users",
+      attributes: { table: "users" },
+      edges: { columns: makeEdge(["col-1"]) },
+    })
+    const entity = createSnapshotTreePaneNode(node)
+    expect(entity).toEqual({
+      id: "table-1",
+      kind: "node",
+      node,
+      label: "public.users",
+      description: "users",
+      badges: undefined,
+      childIds: [],
+      hasChildren: false,
+    })
+  })
+
+  test("describes view nodes from attributes", () => {
     const view = createSnapshotTreePaneNode(
       makeNode({
         id: "view-1",
@@ -38,7 +51,6 @@ describe("createSnapshotTreePaneNode", () => {
         attributes: { table: "active_users" },
       }),
     )
-    expect(table.description).toBe("users")
     expect(view.description).toBe("active_users")
   })
 
@@ -132,15 +144,15 @@ describe("createEdgeTreePaneNode", () => {
     const edge = createEdgeTreePaneNode(node, "columns", makeEdge(["col-1", "col-2"]))
     expect(edge.id).toBe("edge:table-1:columns")
     expect(edge.label).toBe("columns")
-    expect(edge.description).toBe("2 items")
+    expect(edge.description).toBe("2")
   })
 
   test("renders truncated edge descriptions", () => {
     const node = makeNode({ id: "table-1", type: "table", name: "users" })
     const zeroTruncated = createEdgeTreePaneNode(node, "columns", makeEdge([], true))
     const manyTruncated = createEdgeTreePaneNode(node, "columns", makeEdge(["c1", "c2"], true))
-    expect(zeroTruncated.description).toBe("+ items (truncated)")
-    expect(manyTruncated.description).toBe("2+ items (truncated)")
+    expect(zeroTruncated.description).toBe("+ (truncated)")
+    expect(manyTruncated.description).toBe("2+ (truncated)")
   })
 
   test("hides description for empty non-truncated edges", () => {

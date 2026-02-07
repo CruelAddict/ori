@@ -96,9 +96,11 @@ function describeEdge(edge: NodeEdge): string | undefined {
   if (count === 0 && !edge.truncated) {
     return undefined
   }
-  const suffix = count === 1 ? "item" : "items"
   const baseCount = formatEdgeCount(count, edge.truncated)
-  return `${baseCount} ${suffix} ${edge.truncated ? "(truncated)" : ""}`.trim()
+  if (edge.truncated) {
+    return `${baseCount} (truncated)`
+  }
+  return baseCount
 }
 
 function formatEdgeCount(count: number, truncated: boolean): string {
@@ -116,8 +118,16 @@ function describeNode(node: Node): string | undefined {
     case "database":
       return "database"
     case "table":
-    case "view":
-      return typeof node.attributes?.table === "string" ? node.attributes.table : undefined
+    case "view": {
+      const table = typeof node.attributes?.table === "string" ? node.attributes.table : ""
+      if (!table) {
+        return undefined
+      }
+      if (table.trim().toLowerCase() === node.name.trim().toLowerCase()) {
+        return undefined
+      }
+      return table
+    }
     case "column":
       return typeof node.attributes?.dataType === "string" ? node.attributes.dataType : undefined
     case "constraint":
