@@ -1,4 +1,5 @@
 import type { SyntaxStyle, TextareaRenderable } from "@opentui/core"
+import type { SyntaxHighlightResult } from "../../features/syntax-highlighting/syntax-highlighter"
 
 const SYNTAX_EXTMARK_TYPE = "syntax-highlight"
 
@@ -29,6 +30,64 @@ function spansEqual(a: LineSpan[], b: LineSpan[]) {
   return true
 }
 
+function offsetToLineCol(offset: number, lineStarts: number[]): { line: number; col: number } {
+  let low = 0
+  let high = lineStarts.length - 1
+  while (low <= high) {
+    const mid = (low + high) >> 1
+    const start = lineStarts[mid]
+    const nextStart = mid + 1 < lineStarts.length ? lineStarts[mid + 1] : Number.POSITIVE_INFINITY
+    if (offset < start) {
+      high = mid - 1
+      continue
+    }
+    if (offset >= nextStart) {
+      low = mid + 1
+      continue
+    }
+    return { line: mid, col: offset - start }
+  }
+  return { line: lineStarts.length - 1, col: 0 }
+}
+
+function applyLineHighlights(params: {
+  ref: TextareaRenderable
+  nextSpans: LineSpan[]
+  syntaxStyle: SyntaxStyle
+  force: boolean
+}) {
+  const { ref, nextSpans, syntaxStyle, force } = params
+  const refState = ref as TextareaRenderable & { syntaxStyle?: SyntaxStyle; __syntaxSpans?: LineSpan[] }
+  const prevSpans = refState.__syntaxSpans ?? []
+  const styleChanged = refState.syntaxStyle !== syntaxStyle
+  const spansChanged = !spansEqual(prevSpans, nextSpans)
+
+  if (!force && !styleChanged && !spansChanged) {
+    return
+  }
+
+  if (force || spansChanged) {
+    const typeId = getSyntaxHighlightTypeID(ref)
+    clearSyntaxExtmarks(ref, typeId)
+    for (const span of nextSpans) {
+      ref.extmarks.create({
+        start: span.start,
+        end: span.end,
+        styleId: span.styleId,
+        typeId,
+        virtual: false,
+      })
+    }
+    refState.__syntaxSpans = nextSpans.map((span) => ({ ...span }))
+  }
+
+  if (force || styleChanged) {
+    refState.syntaxStyle = syntaxStyle
+  }
+
+  ref.requestRender()
+}
+
 export function applySyntaxHighlights(params: {
   spansByLine: Map<number, LineSpan[]>
   syntaxStyle: SyntaxStyle
@@ -42,36 +101,60 @@ export function applySyntaxHighlights(params: {
     if (!ref) {
       continue
     }
-
-    const refState = ref as TextareaRenderable & { syntaxStyle?: SyntaxStyle; __syntaxSpans?: LineSpan[] }
-    const prevSpans = refState.__syntaxSpans ?? []
     const nextSpans = spansByLine.get(index) ?? []
-    const styleChanged = refState.syntaxStyle !== syntaxStyle
-    const spansChanged = !spansEqual(prevSpans, nextSpans)
+    applyLineHighlights({ ref, nextSpans, syntaxStyle, force: false })
+  }
+}
 
-    if (!styleChanged && !spansChanged) {
+export function applySyntaxHighlightsForLine(params: {
+  line: number
+  spans: LineSpan[]
+  syntaxStyle: SyntaxStyle
+  getLineRef: (index: number) => TextareaRenderable | undefined
+}) {
+  const { line, spans, getLineRef, syntaxStyle } = params
+  const ref = getLineRef(line)
+  if (!ref) {
+    return
+  }
+  applyLineHighlights({ ref, nextSpans: spans, syntaxStyle, force: true })
+}
+
+export function forceReapplySyntaxHighlightForLineId(params: {
+  lineId: string
+  highlight: SyntaxHighlightResult
+  lineStarts: number[]
+  getLineRef: (index: number) => TextareaRenderable | undefined
+  getLineIndexById: (lineId: string) => number
+  getLineText: (index: number) => string
+  toDisplayColumn: (text: string, column: number) => number
+}) {
+  const { lineId, highlight, lineStarts, getLineRef, getLineIndexById, getLineText, toDisplayColumn } = params
+  const line = getLineIndexById(lineId)
+  if (line < 0) {
+    return
+  }
+
+  const text = getLineText(line)
+  const spans: LineSpan[] = []
+  for (const span of highlight.spans) {
+    const start = offsetToLineCol(span.start, lineStarts)
+    const end = offsetToLineCol(span.end, lineStarts)
+    if (start.line !== line || end.line !== line) {
       continue
     }
-
-    if (spansChanged) {
-      const typeId = getSyntaxHighlightTypeID(ref)
-      clearSyntaxExtmarks(ref, typeId)
-      for (const span of nextSpans) {
-        ref.extmarks.create({
-          start: span.start,
-          end: span.end,
-          styleId: span.styleId,
-          typeId,
-          virtual: false,
-        })
-      }
-      refState.__syntaxSpans = nextSpans.map((span) => ({ ...span }))
-    }
-
-    if (styleChanged) {
-      refState.syntaxStyle = syntaxStyle
-    }
-
-    ref.requestRender()
+    spans.push({
+      start: toDisplayColumn(text, start.col),
+      end: toDisplayColumn(text, end.col),
+      styleId: span.styleId,
+    })
   }
+
+  spans.sort((a, b) => a.start - b.start || a.end - b.end)
+  applySyntaxHighlightsForLine({
+    line,
+    spans,
+    syntaxStyle: highlight.syntaxStyle,
+    getLineRef,
+  })
 }

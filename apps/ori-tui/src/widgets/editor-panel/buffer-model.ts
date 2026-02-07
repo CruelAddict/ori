@@ -4,8 +4,8 @@ import type { Logger } from "pino"
 import { type Accessor, createEffect, createMemo, createSignal, on } from "solid-js"
 import { createStore } from "solid-js/store"
 import type { SyntaxHighlightResult } from "../../features/syntax-highlighting/syntax-highlighter"
-import { applySyntaxHighlights } from "./sql-highlighter"
-import { collectSqlStatements, type SqlStatement } from "./sql-statement-detector"
+import { applySyntaxHighlights, forceReapplySyntaxHighlightForLineId } from "./sql-highlighter"
+import { collectSqlStatements } from "./sql-statement-detector"
 
 const DEBOUNCE_DEFAULT_MS = 20
 let cachedWidthMethod: WidthMethod | undefined
@@ -20,7 +20,6 @@ function extractWidthMethod(ref: TextareaRenderable | undefined): void {
 function widthMethod(): WidthMethod {
   return cachedWidthMethod ?? "unicode"
 }
-
 
 function toDisplayColumn(text: string, column: number): number {
   if (column <= 0) {
@@ -183,9 +182,7 @@ export function createBufferModel(options: BufferModelOptions) {
   const lineStarts = createMemo(() => buildLineStarts(fullText()))
   const statements = createMemo(() => collectSqlStatements(fullText(), lineStarts()))
   const statementAtCursor = createMemo(() => {
-    return statements().find(
-      (stmt) => stmt.startLine <= focusedRow() && stmt.endLine >= focusedRow(),
-    )
+    return statements().find((stmt) => stmt.startLine <= focusedRow() && stmt.endLine >= focusedRow())
   })
   let highlightRequestVersion = 0
 
@@ -196,13 +193,12 @@ export function createBufferModel(options: BufferModelOptions) {
   }
 
   const buildHighlightSpansByLine = (highlight: SyntaxHighlightResult) => {
-    const text = state.lines.map((line) => line.text).join("\n")
-    const lineStarts = buildLineStarts(text)
+    const starts = lineStarts()
     const highlightSpansByLine = new Map<number, { start: number; end: number; styleId: number }[]>()
 
     for (const span of highlight.spans) {
-      const start = offsetToLineCol(span.start, lineStarts)
-      const end = offsetToLineCol(span.end, lineStarts)
+      const start = offsetToLineCol(span.start, starts)
+      const end = offsetToLineCol(span.end, starts)
       if (start.line !== end.line) {
         continue
       }
@@ -385,7 +381,7 @@ export function createBufferModel(options: BufferModelOptions) {
     schedulePush()
     const ids = result?.syncIds ?? []
     const lines = result?.nextLines ?? []
-    if (ids.length == 0) {
+    if (ids.length === 0) {
       return
     }
     queueMicrotask(() => {
@@ -400,6 +396,15 @@ export function createBufferModel(options: BufferModelOptions) {
         }
         if (ref.plainText !== line.text) {
           ref.setText(line.text)
+          forceReapplySyntaxHighlightForLineId({
+            lineId: id,
+            highlight: options.highlightResult(),
+            lineStarts: lineStarts(),
+            getLineRef,
+            getLineIndexById: (lineId) => state.lines.findIndex((entry) => entry.id === lineId),
+            getLineText: (index) => state.lines[index]?.text ?? "",
+            toDisplayColumn,
+          })
         }
         setState("contentModified", true)
         schedulePush()
