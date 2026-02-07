@@ -202,7 +202,30 @@ export function Buffer(props: BufferProps) {
       }),
     },
     {
+      pattern: "alt+left",
+      handler: withCursor((ctx, event) => {
+        bufferModel.setNavColumn(ctx.cursorCol)
+        const atStart = ctx.cursorCol === 0 && ctx.cursorRow === 0
+        if (atStart) {
+          event.preventDefault()
+          bufferModel.handleHorizontalJump(ctx.index, true)
+        }
+      }),
+    },
+    {
       pattern: "right",
+      handler: withCursor((ctx, event) => {
+        bufferModel.setNavColumn(ctx.cursorCol)
+        const eolCol = bufferModel.getVisualEOLColumn(ctx.index)
+        const atEnd = ctx.cursorCol === eolCol && ctx.cursorRow === 0
+        if (atEnd) {
+          event.preventDefault()
+          bufferModel.handleHorizontalJump(ctx.index, false)
+        }
+      }),
+    },
+    {
+      pattern: "alt+right",
       handler: withCursor((ctx, event) => {
         bufferModel.setNavColumn(ctx.cursorCol)
         const eolCol = bufferModel.getVisualEOLColumn(ctx.index)

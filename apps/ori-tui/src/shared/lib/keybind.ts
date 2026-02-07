@@ -11,6 +11,7 @@ export type ParsedKeybind = {
 export type KeyboardEventLike = Pick<KeyEvent, "name" | "ctrl" | "meta" | "shift"> & {
   alt?: boolean
   option?: boolean
+  raw?: string
   preventDefault?: () => void
 }
 
@@ -64,10 +65,22 @@ const parsePattern = (pattern: string) => {
 
 const hasUnexpectedModifiers = (requirements: ParsedKeybind, event: ParsedKeybind) => {
   if (!requirements.ctrl && event.ctrl) return true
-  if (!requirements.meta && event.meta) return true
+  if (!requirements.meta && event.meta && !requirements.alt && !event.alt) return true
   if (!requirements.shift && event.shift) return true
   if (!requirements.alt && event.alt) return true
   return false
+}
+
+// Some terminals encode Alt as ESC+key and only set `meta`; normalize that shape to Alt.
+const isEscMetaAltEncoding = (evt: KeyboardEventLike): boolean => {
+  if (!evt.meta || evt.ctrl || evt.shift) {
+    return false
+  }
+  if (!evt.raw?.startsWith("\u001b")) {
+    return false
+  }
+  const name = normalize(evt.name)
+  return name === "left" || name === "right"
 }
 
 export const Keybind = {
@@ -95,7 +108,7 @@ export function useKeybind() {
     ctrl: Boolean(evt.ctrl),
     meta: Boolean(evt.meta),
     shift: Boolean(evt.shift),
-    alt: Boolean(evt.alt ?? evt.option),
+    alt: Boolean((evt.alt ?? evt.option) || isEscMetaAltEncoding(evt)),
   })
 
   return { parse }
