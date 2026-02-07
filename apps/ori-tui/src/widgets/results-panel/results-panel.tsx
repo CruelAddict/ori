@@ -404,11 +404,14 @@ export function ResultsPanel(props: ResultsPanelProps) {
                               return palette().primary
                             }
 
-                            return undefined
+                            return palette().backgroundPanel
                           }
                           return (
                             <>
-                              <SeparatorCell selectionBg={palette().backgroundElement} />
+                              <SeparatorCell
+                                bg={rowBg()}
+                                selectionBg={palette().backgroundElement}
+                              />
                               <table_cell
                                 backgroundColor={rowBg()}
                                 flexDirection="row"

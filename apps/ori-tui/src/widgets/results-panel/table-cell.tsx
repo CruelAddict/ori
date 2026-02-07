@@ -208,7 +208,14 @@ export class TableCellRenderable extends BoxRenderable {
     const visibleText = clippedLeft.length > maxVisible ? clippedLeft.slice(0, maxVisible) : clippedLeft
     if (visibleText.length === 0) return
 
-    buffer.drawText(visibleText, drawX, this.y, this.textColor ?? parseColor("#ffffff"), undefined, this.textAttributes)
+    buffer.drawText(
+      visibleText,
+      drawX,
+      this.y,
+      this.textColor ?? parseColor("#ffffff"),
+      backgroundColor,
+      this.textAttributes,
+    )
   }
 }
 
