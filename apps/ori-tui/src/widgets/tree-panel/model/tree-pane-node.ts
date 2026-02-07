@@ -1,39 +1,39 @@
 import type { Node, NodeEdge } from "@shared/lib/configurations-client"
 
-export type NodeEntity = SnapshotNodeEntity | EdgeNodeEntity
+export type TreePaneNode = SnapshotTreePaneNode | EdgeTreePaneNode
 
-type BaseNodeEntity = {
+type BaseTreePaneNode = {
   id: string
   kind: "node" | "edge"
   label: string
   icon?: string
   description?: string
-  badges?: string
+  badges?: string[]
   childIds: string[]
   hasChildren: boolean
 }
 
-// SnapshotNodeEntity represents a node that represents an actual node
+// SnapshotTreePaneNode represents a node that represents an actual node
 // from a snapshot that we retrieved from backend
-export interface SnapshotNodeEntity extends BaseNodeEntity {
+export interface SnapshotTreePaneNode extends BaseTreePaneNode {
   kind: "node"
   node: Node
 }
 
-// EdgeNodeEntity represents a node that doesn't exist in the snapshot
+// EdgeTreePaneNode represents a node that doesn't exist in the snapshot
 // and that we introduced for display purposes
-export interface EdgeNodeEntity extends BaseNodeEntity {
+export interface EdgeTreePaneNode extends BaseTreePaneNode {
   kind: "edge"
   sourceNodeId: string
   edgeName: string
   truncated: boolean
 }
 
-export function buildNodeEntityMap(nodes: Map<string, Node>): Map<string, NodeEntity> {
-  const map = new Map<string, NodeEntity>()
+export function buildTreePaneNodeMap(nodes: Map<string, Node>): Map<string, TreePaneNode> {
+  const map = new Map<string, TreePaneNode>()
 
   for (const node of nodes.values()) {
-    map.set(node.id, createSnapshotNodeEntity(node))
+    map.set(node.id, createSnapshotTreePaneNode(node))
   }
 
   for (const node of nodes.values()) {
@@ -45,7 +45,7 @@ export function buildNodeEntityMap(nodes: Map<string, Node>): Map<string, NodeEn
       if (!edge.items || edge.items.length === 0) {
         continue
       }
-      const edgeEntity = createEdgeNodeEntity(node, edgeName, edge)
+      const edgeEntity = createEdgeTreePaneNode(node, edgeName, edge)
       map.set(edgeEntity.id, edgeEntity)
       parent.childIds.push(edgeEntity.id)
       parent.hasChildren = parent.childIds.length > 0
@@ -55,7 +55,7 @@ export function buildNodeEntityMap(nodes: Map<string, Node>): Map<string, NodeEn
   return map
 }
 
-export function createSnapshotNodeEntity(node: Node): SnapshotNodeEntity {
+export function createSnapshotTreePaneNode(node: Node): SnapshotTreePaneNode {
   return {
     id: node.id,
     kind: "node",
@@ -68,7 +68,7 @@ export function createSnapshotNodeEntity(node: Node): SnapshotNodeEntity {
   }
 }
 
-export function createEdgeNodeEntity(node: Node, edgeName: string, edge: NodeEdge): EdgeNodeEntity {
+export function createEdgeTreePaneNode(node: Node, edgeName: string, edge: NodeEdge): EdgeTreePaneNode {
   const childIds = edge.items.slice()
   return {
     id: edgeEntityId(node.id, edgeName),
@@ -131,7 +131,7 @@ function describeNode(node: Node): string | undefined {
   }
 }
 
-function nodeBadges(node: Node): string | undefined {
+function nodeBadges(node: Node): string[] | undefined {
   if (node.type === "column") {
     const badges: string[] = []
     const position = typeof node.attributes?.primaryKeyPosition === "number" ? node.attributes.primaryKeyPosition : 0
@@ -141,7 +141,7 @@ function nodeBadges(node: Node): string | undefined {
     if (node.attributes?.notNull) {
       badges.push("NOT NULL")
     }
-    return badges.length > 0 ? badges.join(" • ") : undefined
+    return badges.length > 0 ? badges : undefined
   }
   if (node.type === "constraint") {
     return constraintBadges(node)
@@ -152,7 +152,7 @@ function nodeBadges(node: Node): string | undefined {
   if (node.type === "trigger") {
     const state = typeof node.attributes?.enabledState === "string" ? node.attributes.enabledState : ""
     if (!state) return undefined
-    return state.toUpperCase()
+    return [state.toUpperCase()]
   }
   return undefined
 }
@@ -180,7 +180,7 @@ function describeConstraint(node: Node): string | undefined {
   return constraintType
 }
 
-function constraintBadges(node: Node): string | undefined {
+function constraintBadges(node: Node): string[] | undefined {
   const constraintType = typeof node.attributes?.constraintType === "string" ? node.attributes.constraintType : ""
   if (constraintType !== "FOREIGN KEY") return undefined
   const badges: string[] = []
@@ -190,7 +190,7 @@ function constraintBadges(node: Node): string | undefined {
   if (match) badges.push(`MATCH ${match}`)
   if (onUpdate) badges.push(`ON UPDATE ${onUpdate}`)
   if (onDelete) badges.push(`ON DELETE ${onDelete}`)
-  return badges.length > 0 ? badges.join(" • ") : undefined
+  return badges.length > 0 ? badges : undefined
 }
 
 function describeIndex(node: Node): string | undefined {
@@ -220,7 +220,7 @@ function describeTrigger(node: Node): string | undefined {
   return undefined
 }
 
-function indexBadges(node: Node): string | undefined {
+function indexBadges(node: Node): string[] | undefined {
   const badges: string[] = []
   if (node.attributes?.primary === true) {
     badges.push("PRIMARY")
@@ -228,5 +228,5 @@ function indexBadges(node: Node): string | undefined {
   if (node.attributes?.unique === true) {
     badges.push("UNIQUE")
   }
-  return badges.length > 0 ? badges.join(" • ") : undefined
+  return badges.length > 0 ? badges : undefined
 }

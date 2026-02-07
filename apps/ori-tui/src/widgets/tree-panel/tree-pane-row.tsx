@@ -1,8 +1,8 @@
 import { useTheme } from "@app/providers/theme"
 import type { BoxRenderable, MouseEvent } from "@opentui/core"
 import { TextAttributes } from "@opentui/core"
-import type { NodeEntity } from "@src/entities/schema-tree/model/node-entity"
 import type { TreePaneViewModel } from "@src/features/tree-pane/use-tree-pane"
+import type { TreePaneNode } from "@widgets/tree-panel/model/tree-pane-node"
 import { type Accessor, createEffect, createMemo, createSignal, For, Show } from "solid-js"
 import type { TreeRowSegment } from "./tree-row-renderable.ts"
 import "./tree-row-renderable.ts"
@@ -11,7 +11,7 @@ import { useTreeScrollRegistration } from "./tree-scrollbox.tsx"
 const ROW_LEFT_PADDING = 2
 const GLYPH_SEPARATOR_WIDTH = 1
 
-type TreeNodeProps = {
+type TreePaneRowProps = {
   nodeId: string
   depth: number
   isFocused: Accessor<boolean>
@@ -19,7 +19,7 @@ type TreeNodeProps = {
   isRowSelected: (key: string) => boolean
 }
 
-export function TreeNode(props: TreeNodeProps) {
+export function TreePaneRow(props: TreePaneRowProps) {
   const registerRowNode = useTreeScrollRegistration()
   const { theme } = useTheme()
   const palette = theme
@@ -86,8 +86,9 @@ export function TreeNode(props: TreeNodeProps) {
       })
     }
     if (parts.badges) {
+      const badges = parts.badges.join(" • ")
       segments.push({
-        text: ` ${parts.badges}`,
+        text: ` ${badges}`,
         fg: colors.accent,
         bg: colors.baseBg,
       })
@@ -101,7 +102,7 @@ export function TreeNode(props: TreeNodeProps) {
       when={entity()}
       keyed
     >
-      {(_: NodeEntity) => (
+      {(_: TreePaneNode) => (
         <>
           <box
             id={`tree-row-${rowId()}`}
@@ -132,7 +133,7 @@ export function TreeNode(props: TreeNodeProps) {
             >
               <For each={childIds()}>
                 {(childId) => (
-                  <TreeNode
+                  <TreePaneRow
                     nodeId={childId}
                     depth={props.depth + 1}
                     isFocused={props.isFocused}
@@ -153,11 +154,10 @@ type RowTextParts = {
   glyph: string
   main: string
   description?: string
-  badges?: string
+  badges?: string[]
 }
 
-function buildRowTextParts(details: NodeEntity | undefined, expanded: boolean): RowTextParts {
-  // TODO: handle undefined?
+function buildRowTextParts(details: TreePaneNode | undefined, expanded: boolean): RowTextParts {
   const hasChildren = Boolean(details?.hasChildren)
   const glyph = hasChildren ? (expanded ? "▽" : "▷") : "·"
   const label = details?.label ?? ""
@@ -172,6 +172,9 @@ function buildRowTextParts(details: NodeEntity | undefined, expanded: boolean): 
 function calculateRowTextWidth(parts: RowTextParts): number {
   let width = parts.glyph.length + GLYPH_SEPARATOR_WIDTH + parts.main.length
   if (parts.description) width += 1 + parts.description.length
-  if (parts.badges) width += 1 + parts.badges.length
+  if (parts.badges) {
+    const badges = parts.badges.join(" • ")
+    width += 1 + badges.length
+  }
   return width
 }

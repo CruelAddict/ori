@@ -1,8 +1,9 @@
-import { useResourceGraphSnapshot, useSchemaTree } from "@entities/schema-tree"
+import { useResourceGraphSnapshot } from "@entities/schema-tree"
+import { useTreePaneGraph } from "@widgets/tree-panel/model/tree-pane-graph"
 import type { Accessor } from "solid-js"
 
 export type TreePaneViewModel = {
-  controller: ReturnType<typeof useSchemaTree>
+  controller: ReturnType<typeof useTreePaneGraph>
   isFocused: Accessor<boolean>
   loading: Accessor<boolean>
   error: Accessor<string | null>
@@ -18,7 +19,7 @@ type UseTreePaneOptions = {
 
 export function useTreePane(options: UseTreePaneOptions): TreePaneViewModel {
   const { nodesById, rootIds, loading, error, refresh } = useResourceGraphSnapshot(options.configurationName)
-  const controller = useSchemaTree(nodesById, rootIds)
+  const controller = useTreePaneGraph(nodesById, rootIds)
 
   const refreshGraph = async () => {
     await refresh()

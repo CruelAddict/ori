@@ -1,8 +1,8 @@
+import type { Node } from "@shared/lib/configurations-client"
 import type { Accessor } from "solid-js"
 import { batch, createEffect, createMemo, createSignal } from "solid-js"
 import { createStore, produce, type SetStoreFunction } from "solid-js/store"
-import type { Node } from "@shared/lib/configurations-client"
-import { createEdgeNodeEntity, createSnapshotNodeEntity, type NodeEntity } from "./node-entity"
+import { createEdgeTreePaneNode, createSnapshotTreePaneNode, type TreePaneNode } from "./tree-pane-node"
 
 const CHILD_BATCH_SIZE = 10
 
@@ -12,8 +12,67 @@ export type VisibleRow = {
   depth: number
 }
 
-export function useSchemaTree(nodesById: Accessor<Record<string, Node>>, rootIds: Accessor<string[]>) {
-  const [entitiesById, setEntitiesById] = createStore<Record<string, NodeEntity>>({})
+export function convertSnapshotNodeEntities(node: Node, nodes: Record<string, Node>): TreePaneNode[] {
+  const entities: TreePaneNode[] = []
+  const nodeEntity = createSnapshotTreePaneNode(node)
+  entities.push(nodeEntity)
+
+  const attachEdgeEntity = (edgeEntity: ReturnType<typeof createEdgeTreePaneNode>, hasChildren: boolean) => {
+    edgeEntity.hasChildren = hasChildren
+    nodeEntity.childIds.push(edgeEntity.id)
+    nodeEntity.hasChildren = nodeEntity.childIds.length > 0
+    entities.push(edgeEntity)
+  }
+
+  const attachSyntheticEdge = (edgeName: string, labels: string[]) => {
+    if (labels.length === 0) return
+    const childIds: string[] = []
+    for (let index = 0; index < labels.length; index += 1) {
+      const label = labels[index]
+      const childId = `synthetic:${node.id}:${edgeName}:${index}`
+      const childNode: Node = {
+        id: childId,
+        type: "column",
+        name: label,
+        attributes: {},
+        edges: {},
+      }
+      const childEntity = createSnapshotTreePaneNode(childNode)
+      entities.push(childEntity)
+      childIds.push(childEntity.id)
+    }
+    if (childIds.length === 0) return
+    const edgeEntity = createEdgeTreePaneNode(node, edgeName, {
+      items: childIds,
+      truncated: false,
+    })
+    attachEdgeEntity(edgeEntity, true)
+  }
+
+  if (node.type === "index") {
+    attachSyntheticEdge("columns", toStringArray(node.attributes?.columns))
+    attachSyntheticEdge("include", toStringArray(node.attributes?.includeColumns))
+  }
+
+  if (node.type === "constraint") {
+    attachSyntheticEdge("columns", toStringArray(node.attributes?.columns))
+    attachSyntheticEdge("references", toStringArray(node.attributes?.referencedColumns))
+  }
+
+  for (const [edgeName, edge] of Object.entries(node.edges ?? {})) {
+    if (!edge.items || edge.items.length === 0) {
+      continue
+    }
+    const edgeEntity = createEdgeTreePaneNode(node, edgeName, edge)
+    const hasChildren = edgeEntity.childIds.some((childId) => Boolean(nodes[childId]))
+    attachEdgeEntity(edgeEntity, hasChildren)
+  }
+
+  return entities
+}
+
+export function useTreePaneGraph(nodesById: Accessor<Record<string, Node>>, rootIds: Accessor<string[]>) {
+  const [entitiesById, setEntitiesById] = createStore<Record<string, TreePaneNode>>({})
   const processedNodeIds = new Set<string>()
   const edgeIdsByChildId = new Map<string, Set<string>>()
 
@@ -30,9 +89,7 @@ export function useSchemaTree(nodesById: Accessor<Record<string, Node>>, rootIds
   const rootIdsMemo = createMemo(() => rootIds())
 
   // Derived flat rows for navigation/scroll. Rendering can be recursive and read helpers directly.
-  const visibleRows = createMemo(() =>
-    buildVisibleRows(rootIdsMemo(), getEntity, isNodeExpanded, getVisibleCount),
-  )
+  const visibleRows = createMemo(() => buildVisibleRows(rootIdsMemo(), getEntity, isNodeExpanded, getVisibleCount))
 
   const rowIndexMap = createMemo(() => {
     const list = visibleRows()
@@ -96,14 +153,29 @@ export function useSchemaTree(nodesById: Accessor<Record<string, Node>>, rootIds
     }
   }
 
+  const clearSnapshotState = () => {
+    processedNodeIds.clear()
+    edgeIdsByChildId.clear()
+    setEntitiesById({})
+  }
+
+  const applySnapshotNode = (node: Node, nodes: Record<string, Node>) => {
+    const entities = convertSnapshotNodeEntities(node, nodes)
+    for (const entity of entities) {
+      setEntitiesById(entity.id, entity)
+      if (entity.kind === "edge") {
+        registerEdgeChildren(entity.id, entity.childIds)
+      }
+    }
+    updateEdgesForChild(node.id)
+  }
+
   createEffect(() => {
     const nodes = nodesById()
     const ids = Object.keys(nodes)
     if (ids.length === 0) {
       if (processedNodeIds.size > 0) {
-        processedNodeIds.clear()
-        edgeIdsByChildId.clear()
-        setEntitiesById({})
+        clearSnapshotState()
       }
       return
     }
@@ -113,67 +185,7 @@ export function useSchemaTree(nodesById: Accessor<Record<string, Node>>, rootIds
       const node = nodes[id]
       if (!node) continue
       processedNodeIds.add(id)
-
-      const nodeEntity = createSnapshotNodeEntity(node)
-      const attachEdgeEntity = (edgeEntity: ReturnType<typeof createEdgeNodeEntity>) => {
-        registerEdgeChildren(edgeEntity.id, edgeEntity.childIds)
-        nodeEntity.childIds.push(edgeEntity.id)
-        nodeEntity.hasChildren = nodeEntity.childIds.length > 0
-        edgeEntity.hasChildren = edgeEntity.childIds.length > 0
-        setEntitiesById(edgeEntity.id, edgeEntity)
-      }
-
-      const attachSyntheticEdge = (edgeName: string, labels: string[]) => {
-        if (labels.length === 0) return
-        const childEntities = labels.map((label, index) => {
-          const childId = `synthetic:${node.id}:${edgeName}:${index}`
-          const childNode: Node = {
-            id: childId,
-            type: "column",
-            name: label,
-            attributes: {},
-            edges: {},
-          }
-          const childEntity = createSnapshotNodeEntity(childNode)
-          childEntity.hasChildren = false
-          setEntitiesById(childEntity.id, childEntity)
-          return childEntity
-        })
-
-        const edgeEntity = createEdgeNodeEntity(node, edgeName, {
-          items: childEntities.map((child) => child.id),
-          truncated: false,
-        })
-        attachEdgeEntity(edgeEntity)
-      }
-
-      if (node.type === "index") {
-        const columns = toStringArray(node.attributes?.columns)
-        const includeColumns = toStringArray(node.attributes?.includeColumns)
-        attachSyntheticEdge("columns", columns)
-        attachSyntheticEdge("include", includeColumns)
-      }
-
-      if (node.type === "constraint") {
-        const columns = toStringArray(node.attributes?.columns)
-        const references = toStringArray(node.attributes?.referencedColumns)
-        attachSyntheticEdge("columns", columns)
-        attachSyntheticEdge("references", references)
-      }
-
-      for (const [edgeName, edge] of Object.entries(node.edges ?? {})) {
-        if (!edge.items || edge.items.length === 0) {
-          continue
-        }
-        const edgeEntity = createEdgeNodeEntity(node, edgeName, edge)
-        registerEdgeChildren(edgeEntity.id, edgeEntity.childIds)
-        edgeEntity.hasChildren = edgeEntity.childIds.some((childId) => Boolean(nodes[childId]))
-        nodeEntity.childIds.push(edgeEntity.id)
-        nodeEntity.hasChildren = nodeEntity.childIds.length > 0
-        setEntitiesById(edgeEntity.id, edgeEntity)
-      }
-      setEntitiesById(node.id, nodeEntity)
-      updateEdgesForChild(node.id)
+      applySnapshotNode(node, nodes)
     }
   })
 
@@ -251,7 +263,7 @@ export function useSchemaTree(nodesById: Accessor<Record<string, Node>>, rootIds
 
 function buildVisibleRows(
   rootIds: readonly string[],
-  getEntity: (id: string) => NodeEntity | undefined,
+  getEntity: (id: string) => TreePaneNode | undefined,
   isExpanded: (id: string) => boolean,
   getVisibleCount: (id: string) => number,
 ): VisibleRow[] {
@@ -271,10 +283,10 @@ function appendVisibleChildren(
   list: VisibleRow[],
   parentId: string,
   depth: number,
-  getEntity: (id: string) => NodeEntity | undefined,
+  getEntity: (id: string) => TreePaneNode | undefined,
   isExpanded: (id: string) => boolean,
   getVisibleCount: (id: string) => number,
-) {
+): void {
   const parent = getEntity(parentId)
   if (!parent) return
   const visibleCount = Math.min(getVisibleCount(parentId), parent.childIds.length)
@@ -292,7 +304,7 @@ function appendVisibleChildren(
 
 type TreeEffectsOptions = {
   rootIds: Accessor<string[]>
-  getEntity: (id: string) => NodeEntity | undefined
+  getEntity: (id: string) => TreePaneNode | undefined
   setExpandedNodes: SetStoreFunction<Record<string, true>>
   setVisibleChildCounts: SetStoreFunction<Record<string, number>>
   selectedId: Accessor<string | null>
@@ -349,7 +361,7 @@ function setupTreeEffects(options: TreeEffectsOptions) {
 }
 
 type ChildVisibilityOptions = {
-  getEntity: (id: string) => NodeEntity | undefined
+  getEntity: (id: string) => TreePaneNode | undefined
   isNodeExpanded: (nodeId: string | null) => boolean
   getVisibleCount: (nodeId: string) => number
   setVisibleChildCounts: SetStoreFunction<Record<string, number>>
@@ -454,7 +466,7 @@ function createMoveSelectionAction(options: MoveSelectionOptions) {
 
 type FocusFirstChildOptions = {
   selectedRow: Accessor<VisibleRow | null>
-  getEntity: (id: string) => NodeEntity | undefined
+  getEntity: (id: string) => TreePaneNode | undefined
   expandNode: (nodeId: string | null) => void
   ensureInitialChildren: (nodeId: string) => void
   selectNode: (nodeId: string | null) => void
@@ -484,7 +496,7 @@ function createFocusFirstChildAction(options: FocusFirstChildOptions) {
 
 type CollapseCurrentOrParentOptions = {
   selectedRow: Accessor<VisibleRow | null>
-  getEntity: (id: string) => NodeEntity | undefined
+  getEntity: (id: string) => TreePaneNode | undefined
   collapseNode: (nodeId: string | null) => void
   selectNode: (nodeId: string | null) => void
   isNodeExpanded: (nodeId: string | null) => boolean
@@ -509,7 +521,7 @@ function createCollapseCurrentOrParentAction(options: CollapseCurrentOrParentOpt
 
 type ActivateSelectionOptions = {
   selectedRow: Accessor<VisibleRow | null>
-  getEntity: (id: string) => NodeEntity | undefined
+  getEntity: (id: string) => TreePaneNode | undefined
   collapseNode: (nodeId: string | null) => void
   expandNode: (nodeId: string | null) => void
   isNodeExpanded: (nodeId: string | null) => boolean

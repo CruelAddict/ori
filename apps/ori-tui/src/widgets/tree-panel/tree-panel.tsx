@@ -3,7 +3,7 @@ import { TextAttributes } from "@opentui/core"
 import { type KeyBinding, KeyScope } from "@src/core/services/key-scopes"
 import type { TreePaneViewModel } from "@src/features/tree-pane/use-tree-pane"
 import { type Accessor, createSelector, For, Show } from "solid-js"
-import { TreeNode } from "./tree-node.tsx"
+import { TreePaneRow } from "./tree-pane-row.tsx"
 import { TreeScrollbox, type TreeScrollboxApi } from "./tree-scrollbox.tsx"
 
 const HORIZONTAL_SCROLL_STEP = 6
@@ -99,7 +99,7 @@ export function TreePanel(props: TreePanelProps) {
             >
               <For each={rootIds()}>
                 {(id) => (
-                  <TreeNode
+                  <TreePaneRow
                     nodeId={id}
                     depth={0}
                     isFocused={pane.isFocused}

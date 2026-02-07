@@ -4,6 +4,7 @@
     "target": "ESNext",
     "module": "ESNext",
     "moduleDetection": "force",
+    "customConditions": ["browser"],
     "jsx": "preserve",
     "jsxImportSource": "@opentui/solid",
     "allowJs": true,
@@ -24,7 +25,7 @@
       "@cli/*": ["src/app/cli/*"],
       "@src/*": ["src/*"]
     },
-    "types": ["vitest/globals"],
+    "types": ["bun"],
     "noEmit": true,
     "strict": true,
     "skipLibCheck": true,

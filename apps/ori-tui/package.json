@@ -9,17 +9,14 @@
     "lint": "bunx biome check --reporter summary",
     "lint:fix": "bunx biome check --write",
     "postinstall": "patch -p1 -N -r- < patches/follow-redirects+1.15.11.patch || true",
-    "test": "bun run vitest",
-    "test:run": "bun run vitest run",
-    "test:watch": "bun run vitest watch",
-    "test:coverage": "bun run vitest run --coverage"
+    "test": "bun test",
+    "test:run": "bun test",
+    "test:watch": "bun test --watch",
+    "test:coverage": "bun test --coverage"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.1.5",
-    "@types/bun": "latest",
-    "@vitest/coverage-v8": "^4.0.16",
-    "vite-tsconfig-paths": "^6.0.3",
-    "vitest": "^4.0.16"
+    "@types/bun": "latest"
   },
   "peerDependencies": {
     "typescript": "^5"

@@ -1,4 +1,4 @@
-import { describe, expect, test } from "vitest"
+import { describe, expect, test } from "bun:test"
 import { buildLineStarts } from "./buffer-model"
 import { collectSqlStatements, type SqlStatement } from "./sql-statement-detector"
 

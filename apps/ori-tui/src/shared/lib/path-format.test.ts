@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, test } from "vitest"
+import { afterAll, beforeAll, describe, expect, test } from "bun:test"
 import { type FormattedFilePath, formatFilePath } from "./path-format"
 
 const originalHome = process.env.HOME
