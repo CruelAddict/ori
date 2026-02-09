@@ -105,8 +105,8 @@ func TestListConfigurationsAndConnectSQLiteOverUDS(t *testing.T) {
 	if rootResp.JSON200 == nil || len(rootResp.JSON200.Nodes) == 0 {
 		t.Fatalf("expected at least one root node")
 	}
-	rootNode := rootResp.JSON200.Nodes[0]
-	if rootNode.Type != "database" {
+	rootNode := mustDatabaseNode(t, rootResp.JSON200.Nodes[0])
+	if rootNode.Type != dto.Database {
 		t.Fatalf("expected database node, got %s", rootNode.Type)
 	}
 	tablesEdge, ok := rootNode.Edges["tables"]
@@ -123,7 +123,7 @@ func TestListConfigurationsAndConnectSQLiteOverUDS(t *testing.T) {
 	if dbResp.JSON200 == nil || len(dbResp.JSON200.Nodes) != 1 {
 		t.Fatalf("expected single database node")
 	}
-	dbNode := dbResp.JSON200.Nodes[0]
+	dbNode := mustDatabaseNode(t, dbResp.JSON200.Nodes[0])
 	tablesAtDB, ok := dbNode.Edges["tables"]
 	if !ok || len(tablesAtDB.Items) == 0 {
 		t.Fatalf("expected tables edge at database node")
@@ -139,7 +139,7 @@ func TestListConfigurationsAndConnectSQLiteOverUDS(t *testing.T) {
 	if tableResp.JSON200 == nil || len(tableResp.JSON200.Nodes) != 1 {
 		t.Fatalf("expected single table node")
 	}
-	tNode := tableResp.JSON200.Nodes[0]
+	tNode := mustTableNode(t, tableResp.JSON200.Nodes[0])
 	if edge, ok := tNode.Edges["columns"]; !ok || len(edge.Items) == 0 {
 		t.Fatalf("expected at least one column edge")
 	}
@@ -222,7 +222,7 @@ func TestQueryExecAndGetResult(t *testing.T) {
 	execReq := dto.ExecQueryJSONRequestBody{
 		ConfigurationName: "local-sqlite",
 		JobId:             uuid.New(),
-		Query:             "SELECT id, name, email FROM authors",
+		Query:             "SELECT id, name, email FROM authors WHERE id = 1",
 	}
 	requestCtx, cancel := context.WithCancel(ctx)
 	execResp, err := client.ExecQueryWithResponse(requestCtx, execReq)
@@ -246,7 +246,7 @@ func TestQueryExecAndGetResult(t *testing.T) {
 	execReq2 := dto.ExecQueryJSONRequestBody{
 		ConfigurationName: "local-sqlite",
 		JobId:             uuid.New(),
-		Query:             "SELECT id, title FROM books",
+		Query:             "SELECT id, title FROM books ORDER BY id LIMIT 10",
 	}
 	execResp2, err := client.ExecQueryWithResponse(ctx, execReq2)
 	if err != nil {
@@ -261,8 +261,8 @@ func TestQueryExecAndGetResult(t *testing.T) {
 	if len(paginated.Rows) != 1 {
 		t.Fatalf("expected 1 row for paginated request")
 	}
-	if paginated.RowCount != 1 {
-		t.Fatalf("expected RowCount=1, got %d", paginated.RowCount)
+	if paginated.RowCount != 10 {
+		t.Fatalf("expected RowCount=10, got %d", paginated.RowCount)
 	}
 
 	badResp, err := client.GetQueryResultWithResponse(ctx, "invalid-job-id", nil)
@@ -290,6 +290,38 @@ func waitForQueryResult(t *testing.T, ctx context.Context, client *dto.ClientWit
 	}
 	t.Fatalf("query %s did not complete within timeout", jobID)
 	return nil
+}
+
+func mustDatabaseNode(t *testing.T, node dto.Node) dto.DatabaseNode {
+	t.Helper()
+	discriminator, err := node.Discriminator()
+	if err != nil {
+		t.Fatalf("failed to read node discriminator: %v", err)
+	}
+	if discriminator != string(dto.Database) {
+		t.Fatalf("expected database node discriminator, got %q", discriminator)
+	}
+	dbNode, err := node.AsDatabaseNode()
+	if err != nil {
+		t.Fatalf("failed to decode database node: %v", err)
+	}
+	return dbNode
+}
+
+func mustTableNode(t *testing.T, node dto.Node) dto.TableNode {
+	t.Helper()
+	discriminator, err := node.Discriminator()
+	if err != nil {
+		t.Fatalf("failed to read node discriminator: %v", err)
+	}
+	if discriminator != string(dto.Table) {
+		t.Fatalf("expected table node discriminator, got %q", discriminator)
+	}
+	tableNode, err := node.AsTableNode()
+	if err != nil {
+		t.Fatalf("failed to decode table node: %v", err)
+	}
+	return tableNode
 }
 
 func newContractClient(t *testing.T, socketPath string) *dto.ClientWithResponses {

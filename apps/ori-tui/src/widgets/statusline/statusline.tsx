@@ -28,7 +28,6 @@ export function Statusline() {
       justifyContent="space-between"
       minHeight={1}
       maxHeight={1}
-      marginTop={1}
       marginBottom={1}
       paddingLeft={3}
       paddingRight={3}

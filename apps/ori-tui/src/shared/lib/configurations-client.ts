@@ -3,10 +3,17 @@ import { decodeServerEvent, type ServerEvent } from "@shared/lib/events"
 import { createSSEStream, type SSEMessage } from "@shared/lib/sse-client"
 import axios, { type AxiosInstance } from "axios"
 import {
+  ColumnNode,
   type ConfigurationsResponse,
   type ConnectionResult as ContractConnectionResult,
-  type Node as ContractNode,
-  type NodeEdge as ContractNodeEdge,
+  ConstraintNode,
+  DatabaseNode,
+  IndexNode,
+  type Node,
+  SchemaNode,
+  TableNode,
+  TriggerNode,
+  ViewNode,
   type ErrorPayload,
   type NodesResponse,
   OpenAPI,
@@ -26,18 +33,18 @@ export type ConnectResult = {
   userMessage?: string
 }
 
-export type NodeEdge = {
-  items: string[]
-  truncated: boolean
-}
+export type { Node, NodeEdge } from "contract"
 
-export type Node = {
-  id: string
-  type: string
-  name: string
-  attributes: Record<string, unknown>
-  edges: Record<string, NodeEdge>
-}
+export const NodeType = {
+  DATABASE: DatabaseNode.type.DATABASE,
+  SCHEMA: SchemaNode.type.SCHEMA,
+  TABLE: TableNode.type.TABLE,
+  VIEW: ViewNode.type.VIEW,
+  COLUMN: ColumnNode.type.COLUMN,
+  CONSTRAINT: ConstraintNode.type.CONSTRAINT,
+  INDEX: IndexNode.type.INDEX,
+  TRIGGER: TriggerNode.type.TRIGGER,
+} as const
 
 export type QueryExecResult = {
   jobId: string
@@ -362,24 +369,8 @@ function isErrorPayload(value: unknown): value is ErrorPayload {
   return typeof value === "object" && value !== null && "code" in value
 }
 
-function mapNode(node: ContractNode): Node {
-  const edges: Record<string, NodeEdge> = {}
-  if (node.edges) {
-    const contractEdges = Object.entries(node.edges) as Array<[string, ContractNodeEdge]>
-    for (const [kind, edge] of contractEdges) {
-      edges[kind] = {
-        items: edge.items ?? [],
-        truncated: edge.truncated ?? false,
-      }
-    }
-  }
-  return {
-    id: node.id,
-    type: node.type,
-    name: node.name,
-    attributes: node.attributes ?? {},
-    edges,
-  }
+function mapNode(node: Node): Node {
+  return node
 }
 
 function rootNodeId(configurationName: string): string {
@@ -411,11 +402,11 @@ function buildStubGraph(configurationName: string): Map<string, Node> {
 
   const databaseNode: Node = {
     id: databaseId,
-    type: "database",
+    type: NodeType.DATABASE,
     name: databaseName,
     attributes: {
       connection: configurationName,
-      database: databaseName,
+      engine: "sqlite",
     },
     edges: {
       tables: { items: [tableId], truncated: false },
@@ -424,12 +415,12 @@ function buildStubGraph(configurationName: string): Map<string, Node> {
 
   const tableNode: Node = {
     id: tableId,
-    type: "table",
+    type: NodeType.TABLE,
     name: "public.sample",
     attributes: {
       connection: configurationName,
-      database: databaseName,
       table: "sample",
+      tableType: "table",
     },
     edges: {
       columns: { items: [columnId], truncated: false },
@@ -440,9 +431,13 @@ function buildStubGraph(configurationName: string): Map<string, Node> {
 
   const columnNode: Node = {
     id: columnId,
-    type: "column",
+    type: NodeType.COLUMN,
     name: "id",
     attributes: {
+      connection: configurationName,
+      table: "sample",
+      column: "id",
+      ordinal: 1,
       dataType: "integer",
       notNull: true,
       primaryKeyPosition: 1,
@@ -452,9 +447,11 @@ function buildStubGraph(configurationName: string): Map<string, Node> {
 
   const indexNode: Node = {
     id: indexId,
-    type: "index",
+    type: NodeType.INDEX,
     name: "sample_idx",
     attributes: {
+      connection: configurationName,
+      table: "sample",
       indexName: "sample_idx",
       unique: true,
       primary: false,
@@ -465,9 +462,12 @@ function buildStubGraph(configurationName: string): Map<string, Node> {
 
   const triggerNode: Node = {
     id: triggerId,
-    type: "trigger",
+    type: NodeType.TRIGGER,
     name: "sample_trigger",
     attributes: {
+      connection: configurationName,
+      table: "sample",
+      triggerName: "sample_trigger",
       timing: "BEFORE",
       events: ["INSERT"],
       orientation: "ROW",

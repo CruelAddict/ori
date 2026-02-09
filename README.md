@@ -31,6 +31,14 @@ make uninstall
 
 ## Development
 
+### Strict Contract Check
+
+```bash
+make contract-check
+```
+
+This command fails if generated contract SDKs are out of date.
+
 ### Project Structure
 
 ```

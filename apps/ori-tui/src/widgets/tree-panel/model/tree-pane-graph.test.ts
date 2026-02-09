@@ -1,15 +1,120 @@
 import { describe, expect, test } from "bun:test"
-import type { Node, NodeEdge } from "@shared/lib/configurations-client"
+import { NodeType, type Node, type NodeEdge } from "@shared/lib/configurations-client"
 import { convertSnapshotNodeEntities } from "./tree-pane-graph"
 import type { TreePaneNode } from "./tree-pane-node"
 
-const makeNode = (overrides: Partial<Node> & { id: string }): Node => ({
-  id: overrides.id,
-  type: overrides.type ?? "table",
-  name: overrides.name ?? overrides.id,
-  attributes: overrides.attributes ?? {},
-  edges: overrides.edges ?? {},
-})
+type NodeOverrides = {
+  id: string
+  type?: Node["type"]
+  name?: string
+  attributes?: Record<string, unknown>
+  edges?: Record<string, NodeEdge>
+}
+
+const makeNode = (overrides: NodeOverrides): Node => {
+  const kind = overrides.type ?? NodeType.TABLE
+  const name = overrides.name ?? overrides.id
+
+  if (kind === NodeType.DATABASE) {
+    return {
+      id: overrides.id,
+      type: kind,
+      name,
+      attributes: Object.assign({ connection: "test", engine: "sqlite" }, overrides.attributes ?? {}),
+      edges: overrides.edges ?? {},
+    } as Node
+  }
+
+  if (kind === NodeType.COLUMN) {
+    return {
+      id: overrides.id,
+      type: kind,
+      name,
+      attributes: {
+        ...Object.assign({
+          connection: "test",
+          table: "users",
+          column: name,
+          ordinal: 1,
+          dataType: "text",
+          notNull: false,
+        }, overrides.attributes ?? {}),
+      },
+      edges: overrides.edges ?? {},
+    } as Node
+  }
+
+  if (kind === NodeType.CONSTRAINT) {
+    return {
+      id: overrides.id,
+      type: kind,
+      name,
+      attributes: {
+        ...Object.assign({
+          connection: "test",
+          table: "users",
+          constraintName: name,
+          constraintType: "FOREIGN KEY",
+        }, overrides.attributes ?? {}),
+      },
+      edges: overrides.edges ?? {},
+    } as Node
+  }
+
+  if (kind === NodeType.INDEX) {
+    return {
+      id: overrides.id,
+      type: kind,
+      name,
+      attributes: {
+        ...Object.assign({
+          connection: "test",
+          table: "users",
+          indexName: name,
+          unique: false,
+          primary: false,
+        }, overrides.attributes ?? {}),
+      },
+      edges: overrides.edges ?? {},
+    } as Node
+  }
+
+  if (kind === NodeType.TRIGGER) {
+    return {
+      id: overrides.id,
+      type: kind,
+      name,
+      attributes: {
+        ...Object.assign({
+          connection: "test",
+          table: "users",
+          triggerName: name,
+          timing: "BEFORE",
+          orientation: "ROW",
+        }, overrides.attributes ?? {}),
+      },
+      edges: overrides.edges ?? {},
+    } as Node
+  }
+
+  if (kind === NodeType.VIEW) {
+    return {
+      id: overrides.id,
+      type: kind,
+      name,
+      attributes: Object.assign({ connection: "test", table: name, tableType: "view" }, overrides.attributes ?? {}),
+      edges: overrides.edges ?? {},
+    } as Node
+  }
+
+  return {
+    id: overrides.id,
+    type: kind,
+    name,
+    attributes: Object.assign({ connection: "test", table: name, tableType: "table" }, overrides.attributes ?? {}),
+    edges: overrides.edges ?? {},
+  } as Node
+}
 
 const makeEdge = (items: string[], truncated = false): NodeEdge => ({
   items,
@@ -31,11 +136,11 @@ describe("convertSnapshotNodeEntities", () => {
   test("creates edge entities for non-empty edges", () => {
     const db = makeNode({
       id: "db-1",
-      type: "database",
+      type: NodeType.DATABASE,
       name: "main",
       edges: { tables: makeEdge(["table-1"]) },
     })
-    const table = makeNode({ id: "table-1", type: "table", name: "public.users" })
+    const table = makeNode({ id: "table-1", type: NodeType.TABLE, name: "public.users" })
 
     const entities = toEntityMap(db, {
       [db.id]: db,
@@ -55,7 +160,7 @@ describe("convertSnapshotNodeEntities", () => {
   test("skips empty edges", () => {
     const db = makeNode({
       id: "db-1",
-      type: "database",
+      type: NodeType.DATABASE,
       name: "main",
       edges: { tables: makeEdge([]), views: makeEdge([], true) },
     })
@@ -71,9 +176,9 @@ describe("convertSnapshotNodeEntities", () => {
   test("creates synthetic edges for index columns and includeColumns", () => {
     const index = makeNode({
       id: "idx-1",
-      type: "index",
+      type: NodeType.INDEX,
       name: "users_idx",
-      attributes: { columns: ["id", 123, "email"], includeColumns: ["created_at"] },
+      attributes: { columns: ["id", "email"], includeColumns: ["created_at"] },
     })
 
     const entities = toEntityMap(index, { [index.id]: index })
@@ -97,7 +202,7 @@ describe("convertSnapshotNodeEntities", () => {
   test("creates synthetic edges for constraint columns and references", () => {
     const constraint = makeNode({
       id: "fk-1",
-      type: "constraint",
+      type: NodeType.CONSTRAINT,
       name: "orders_user_id_fkey",
       attributes: { columns: ["user_id"], referencedColumns: ["users.id"] },
     })
@@ -113,12 +218,12 @@ describe("convertSnapshotNodeEntities", () => {
     expect(referencesEdge?.childIds).toEqual([syntheticId(constraint.id, "references", 0)])
   })
 
-  test("ignores non-array attributes for synthetic edges", () => {
+  test("skips synthetic edges when arrays are empty", () => {
     const index = makeNode({
       id: "idx-1",
-      type: "index",
+      type: NodeType.INDEX,
       name: "users_idx",
-      attributes: { columns: "id" },
+      attributes: { columns: [] },
     })
 
     const entities = toEntityMap(index, { [index.id]: index })

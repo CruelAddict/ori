@@ -1,4 +1,4 @@
-import type { Node } from "@shared/lib/configurations-client"
+import { NodeType, type Node, type NodeEdge } from "@shared/lib/configurations-client"
 import type { Accessor } from "solid-js"
 import { batch, createEffect, createMemo, createSignal } from "solid-js"
 import { createStore, produce, type SetStoreFunction } from "solid-js/store"
@@ -32,9 +32,16 @@ export function convertSnapshotNodeEntities(node: Node, nodes: Record<string, No
       const childId = `synthetic:${node.id}:${edgeName}:${index}`
       const childNode: Node = {
         id: childId,
-        type: "column",
+        type: NodeType.COLUMN,
         name: label,
-        attributes: {},
+        attributes: {
+          connection: "synthetic",
+          table: node.name,
+          column: label,
+          ordinal: index,
+          dataType: "",
+          notNull: false,
+        },
         edges: {},
       }
       const childEntity = createSnapshotTreePaneNode(childNode)
@@ -49,17 +56,18 @@ export function convertSnapshotNodeEntities(node: Node, nodes: Record<string, No
     attachEdgeEntity(edgeEntity, true)
   }
 
-  if (node.type === "index") {
-    attachSyntheticEdge("columns", toStringArray(node.attributes?.columns))
-    attachSyntheticEdge("include", toStringArray(node.attributes?.includeColumns))
+  if (node.type === NodeType.INDEX) {
+    attachSyntheticEdge("columns", node.attributes.columns ?? [])
+    attachSyntheticEdge("include", node.attributes.includeColumns ?? [])
   }
 
-  if (node.type === "constraint") {
-    attachSyntheticEdge("columns", toStringArray(node.attributes?.columns))
-    attachSyntheticEdge("references", toStringArray(node.attributes?.referencedColumns))
+  if (node.type === NodeType.CONSTRAINT) {
+    attachSyntheticEdge("columns", node.attributes.columns ?? [])
+    attachSyntheticEdge("references", node.attributes.referencedColumns ?? [])
   }
 
-  for (const [edgeName, edge] of Object.entries(node.edges ?? {})) {
+  const entries = Object.entries(node.edges) as Array<[string, NodeEdge]>
+  for (const [edgeName, edge] of entries) {
     if (!edge.items || edge.items.length === 0) {
       continue
     }
@@ -365,11 +373,6 @@ type ChildVisibilityOptions = {
   isNodeExpanded: (nodeId: string | null) => boolean
   getVisibleCount: (nodeId: string) => number
   setVisibleChildCounts: SetStoreFunction<Record<string, number>>
-}
-
-function toStringArray(value: unknown): string[] {
-  if (!Array.isArray(value)) return []
-  return value.filter((entry): entry is string => typeof entry === "string")
 }
 
 function createChildVisibilityManager(options: ChildVisibilityOptions) {

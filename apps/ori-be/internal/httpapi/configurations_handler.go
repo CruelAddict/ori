@@ -61,9 +61,13 @@ func (h *Handler) getConfigurationNodes(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	respondJSON(w, http.StatusOK, dto.NodesResponse{
-		Nodes: model.ConvertNodesToDTO(nodes, h.nodes.EdgeLimit()),
-	})
+	converted, err := nodes.ToDTO()
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, "node_convert_failed", err.Error(), nil)
+		return
+	}
+
+	respondJSON(w, http.StatusOK, dto.NodesResponse{Nodes: converted})
 }
 
 func (h *Handler) validateGetConfigurationNodes(r *http.Request) (string, []string, error) {

@@ -145,6 +145,7 @@ export function ConnectionViewPage(props: ConnectionViewPageProps) {
             flexGrow={1}
             marginLeft={vm.isPaneVisible("tree") ? 1 : 0}
             justifyContent="space-between"
+            paddingBottom={1}
           >
             <Show
               when={vm.isPaneVisible("editor")}

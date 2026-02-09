@@ -1,11 +1,11 @@
 package service
 
 import (
-	"maps"
 	"sort"
 
 	"github.com/crueladdict/ori/apps/ori-server/internal/model"
 	"github.com/crueladdict/ori/apps/ori-server/internal/pkg/stringutil"
+	dto "github.com/crueladdict/ori/libs/contract/go"
 )
 
 // GraphBuilder converts relational metadata into graph nodes.
@@ -72,107 +72,140 @@ func (b *GraphBuilder) TriggerNodeID(scope model.ScopeID, relation, triggerName 
 }
 
 // BuildScopeNode creates a node for a scope.
-func (b *GraphBuilder) BuildScopeNode(scope model.Scope) *model.Node {
-	var nodeType string
-	attrs := map[string]any{
-		"connection": b.connectionName,
-		"engine":     b.engine,
-	}
-
-	var name string
+func (b *GraphBuilder) BuildScopeNode(scope model.Scope) model.Node {
 	if scope.Schema == nil {
-		nodeType = "database"
-		name = scope.Database
-	} else {
-		nodeType = "schema"
-		name = *scope.Schema
+		attrs := dto.DatabaseNodeAttributes{
+			Connection: b.connectionName,
+			Engine:     b.engine,
+		}
+		if file, ok := attributeAsString(scope.Attrs, "file"); ok {
+			attrs.File = &file
+		}
+		if sequence, ok := attributeAsInt(scope.Attrs, "sequence"); ok {
+			attrs.Sequence = &sequence
+		}
+		if pageSize, ok := attributeAsInt64(scope.Attrs, "pageSize"); ok {
+			attrs.PageSize = &pageSize
+		}
+		if encoding, ok := attributeAsString(scope.Attrs, "encoding"); ok {
+			attrs.Encoding = &encoding
+		}
+		return &model.DatabaseNode{
+			BaseNode: model.BaseNode{
+				ID:       b.ScopeNodeID(scope.ScopeID),
+				Name:     scope.Database,
+				Scope:    scope.ScopeID,
+				Hydrated: false,
+			},
+			Attributes: attrs,
+		}
 	}
 
-	maps.Copy(attrs, scope.Attrs)
-
-	return &model.Node{
-		ID:         b.ScopeNodeID(scope.ScopeID),
-		Type:       nodeType,
-		Name:       name,
-		Scope:      scope.ScopeID,
-		Attributes: attrs,
-		Edges:      make(map[string]model.EdgeList),
-		Hydrated:   false,
+	return &model.SchemaNode{
+		BaseNode: model.BaseNode{
+			ID:       b.ScopeNodeID(scope.ScopeID),
+			Name:     *scope.Schema,
+			Scope:    scope.ScopeID,
+			Hydrated: false,
+		},
+		Attributes: dto.SchemaNodeAttributes{
+			Connection: b.connectionName,
+			Engine:     b.engine,
+		},
 	}
 }
 
 // BuildRelationNode creates a node for a table or view.
-func (b *GraphBuilder) BuildRelationNode(scope model.ScopeID, rel model.Relation) *model.Node {
-	attrs := map[string]any{
-		"connection": b.connectionName,
-		"table":      rel.Name,
-		"tableType":  rel.Type,
+func (b *GraphBuilder) BuildRelationNode(scope model.ScopeID, rel model.Relation) model.Node {
+	if rel.Type == "view" {
+		attrs := dto.ViewNodeAttributes{
+			Connection: b.connectionName,
+			Table:      rel.Name,
+			TableType:  rel.Type,
+		}
+		if rel.Definition != "" {
+			attrs.Definition = &rel.Definition
+		}
+		return &model.ViewNode{
+			BaseNode: model.BaseNode{
+				ID:       b.RelationNodeID(scope, rel),
+				Name:     rel.Name,
+				Scope:    scope,
+				Hydrated: false,
+			},
+			Attributes: attrs,
+		}
 	}
 
+	attrs := dto.TableNodeAttributes{
+		Connection: b.connectionName,
+		Table:      rel.Name,
+		TableType:  rel.Type,
+	}
 	if rel.Definition != "" {
-		attrs["definition"] = rel.Definition
+		attrs.Definition = &rel.Definition
 	}
-
-	return &model.Node{
-		ID:         b.RelationNodeID(scope, rel),
-		Type:       rel.Type,
-		Name:       rel.Name,
-		Scope:      scope,
+	return &model.TableNode{
+		BaseNode: model.BaseNode{
+			ID:       b.RelationNodeID(scope, rel),
+			Name:     rel.Name,
+			Scope:    scope,
+			Hydrated: false,
+		},
 		Attributes: attrs,
-		Edges:      make(map[string]model.EdgeList),
-		Hydrated:   false,
 	}
 }
 
 // BuildColumnNodes creates nodes for table columns.
-func (b *GraphBuilder) BuildColumnNodes(scope model.ScopeID, relation string, columns []model.Column) ([]*model.Node, model.EdgeList) {
-	nodes := make([]*model.Node, 0, len(columns))
+func (b *GraphBuilder) BuildColumnNodes(scope model.ScopeID, relation string, columns []model.Column) ([]model.Node, model.EdgeList) {
+	nodes := make([]model.Node, 0, len(columns))
 	edge := model.EdgeList{Items: make([]string, 0, len(columns))}
 
 	for _, col := range columns {
-		attrs := map[string]any{
-			"connection": b.connectionName,
-			"table":      relation,
-			"column":     col.Name,
-			"ordinal":    col.Ordinal,
-			"dataType":   col.DataType,
-			"notNull":    col.NotNull,
+		attrs := dto.ColumnNodeAttributes{
+			Connection: b.connectionName,
+			Table:      relation,
+			Column:     col.Name,
+			Ordinal:    col.Ordinal,
+			DataType:   col.DataType,
+			NotNull:    col.NotNull,
 		}
 
 		if col.DefaultValue != nil {
-			attrs["defaultValue"] = *col.DefaultValue
+			attrs.DefaultValue = cloneStringPtr(col.DefaultValue)
 		}
 		if col.PrimaryKeyPos > 0 {
-			attrs["primaryKeyPosition"] = col.PrimaryKeyPos
+			v := col.PrimaryKeyPos
+			attrs.PrimaryKeyPosition = &v
 		}
 		if col.CharMaxLength != nil {
-			attrs["charMaxLength"] = *col.CharMaxLength
+			attrs.CharMaxLength = cloneInt64Ptr(col.CharMaxLength)
 		}
 		if col.NumericPrecision != nil {
-			attrs["numericPrecision"] = *col.NumericPrecision
+			attrs.NumericPrecision = cloneInt64Ptr(col.NumericPrecision)
 		}
 		if col.NumericScale != nil {
-			attrs["numericScale"] = *col.NumericScale
+			attrs.NumericScale = cloneInt64Ptr(col.NumericScale)
 		}
 
-		node := &model.Node{
-			ID:         b.ColumnNodeID(scope, relation, col.Name),
-			Type:       "column",
-			Name:       col.Name,
-			Scope:      scope,
+		node := &model.ColumnNode{
+			BaseNode: model.BaseNode{
+				ID:       b.ColumnNodeID(scope, relation, col.Name),
+				Name:     col.Name,
+				Scope:    scope,
+				Hydrated: true,
+			},
 			Attributes: attrs,
-			Edges:      make(map[string]model.EdgeList),
-			Hydrated:   true,
 		}
 		nodes = append(nodes, node)
-		edge.Items = append(edge.Items, node.ID)
+		edge.Items = append(edge.Items, node.GetID())
 	}
 
 	return nodes, edge
 }
 
 // BuildConstraintNodes creates nodes for table constraints.
-func (b *GraphBuilder) BuildConstraintNodes(scope model.ScopeID, relation string, constraints []model.Constraint) ([]*model.Node, model.EdgeList) {
+func (b *GraphBuilder) BuildConstraintNodes(scope model.ScopeID, relation string, constraints []model.Constraint) ([]model.Node, model.EdgeList) {
 	sorted := make([]model.Constraint, len(constraints))
 	copy(sorted, constraints)
 	sort.Slice(sorted, func(i, j int) bool {
@@ -182,166 +215,160 @@ func (b *GraphBuilder) BuildConstraintNodes(scope model.ScopeID, relation string
 		return sorted[i].Name < sorted[j].Name
 	})
 
-	nodes := make([]*model.Node, 0, len(sorted))
+	nodes := make([]model.Node, 0, len(sorted))
 	edge := model.EdgeList{Items: make([]string, 0, len(sorted))}
 
 	for _, c := range sorted {
-		attrs := map[string]any{
-			"connection":     b.connectionName,
-			"table":          relation,
-			"constraintName": c.Name,
-			"constraintType": c.Type,
+		attrs := dto.ConstraintNodeAttributes{
+			Connection:     b.connectionName,
+			Table:          relation,
+			ConstraintName: c.Name,
+			ConstraintType: c.Type,
 		}
 
 		if len(c.Columns) > 0 {
-			attrs["columns"] = stringutil.CopyStrings(c.Columns)
+			attrs.Columns = copyStringsPtr(c.Columns)
 		}
 
 		if c.Type == "FOREIGN KEY" {
-			attrs["referencedTable"] = c.ReferencedTable
+			attrs.ReferencedTable = stringPtrIfNotEmpty(c.ReferencedTable)
 			if c.ReferencedScope != nil {
-				attrs["referencedDatabase"] = c.ReferencedScope.Database
+				attrs.ReferencedDatabase = stringPtrIfNotEmpty(c.ReferencedScope.Database)
 				if c.ReferencedScope.Schema != nil {
-					attrs["referencedSchema"] = *c.ReferencedScope.Schema
+					attrs.ReferencedSchema = cloneStringPtr(c.ReferencedScope.Schema)
 				}
 			}
 			if len(c.ReferencedColumns) > 0 {
-				attrs["referencedColumns"] = stringutil.CopyStrings(c.ReferencedColumns)
+				attrs.ReferencedColumns = copyStringsPtr(c.ReferencedColumns)
 			}
-			if c.OnUpdate != "" {
-				attrs["onUpdate"] = c.OnUpdate
-			}
-			if c.OnDelete != "" {
-				attrs["onDelete"] = c.OnDelete
-			}
-			if c.Match != "" {
-				attrs["match"] = c.Match
-			}
+			attrs.OnUpdate = stringPtrIfNotEmpty(c.OnUpdate)
+			attrs.OnDelete = stringPtrIfNotEmpty(c.OnDelete)
+			attrs.Match = stringPtrIfNotEmpty(c.Match)
 		}
 
 		if c.UnderlyingIndex != nil {
-			attrs["indexName"] = *c.UnderlyingIndex
+			attrs.IndexName = cloneStringPtr(c.UnderlyingIndex)
 		}
 
 		if c.CheckClause != "" {
-			attrs["checkClause"] = c.CheckClause
+			attrs.CheckClause = &c.CheckClause
 		}
 
-		node := &model.Node{
-			ID:         b.ConstraintNodeID(scope, relation, c.Name),
-			Type:       "constraint",
-			Name:       c.Name,
-			Scope:      scope,
+		node := &model.ConstraintNode{
+			BaseNode: model.BaseNode{
+				ID:       b.ConstraintNodeID(scope, relation, c.Name),
+				Name:     c.Name,
+				Scope:    scope,
+				Hydrated: true,
+			},
 			Attributes: attrs,
-			Edges:      make(map[string]model.EdgeList),
-			Hydrated:   true,
 		}
 		nodes = append(nodes, node)
-		edge.Items = append(edge.Items, node.ID)
+		edge.Items = append(edge.Items, node.GetID())
 	}
 
 	return nodes, edge
 }
 
 // BuildIndexNodes creates nodes for table/view indexes.
-func (b *GraphBuilder) BuildIndexNodes(scope model.ScopeID, relation string, indexes []model.Index) ([]*model.Node, model.EdgeList) {
+func (b *GraphBuilder) BuildIndexNodes(scope model.ScopeID, relation string, indexes []model.Index) ([]model.Node, model.EdgeList) {
 	sorted := make([]model.Index, len(indexes))
 	copy(sorted, indexes)
 	sort.Slice(sorted, func(i, j int) bool {
 		return sorted[i].Name < sorted[j].Name
 	})
 
-	nodes := make([]*model.Node, 0, len(sorted))
+	nodes := make([]model.Node, 0, len(sorted))
 	edge := model.EdgeList{Items: make([]string, 0, len(sorted))}
 
 	for _, idx := range sorted {
-		attrs := map[string]any{
-			"connection": b.connectionName,
-			"table":      relation,
-			"indexName":  idx.Name,
-			"unique":     idx.Unique,
-			"primary":    idx.Primary,
+		attrs := dto.IndexNodeAttributes{
+			Connection: b.connectionName,
+			Table:      relation,
+			IndexName:  idx.Name,
+			Unique:     idx.Unique,
+			Primary:    idx.Primary,
 		}
 
 		if len(idx.Columns) > 0 {
-			attrs["columns"] = stringutil.CopyStrings(idx.Columns)
+			attrs.Columns = copyStringsPtr(idx.Columns)
 		}
 		if len(idx.IncludeColumns) > 0 {
-			attrs["includeColumns"] = stringutil.CopyStrings(idx.IncludeColumns)
+			attrs.IncludeColumns = copyStringsPtr(idx.IncludeColumns)
 		}
 		if idx.Definition != "" {
-			attrs["definition"] = idx.Definition
+			attrs.Definition = &idx.Definition
 		}
 		if idx.Method != "" {
-			attrs["method"] = idx.Method
+			attrs.Method = &idx.Method
 		}
 		if idx.Predicate != "" {
-			attrs["predicate"] = idx.Predicate
+			attrs.Predicate = &idx.Predicate
 		}
 
-		node := &model.Node{
-			ID:         b.IndexNodeID(scope, relation, idx.Name),
-			Type:       "index",
-			Name:       idx.Name,
-			Scope:      scope,
+		node := &model.IndexNode{
+			BaseNode: model.BaseNode{
+				ID:       b.IndexNodeID(scope, relation, idx.Name),
+				Name:     idx.Name,
+				Scope:    scope,
+				Hydrated: true,
+			},
 			Attributes: attrs,
-			Edges:      make(map[string]model.EdgeList),
-			Hydrated:   true,
 		}
 		nodes = append(nodes, node)
-		edge.Items = append(edge.Items, node.ID)
+		edge.Items = append(edge.Items, node.GetID())
 	}
 
 	return nodes, edge
 }
 
 // BuildTriggerNodes creates nodes for table/view triggers.
-func (b *GraphBuilder) BuildTriggerNodes(scope model.ScopeID, relation string, triggers []model.Trigger) ([]*model.Node, model.EdgeList) {
+func (b *GraphBuilder) BuildTriggerNodes(scope model.ScopeID, relation string, triggers []model.Trigger) ([]model.Node, model.EdgeList) {
 	sorted := make([]model.Trigger, len(triggers))
 	copy(sorted, triggers)
 	sort.Slice(sorted, func(i, j int) bool {
 		return sorted[i].Name < sorted[j].Name
 	})
 
-	nodes := make([]*model.Node, 0, len(sorted))
+	nodes := make([]model.Node, 0, len(sorted))
 	edge := model.EdgeList{Items: make([]string, 0, len(sorted))}
 
 	for _, trg := range sorted {
-		attrs := map[string]any{
-			"connection":  b.connectionName,
-			"table":       relation,
-			"triggerName": trg.Name,
-			"timing":      trg.Timing,
-			"orientation": trg.Orientation,
+		attrs := dto.TriggerNodeAttributes{
+			Connection:  b.connectionName,
+			Table:       relation,
+			TriggerName: trg.Name,
+			Timing:      trg.Timing,
+			Orientation: trg.Orientation,
 		}
 
 		if len(trg.Events) > 0 {
-			attrs["events"] = stringutil.CopyStrings(trg.Events)
+			attrs.Events = copyStringsPtr(trg.Events)
 		}
 		if trg.Statement != "" {
-			attrs["statement"] = trg.Statement
+			attrs.Statement = &trg.Statement
 		}
 		if trg.Condition != "" {
-			attrs["condition"] = trg.Condition
+			attrs.Condition = &trg.Condition
 		}
 		if trg.EnabledState != "" {
-			attrs["enabledState"] = trg.EnabledState
+			attrs.EnabledState = &trg.EnabledState
 		}
 		if trg.Definition != "" {
-			attrs["definition"] = trg.Definition
+			attrs.Definition = &trg.Definition
 		}
 
-		node := &model.Node{
-			ID:         b.TriggerNodeID(scope, relation, trg.Name),
-			Type:       "trigger",
-			Name:       trg.Name,
-			Scope:      scope,
+		node := &model.TriggerNode{
+			BaseNode: model.BaseNode{
+				ID:       b.TriggerNodeID(scope, relation, trg.Name),
+				Name:     trg.Name,
+				Scope:    scope,
+				Hydrated: true,
+			},
 			Attributes: attrs,
-			Edges:      make(map[string]model.EdgeList),
-			Hydrated:   true,
 		}
 		nodes = append(nodes, node)
-		edge.Items = append(edge.Items, node.ID)
+		edge.Items = append(edge.Items, node.GetID())
 	}
 
 	return nodes, edge
@@ -360,4 +387,81 @@ func constraintTypeOrder(t string) int {
 	default:
 		return 4
 	}
+}
+
+func attributeAsString(attrs map[string]any, key string) (string, bool) {
+	v, ok := attrs[key]
+	if !ok {
+		return "", false
+	}
+	s, ok := v.(string)
+	if !ok {
+		return "", false
+	}
+	return s, true
+}
+
+func attributeAsInt(attrs map[string]any, key string) (int, bool) {
+	v, ok := attrs[key]
+	if !ok {
+		return 0, false
+	}
+	i, ok := v.(int)
+	if ok {
+		return i, true
+	}
+	i64, ok := v.(int64)
+	if ok {
+		return int(i64), true
+	}
+	return 0, false
+}
+
+func attributeAsInt64(attrs map[string]any, key string) (int64, bool) {
+	v, ok := attrs[key]
+	if !ok {
+		return 0, false
+	}
+	i64, ok := v.(int64)
+	if ok {
+		return i64, true
+	}
+	i, ok := v.(int)
+	if ok {
+		return int64(i), true
+	}
+	return 0, false
+}
+
+func cloneStringPtr(src *string) *string {
+	if src == nil {
+		return nil
+	}
+	copy := *src
+	return &copy
+}
+
+func cloneInt64Ptr(src *int64) *int64 {
+	if src == nil {
+		return nil
+	}
+	copy := *src
+	return &copy
+}
+
+func stringPtrIfNotEmpty(value string) *string {
+	if value == "" {
+		return nil
+	}
+	v := value
+	return &v
+}
+
+func copyStringsPtr(values []string) *[]string {
+	if len(values) == 0 {
+		return nil
+	}
+	copyOf := make([]string, len(values))
+	copy(copyOf, values)
+	return &copyOf
 }

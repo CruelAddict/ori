@@ -49,6 +49,14 @@ func (h *Handler) getQueryResult(w http.ResponseWriter, r *http.Request) {
 		Rows:         view.Rows,
 		RowCount:     view.RowCount,
 		Truncated:    view.Truncated,
-		RowsAffected: view.RowsAffected,
+		RowsAffected: toIntPtr(view.RowsAffected),
 	})
+}
+
+func toIntPtr(value *int64) *int {
+	if value == nil {
+		return nil
+	}
+	v := int(*value)
+	return &v
 }

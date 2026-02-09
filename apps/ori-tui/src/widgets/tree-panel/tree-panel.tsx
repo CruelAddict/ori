@@ -1,4 +1,5 @@
 import { useTheme } from "@app/providers/theme"
+import { withAlpha } from "@shared/lib/color/with-alpha"
 import { TextAttributes } from "@opentui/core"
 import { type KeyBinding, KeyScope } from "@src/core/services/key-scopes"
 import type { TreePaneViewModel } from "@src/features/tree-pane/use-tree-pane"
@@ -63,6 +64,10 @@ export function TreePanel(props: TreePanelProps) {
         maxWidth={"44%"}
         flexGrow={0}
         flexShrink={0}
+        border={["right"]}
+        borderColor={theme().border}
+        paddingRight={1}
+        paddingBottom={1}
       >
         <box
           paddingLeft={1}

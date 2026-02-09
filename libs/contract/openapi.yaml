@@ -282,28 +282,352 @@ components:
       required:
         - items
         - truncated
-    Node:
+    DatabaseNodeAttributes:
+      type: object
+      additionalProperties: false
+      properties:
+        connection:
+          type: string
+        engine:
+          type: string
+        file:
+          type: string
+        sequence:
+          type: integer
+        pageSize:
+          type: integer
+          format: int64
+        encoding:
+          type: string
+      required:
+        - connection
+        - engine
+    SchemaNodeAttributes:
+      type: object
+      additionalProperties: false
+      properties:
+        connection:
+          type: string
+        engine:
+          type: string
+      required:
+        - connection
+        - engine
+    TableNodeAttributes:
+      type: object
+      additionalProperties: false
+      properties:
+        connection:
+          type: string
+        table:
+          type: string
+        tableType:
+          type: string
+        definition:
+          type: string
+      required:
+        - connection
+        - table
+        - tableType
+    ViewNodeAttributes:
+      type: object
+      additionalProperties: false
+      properties:
+        connection:
+          type: string
+        table:
+          type: string
+        tableType:
+          type: string
+        definition:
+          type: string
+      required:
+        - connection
+        - table
+        - tableType
+    ColumnNodeAttributes:
+      type: object
+      additionalProperties: false
+      properties:
+        connection:
+          type: string
+        table:
+          type: string
+        column:
+          type: string
+        ordinal:
+          type: integer
+        dataType:
+          type: string
+        notNull:
+          type: boolean
+        defaultValue:
+          type: string
+        primaryKeyPosition:
+          type: integer
+        charMaxLength:
+          type: integer
+          format: int64
+        numericPrecision:
+          type: integer
+          format: int64
+        numericScale:
+          type: integer
+          format: int64
+      required:
+        - connection
+        - table
+        - column
+        - ordinal
+        - dataType
+        - notNull
+    ConstraintNodeAttributes:
+      type: object
+      additionalProperties: false
+      properties:
+        connection:
+          type: string
+        table:
+          type: string
+        constraintName:
+          type: string
+        constraintType:
+          type: string
+        columns:
+          type: array
+          items:
+            type: string
+        referencedTable:
+          type: string
+        referencedDatabase:
+          type: string
+        referencedSchema:
+          type: string
+        referencedColumns:
+          type: array
+          items:
+            type: string
+        onUpdate:
+          type: string
+        onDelete:
+          type: string
+        match:
+          type: string
+        indexName:
+          type: string
+        checkClause:
+          type: string
+      required:
+        - connection
+        - table
+        - constraintName
+        - constraintType
+    IndexNodeAttributes:
+      type: object
+      additionalProperties: false
+      properties:
+        connection:
+          type: string
+        table:
+          type: string
+        indexName:
+          type: string
+        unique:
+          type: boolean
+        primary:
+          type: boolean
+        columns:
+          type: array
+          items:
+            type: string
+        includeColumns:
+          type: array
+          items:
+            type: string
+        definition:
+          type: string
+        method:
+          type: string
+        predicate:
+          type: string
+      required:
+        - connection
+        - table
+        - indexName
+        - unique
+        - primary
+    TriggerNodeAttributes:
+      type: object
+      additionalProperties: false
+      properties:
+        connection:
+          type: string
+        table:
+          type: string
+        triggerName:
+          type: string
+        timing:
+          type: string
+        orientation:
+          type: string
+        events:
+          type: array
+          items:
+            type: string
+        statement:
+          type: string
+        condition:
+          type: string
+        enabledState:
+          type: string
+        definition:
+          type: string
+      required:
+        - connection
+        - table
+        - triggerName
+        - timing
+        - orientation
+    NodeBase:
       type: object
       properties:
         id:
           type: string
-        type:
-          type: string
         name:
           type: string
-        attributes:
-          type: object
-          additionalProperties: {}
         edges:
           type: object
           additionalProperties:
             $ref: '#/components/schemas/NodeEdge'
       required:
         - id
-        - type
         - name
-        - attributes
         - edges
+    DatabaseNode:
+      allOf:
+        - $ref: '#/components/schemas/NodeBase'
+        - type: object
+          properties:
+            type:
+              type: string
+              enum: [database]
+            attributes:
+              $ref: '#/components/schemas/DatabaseNodeAttributes'
+          required:
+            - type
+            - attributes
+    SchemaNode:
+      allOf:
+        - $ref: '#/components/schemas/NodeBase'
+        - type: object
+          properties:
+            type:
+              type: string
+              enum: [schema]
+            attributes:
+              $ref: '#/components/schemas/SchemaNodeAttributes'
+          required:
+            - type
+            - attributes
+    TableNode:
+      allOf:
+        - $ref: '#/components/schemas/NodeBase'
+        - type: object
+          properties:
+            type:
+              type: string
+              enum: [table]
+            attributes:
+              $ref: '#/components/schemas/TableNodeAttributes'
+          required:
+            - type
+            - attributes
+    ViewNode:
+      allOf:
+        - $ref: '#/components/schemas/NodeBase'
+        - type: object
+          properties:
+            type:
+              type: string
+              enum: [view]
+            attributes:
+              $ref: '#/components/schemas/ViewNodeAttributes'
+          required:
+            - type
+            - attributes
+    ColumnNode:
+      allOf:
+        - $ref: '#/components/schemas/NodeBase'
+        - type: object
+          properties:
+            type:
+              type: string
+              enum: [column]
+            attributes:
+              $ref: '#/components/schemas/ColumnNodeAttributes'
+          required:
+            - type
+            - attributes
+    ConstraintNode:
+      allOf:
+        - $ref: '#/components/schemas/NodeBase'
+        - type: object
+          properties:
+            type:
+              type: string
+              enum: [constraint]
+            attributes:
+              $ref: '#/components/schemas/ConstraintNodeAttributes'
+          required:
+            - type
+            - attributes
+    IndexNode:
+      allOf:
+        - $ref: '#/components/schemas/NodeBase'
+        - type: object
+          properties:
+            type:
+              type: string
+              enum: [index]
+            attributes:
+              $ref: '#/components/schemas/IndexNodeAttributes'
+          required:
+            - type
+            - attributes
+    TriggerNode:
+      allOf:
+        - $ref: '#/components/schemas/NodeBase'
+        - type: object
+          properties:
+            type:
+              type: string
+              enum: [trigger]
+            attributes:
+              $ref: '#/components/schemas/TriggerNodeAttributes'
+          required:
+            - type
+            - attributes
+    Node:
+      oneOf:
+        - $ref: '#/components/schemas/DatabaseNode'
+        - $ref: '#/components/schemas/SchemaNode'
+        - $ref: '#/components/schemas/TableNode'
+        - $ref: '#/components/schemas/ViewNode'
+        - $ref: '#/components/schemas/ColumnNode'
+        - $ref: '#/components/schemas/ConstraintNode'
+        - $ref: '#/components/schemas/IndexNode'
+        - $ref: '#/components/schemas/TriggerNode'
+      discriminator:
+        propertyName: type
+        mapping:
+          database: '#/components/schemas/DatabaseNode'
+          schema: '#/components/schemas/SchemaNode'
+          table: '#/components/schemas/TableNode'
+          view: '#/components/schemas/ViewNode'
+          column: '#/components/schemas/ColumnNode'
+          constraint: '#/components/schemas/ConstraintNode'
+          index: '#/components/schemas/IndexNode'
+          trigger: '#/components/schemas/TriggerNode'
     NodesResponse:
       type: object
       properties:

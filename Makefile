@@ -1,4 +1,4 @@
-.PHONY: build clean install uninstall test demo postgres-up postgres-down postgres-clean contract-ts-install
+.PHONY: build clean install uninstall test demo postgres-up postgres-down postgres-clean contract-ts-install contract-check
 
 build:
 	@echo "Building all components..."
@@ -27,6 +27,9 @@ test:
 	@echo "Running tests..."
 	@$(MAKE) -C apps/ori-be test
 	@echo "Tests complete!"
+
+contract-check:
+	@./scripts/contract_check_strict.sh
 
 # Build everything and run the CLI with the test config
 demo: build

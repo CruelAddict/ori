@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -17,11 +18,31 @@ import (
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
+// Defines values for ColumnNodeType.
+const (
+	Column ColumnNodeType = "column"
+)
+
 // Defines values for ConnectionResultResult.
 const (
 	Connecting ConnectionResultResult = "connecting"
 	Fail       ConnectionResultResult = "fail"
 	Success    ConnectionResultResult = "success"
+)
+
+// Defines values for ConstraintNodeType.
+const (
+	Constraint ConstraintNodeType = "constraint"
+)
+
+// Defines values for DatabaseNodeType.
+const (
+	Database DatabaseNodeType = "database"
+)
+
+// Defines values for IndexNodeType.
+const (
+	Index IndexNodeType = "index"
 )
 
 // Defines values for PasswordConfigType.
@@ -36,6 +57,53 @@ const (
 	Failed  QueryExecResponseStatus = "failed"
 	Running QueryExecResponseStatus = "running"
 )
+
+// Defines values for SchemaNodeType.
+const (
+	Schema SchemaNodeType = "schema"
+)
+
+// Defines values for TableNodeType.
+const (
+	Table TableNodeType = "table"
+)
+
+// Defines values for TriggerNodeType.
+const (
+	Trigger TriggerNodeType = "trigger"
+)
+
+// Defines values for ViewNodeType.
+const (
+	View ViewNodeType = "view"
+)
+
+// ColumnNode defines model for ColumnNode.
+type ColumnNode struct {
+	Attributes ColumnNodeAttributes `json:"attributes"`
+	Edges      map[string]NodeEdge  `json:"edges"`
+	Id         string               `json:"id"`
+	Name       string               `json:"name"`
+	Type       ColumnNodeType       `json:"type"`
+}
+
+// ColumnNodeType defines model for ColumnNode.Type.
+type ColumnNodeType string
+
+// ColumnNodeAttributes defines model for ColumnNodeAttributes.
+type ColumnNodeAttributes struct {
+	CharMaxLength      *int64  `json:"charMaxLength,omitempty"`
+	Column             string  `json:"column"`
+	Connection         string  `json:"connection"`
+	DataType           string  `json:"dataType"`
+	DefaultValue       *string `json:"defaultValue,omitempty"`
+	NotNull            bool    `json:"notNull"`
+	NumericPrecision   *int64  `json:"numericPrecision,omitempty"`
+	NumericScale       *int64  `json:"numericScale,omitempty"`
+	Ordinal            int     `json:"ordinal"`
+	PrimaryKeyPosition *int    `json:"primaryKeyPosition,omitempty"`
+	Table              string  `json:"table"`
+}
 
 // Configuration defines model for Configuration.
 type Configuration struct {
@@ -68,6 +136,58 @@ type ConnectionResult struct {
 // ConnectionResultResult defines model for ConnectionResult.Result.
 type ConnectionResultResult string
 
+// ConstraintNode defines model for ConstraintNode.
+type ConstraintNode struct {
+	Attributes ConstraintNodeAttributes `json:"attributes"`
+	Edges      map[string]NodeEdge      `json:"edges"`
+	Id         string                   `json:"id"`
+	Name       string                   `json:"name"`
+	Type       ConstraintNodeType       `json:"type"`
+}
+
+// ConstraintNodeType defines model for ConstraintNode.Type.
+type ConstraintNodeType string
+
+// ConstraintNodeAttributes defines model for ConstraintNodeAttributes.
+type ConstraintNodeAttributes struct {
+	CheckClause        *string   `json:"checkClause,omitempty"`
+	Columns            *[]string `json:"columns,omitempty"`
+	Connection         string    `json:"connection"`
+	ConstraintName     string    `json:"constraintName"`
+	ConstraintType     string    `json:"constraintType"`
+	IndexName          *string   `json:"indexName,omitempty"`
+	Match              *string   `json:"match,omitempty"`
+	OnDelete           *string   `json:"onDelete,omitempty"`
+	OnUpdate           *string   `json:"onUpdate,omitempty"`
+	ReferencedColumns  *[]string `json:"referencedColumns,omitempty"`
+	ReferencedDatabase *string   `json:"referencedDatabase,omitempty"`
+	ReferencedSchema   *string   `json:"referencedSchema,omitempty"`
+	ReferencedTable    *string   `json:"referencedTable,omitempty"`
+	Table              string    `json:"table"`
+}
+
+// DatabaseNode defines model for DatabaseNode.
+type DatabaseNode struct {
+	Attributes DatabaseNodeAttributes `json:"attributes"`
+	Edges      map[string]NodeEdge    `json:"edges"`
+	Id         string                 `json:"id"`
+	Name       string                 `json:"name"`
+	Type       DatabaseNodeType       `json:"type"`
+}
+
+// DatabaseNodeType defines model for DatabaseNode.Type.
+type DatabaseNodeType string
+
+// DatabaseNodeAttributes defines model for DatabaseNodeAttributes.
+type DatabaseNodeAttributes struct {
+	Connection string  `json:"connection"`
+	Encoding   *string `json:"encoding,omitempty"`
+	Engine     string  `json:"engine"`
+	File       *string `json:"file,omitempty"`
+	PageSize   *int64  `json:"pageSize,omitempty"`
+	Sequence   *int    `json:"sequence,omitempty"`
+}
+
 // ErrorPayload defines model for ErrorPayload.
 type ErrorPayload struct {
 	Code    string                  `json:"code"`
@@ -75,13 +195,42 @@ type ErrorPayload struct {
 	Message string                  `json:"message"`
 }
 
+// IndexNode defines model for IndexNode.
+type IndexNode struct {
+	Attributes IndexNodeAttributes `json:"attributes"`
+	Edges      map[string]NodeEdge `json:"edges"`
+	Id         string              `json:"id"`
+	Name       string              `json:"name"`
+	Type       IndexNodeType       `json:"type"`
+}
+
+// IndexNodeType defines model for IndexNode.Type.
+type IndexNodeType string
+
+// IndexNodeAttributes defines model for IndexNodeAttributes.
+type IndexNodeAttributes struct {
+	Columns        *[]string `json:"columns,omitempty"`
+	Connection     string    `json:"connection"`
+	Definition     *string   `json:"definition,omitempty"`
+	IncludeColumns *[]string `json:"includeColumns,omitempty"`
+	IndexName      string    `json:"indexName"`
+	Method         *string   `json:"method,omitempty"`
+	Predicate      *string   `json:"predicate,omitempty"`
+	Primary        bool      `json:"primary"`
+	Table          string    `json:"table"`
+	Unique         bool      `json:"unique"`
+}
+
 // Node defines model for Node.
 type Node struct {
-	Attributes map[string]interface{} `json:"attributes"`
-	Edges      map[string]NodeEdge    `json:"edges"`
-	Id         string                 `json:"id"`
-	Name       string                 `json:"name"`
-	Type       string                 `json:"type"`
+	union json.RawMessage
+}
+
+// NodeBase defines model for NodeBase.
+type NodeBase struct {
+	Edges map[string]NodeEdge `json:"edges"`
+	Id    string              `json:"id"`
+	Name  string              `json:"name"`
 }
 
 // NodeEdge defines model for NodeEdge.
@@ -102,20 +251,6 @@ type PasswordConfig struct {
 
 	// Type Password provider type
 	Type PasswordConfigType `json:"type"`
-}
-
-type TlsConfig struct {
-	// CACertPath CA certificate path
-	CACertPath *string `json:"caCertPath,omitempty"`
-
-	// CertPath Client certificate path
-	CertPath *string `json:"certPath,omitempty"`
-
-	// KeyPath Client key path
-	KeyPath *string `json:"keyPath,omitempty"`
-
-	// Mode TLS mode (e.g. require, verify-ca, verify-full)
-	Mode *string `json:"mode,omitempty"`
 }
 
 // PasswordConfigType Password provider type
@@ -167,8 +302,107 @@ type QueryResultResponse struct {
 	Columns      []QueryResultColumn `json:"columns"`
 	RowCount     int                 `json:"rowCount"`
 	Rows         [][]interface{}     `json:"rows"`
+	RowsAffected *int                `json:"rowsAffected"`
 	Truncated    bool                `json:"truncated"`
-	RowsAffected *int64              `json:"rowsAffected,omitempty"`
+}
+
+// SchemaNode defines model for SchemaNode.
+type SchemaNode struct {
+	Attributes SchemaNodeAttributes `json:"attributes"`
+	Edges      map[string]NodeEdge  `json:"edges"`
+	Id         string               `json:"id"`
+	Name       string               `json:"name"`
+	Type       SchemaNodeType       `json:"type"`
+}
+
+// SchemaNodeType defines model for SchemaNode.Type.
+type SchemaNodeType string
+
+// SchemaNodeAttributes defines model for SchemaNodeAttributes.
+type SchemaNodeAttributes struct {
+	Connection string `json:"connection"`
+	Engine     string `json:"engine"`
+}
+
+// TableNode defines model for TableNode.
+type TableNode struct {
+	Attributes TableNodeAttributes `json:"attributes"`
+	Edges      map[string]NodeEdge `json:"edges"`
+	Id         string              `json:"id"`
+	Name       string              `json:"name"`
+	Type       TableNodeType       `json:"type"`
+}
+
+// TableNodeType defines model for TableNode.Type.
+type TableNodeType string
+
+// TableNodeAttributes defines model for TableNodeAttributes.
+type TableNodeAttributes struct {
+	Connection string  `json:"connection"`
+	Definition *string `json:"definition,omitempty"`
+	Table      string  `json:"table"`
+	TableType  string  `json:"tableType"`
+}
+
+// TlsConfig defines model for TlsConfig.
+type TlsConfig struct {
+	// CaCertPath CA certificate path
+	CaCertPath *string `json:"caCertPath"`
+
+	// CertPath Client certificate path
+	CertPath *string `json:"certPath"`
+
+	// KeyPath Client key path
+	KeyPath *string `json:"keyPath"`
+
+	// Mode TLS mode (e.g. require, verify-ca, verify-full)
+	Mode *string `json:"mode"`
+}
+
+// TriggerNode defines model for TriggerNode.
+type TriggerNode struct {
+	Attributes TriggerNodeAttributes `json:"attributes"`
+	Edges      map[string]NodeEdge   `json:"edges"`
+	Id         string                `json:"id"`
+	Name       string                `json:"name"`
+	Type       TriggerNodeType       `json:"type"`
+}
+
+// TriggerNodeType defines model for TriggerNode.Type.
+type TriggerNodeType string
+
+// TriggerNodeAttributes defines model for TriggerNodeAttributes.
+type TriggerNodeAttributes struct {
+	Condition    *string   `json:"condition,omitempty"`
+	Connection   string    `json:"connection"`
+	Definition   *string   `json:"definition,omitempty"`
+	EnabledState *string   `json:"enabledState,omitempty"`
+	Events       *[]string `json:"events,omitempty"`
+	Orientation  string    `json:"orientation"`
+	Statement    *string   `json:"statement,omitempty"`
+	Table        string    `json:"table"`
+	Timing       string    `json:"timing"`
+	TriggerName  string    `json:"triggerName"`
+}
+
+// ViewNode defines model for ViewNode.
+type ViewNode struct {
+	Attributes ViewNodeAttributes  `json:"attributes"`
+	Edges      map[string]NodeEdge `json:"edges"`
+	Id         string              `json:"id"`
+	Name       string              `json:"name"`
+	Type       ViewNodeType        `json:"type"`
+}
+
+// ViewNodeType defines model for ViewNode.Type.
+type ViewNodeType string
+
+// ViewNodeAttributes defines model for ViewNodeAttributes.
+type ViewNodeAttributes struct {
+	Connection string  `json:"connection"`
+	Definition *string `json:"definition,omitempty"`
+	Table      string  `json:"table"`
+	TableType  string  `json:"tableType"`
 }
 
 // ErrorResponse defines model for ErrorResponse.
@@ -191,6 +425,275 @@ type StartConnectionJSONRequestBody = ConnectionRequest
 
 // ExecQueryJSONRequestBody defines body for ExecQuery for application/json ContentType.
 type ExecQueryJSONRequestBody = QueryExecRequest
+
+// AsDatabaseNode returns the union data inside the Node as a DatabaseNode
+func (t Node) AsDatabaseNode() (DatabaseNode, error) {
+	var body DatabaseNode
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromDatabaseNode overwrites any union data inside the Node as the provided DatabaseNode
+func (t *Node) FromDatabaseNode(v DatabaseNode) error {
+	v.Type = "database"
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeDatabaseNode performs a merge with any union data inside the Node, using the provided DatabaseNode
+func (t *Node) MergeDatabaseNode(v DatabaseNode) error {
+	v.Type = "database"
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsSchemaNode returns the union data inside the Node as a SchemaNode
+func (t Node) AsSchemaNode() (SchemaNode, error) {
+	var body SchemaNode
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromSchemaNode overwrites any union data inside the Node as the provided SchemaNode
+func (t *Node) FromSchemaNode(v SchemaNode) error {
+	v.Type = "schema"
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeSchemaNode performs a merge with any union data inside the Node, using the provided SchemaNode
+func (t *Node) MergeSchemaNode(v SchemaNode) error {
+	v.Type = "schema"
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsTableNode returns the union data inside the Node as a TableNode
+func (t Node) AsTableNode() (TableNode, error) {
+	var body TableNode
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromTableNode overwrites any union data inside the Node as the provided TableNode
+func (t *Node) FromTableNode(v TableNode) error {
+	v.Type = "table"
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeTableNode performs a merge with any union data inside the Node, using the provided TableNode
+func (t *Node) MergeTableNode(v TableNode) error {
+	v.Type = "table"
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsViewNode returns the union data inside the Node as a ViewNode
+func (t Node) AsViewNode() (ViewNode, error) {
+	var body ViewNode
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromViewNode overwrites any union data inside the Node as the provided ViewNode
+func (t *Node) FromViewNode(v ViewNode) error {
+	v.Type = "view"
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeViewNode performs a merge with any union data inside the Node, using the provided ViewNode
+func (t *Node) MergeViewNode(v ViewNode) error {
+	v.Type = "view"
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsColumnNode returns the union data inside the Node as a ColumnNode
+func (t Node) AsColumnNode() (ColumnNode, error) {
+	var body ColumnNode
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromColumnNode overwrites any union data inside the Node as the provided ColumnNode
+func (t *Node) FromColumnNode(v ColumnNode) error {
+	v.Type = "column"
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeColumnNode performs a merge with any union data inside the Node, using the provided ColumnNode
+func (t *Node) MergeColumnNode(v ColumnNode) error {
+	v.Type = "column"
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsConstraintNode returns the union data inside the Node as a ConstraintNode
+func (t Node) AsConstraintNode() (ConstraintNode, error) {
+	var body ConstraintNode
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromConstraintNode overwrites any union data inside the Node as the provided ConstraintNode
+func (t *Node) FromConstraintNode(v ConstraintNode) error {
+	v.Type = "constraint"
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeConstraintNode performs a merge with any union data inside the Node, using the provided ConstraintNode
+func (t *Node) MergeConstraintNode(v ConstraintNode) error {
+	v.Type = "constraint"
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsIndexNode returns the union data inside the Node as a IndexNode
+func (t Node) AsIndexNode() (IndexNode, error) {
+	var body IndexNode
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromIndexNode overwrites any union data inside the Node as the provided IndexNode
+func (t *Node) FromIndexNode(v IndexNode) error {
+	v.Type = "index"
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeIndexNode performs a merge with any union data inside the Node, using the provided IndexNode
+func (t *Node) MergeIndexNode(v IndexNode) error {
+	v.Type = "index"
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsTriggerNode returns the union data inside the Node as a TriggerNode
+func (t Node) AsTriggerNode() (TriggerNode, error) {
+	var body TriggerNode
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromTriggerNode overwrites any union data inside the Node as the provided TriggerNode
+func (t *Node) FromTriggerNode(v TriggerNode) error {
+	v.Type = "trigger"
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeTriggerNode performs a merge with any union data inside the Node, using the provided TriggerNode
+func (t *Node) MergeTriggerNode(v TriggerNode) error {
+	v.Type = "trigger"
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t Node) Discriminator() (string, error) {
+	var discriminator struct {
+		Discriminator string `json:"type"`
+	}
+	err := json.Unmarshal(t.union, &discriminator)
+	return discriminator.Discriminator, err
+}
+
+func (t Node) ValueByDiscriminator() (interface{}, error) {
+	discriminator, err := t.Discriminator()
+	if err != nil {
+		return nil, err
+	}
+	switch discriminator {
+	case "column":
+		return t.AsColumnNode()
+	case "constraint":
+		return t.AsConstraintNode()
+	case "database":
+		return t.AsDatabaseNode()
+	case "index":
+		return t.AsIndexNode()
+	case "schema":
+		return t.AsSchemaNode()
+	case "table":
+		return t.AsTableNode()
+	case "trigger":
+		return t.AsTriggerNode()
+	case "view":
+		return t.AsViewNode()
+	default:
+		return nil, errors.New("unknown discriminator value: " + discriminator)
+	}
+}
+
+func (t Node) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	return b, err
+}
+
+func (t *Node) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	return err
+}
 
 // AsQueryExecRequestParams0 returns the union data inside the QueryExecRequest_Params as a QueryExecRequestParams0
 func (t QueryExecRequest_Params) AsQueryExecRequestParams0() (QueryExecRequestParams0, error) {

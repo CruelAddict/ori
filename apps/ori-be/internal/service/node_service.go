@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"maps"
 	"sync"
 
 	"github.com/crueladdict/ori/apps/ori-server/internal/model"
@@ -49,7 +48,7 @@ func NewNodeService(configs *ConfigService, connections *ConnectionService) *Nod
 }
 
 // GetNodes returns root nodes (when nodeIDs is empty) or hydrates the requested nodes.
-func (ns *NodeService) GetNodes(ctx context.Context, configurationName string, nodeIDs []string) ([]*model.Node, error) {
+func (ns *NodeService) GetNodes(ctx context.Context, configurationName string, nodeIDs []string) (model.Nodes, error) {
 	connection, ok := ns.connections.GetConnection(configurationName)
 	if !ok || connection == nil || connection.Adapter == nil {
 		return nil, fmt.Errorf("%w: %s", ErrConnectionUnavailable, configurationName)
@@ -70,7 +69,7 @@ func (ns *NodeService) GetNodes(ctx context.Context, configurationName string, n
 		if !ok {
 			return nil, fmt.Errorf("%w: %s", ErrUnknownNode, id)
 		}
-		if node.Hydrated {
+		if node.IsHydrated() {
 			continue
 		}
 		if err := ns.hydrateNode(ctx, cGraph, connection, id); err != nil {
@@ -78,7 +77,7 @@ func (ns *NodeService) GetNodes(ctx context.Context, configurationName string, n
 		}
 	}
 
-	return cGraph.snapshot(uniqueIDs)
+	return cGraph.snapshot(uniqueIDs, ns.edgeLimit)
 }
 
 func (ns *NodeService) hydrateNode(ctx context.Context, graph *connectionGraph, handle *ConnectionHandle, nodeID string) error {
@@ -95,37 +94,36 @@ func (ns *NodeService) hydrateNode(ctx context.Context, graph *connectionGraph, 
 	if !ok {
 		return fmt.Errorf("%w: %s", ErrUnknownNode, nodeID)
 	}
-	if node.Hydrated {
+	if node.IsHydrated() {
 		return nil
 	}
 
 	nodeCopy := cloneNode(node)
-	var nodes []*model.Node
+	var nodes []model.Node
 	var err error
 
-	switch nodeCopy.Type {
-	case "database", "schema":
+	switch nodeCopy.(type) {
+	case *model.DatabaseNode, *model.SchemaNode:
 		nodes, err = ns.hydrateScope(ctx, handle, nodeCopy)
-	case "table", "view":
+	case *model.TableNode, *model.ViewNode:
 		nodes, err = ns.hydrateRelation(ctx, handle, nodeCopy)
 	default:
-		nodeCopy.Hydrated = true
-		nodes = []*model.Node{nodeCopy}
+		nodeCopy.SetHydrated(true)
+		nodes = []model.Node{nodeCopy}
 	}
 
 	if err != nil {
 		return err
 	}
 
-	ns.prepareNodes(nodes)
 	graph.upsert(nodes)
 	return nil
 }
 
-func (ns *NodeService) hydrateScope(ctx context.Context, handle *ConnectionHandle, node *model.Node) ([]*model.Node, error) {
-	scope := node.Scope
+func (ns *NodeService) hydrateScope(ctx context.Context, handle *ConnectionHandle, node model.Node) ([]model.Node, error) {
+	scope := node.GetScope()
 	if scope.Database == "" {
-		return nil, fmt.Errorf("node %s missing scope", node.ID)
+		return nil, fmt.Errorf("node %s missing scope", node.GetID())
 	}
 
 	relations, err := handle.Adapter.GetRelations(ctx, scope)
@@ -135,11 +133,11 @@ func (ns *NodeService) hydrateScope(ctx context.Context, handle *ConnectionHandl
 
 	builder := NewGraphBuilder(handle)
 
-	childNodes := []*model.Node{node}
+	childNodes := []model.Node{node}
 	tableEdge := model.EdgeList{Items: make([]string, 0)}
 	viewEdge := model.EdgeList{Items: make([]string, 0)}
 	partitionEdges := make(map[string][]string)
-	relationNodes := make(map[string]*model.Node, len(relations))
+	relationNodes := make(map[string]model.Node, len(relations))
 
 	for _, rel := range relations {
 		relScope := scope
@@ -148,7 +146,7 @@ func (ns *NodeService) hydrateScope(ctx context.Context, handle *ConnectionHandl
 		}
 		relNode := builder.BuildRelationNode(relScope, rel)
 		childNodes = append(childNodes, relNode)
-		relationNodes[relNode.ID] = relNode
+		relationNodes[relNode.GetID()] = relNode
 		if rel.Type == "table" {
 			if rel.ParentTable != nil {
 				parentScope := scope
@@ -157,12 +155,12 @@ func (ns *NodeService) hydrateScope(ctx context.Context, handle *ConnectionHandl
 				}
 				parentRel := model.Relation{Name: *rel.ParentTable, Type: "table"}
 				parentID := builder.RelationNodeID(parentScope, parentRel)
-				partitionEdges[parentID] = append(partitionEdges[parentID], relNode.ID)
+				partitionEdges[parentID] = append(partitionEdges[parentID], relNode.GetID())
 			} else {
-				tableEdge.Items = append(tableEdge.Items, relNode.ID)
+				tableEdge.Items = append(tableEdge.Items, relNode.GetID())
 			}
 		} else {
-			viewEdge.Items = append(viewEdge.Items, relNode.ID)
+			viewEdge.Items = append(viewEdge.Items, relNode.GetID())
 		}
 	}
 
@@ -171,24 +169,46 @@ func (ns *NodeService) hydrateScope(ctx context.Context, handle *ConnectionHandl
 		if parentNode == nil {
 			continue
 		}
-		parentNode.Edges["partitions"] = model.EdgeList{Items: childIDs}
+		parentTable, ok := parentNode.(*model.TableNode)
+		if !ok {
+			return nil, fmt.Errorf("partition parent %s is not a table node", parentID)
+		}
+		parentTable.SetPartitions(model.EdgeList{Items: childIDs})
 	}
 
-	node.Edges["tables"] = tableEdge
-	node.Edges["views"] = viewEdge
-	node.Hydrated = true
+	switch typed := node.(type) {
+	case *model.DatabaseNode:
+		typed.SetTables(tableEdge)
+		typed.SetViews(viewEdge)
+		typed.SetHydrated(true)
+	case *model.SchemaNode:
+		typed.SetTables(tableEdge)
+		typed.SetViews(viewEdge)
+		typed.SetHydrated(true)
+	default:
+		return nil, fmt.Errorf("node %s cannot hold tables/views edges", node.GetID())
+	}
 
 	return childNodes, nil
 }
 
-func (ns *NodeService) hydrateRelation(ctx context.Context, handle *ConnectionHandle, node *model.Node) ([]*model.Node, error) {
-	scope := node.Scope
+func (ns *NodeService) hydrateRelation(ctx context.Context, handle *ConnectionHandle, node model.Node) ([]model.Node, error) {
+	scope := node.GetScope()
 	if scope.Database == "" {
-		return nil, fmt.Errorf("node %s missing scope", node.ID)
+		return nil, fmt.Errorf("node %s missing scope", node.GetID())
 	}
-	relation, _ := node.Attributes["table"].(string)
+
+	var relation string
+	switch typed := node.(type) {
+	case *model.TableNode:
+		relation = typed.RelationName()
+	case *model.ViewNode:
+		relation = typed.RelationName()
+	default:
+		return nil, fmt.Errorf("node %s is not a relation node", node.GetID())
+	}
 	if relation == "" {
-		return nil, fmt.Errorf("relation node %s missing 'table' attribute", node.ID)
+		return nil, fmt.Errorf("relation node %s missing relation name", node.GetID())
 	}
 
 	columns, err := handle.Adapter.GetColumns(ctx, scope, relation)
@@ -218,13 +238,24 @@ func (ns *NodeService) hydrateRelation(ctx context.Context, handle *ConnectionHa
 	indexNodes, indexEdge := builder.BuildIndexNodes(scope, relation, indexes)
 	triggerNodes, triggerEdge := builder.BuildTriggerNodes(scope, relation, triggers)
 
-	node.Edges["columns"] = columnEdge
-	node.Edges["constraints"] = constraintEdge
-	node.Edges["indexes"] = indexEdge
-	node.Edges["triggers"] = triggerEdge
-	node.Hydrated = true
+	switch typed := node.(type) {
+	case *model.TableNode:
+		typed.SetColumns(columnEdge)
+		typed.SetConstraints(constraintEdge)
+		typed.SetIndexes(indexEdge)
+		typed.SetTriggers(triggerEdge)
+		typed.SetHydrated(true)
+	case *model.ViewNode:
+		typed.SetColumns(columnEdge)
+		typed.SetConstraints(constraintEdge)
+		typed.SetIndexes(indexEdge)
+		typed.SetTriggers(triggerEdge)
+		typed.SetHydrated(true)
+	default:
+		return nil, fmt.Errorf("node %s cannot hold relation child edges", node.GetID())
+	}
 
-	nodes := []*model.Node{node}
+	nodes := []model.Node{node}
 	nodes = append(nodes, columnNodes...)
 	nodes = append(nodes, constraintNodes...)
 	nodes = append(nodes, indexNodes...)
@@ -254,25 +285,6 @@ func (ns *NodeService) leaveHydration(key hydrationKey) {
 	}
 }
 
-func (ns *NodeService) prepareNodes(nodes []*model.Node) {
-	for _, node := range nodes {
-		if node == nil {
-			continue
-		}
-		if node.Attributes == nil {
-			node.Attributes = map[string]any{}
-		}
-		if node.Edges == nil {
-			node.Edges = make(map[string]model.EdgeList)
-		}
-		for kind, edge := range node.Edges {
-			copyItems := make([]string, len(edge.Items))
-			copy(copyItems, edge.Items)
-			node.Edges[kind] = model.EdgeList{Items: copyItems}
-		}
-	}
-}
-
 func (ns *NodeService) getOrCreateConnGraph(ctx context.Context, connection *ConnectionHandle) (*connectionGraph, error) {
 	name := connection.Name
 	ns.graphsMu.RLock()
@@ -296,7 +308,7 @@ func (ns *NodeService) getOrCreateConnGraph(ctx context.Context, connection *Con
 }
 
 func (ns *NodeService) createConnGraph(ctx context.Context, connection *ConnectionHandle) (*connectionGraph, error) {
-	graph := &connectionGraph{nodes: make(map[string]*model.Node)}
+	graph := &connectionGraph{nodes: make(map[string]model.Node)}
 
 	scopes, err := connection.Adapter.GetScopes(ctx)
 	if err != nil {
@@ -307,12 +319,11 @@ func (ns *NodeService) createConnGraph(ctx context.Context, connection *Connecti
 	}
 
 	builder := NewGraphBuilder(connection)
-	nodes := make([]*model.Node, 0, len(scopes))
+	nodes := make([]model.Node, 0, len(scopes))
 	for _, scope := range scopes {
 		nodes = append(nodes, builder.BuildScopeNode(scope))
 	}
 
-	ns.prepareNodes(nodes)
 	graph.setRootNodes(nodes)
 
 	return graph, nil
@@ -325,7 +336,7 @@ type hydrationKey struct {
 
 type connectionGraph struct {
 	mu      sync.RWMutex
-	nodes   map[string]*model.Node
+	nodes   map[string]model.Node
 	rootIDs []string
 }
 
@@ -337,7 +348,7 @@ func (s *connectionGraph) rootIDList() []string {
 	return ids
 }
 
-func (s *connectionGraph) setRootNodes(nodes []*model.Node) {
+func (s *connectionGraph) setRootNodes(nodes []model.Node) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.rootIDs = make([]string, 0, len(nodes))
@@ -346,77 +357,68 @@ func (s *connectionGraph) setRootNodes(nodes []*model.Node) {
 			continue
 		}
 		copyNode := cloneNode(node)
-		s.nodes[copyNode.ID] = copyNode
-		s.rootIDs = append(s.rootIDs, copyNode.ID)
+		s.nodes[copyNode.GetID()] = copyNode
+		s.rootIDs = append(s.rootIDs, copyNode.GetID())
 	}
 }
 
-func (s *connectionGraph) get(id string) (*model.Node, bool) {
+func (s *connectionGraph) get(id string) (model.Node, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	node, ok := s.nodes[id]
 	return node, ok
 }
 
-func (s *connectionGraph) snapshot(ids []string) ([]*model.Node, error) {
+func (s *connectionGraph) snapshot(ids []string, edgeLimit int) (model.Nodes, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	result := make([]*model.Node, 0, len(ids))
+	result := make(model.Nodes, 0, len(ids))
 	for _, id := range ids {
 		node, ok := s.nodes[id]
 		if !ok {
 			return nil, fmt.Errorf("%w: %s", ErrUnknownNode, id)
 		}
-		result = append(result, cloneNode(node))
+		result = append(result, cloneNodeWithEdgeLimit(node, edgeLimit))
 	}
 	return result, nil
 }
 
-func (s *connectionGraph) upsert(nodes []*model.Node) {
+func (s *connectionGraph) upsert(nodes []model.Node) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for _, node := range nodes {
 		if node == nil {
 			continue
 		}
-		s.nodes[node.ID] = cloneNode(node)
+		s.nodes[node.GetID()] = cloneNode(node)
 	}
 }
 
-func cloneNode(src *model.Node) *model.Node {
+func cloneNode(src model.Node) model.Node {
+	return cloneNodeWithEdgeLimit(src, 0)
+}
+
+func cloneNodeWithEdgeLimit(src model.Node, edgeLimit int) model.Node {
 	if src == nil {
 		return nil
 	}
-	clone := &model.Node{
-		ID:       src.ID,
-		Type:     src.Type,
-		Name:     src.Name,
-		Scope:    src.Scope,
-		Hydrated: src.Hydrated,
-	}
-	clone.Attributes = cloneAttributeMap(src.Attributes)
-	clone.Edges = cloneEdgeMap(src.Edges)
-	return clone
+	return src.Clone(edgeLimit)
 }
 
-func cloneAttributeMap(attrs map[string]any) map[string]any {
-	if len(attrs) == 0 {
-		return map[string]any{}
-	}
-	out := make(map[string]any, len(attrs))
-	maps.Copy(out, attrs)
-	return out
-}
-
-func cloneEdgeMap(edges map[string]model.EdgeList) map[string]model.EdgeList {
+func cloneEdgeMap(edges map[string]model.EdgeList, edgeLimit int) map[string]model.EdgeList {
 	if len(edges) == 0 {
 		return map[string]model.EdgeList{}
 	}
 	out := make(map[string]model.EdgeList, len(edges))
 	for kind, edge := range edges {
-		items := make([]string, len(edge.Items))
-		copy(items, edge.Items)
-		out[kind] = model.EdgeList{Items: items}
+		total := len(edge.Items)
+		max := total
+		if edgeLimit > 0 && edgeLimit < total {
+			max = edgeLimit
+		}
+		items := make([]string, max)
+		copy(items, edge.Items[:max])
+		out[kind] = model.EdgeList{Items: items, Truncated: edge.Truncated || total > max}
 	}
 	return out
 }

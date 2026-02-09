@@ -1,50 +1,295 @@
 package model
 
 import (
-	"maps"
+	"fmt"
+	"strings"
 
 	dto "github.com/crueladdict/ori/libs/contract/go"
 )
 
-// ConvertNodesToDTO converts internal node representations to the public DTOs and
-// enforces the edge truncation limit at response time.
-func ConvertNodesToDTO(nodes []*Node, edgeLimit int) []dto.Node {
-	if len(nodes) == 0 {
-		return nil
-	}
-	result := make([]dto.Node, len(nodes))
-	for i, node := range nodes {
-		result[i] = convertNode(node, edgeLimit)
-	}
-	return result
+func ConvertNodesToDTO(nodes []Node) ([]dto.Node, error) {
+	return Nodes(nodes).ToDTO()
 }
 
-func convertNode(node *Node, edgeLimit int) dto.Node {
-	if node == nil {
-		return dto.Node{}
-	}
-	out := dto.Node{
-		Id:   node.ID,
-		Type: node.Type,
-		Name: node.Name,
-	}
-	out.Attributes = cloneAttributes(node.Attributes)
-	out.Edges = make(map[string]dto.NodeEdge, len(node.Edges))
-	for kind, edge := range node.Edges {
-		total := len(edge.Items)
-		max := edgeLimit
-		if max <= 0 || max > total {
-			max = total
+func (nodes Nodes) ToDTO() ([]dto.Node, error) {
+	result := make([]dto.Node, len(nodes))
+	for i, node := range nodes {
+		if node == nil {
+			return nil, fmt.Errorf("node at index %d is nil", i)
 		}
-		items := make([]string, max)
-		copy(items, edge.Items[:max])
-		out.Edges[kind] = dto.NodeEdge{Items: items, Truncated: total > max}
+		mapped, err := node.ToDTO()
+		if err != nil {
+			return nil, err
+		}
+		result[i] = mapped
+	}
+	return result, nil
+}
+
+func (node *DatabaseNode) ToDTO() (dto.Node, error) {
+	if node == nil {
+		return dto.Node{}, fmt.Errorf("database node is nil")
+	}
+	if err := validateNodeBase(node.GetID(), node.GetName()); err != nil {
+		return dto.Node{}, err
+	}
+	if err := requireNonEmpty(node.GetID(), "attributes.connection", node.Attributes.Connection); err != nil {
+		return dto.Node{}, err
+	}
+	if err := requireNonEmpty(node.GetID(), "attributes.engine", node.Attributes.Engine); err != nil {
+		return dto.Node{}, err
+	}
+	out := dto.Node{}
+	err := out.FromDatabaseNode(dto.DatabaseNode{
+		Id:         node.GetID(),
+		Name:       node.GetName(),
+		Edges:      cloneEdgesToDTO(node.GetEdges()),
+		Attributes: cloneDatabaseAttributes(node.Attributes),
+	})
+	if err != nil {
+		return dto.Node{}, fmt.Errorf("node %s: %w", node.GetID(), err)
+	}
+	return out, nil
+}
+
+func (node *SchemaNode) ToDTO() (dto.Node, error) {
+	if node == nil {
+		return dto.Node{}, fmt.Errorf("schema node is nil")
+	}
+	if err := validateNodeBase(node.GetID(), node.GetName()); err != nil {
+		return dto.Node{}, err
+	}
+	if err := requireNonEmpty(node.GetID(), "attributes.connection", node.Attributes.Connection); err != nil {
+		return dto.Node{}, err
+	}
+	if err := requireNonEmpty(node.GetID(), "attributes.engine", node.Attributes.Engine); err != nil {
+		return dto.Node{}, err
+	}
+	out := dto.Node{}
+	err := out.FromSchemaNode(dto.SchemaNode{
+		Id:         node.GetID(),
+		Name:       node.GetName(),
+		Edges:      cloneEdgesToDTO(node.GetEdges()),
+		Attributes: node.Attributes,
+	})
+	if err != nil {
+		return dto.Node{}, fmt.Errorf("node %s: %w", node.GetID(), err)
+	}
+	return out, nil
+}
+
+func (node *TableNode) ToDTO() (dto.Node, error) {
+	if node == nil {
+		return dto.Node{}, fmt.Errorf("table node is nil")
+	}
+	if err := validateNodeBase(node.GetID(), node.GetName()); err != nil {
+		return dto.Node{}, err
+	}
+	if err := requireNonEmpty(node.GetID(), "attributes.connection", node.Attributes.Connection); err != nil {
+		return dto.Node{}, err
+	}
+	if err := requireNonEmpty(node.GetID(), "attributes.table", node.Attributes.Table); err != nil {
+		return dto.Node{}, err
+	}
+	if err := requireNonEmpty(node.GetID(), "attributes.tableType", node.Attributes.TableType); err != nil {
+		return dto.Node{}, err
+	}
+	out := dto.Node{}
+	err := out.FromTableNode(dto.TableNode{
+		Id:         node.GetID(),
+		Name:       node.GetName(),
+		Edges:      cloneEdgesToDTO(node.GetEdges()),
+		Attributes: cloneTableAttributes(node.Attributes),
+	})
+	if err != nil {
+		return dto.Node{}, fmt.Errorf("node %s: %w", node.GetID(), err)
+	}
+	return out, nil
+}
+
+func (node *ViewNode) ToDTO() (dto.Node, error) {
+	if node == nil {
+		return dto.Node{}, fmt.Errorf("view node is nil")
+	}
+	if err := validateNodeBase(node.GetID(), node.GetName()); err != nil {
+		return dto.Node{}, err
+	}
+	if err := requireNonEmpty(node.GetID(), "attributes.connection", node.Attributes.Connection); err != nil {
+		return dto.Node{}, err
+	}
+	if err := requireNonEmpty(node.GetID(), "attributes.table", node.Attributes.Table); err != nil {
+		return dto.Node{}, err
+	}
+	if err := requireNonEmpty(node.GetID(), "attributes.tableType", node.Attributes.TableType); err != nil {
+		return dto.Node{}, err
+	}
+	out := dto.Node{}
+	err := out.FromViewNode(dto.ViewNode{
+		Id:         node.GetID(),
+		Name:       node.GetName(),
+		Edges:      cloneEdgesToDTO(node.GetEdges()),
+		Attributes: cloneViewAttributes(node.Attributes),
+	})
+	if err != nil {
+		return dto.Node{}, fmt.Errorf("node %s: %w", node.GetID(), err)
+	}
+	return out, nil
+}
+
+func (node *ColumnNode) ToDTO() (dto.Node, error) {
+	if node == nil {
+		return dto.Node{}, fmt.Errorf("column node is nil")
+	}
+	if err := validateNodeBase(node.GetID(), node.GetName()); err != nil {
+		return dto.Node{}, err
+	}
+	if err := requireNonEmpty(node.GetID(), "attributes.connection", node.Attributes.Connection); err != nil {
+		return dto.Node{}, err
+	}
+	if err := requireNonEmpty(node.GetID(), "attributes.table", node.Attributes.Table); err != nil {
+		return dto.Node{}, err
+	}
+	if err := requireNonEmpty(node.GetID(), "attributes.column", node.Attributes.Column); err != nil {
+		return dto.Node{}, err
+	}
+	if err := requireNonEmpty(node.GetID(), "attributes.dataType", node.Attributes.DataType); err != nil {
+		return dto.Node{}, err
+	}
+	out := dto.Node{}
+	err := out.FromColumnNode(dto.ColumnNode{
+		Id:         node.GetID(),
+		Name:       node.GetName(),
+		Edges:      cloneEdgesToDTO(node.GetEdges()),
+		Attributes: cloneColumnAttributes(node.Attributes),
+	})
+	if err != nil {
+		return dto.Node{}, fmt.Errorf("node %s: %w", node.GetID(), err)
+	}
+	return out, nil
+}
+
+func (node *ConstraintNode) ToDTO() (dto.Node, error) {
+	if node == nil {
+		return dto.Node{}, fmt.Errorf("constraint node is nil")
+	}
+	if err := validateNodeBase(node.GetID(), node.GetName()); err != nil {
+		return dto.Node{}, err
+	}
+	if err := requireNonEmpty(node.GetID(), "attributes.connection", node.Attributes.Connection); err != nil {
+		return dto.Node{}, err
+	}
+	if err := requireNonEmpty(node.GetID(), "attributes.table", node.Attributes.Table); err != nil {
+		return dto.Node{}, err
+	}
+	if err := requireNonEmpty(node.GetID(), "attributes.constraintName", node.Attributes.ConstraintName); err != nil {
+		return dto.Node{}, err
+	}
+	if err := requireNonEmpty(node.GetID(), "attributes.constraintType", node.Attributes.ConstraintType); err != nil {
+		return dto.Node{}, err
+	}
+	out := dto.Node{}
+	err := out.FromConstraintNode(dto.ConstraintNode{
+		Id:         node.GetID(),
+		Name:       node.GetName(),
+		Edges:      cloneEdgesToDTO(node.GetEdges()),
+		Attributes: cloneConstraintAttributes(node.Attributes),
+	})
+	if err != nil {
+		return dto.Node{}, fmt.Errorf("node %s: %w", node.GetID(), err)
+	}
+	return out, nil
+}
+
+func (node *IndexNode) ToDTO() (dto.Node, error) {
+	if node == nil {
+		return dto.Node{}, fmt.Errorf("index node is nil")
+	}
+	if err := validateNodeBase(node.GetID(), node.GetName()); err != nil {
+		return dto.Node{}, err
+	}
+	if err := requireNonEmpty(node.GetID(), "attributes.connection", node.Attributes.Connection); err != nil {
+		return dto.Node{}, err
+	}
+	if err := requireNonEmpty(node.GetID(), "attributes.table", node.Attributes.Table); err != nil {
+		return dto.Node{}, err
+	}
+	if err := requireNonEmpty(node.GetID(), "attributes.indexName", node.Attributes.IndexName); err != nil {
+		return dto.Node{}, err
+	}
+	out := dto.Node{}
+	err := out.FromIndexNode(dto.IndexNode{
+		Id:         node.GetID(),
+		Name:       node.GetName(),
+		Edges:      cloneEdgesToDTO(node.GetEdges()),
+		Attributes: cloneIndexAttributes(node.Attributes),
+	})
+	if err != nil {
+		return dto.Node{}, fmt.Errorf("node %s: %w", node.GetID(), err)
+	}
+	return out, nil
+}
+
+func (node *TriggerNode) ToDTO() (dto.Node, error) {
+	if node == nil {
+		return dto.Node{}, fmt.Errorf("trigger node is nil")
+	}
+	if err := validateNodeBase(node.GetID(), node.GetName()); err != nil {
+		return dto.Node{}, err
+	}
+	if err := requireNonEmpty(node.GetID(), "attributes.connection", node.Attributes.Connection); err != nil {
+		return dto.Node{}, err
+	}
+	if err := requireNonEmpty(node.GetID(), "attributes.table", node.Attributes.Table); err != nil {
+		return dto.Node{}, err
+	}
+	if err := requireNonEmpty(node.GetID(), "attributes.triggerName", node.Attributes.TriggerName); err != nil {
+		return dto.Node{}, err
+	}
+	if err := requireNonEmpty(node.GetID(), "attributes.timing", node.Attributes.Timing); err != nil {
+		return dto.Node{}, err
+	}
+	if err := requireNonEmpty(node.GetID(), "attributes.orientation", node.Attributes.Orientation); err != nil {
+		return dto.Node{}, err
+	}
+	out := dto.Node{}
+	err := out.FromTriggerNode(dto.TriggerNode{
+		Id:         node.GetID(),
+		Name:       node.GetName(),
+		Edges:      cloneEdgesToDTO(node.GetEdges()),
+		Attributes: cloneTriggerAttributes(node.Attributes),
+	})
+	if err != nil {
+		return dto.Node{}, fmt.Errorf("node %s: %w", node.GetID(), err)
+	}
+	return out, nil
+}
+
+func cloneEdgesToDTO(edges map[string]EdgeList) map[string]dto.NodeEdge {
+	if len(edges) == 0 {
+		return map[string]dto.NodeEdge{}
+	}
+	out := make(map[string]dto.NodeEdge, len(edges))
+	for kind, edge := range edges {
+		items := make([]string, len(edge.Items))
+		copy(items, edge.Items)
+		out[kind] = dto.NodeEdge{Items: items, Truncated: edge.Truncated}
 	}
 	return out
 }
 
-func cloneAttributes(attrs map[string]any) map[string]any {
-	copyAttrs := make(map[string]any, len(attrs))
-	maps.Copy(copyAttrs, attrs)
-	return copyAttrs
+func validateNodeBase(id, name string) error {
+	if strings.TrimSpace(id) == "" {
+		return fmt.Errorf("node id is required")
+	}
+	if strings.TrimSpace(name) == "" {
+		return fmt.Errorf("node %s: name is required", id)
+	}
+	return nil
+}
+
+func requireNonEmpty(nodeID, field, value string) error {
+	if strings.TrimSpace(value) != "" {
+		return nil
+	}
+	return fmt.Errorf("node %s: %s is required", nodeID, field)
 }

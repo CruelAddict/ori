@@ -93,7 +93,7 @@ func cloneTLS(src *TLSConfig) *dto.TlsConfig {
 
 	return &dto.TlsConfig{
 		Mode:       cloneString(src.Mode),
-		CACertPath: cloneString(src.CACertPath),
+		CaCertPath: cloneString(src.CACertPath),
 		CertPath:   cloneString(src.CertPath),
 		KeyPath:    cloneString(src.KeyPath),
 	}
