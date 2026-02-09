@@ -2,7 +2,6 @@ package model
 
 import (
 	"fmt"
-	"strings"
 
 	dto "github.com/crueladdict/ori/libs/contract/go"
 )
@@ -30,15 +29,6 @@ func (node *DatabaseNode) ToDTO() (dto.Node, error) {
 	if node == nil {
 		return dto.Node{}, fmt.Errorf("database node is nil")
 	}
-	if err := validateNodeBase(node.GetID(), node.GetName()); err != nil {
-		return dto.Node{}, err
-	}
-	if err := requireNonEmpty(node.GetID(), "attributes.connection", node.Attributes.Connection); err != nil {
-		return dto.Node{}, err
-	}
-	if err := requireNonEmpty(node.GetID(), "attributes.engine", node.Attributes.Engine); err != nil {
-		return dto.Node{}, err
-	}
 	out := dto.Node{}
 	err := out.FromDatabaseNode(dto.DatabaseNode{
 		Id:         node.GetID(),
@@ -55,15 +45,6 @@ func (node *DatabaseNode) ToDTO() (dto.Node, error) {
 func (node *SchemaNode) ToDTO() (dto.Node, error) {
 	if node == nil {
 		return dto.Node{}, fmt.Errorf("schema node is nil")
-	}
-	if err := validateNodeBase(node.GetID(), node.GetName()); err != nil {
-		return dto.Node{}, err
-	}
-	if err := requireNonEmpty(node.GetID(), "attributes.connection", node.Attributes.Connection); err != nil {
-		return dto.Node{}, err
-	}
-	if err := requireNonEmpty(node.GetID(), "attributes.engine", node.Attributes.Engine); err != nil {
-		return dto.Node{}, err
 	}
 	out := dto.Node{}
 	err := out.FromSchemaNode(dto.SchemaNode{
@@ -82,18 +63,6 @@ func (node *TableNode) ToDTO() (dto.Node, error) {
 	if node == nil {
 		return dto.Node{}, fmt.Errorf("table node is nil")
 	}
-	if err := validateNodeBase(node.GetID(), node.GetName()); err != nil {
-		return dto.Node{}, err
-	}
-	if err := requireNonEmpty(node.GetID(), "attributes.connection", node.Attributes.Connection); err != nil {
-		return dto.Node{}, err
-	}
-	if err := requireNonEmpty(node.GetID(), "attributes.table", node.Attributes.Table); err != nil {
-		return dto.Node{}, err
-	}
-	if err := requireNonEmpty(node.GetID(), "attributes.tableType", node.Attributes.TableType); err != nil {
-		return dto.Node{}, err
-	}
 	out := dto.Node{}
 	err := out.FromTableNode(dto.TableNode{
 		Id:         node.GetID(),
@@ -110,18 +79,6 @@ func (node *TableNode) ToDTO() (dto.Node, error) {
 func (node *ViewNode) ToDTO() (dto.Node, error) {
 	if node == nil {
 		return dto.Node{}, fmt.Errorf("view node is nil")
-	}
-	if err := validateNodeBase(node.GetID(), node.GetName()); err != nil {
-		return dto.Node{}, err
-	}
-	if err := requireNonEmpty(node.GetID(), "attributes.connection", node.Attributes.Connection); err != nil {
-		return dto.Node{}, err
-	}
-	if err := requireNonEmpty(node.GetID(), "attributes.table", node.Attributes.Table); err != nil {
-		return dto.Node{}, err
-	}
-	if err := requireNonEmpty(node.GetID(), "attributes.tableType", node.Attributes.TableType); err != nil {
-		return dto.Node{}, err
 	}
 	out := dto.Node{}
 	err := out.FromViewNode(dto.ViewNode{
@@ -140,21 +97,6 @@ func (node *ColumnNode) ToDTO() (dto.Node, error) {
 	if node == nil {
 		return dto.Node{}, fmt.Errorf("column node is nil")
 	}
-	if err := validateNodeBase(node.GetID(), node.GetName()); err != nil {
-		return dto.Node{}, err
-	}
-	if err := requireNonEmpty(node.GetID(), "attributes.connection", node.Attributes.Connection); err != nil {
-		return dto.Node{}, err
-	}
-	if err := requireNonEmpty(node.GetID(), "attributes.table", node.Attributes.Table); err != nil {
-		return dto.Node{}, err
-	}
-	if err := requireNonEmpty(node.GetID(), "attributes.column", node.Attributes.Column); err != nil {
-		return dto.Node{}, err
-	}
-	if err := requireNonEmpty(node.GetID(), "attributes.dataType", node.Attributes.DataType); err != nil {
-		return dto.Node{}, err
-	}
 	out := dto.Node{}
 	err := out.FromColumnNode(dto.ColumnNode{
 		Id:         node.GetID(),
@@ -171,21 +113,6 @@ func (node *ColumnNode) ToDTO() (dto.Node, error) {
 func (node *ConstraintNode) ToDTO() (dto.Node, error) {
 	if node == nil {
 		return dto.Node{}, fmt.Errorf("constraint node is nil")
-	}
-	if err := validateNodeBase(node.GetID(), node.GetName()); err != nil {
-		return dto.Node{}, err
-	}
-	if err := requireNonEmpty(node.GetID(), "attributes.connection", node.Attributes.Connection); err != nil {
-		return dto.Node{}, err
-	}
-	if err := requireNonEmpty(node.GetID(), "attributes.table", node.Attributes.Table); err != nil {
-		return dto.Node{}, err
-	}
-	if err := requireNonEmpty(node.GetID(), "attributes.constraintName", node.Attributes.ConstraintName); err != nil {
-		return dto.Node{}, err
-	}
-	if err := requireNonEmpty(node.GetID(), "attributes.constraintType", node.Attributes.ConstraintType); err != nil {
-		return dto.Node{}, err
 	}
 	out := dto.Node{}
 	err := out.FromConstraintNode(dto.ConstraintNode{
@@ -204,18 +131,6 @@ func (node *IndexNode) ToDTO() (dto.Node, error) {
 	if node == nil {
 		return dto.Node{}, fmt.Errorf("index node is nil")
 	}
-	if err := validateNodeBase(node.GetID(), node.GetName()); err != nil {
-		return dto.Node{}, err
-	}
-	if err := requireNonEmpty(node.GetID(), "attributes.connection", node.Attributes.Connection); err != nil {
-		return dto.Node{}, err
-	}
-	if err := requireNonEmpty(node.GetID(), "attributes.table", node.Attributes.Table); err != nil {
-		return dto.Node{}, err
-	}
-	if err := requireNonEmpty(node.GetID(), "attributes.indexName", node.Attributes.IndexName); err != nil {
-		return dto.Node{}, err
-	}
 	out := dto.Node{}
 	err := out.FromIndexNode(dto.IndexNode{
 		Id:         node.GetID(),
@@ -232,24 +147,6 @@ func (node *IndexNode) ToDTO() (dto.Node, error) {
 func (node *TriggerNode) ToDTO() (dto.Node, error) {
 	if node == nil {
 		return dto.Node{}, fmt.Errorf("trigger node is nil")
-	}
-	if err := validateNodeBase(node.GetID(), node.GetName()); err != nil {
-		return dto.Node{}, err
-	}
-	if err := requireNonEmpty(node.GetID(), "attributes.connection", node.Attributes.Connection); err != nil {
-		return dto.Node{}, err
-	}
-	if err := requireNonEmpty(node.GetID(), "attributes.table", node.Attributes.Table); err != nil {
-		return dto.Node{}, err
-	}
-	if err := requireNonEmpty(node.GetID(), "attributes.triggerName", node.Attributes.TriggerName); err != nil {
-		return dto.Node{}, err
-	}
-	if err := requireNonEmpty(node.GetID(), "attributes.timing", node.Attributes.Timing); err != nil {
-		return dto.Node{}, err
-	}
-	if err := requireNonEmpty(node.GetID(), "attributes.orientation", node.Attributes.Orientation); err != nil {
-		return dto.Node{}, err
 	}
 	out := dto.Node{}
 	err := out.FromTriggerNode(dto.TriggerNode{
@@ -275,21 +172,4 @@ func cloneEdgesToDTO(edges map[string]EdgeList) map[string]dto.NodeEdge {
 		out[kind] = dto.NodeEdge{Items: items, Truncated: edge.Truncated}
 	}
 	return out
-}
-
-func validateNodeBase(id, name string) error {
-	if strings.TrimSpace(id) == "" {
-		return fmt.Errorf("node id is required")
-	}
-	if strings.TrimSpace(name) == "" {
-		return fmt.Errorf("node %s: name is required", id)
-	}
-	return nil
-}
-
-func requireNonEmpty(nodeID, field, value string) error {
-	if strings.TrimSpace(value) != "" {
-		return nil
-	}
-	return fmt.Errorf("node %s: %s is required", nodeID, field)
 }
