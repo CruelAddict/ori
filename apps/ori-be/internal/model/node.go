@@ -11,7 +11,7 @@ type Node interface {
 	GetScope() ScopeID
 	IsHydrated() bool
 	SetHydrated(value bool)
-	Clone(relationLimit int) Node
+	Clone() Node
 	ToDTO() (dto.Node, error)
 }
 
@@ -93,15 +93,15 @@ type DatabaseNode struct {
 	ViewsTruncated  bool
 }
 
-func (n *DatabaseNode) Clone(relationLimit int) Node {
+func (n *DatabaseNode) Clone() Node {
 	if n == nil {
 		return nil
 	}
 	clone := *n
 	clone.BaseNode = n.cloneBase()
 	clone.Attributes = cloneDatabaseAttributes(n.Attributes)
-	clone.Tables, clone.TablesLoaded, clone.TablesTruncated = cloneRelationIDsWithLimit(n.Tables, n.TablesLoaded, n.TablesTruncated, relationLimit)
-	clone.Views, clone.ViewsLoaded, clone.ViewsTruncated = cloneRelationIDsWithLimit(n.Views, n.ViewsLoaded, n.ViewsTruncated, relationLimit)
+	clone.Tables, clone.TablesLoaded, clone.TablesTruncated = cloneRelationIDs(n.Tables, n.TablesLoaded, n.TablesTruncated)
+	clone.Views, clone.ViewsLoaded, clone.ViewsTruncated = cloneRelationIDs(n.Views, n.ViewsLoaded, n.ViewsTruncated)
 	return &clone
 }
 
@@ -134,15 +134,15 @@ type SchemaNode struct {
 	ViewsTruncated  bool
 }
 
-func (n *SchemaNode) Clone(relationLimit int) Node {
+func (n *SchemaNode) Clone() Node {
 	if n == nil {
 		return nil
 	}
 	clone := *n
 	clone.BaseNode = n.cloneBase()
 	clone.Attributes = n.Attributes
-	clone.Tables, clone.TablesLoaded, clone.TablesTruncated = cloneRelationIDsWithLimit(n.Tables, n.TablesLoaded, n.TablesTruncated, relationLimit)
-	clone.Views, clone.ViewsLoaded, clone.ViewsTruncated = cloneRelationIDsWithLimit(n.Views, n.ViewsLoaded, n.ViewsTruncated, relationLimit)
+	clone.Tables, clone.TablesLoaded, clone.TablesTruncated = cloneRelationIDs(n.Tables, n.TablesLoaded, n.TablesTruncated)
+	clone.Views, clone.ViewsLoaded, clone.ViewsTruncated = cloneRelationIDs(n.Views, n.ViewsLoaded, n.ViewsTruncated)
 	return &clone
 }
 
@@ -184,18 +184,18 @@ type TableNode struct {
 	TriggersTruncated    bool
 }
 
-func (n *TableNode) Clone(relationLimit int) Node {
+func (n *TableNode) Clone() Node {
 	if n == nil {
 		return nil
 	}
 	clone := *n
 	clone.BaseNode = n.cloneBase()
 	clone.Attributes = cloneTableAttributes(n.Attributes)
-	clone.Partitions, clone.PartitionsLoaded, clone.PartitionsTruncated = cloneRelationIDsWithLimit(n.Partitions, n.PartitionsLoaded, n.PartitionsTruncated, relationLimit)
-	clone.Columns, clone.ColumnsLoaded, clone.ColumnsTruncated = cloneRelationIDsWithLimit(n.Columns, n.ColumnsLoaded, n.ColumnsTruncated, relationLimit)
-	clone.Constraints, clone.ConstraintsLoaded, clone.ConstraintsTruncated = cloneRelationIDsWithLimit(n.Constraints, n.ConstraintsLoaded, n.ConstraintsTruncated, relationLimit)
-	clone.Indexes, clone.IndexesLoaded, clone.IndexesTruncated = cloneRelationIDsWithLimit(n.Indexes, n.IndexesLoaded, n.IndexesTruncated, relationLimit)
-	clone.Triggers, clone.TriggersLoaded, clone.TriggersTruncated = cloneRelationIDsWithLimit(n.Triggers, n.TriggersLoaded, n.TriggersTruncated, relationLimit)
+	clone.Partitions, clone.PartitionsLoaded, clone.PartitionsTruncated = cloneRelationIDs(n.Partitions, n.PartitionsLoaded, n.PartitionsTruncated)
+	clone.Columns, clone.ColumnsLoaded, clone.ColumnsTruncated = cloneRelationIDs(n.Columns, n.ColumnsLoaded, n.ColumnsTruncated)
+	clone.Constraints, clone.ConstraintsLoaded, clone.ConstraintsTruncated = cloneRelationIDs(n.Constraints, n.ConstraintsLoaded, n.ConstraintsTruncated)
+	clone.Indexes, clone.IndexesLoaded, clone.IndexesTruncated = cloneRelationIDs(n.Indexes, n.IndexesLoaded, n.IndexesTruncated)
+	clone.Triggers, clone.TriggersLoaded, clone.TriggersTruncated = cloneRelationIDs(n.Triggers, n.TriggersLoaded, n.TriggersTruncated)
 	return &clone
 }
 
@@ -268,17 +268,17 @@ type ViewNode struct {
 	TriggersTruncated    bool
 }
 
-func (n *ViewNode) Clone(relationLimit int) Node {
+func (n *ViewNode) Clone() Node {
 	if n == nil {
 		return nil
 	}
 	clone := *n
 	clone.BaseNode = n.cloneBase()
 	clone.Attributes = cloneViewAttributes(n.Attributes)
-	clone.Columns, clone.ColumnsLoaded, clone.ColumnsTruncated = cloneRelationIDsWithLimit(n.Columns, n.ColumnsLoaded, n.ColumnsTruncated, relationLimit)
-	clone.Constraints, clone.ConstraintsLoaded, clone.ConstraintsTruncated = cloneRelationIDsWithLimit(n.Constraints, n.ConstraintsLoaded, n.ConstraintsTruncated, relationLimit)
-	clone.Indexes, clone.IndexesLoaded, clone.IndexesTruncated = cloneRelationIDsWithLimit(n.Indexes, n.IndexesLoaded, n.IndexesTruncated, relationLimit)
-	clone.Triggers, clone.TriggersLoaded, clone.TriggersTruncated = cloneRelationIDsWithLimit(n.Triggers, n.TriggersLoaded, n.TriggersTruncated, relationLimit)
+	clone.Columns, clone.ColumnsLoaded, clone.ColumnsTruncated = cloneRelationIDs(n.Columns, n.ColumnsLoaded, n.ColumnsTruncated)
+	clone.Constraints, clone.ConstraintsLoaded, clone.ConstraintsTruncated = cloneRelationIDs(n.Constraints, n.ConstraintsLoaded, n.ConstraintsTruncated)
+	clone.Indexes, clone.IndexesLoaded, clone.IndexesTruncated = cloneRelationIDs(n.Indexes, n.IndexesLoaded, n.IndexesTruncated)
+	clone.Triggers, clone.TriggersLoaded, clone.TriggersTruncated = cloneRelationIDs(n.Triggers, n.TriggersLoaded, n.TriggersTruncated)
 	return &clone
 }
 
@@ -330,7 +330,7 @@ type ColumnNode struct {
 	Attributes dto.ColumnNodeAttributes
 }
 
-func (n *ColumnNode) Clone(relationLimit int) Node {
+func (n *ColumnNode) Clone() Node {
 	if n == nil {
 		return nil
 	}
@@ -345,7 +345,7 @@ type ConstraintNode struct {
 	Attributes dto.ConstraintNodeAttributes
 }
 
-func (n *ConstraintNode) Clone(relationLimit int) Node {
+func (n *ConstraintNode) Clone() Node {
 	if n == nil {
 		return nil
 	}
@@ -360,7 +360,7 @@ type IndexNode struct {
 	Attributes dto.IndexNodeAttributes
 }
 
-func (n *IndexNode) Clone(relationLimit int) Node {
+func (n *IndexNode) Clone() Node {
 	if n == nil {
 		return nil
 	}
@@ -375,7 +375,7 @@ type TriggerNode struct {
 	Attributes dto.TriggerNodeAttributes
 }
 
-func (n *TriggerNode) Clone(relationLimit int) Node {
+func (n *TriggerNode) Clone() Node {
 	if n == nil {
 		return nil
 	}
@@ -400,18 +400,13 @@ func cloneStringSlice(src []string) []string {
 	return copyOf
 }
 
-func cloneRelationIDsWithLimit(ids []string, loaded bool, truncated bool, relationLimit int) ([]string, bool, bool) {
+func cloneRelationIDs(ids []string, loaded bool, truncated bool) ([]string, bool, bool) {
 	if !loaded {
 		return nil, false, false
 	}
-	total := len(ids)
-	max := total
-	if relationLimit > 0 && relationLimit < total {
-		max = relationLimit
-	}
-	cloned := make([]string, max)
-	copy(cloned, ids[:max])
-	return cloned, true, truncated || total > max
+	cloned := make([]string, len(ids))
+	copy(cloned, ids)
+	return cloned, true, truncated
 }
 
 func cloneDatabaseAttributes(attrs dto.DatabaseNodeAttributes) dto.DatabaseNodeAttributes {

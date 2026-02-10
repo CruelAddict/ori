@@ -10,7 +10,6 @@ import (
 )
 
 const (
-	defaultEdgeLimit   = 1000
 	defaultNodeIDLimit = 1000
 )
 
@@ -31,8 +30,7 @@ type NodeService struct {
 	inflightMu sync.Mutex
 	inflight   map[hydrationKey]*sync.WaitGroup
 
-	edgeLimit int
-	idLimit   int
+	idLimit int
 }
 
 // NewNodeService builds a NodeService instance.
@@ -42,7 +40,6 @@ func NewNodeService(configs *ConfigService, connections *ConnectionService) *Nod
 		connections:      connections,
 		connectionGraphs: make(map[string]*connectionGraph),
 		inflight:         make(map[hydrationKey]*sync.WaitGroup),
-		edgeLimit:        defaultEdgeLimit,
 		idLimit:          defaultNodeIDLimit,
 	}
 }
@@ -77,7 +74,7 @@ func (ns *NodeService) GetNodes(ctx context.Context, configurationName string, n
 		}
 	}
 
-	return cGraph.snapshot(uniqueIDs, ns.edgeLimit)
+	return cGraph.snapshot(uniqueIDs)
 }
 
 func (ns *NodeService) hydrateNode(ctx context.Context, graph *connectionGraph, handle *ConnectionHandle, nodeID string) error {
@@ -369,7 +366,7 @@ func (s *connectionGraph) get(id string) (model.Node, bool) {
 	return node, ok
 }
 
-func (s *connectionGraph) snapshot(ids []string, edgeLimit int) (model.Nodes, error) {
+func (s *connectionGraph) snapshot(ids []string) (model.Nodes, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	result := make(model.Nodes, 0, len(ids))
@@ -378,7 +375,7 @@ func (s *connectionGraph) snapshot(ids []string, edgeLimit int) (model.Nodes, er
 		if !ok {
 			return nil, fmt.Errorf("%w: %s", ErrUnknownNode, id)
 		}
-		result = append(result, cloneNodeWithEdgeLimit(node, edgeLimit))
+		result = append(result, cloneNode(node))
 	}
 	return result, nil
 }
@@ -395,18 +392,10 @@ func (s *connectionGraph) upsert(nodes []model.Node) {
 }
 
 func cloneNode(src model.Node) model.Node {
-	return cloneNodeWithEdgeLimit(src, 0)
-}
-
-func cloneNodeWithEdgeLimit(src model.Node, edgeLimit int) model.Node {
 	if src == nil {
 		return nil
 	}
-	return src.Clone(edgeLimit)
-}
-
-func (ns *NodeService) EdgeLimit() int {
-	return ns.edgeLimit
+	return src.Clone()
 }
 
 func uniqueStrings(values []string) []string {
