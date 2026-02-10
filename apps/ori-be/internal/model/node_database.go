@@ -8,13 +8,9 @@ import (
 
 type DatabaseNode struct {
 	BaseNode
-	Attributes      dto.DatabaseNodeAttributes
-	Tables          []string
-	TablesLoaded    bool
-	TablesTruncated bool
-	Views           []string
-	ViewsLoaded     bool
-	ViewsTruncated  bool
+	Attributes dto.DatabaseNodeAttributes
+	Tables     []string
+	Views      []string
 }
 
 func (n *DatabaseNode) Clone() Node {
@@ -24,8 +20,8 @@ func (n *DatabaseNode) Clone() Node {
 	clone := *n
 	clone.BaseNode = n.cloneBase()
 	clone.Attributes = cloneDatabaseAttributes(n.Attributes)
-	clone.Tables, clone.TablesLoaded, clone.TablesTruncated = cloneRelationIDs(n.Tables, n.TablesLoaded, n.TablesTruncated)
-	clone.Views, clone.ViewsLoaded, clone.ViewsTruncated = cloneRelationIDs(n.Views, n.ViewsLoaded, n.ViewsTruncated)
+	clone.Tables = cloneRelationIDs(n.Tables)
+	clone.Views = cloneRelationIDs(n.Views)
 	return &clone
 }
 
@@ -34,8 +30,6 @@ func (n *DatabaseNode) SetTables(tableIDs []string) {
 		return
 	}
 	n.Tables = cloneStringSlice(tableIDs)
-	n.TablesLoaded = true
-	n.TablesTruncated = false
 }
 
 func (n *DatabaseNode) SetViews(viewIDs []string) {
@@ -43,8 +37,6 @@ func (n *DatabaseNode) SetViews(viewIDs []string) {
 		return
 	}
 	n.Views = cloneStringSlice(viewIDs)
-	n.ViewsLoaded = true
-	n.ViewsTruncated = false
 }
 
 func (node *DatabaseNode) ToDTO() (dto.Node, error) {
@@ -69,11 +61,11 @@ func databaseRelationsToDTO(node *DatabaseNode) map[string]dto.NodeEdge {
 		return emptyRelationsToDTO()
 	}
 	out := make(map[string]dto.NodeEdge, 2)
-	if node.TablesLoaded {
-		out[NodeRelationTables] = relationToDTO(node.Tables, node.TablesTruncated)
+	if node.IsHydrated() || len(node.Tables) > 0 {
+		out[NodeRelationTables] = relationToDTO(node.Tables)
 	}
-	if node.ViewsLoaded {
-		out[NodeRelationViews] = relationToDTO(node.Views, node.ViewsTruncated)
+	if node.IsHydrated() || len(node.Views) > 0 {
+		out[NodeRelationViews] = relationToDTO(node.Views)
 	}
 	if len(out) == 0 {
 		return emptyRelationsToDTO()

@@ -17,23 +17,20 @@ func cloneStringSlice(src []string) []string {
 	return copyOf
 }
 
-func cloneRelationIDs(ids []string, loaded bool, truncated bool) ([]string, bool, bool) {
-	if !loaded {
-		return nil, false, false
-	}
+func cloneRelationIDs(ids []string) []string {
 	cloned := make([]string, len(ids))
 	copy(cloned, ids)
-	return cloned, true, truncated
+	return cloned
 }
 
 func emptyRelationsToDTO() map[string]dto.NodeEdge {
 	return map[string]dto.NodeEdge{}
 }
 
-func relationToDTO(ids []string, truncated bool) dto.NodeEdge {
+func relationToDTO(ids []string) dto.NodeEdge {
 	items := make([]string, len(ids))
 	copy(items, ids)
-	return dto.NodeEdge{Items: items, Truncated: truncated}
+	return dto.NodeEdge{Items: items, Truncated: false}
 }
 
 func cloneDatabaseAttributes(attrs dto.DatabaseNodeAttributes) dto.DatabaseNodeAttributes {

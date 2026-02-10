@@ -8,22 +8,12 @@ import (
 
 type TableNode struct {
 	BaseNode
-	Attributes           dto.TableNodeAttributes
-	Partitions           []string
-	PartitionsLoaded     bool
-	PartitionsTruncated  bool
-	Columns              []string
-	ColumnsLoaded        bool
-	ColumnsTruncated     bool
-	Constraints          []string
-	ConstraintsLoaded    bool
-	ConstraintsTruncated bool
-	Indexes              []string
-	IndexesLoaded        bool
-	IndexesTruncated     bool
-	Triggers             []string
-	TriggersLoaded       bool
-	TriggersTruncated    bool
+	Attributes  dto.TableNodeAttributes
+	Partitions  []string
+	Columns     []string
+	Constraints []string
+	Indexes     []string
+	Triggers    []string
 }
 
 func (n *TableNode) Clone() Node {
@@ -33,11 +23,11 @@ func (n *TableNode) Clone() Node {
 	clone := *n
 	clone.BaseNode = n.cloneBase()
 	clone.Attributes = cloneTableAttributes(n.Attributes)
-	clone.Partitions, clone.PartitionsLoaded, clone.PartitionsTruncated = cloneRelationIDs(n.Partitions, n.PartitionsLoaded, n.PartitionsTruncated)
-	clone.Columns, clone.ColumnsLoaded, clone.ColumnsTruncated = cloneRelationIDs(n.Columns, n.ColumnsLoaded, n.ColumnsTruncated)
-	clone.Constraints, clone.ConstraintsLoaded, clone.ConstraintsTruncated = cloneRelationIDs(n.Constraints, n.ConstraintsLoaded, n.ConstraintsTruncated)
-	clone.Indexes, clone.IndexesLoaded, clone.IndexesTruncated = cloneRelationIDs(n.Indexes, n.IndexesLoaded, n.IndexesTruncated)
-	clone.Triggers, clone.TriggersLoaded, clone.TriggersTruncated = cloneRelationIDs(n.Triggers, n.TriggersLoaded, n.TriggersTruncated)
+	clone.Partitions = cloneRelationIDs(n.Partitions)
+	clone.Columns = cloneRelationIDs(n.Columns)
+	clone.Constraints = cloneRelationIDs(n.Constraints)
+	clone.Indexes = cloneRelationIDs(n.Indexes)
+	clone.Triggers = cloneRelationIDs(n.Triggers)
 	return &clone
 }
 
@@ -46,8 +36,6 @@ func (n *TableNode) SetPartitions(partitionIDs []string) {
 		return
 	}
 	n.Partitions = cloneStringSlice(partitionIDs)
-	n.PartitionsLoaded = true
-	n.PartitionsTruncated = false
 }
 
 func (n *TableNode) SetColumns(columnIDs []string) {
@@ -55,8 +43,6 @@ func (n *TableNode) SetColumns(columnIDs []string) {
 		return
 	}
 	n.Columns = cloneStringSlice(columnIDs)
-	n.ColumnsLoaded = true
-	n.ColumnsTruncated = false
 }
 
 func (n *TableNode) SetConstraints(constraintIDs []string) {
@@ -64,8 +50,6 @@ func (n *TableNode) SetConstraints(constraintIDs []string) {
 		return
 	}
 	n.Constraints = cloneStringSlice(constraintIDs)
-	n.ConstraintsLoaded = true
-	n.ConstraintsTruncated = false
 }
 
 func (n *TableNode) SetIndexes(indexIDs []string) {
@@ -73,8 +57,6 @@ func (n *TableNode) SetIndexes(indexIDs []string) {
 		return
 	}
 	n.Indexes = cloneStringSlice(indexIDs)
-	n.IndexesLoaded = true
-	n.IndexesTruncated = false
 }
 
 func (n *TableNode) SetTriggers(triggerIDs []string) {
@@ -82,8 +64,6 @@ func (n *TableNode) SetTriggers(triggerIDs []string) {
 		return
 	}
 	n.Triggers = cloneStringSlice(triggerIDs)
-	n.TriggersLoaded = true
-	n.TriggersTruncated = false
 }
 
 func (n *TableNode) RelationName() string {
@@ -115,20 +95,20 @@ func tableRelationsToDTO(node *TableNode) map[string]dto.NodeEdge {
 		return emptyRelationsToDTO()
 	}
 	out := make(map[string]dto.NodeEdge, 5)
-	if node.PartitionsLoaded {
-		out[NodeRelationPartitions] = relationToDTO(node.Partitions, node.PartitionsTruncated)
+	if len(node.Partitions) > 0 {
+		out[NodeRelationPartitions] = relationToDTO(node.Partitions)
 	}
-	if node.ColumnsLoaded {
-		out[NodeRelationColumns] = relationToDTO(node.Columns, node.ColumnsTruncated)
+	if node.IsHydrated() || len(node.Columns) > 0 {
+		out[NodeRelationColumns] = relationToDTO(node.Columns)
 	}
-	if node.ConstraintsLoaded {
-		out[NodeRelationConstraints] = relationToDTO(node.Constraints, node.ConstraintsTruncated)
+	if node.IsHydrated() || len(node.Constraints) > 0 {
+		out[NodeRelationConstraints] = relationToDTO(node.Constraints)
 	}
-	if node.IndexesLoaded {
-		out[NodeRelationIndexes] = relationToDTO(node.Indexes, node.IndexesTruncated)
+	if node.IsHydrated() || len(node.Indexes) > 0 {
+		out[NodeRelationIndexes] = relationToDTO(node.Indexes)
 	}
-	if node.TriggersLoaded {
-		out[NodeRelationTriggers] = relationToDTO(node.Triggers, node.TriggersTruncated)
+	if node.IsHydrated() || len(node.Triggers) > 0 {
+		out[NodeRelationTriggers] = relationToDTO(node.Triggers)
 	}
 	if len(out) == 0 {
 		return emptyRelationsToDTO()

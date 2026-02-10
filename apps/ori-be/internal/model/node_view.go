@@ -8,19 +8,11 @@ import (
 
 type ViewNode struct {
 	BaseNode
-	Attributes           dto.ViewNodeAttributes
-	Columns              []string
-	ColumnsLoaded        bool
-	ColumnsTruncated     bool
-	Constraints          []string
-	ConstraintsLoaded    bool
-	ConstraintsTruncated bool
-	Indexes              []string
-	IndexesLoaded        bool
-	IndexesTruncated     bool
-	Triggers             []string
-	TriggersLoaded       bool
-	TriggersTruncated    bool
+	Attributes  dto.ViewNodeAttributes
+	Columns     []string
+	Constraints []string
+	Indexes     []string
+	Triggers    []string
 }
 
 func (n *ViewNode) Clone() Node {
@@ -30,10 +22,10 @@ func (n *ViewNode) Clone() Node {
 	clone := *n
 	clone.BaseNode = n.cloneBase()
 	clone.Attributes = cloneViewAttributes(n.Attributes)
-	clone.Columns, clone.ColumnsLoaded, clone.ColumnsTruncated = cloneRelationIDs(n.Columns, n.ColumnsLoaded, n.ColumnsTruncated)
-	clone.Constraints, clone.ConstraintsLoaded, clone.ConstraintsTruncated = cloneRelationIDs(n.Constraints, n.ConstraintsLoaded, n.ConstraintsTruncated)
-	clone.Indexes, clone.IndexesLoaded, clone.IndexesTruncated = cloneRelationIDs(n.Indexes, n.IndexesLoaded, n.IndexesTruncated)
-	clone.Triggers, clone.TriggersLoaded, clone.TriggersTruncated = cloneRelationIDs(n.Triggers, n.TriggersLoaded, n.TriggersTruncated)
+	clone.Columns = cloneRelationIDs(n.Columns)
+	clone.Constraints = cloneRelationIDs(n.Constraints)
+	clone.Indexes = cloneRelationIDs(n.Indexes)
+	clone.Triggers = cloneRelationIDs(n.Triggers)
 	return &clone
 }
 
@@ -42,8 +34,6 @@ func (n *ViewNode) SetColumns(columnIDs []string) {
 		return
 	}
 	n.Columns = cloneStringSlice(columnIDs)
-	n.ColumnsLoaded = true
-	n.ColumnsTruncated = false
 }
 
 func (n *ViewNode) SetConstraints(constraintIDs []string) {
@@ -51,8 +41,6 @@ func (n *ViewNode) SetConstraints(constraintIDs []string) {
 		return
 	}
 	n.Constraints = cloneStringSlice(constraintIDs)
-	n.ConstraintsLoaded = true
-	n.ConstraintsTruncated = false
 }
 
 func (n *ViewNode) SetIndexes(indexIDs []string) {
@@ -60,8 +48,6 @@ func (n *ViewNode) SetIndexes(indexIDs []string) {
 		return
 	}
 	n.Indexes = cloneStringSlice(indexIDs)
-	n.IndexesLoaded = true
-	n.IndexesTruncated = false
 }
 
 func (n *ViewNode) SetTriggers(triggerIDs []string) {
@@ -69,8 +55,6 @@ func (n *ViewNode) SetTriggers(triggerIDs []string) {
 		return
 	}
 	n.Triggers = cloneStringSlice(triggerIDs)
-	n.TriggersLoaded = true
-	n.TriggersTruncated = false
 }
 
 func (n *ViewNode) RelationName() string {
@@ -102,17 +86,17 @@ func viewRelationsToDTO(node *ViewNode) map[string]dto.NodeEdge {
 		return emptyRelationsToDTO()
 	}
 	out := make(map[string]dto.NodeEdge, 4)
-	if node.ColumnsLoaded {
-		out[NodeRelationColumns] = relationToDTO(node.Columns, node.ColumnsTruncated)
+	if node.IsHydrated() || len(node.Columns) > 0 {
+		out[NodeRelationColumns] = relationToDTO(node.Columns)
 	}
-	if node.ConstraintsLoaded {
-		out[NodeRelationConstraints] = relationToDTO(node.Constraints, node.ConstraintsTruncated)
+	if node.IsHydrated() || len(node.Constraints) > 0 {
+		out[NodeRelationConstraints] = relationToDTO(node.Constraints)
 	}
-	if node.IndexesLoaded {
-		out[NodeRelationIndexes] = relationToDTO(node.Indexes, node.IndexesTruncated)
+	if node.IsHydrated() || len(node.Indexes) > 0 {
+		out[NodeRelationIndexes] = relationToDTO(node.Indexes)
 	}
-	if node.TriggersLoaded {
-		out[NodeRelationTriggers] = relationToDTO(node.Triggers, node.TriggersTruncated)
+	if node.IsHydrated() || len(node.Triggers) > 0 {
+		out[NodeRelationTriggers] = relationToDTO(node.Triggers)
 	}
 	if len(out) == 0 {
 		return emptyRelationsToDTO()
