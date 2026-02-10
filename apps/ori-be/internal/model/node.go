@@ -4,32 +4,25 @@ import (
 	dto "github.com/crueladdict/ori/libs/contract/go"
 )
 
-// EdgeList captures outgoing relationships for a node grouped by an edge kind.
-type EdgeList struct {
-	Items     []string
-	Truncated bool
-}
-
 // Node is the common graph node interface used by services and storage.
 type Node interface {
 	GetID() string
 	GetName() string
 	GetScope() ScopeID
-	GetEdges() map[string]EdgeList
 	IsHydrated() bool
 	SetHydrated(value bool)
-	Clone(edgeLimit int) Node
+	Clone(relationLimit int) Node
 	ToDTO() (dto.Node, error)
 }
 
 const (
-	EdgeTables      = "tables"
-	EdgeViews       = "views"
-	EdgePartitions  = "partitions"
-	EdgeColumns     = "columns"
-	EdgeConstraints = "constraints"
-	EdgeIndexes     = "indexes"
-	EdgeTriggers    = "triggers"
+	NodeRelationTables      = "tables"
+	NodeRelationViews       = "views"
+	NodeRelationPartitions  = "partitions"
+	NodeRelationColumns     = "columns"
+	NodeRelationConstraints = "constraints"
+	NodeRelationIndexes     = "indexes"
+	NodeRelationTriggers    = "triggers"
 )
 
 // Nodes is a typed list of graph nodes.
@@ -63,13 +56,6 @@ func (n *BaseNode) GetScope() ScopeID {
 	return cloneScope(n.Scope)
 }
 
-func (n *BaseNode) GetEdges() map[string]EdgeList {
-	if n == nil {
-		return nil
-	}
-	return map[string]EdgeList{}
-}
-
 func (n *BaseNode) IsHydrated() bool {
 	if n == nil {
 		return false
@@ -98,161 +84,164 @@ func (n *BaseNode) cloneBase() BaseNode {
 
 type DatabaseNode struct {
 	BaseNode
-	Attributes dto.DatabaseNodeAttributes
-	Tables     *EdgeList
-	Views      *EdgeList
+	Attributes      dto.DatabaseNodeAttributes
+	Tables          []string
+	TablesLoaded    bool
+	TablesTruncated bool
+	Views           []string
+	ViewsLoaded     bool
+	ViewsTruncated  bool
 }
 
-func (n *DatabaseNode) Clone(edgeLimit int) Node {
+func (n *DatabaseNode) Clone(relationLimit int) Node {
 	if n == nil {
 		return nil
 	}
 	clone := *n
 	clone.BaseNode = n.cloneBase()
 	clone.Attributes = cloneDatabaseAttributes(n.Attributes)
-	clone.Tables = cloneEdgeWithLimit(n.Tables, edgeLimit)
-	clone.Views = cloneEdgeWithLimit(n.Views, edgeLimit)
+	clone.Tables, clone.TablesLoaded, clone.TablesTruncated = cloneRelationIDsWithLimit(n.Tables, n.TablesLoaded, n.TablesTruncated, relationLimit)
+	clone.Views, clone.ViewsLoaded, clone.ViewsTruncated = cloneRelationIDsWithLimit(n.Views, n.ViewsLoaded, n.ViewsTruncated, relationLimit)
 	return &clone
 }
 
-func (n *DatabaseNode) GetEdges() map[string]EdgeList {
-	if n == nil {
-		return nil
-	}
-	return edgesFromEntries(
-		edgeEntry{kind: EdgeTables, edge: n.Tables},
-		edgeEntry{kind: EdgeViews, edge: n.Views},
-	)
-}
-
-func (n *DatabaseNode) SetTables(edge EdgeList) {
+func (n *DatabaseNode) SetTables(tableIDs []string) {
 	if n == nil {
 		return
 	}
-	n.Tables = cloneEdgePointer(edge)
+	n.Tables = cloneStringSlice(tableIDs)
+	n.TablesLoaded = true
+	n.TablesTruncated = false
 }
 
-func (n *DatabaseNode) SetViews(edge EdgeList) {
+func (n *DatabaseNode) SetViews(viewIDs []string) {
 	if n == nil {
 		return
 	}
-	n.Views = cloneEdgePointer(edge)
+	n.Views = cloneStringSlice(viewIDs)
+	n.ViewsLoaded = true
+	n.ViewsTruncated = false
 }
 
 type SchemaNode struct {
 	BaseNode
-	Attributes dto.SchemaNodeAttributes
-	Tables     *EdgeList
-	Views      *EdgeList
+	Attributes      dto.SchemaNodeAttributes
+	Tables          []string
+	TablesLoaded    bool
+	TablesTruncated bool
+	Views           []string
+	ViewsLoaded     bool
+	ViewsTruncated  bool
 }
 
-func (n *SchemaNode) Clone(edgeLimit int) Node {
+func (n *SchemaNode) Clone(relationLimit int) Node {
 	if n == nil {
 		return nil
 	}
 	clone := *n
 	clone.BaseNode = n.cloneBase()
 	clone.Attributes = n.Attributes
-	clone.Tables = cloneEdgeWithLimit(n.Tables, edgeLimit)
-	clone.Views = cloneEdgeWithLimit(n.Views, edgeLimit)
+	clone.Tables, clone.TablesLoaded, clone.TablesTruncated = cloneRelationIDsWithLimit(n.Tables, n.TablesLoaded, n.TablesTruncated, relationLimit)
+	clone.Views, clone.ViewsLoaded, clone.ViewsTruncated = cloneRelationIDsWithLimit(n.Views, n.ViewsLoaded, n.ViewsTruncated, relationLimit)
 	return &clone
 }
 
-func (n *SchemaNode) GetEdges() map[string]EdgeList {
-	if n == nil {
-		return nil
-	}
-	return edgesFromEntries(
-		edgeEntry{kind: EdgeTables, edge: n.Tables},
-		edgeEntry{kind: EdgeViews, edge: n.Views},
-	)
-}
-
-func (n *SchemaNode) SetTables(edge EdgeList) {
+func (n *SchemaNode) SetTables(tableIDs []string) {
 	if n == nil {
 		return
 	}
-	n.Tables = cloneEdgePointer(edge)
+	n.Tables = cloneStringSlice(tableIDs)
+	n.TablesLoaded = true
+	n.TablesTruncated = false
 }
 
-func (n *SchemaNode) SetViews(edge EdgeList) {
+func (n *SchemaNode) SetViews(viewIDs []string) {
 	if n == nil {
 		return
 	}
-	n.Views = cloneEdgePointer(edge)
+	n.Views = cloneStringSlice(viewIDs)
+	n.ViewsLoaded = true
+	n.ViewsTruncated = false
 }
 
 type TableNode struct {
 	BaseNode
-	Attributes  dto.TableNodeAttributes
-	Partitions  *EdgeList
-	Columns     *EdgeList
-	Constraints *EdgeList
-	Indexes     *EdgeList
-	Triggers    *EdgeList
+	Attributes           dto.TableNodeAttributes
+	Partitions           []string
+	PartitionsLoaded     bool
+	PartitionsTruncated  bool
+	Columns              []string
+	ColumnsLoaded        bool
+	ColumnsTruncated     bool
+	Constraints          []string
+	ConstraintsLoaded    bool
+	ConstraintsTruncated bool
+	Indexes              []string
+	IndexesLoaded        bool
+	IndexesTruncated     bool
+	Triggers             []string
+	TriggersLoaded       bool
+	TriggersTruncated    bool
 }
 
-func (n *TableNode) Clone(edgeLimit int) Node {
+func (n *TableNode) Clone(relationLimit int) Node {
 	if n == nil {
 		return nil
 	}
 	clone := *n
 	clone.BaseNode = n.cloneBase()
 	clone.Attributes = cloneTableAttributes(n.Attributes)
-	clone.Partitions = cloneEdgeWithLimit(n.Partitions, edgeLimit)
-	clone.Columns = cloneEdgeWithLimit(n.Columns, edgeLimit)
-	clone.Constraints = cloneEdgeWithLimit(n.Constraints, edgeLimit)
-	clone.Indexes = cloneEdgeWithLimit(n.Indexes, edgeLimit)
-	clone.Triggers = cloneEdgeWithLimit(n.Triggers, edgeLimit)
+	clone.Partitions, clone.PartitionsLoaded, clone.PartitionsTruncated = cloneRelationIDsWithLimit(n.Partitions, n.PartitionsLoaded, n.PartitionsTruncated, relationLimit)
+	clone.Columns, clone.ColumnsLoaded, clone.ColumnsTruncated = cloneRelationIDsWithLimit(n.Columns, n.ColumnsLoaded, n.ColumnsTruncated, relationLimit)
+	clone.Constraints, clone.ConstraintsLoaded, clone.ConstraintsTruncated = cloneRelationIDsWithLimit(n.Constraints, n.ConstraintsLoaded, n.ConstraintsTruncated, relationLimit)
+	clone.Indexes, clone.IndexesLoaded, clone.IndexesTruncated = cloneRelationIDsWithLimit(n.Indexes, n.IndexesLoaded, n.IndexesTruncated, relationLimit)
+	clone.Triggers, clone.TriggersLoaded, clone.TriggersTruncated = cloneRelationIDsWithLimit(n.Triggers, n.TriggersLoaded, n.TriggersTruncated, relationLimit)
 	return &clone
 }
 
-func (n *TableNode) GetEdges() map[string]EdgeList {
-	if n == nil {
-		return nil
-	}
-	return edgesFromEntries(
-		edgeEntry{kind: EdgePartitions, edge: n.Partitions},
-		edgeEntry{kind: EdgeColumns, edge: n.Columns},
-		edgeEntry{kind: EdgeConstraints, edge: n.Constraints},
-		edgeEntry{kind: EdgeIndexes, edge: n.Indexes},
-		edgeEntry{kind: EdgeTriggers, edge: n.Triggers},
-	)
-}
-
-func (n *TableNode) SetPartitions(edge EdgeList) {
+func (n *TableNode) SetPartitions(partitionIDs []string) {
 	if n == nil {
 		return
 	}
-	n.Partitions = cloneEdgePointer(edge)
+	n.Partitions = cloneStringSlice(partitionIDs)
+	n.PartitionsLoaded = true
+	n.PartitionsTruncated = false
 }
 
-func (n *TableNode) SetColumns(edge EdgeList) {
+func (n *TableNode) SetColumns(columnIDs []string) {
 	if n == nil {
 		return
 	}
-	n.Columns = cloneEdgePointer(edge)
+	n.Columns = cloneStringSlice(columnIDs)
+	n.ColumnsLoaded = true
+	n.ColumnsTruncated = false
 }
 
-func (n *TableNode) SetConstraints(edge EdgeList) {
+func (n *TableNode) SetConstraints(constraintIDs []string) {
 	if n == nil {
 		return
 	}
-	n.Constraints = cloneEdgePointer(edge)
+	n.Constraints = cloneStringSlice(constraintIDs)
+	n.ConstraintsLoaded = true
+	n.ConstraintsTruncated = false
 }
 
-func (n *TableNode) SetIndexes(edge EdgeList) {
+func (n *TableNode) SetIndexes(indexIDs []string) {
 	if n == nil {
 		return
 	}
-	n.Indexes = cloneEdgePointer(edge)
+	n.Indexes = cloneStringSlice(indexIDs)
+	n.IndexesLoaded = true
+	n.IndexesTruncated = false
 }
 
-func (n *TableNode) SetTriggers(edge EdgeList) {
+func (n *TableNode) SetTriggers(triggerIDs []string) {
 	if n == nil {
 		return
 	}
-	n.Triggers = cloneEdgePointer(edge)
+	n.Triggers = cloneStringSlice(triggerIDs)
+	n.TriggersLoaded = true
+	n.TriggersTruncated = false
 }
 
 func (n *TableNode) RelationName() string {
@@ -264,65 +253,69 @@ func (n *TableNode) RelationName() string {
 
 type ViewNode struct {
 	BaseNode
-	Attributes  dto.ViewNodeAttributes
-	Columns     *EdgeList
-	Constraints *EdgeList
-	Indexes     *EdgeList
-	Triggers    *EdgeList
+	Attributes           dto.ViewNodeAttributes
+	Columns              []string
+	ColumnsLoaded        bool
+	ColumnsTruncated     bool
+	Constraints          []string
+	ConstraintsLoaded    bool
+	ConstraintsTruncated bool
+	Indexes              []string
+	IndexesLoaded        bool
+	IndexesTruncated     bool
+	Triggers             []string
+	TriggersLoaded       bool
+	TriggersTruncated    bool
 }
 
-func (n *ViewNode) Clone(edgeLimit int) Node {
+func (n *ViewNode) Clone(relationLimit int) Node {
 	if n == nil {
 		return nil
 	}
 	clone := *n
 	clone.BaseNode = n.cloneBase()
 	clone.Attributes = cloneViewAttributes(n.Attributes)
-	clone.Columns = cloneEdgeWithLimit(n.Columns, edgeLimit)
-	clone.Constraints = cloneEdgeWithLimit(n.Constraints, edgeLimit)
-	clone.Indexes = cloneEdgeWithLimit(n.Indexes, edgeLimit)
-	clone.Triggers = cloneEdgeWithLimit(n.Triggers, edgeLimit)
+	clone.Columns, clone.ColumnsLoaded, clone.ColumnsTruncated = cloneRelationIDsWithLimit(n.Columns, n.ColumnsLoaded, n.ColumnsTruncated, relationLimit)
+	clone.Constraints, clone.ConstraintsLoaded, clone.ConstraintsTruncated = cloneRelationIDsWithLimit(n.Constraints, n.ConstraintsLoaded, n.ConstraintsTruncated, relationLimit)
+	clone.Indexes, clone.IndexesLoaded, clone.IndexesTruncated = cloneRelationIDsWithLimit(n.Indexes, n.IndexesLoaded, n.IndexesTruncated, relationLimit)
+	clone.Triggers, clone.TriggersLoaded, clone.TriggersTruncated = cloneRelationIDsWithLimit(n.Triggers, n.TriggersLoaded, n.TriggersTruncated, relationLimit)
 	return &clone
 }
 
-func (n *ViewNode) GetEdges() map[string]EdgeList {
-	if n == nil {
-		return nil
-	}
-	return edgesFromEntries(
-		edgeEntry{kind: EdgeColumns, edge: n.Columns},
-		edgeEntry{kind: EdgeConstraints, edge: n.Constraints},
-		edgeEntry{kind: EdgeIndexes, edge: n.Indexes},
-		edgeEntry{kind: EdgeTriggers, edge: n.Triggers},
-	)
-}
-
-func (n *ViewNode) SetColumns(edge EdgeList) {
+func (n *ViewNode) SetColumns(columnIDs []string) {
 	if n == nil {
 		return
 	}
-	n.Columns = cloneEdgePointer(edge)
+	n.Columns = cloneStringSlice(columnIDs)
+	n.ColumnsLoaded = true
+	n.ColumnsTruncated = false
 }
 
-func (n *ViewNode) SetConstraints(edge EdgeList) {
+func (n *ViewNode) SetConstraints(constraintIDs []string) {
 	if n == nil {
 		return
 	}
-	n.Constraints = cloneEdgePointer(edge)
+	n.Constraints = cloneStringSlice(constraintIDs)
+	n.ConstraintsLoaded = true
+	n.ConstraintsTruncated = false
 }
 
-func (n *ViewNode) SetIndexes(edge EdgeList) {
+func (n *ViewNode) SetIndexes(indexIDs []string) {
 	if n == nil {
 		return
 	}
-	n.Indexes = cloneEdgePointer(edge)
+	n.Indexes = cloneStringSlice(indexIDs)
+	n.IndexesLoaded = true
+	n.IndexesTruncated = false
 }
 
-func (n *ViewNode) SetTriggers(edge EdgeList) {
+func (n *ViewNode) SetTriggers(triggerIDs []string) {
 	if n == nil {
 		return
 	}
-	n.Triggers = cloneEdgePointer(edge)
+	n.Triggers = cloneStringSlice(triggerIDs)
+	n.TriggersLoaded = true
+	n.TriggersTruncated = false
 }
 
 func (n *ViewNode) RelationName() string {
@@ -337,7 +330,7 @@ type ColumnNode struct {
 	Attributes dto.ColumnNodeAttributes
 }
 
-func (n *ColumnNode) Clone(edgeLimit int) Node {
+func (n *ColumnNode) Clone(relationLimit int) Node {
 	if n == nil {
 		return nil
 	}
@@ -352,7 +345,7 @@ type ConstraintNode struct {
 	Attributes dto.ConstraintNodeAttributes
 }
 
-func (n *ConstraintNode) Clone(edgeLimit int) Node {
+func (n *ConstraintNode) Clone(relationLimit int) Node {
 	if n == nil {
 		return nil
 	}
@@ -367,7 +360,7 @@ type IndexNode struct {
 	Attributes dto.IndexNodeAttributes
 }
 
-func (n *IndexNode) Clone(edgeLimit int) Node {
+func (n *IndexNode) Clone(relationLimit int) Node {
 	if n == nil {
 		return nil
 	}
@@ -382,7 +375,7 @@ type TriggerNode struct {
 	Attributes dto.TriggerNodeAttributes
 }
 
-func (n *TriggerNode) Clone(edgeLimit int) Node {
+func (n *TriggerNode) Clone(relationLimit int) Node {
 	if n == nil {
 		return nil
 	}
@@ -401,52 +394,24 @@ func cloneScope(scope ScopeID) ScopeID {
 	return cloned
 }
 
-type edgeEntry struct {
-	kind string
-	edge *EdgeList
+func cloneStringSlice(src []string) []string {
+	copyOf := make([]string, len(src))
+	copy(copyOf, src)
+	return copyOf
 }
 
-func edgesFromEntries(entries ...edgeEntry) map[string]EdgeList {
-	if len(entries) == 0 {
-		return map[string]EdgeList{}
+func cloneRelationIDsWithLimit(ids []string, loaded bool, truncated bool, relationLimit int) ([]string, bool, bool) {
+	if !loaded {
+		return nil, false, false
 	}
-	out := make(map[string]EdgeList, len(entries))
-	for _, entry := range entries {
-		if entry.edge == nil {
-			continue
-		}
-		out[entry.kind] = cloneEdge(*entry.edge)
-	}
-	if len(out) == 0 {
-		return map[string]EdgeList{}
-	}
-	return out
-}
-
-func cloneEdge(edge EdgeList) EdgeList {
-	items := make([]string, len(edge.Items))
-	copy(items, edge.Items)
-	return EdgeList{Items: items, Truncated: edge.Truncated}
-}
-
-func cloneEdgePointer(edge EdgeList) *EdgeList {
-	cloned := cloneEdge(edge)
-	return &cloned
-}
-
-func cloneEdgeWithLimit(edge *EdgeList, edgeLimit int) *EdgeList {
-	if edge == nil {
-		return nil
-	}
-	total := len(edge.Items)
+	total := len(ids)
 	max := total
-	if edgeLimit > 0 && edgeLimit < total {
-		max = edgeLimit
+	if relationLimit > 0 && relationLimit < total {
+		max = relationLimit
 	}
-	items := make([]string, max)
-	copy(items, edge.Items[:max])
-	cloned := EdgeList{Items: items, Truncated: edge.Truncated || total > max}
-	return &cloned
+	cloned := make([]string, max)
+	copy(cloned, ids[:max])
+	return cloned, true, truncated || total > max
 }
 
 func cloneDatabaseAttributes(attrs dto.DatabaseNodeAttributes) dto.DatabaseNodeAttributes {

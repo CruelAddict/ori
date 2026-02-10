@@ -6,23 +6,23 @@ import (
 	"github.com/crueladdict/ori/apps/ori-server/internal/model"
 )
 
-func TestCloneEdgeMapAppliesLimitAndMarksTruncated(t *testing.T) {
-	source := map[string]model.EdgeList{
-		"tables": {
-			Items: []string{"users", "orders", "events"},
-		},
+func TestCloneNodeWithEdgeLimitAppliesLimitAndMarksTruncated(t *testing.T) {
+	source := &model.DatabaseNode{}
+	source.SetTables([]string{"users", "orders", "events"})
+
+	cloned := cloneNodeWithEdgeLimit(source, 2)
+	node, ok := cloned.(*model.DatabaseNode)
+	if !ok {
+		t.Fatalf("expected *model.DatabaseNode clone")
 	}
 
-	cloned := cloneEdgeMap(source, 2)
-	edge := cloned["tables"]
-
-	if len(edge.Items) != 2 {
-		t.Fatalf("expected 2 edge items, got %d", len(edge.Items))
+	if len(node.Tables) != 2 {
+		t.Fatalf("expected 2 table IDs, got %d", len(node.Tables))
 	}
-	if !edge.Truncated {
-		t.Fatalf("expected truncated edge flag to be true")
+	if !node.TablesTruncated {
+		t.Fatalf("expected tables truncated flag to be true")
 	}
-	if len(source["tables"].Items) != 3 {
-		t.Fatalf("expected source edge items to remain unchanged")
+	if len(source.Tables) != 3 {
+		t.Fatalf("expected source table IDs to remain unchanged")
 	}
 }

@@ -33,7 +33,7 @@ func (node *DatabaseNode) ToDTO() (dto.Node, error) {
 	err := out.FromDatabaseNode(dto.DatabaseNode{
 		Id:         node.GetID(),
 		Name:       node.GetName(),
-		Edges:      cloneEdgesToDTO(node.GetEdges()),
+		Edges:      databaseRelationsToDTO(node),
 		Attributes: cloneDatabaseAttributes(node.Attributes),
 	})
 	if err != nil {
@@ -50,7 +50,7 @@ func (node *SchemaNode) ToDTO() (dto.Node, error) {
 	err := out.FromSchemaNode(dto.SchemaNode{
 		Id:         node.GetID(),
 		Name:       node.GetName(),
-		Edges:      cloneEdgesToDTO(node.GetEdges()),
+		Edges:      schemaRelationsToDTO(node),
 		Attributes: node.Attributes,
 	})
 	if err != nil {
@@ -67,7 +67,7 @@ func (node *TableNode) ToDTO() (dto.Node, error) {
 	err := out.FromTableNode(dto.TableNode{
 		Id:         node.GetID(),
 		Name:       node.GetName(),
-		Edges:      cloneEdgesToDTO(node.GetEdges()),
+		Edges:      tableRelationsToDTO(node),
 		Attributes: cloneTableAttributes(node.Attributes),
 	})
 	if err != nil {
@@ -84,7 +84,7 @@ func (node *ViewNode) ToDTO() (dto.Node, error) {
 	err := out.FromViewNode(dto.ViewNode{
 		Id:         node.GetID(),
 		Name:       node.GetName(),
-		Edges:      cloneEdgesToDTO(node.GetEdges()),
+		Edges:      viewRelationsToDTO(node),
 		Attributes: cloneViewAttributes(node.Attributes),
 	})
 	if err != nil {
@@ -101,7 +101,7 @@ func (node *ColumnNode) ToDTO() (dto.Node, error) {
 	err := out.FromColumnNode(dto.ColumnNode{
 		Id:         node.GetID(),
 		Name:       node.GetName(),
-		Edges:      cloneEdgesToDTO(node.GetEdges()),
+		Edges:      emptyRelationsToDTO(),
 		Attributes: cloneColumnAttributes(node.Attributes),
 	})
 	if err != nil {
@@ -118,7 +118,7 @@ func (node *ConstraintNode) ToDTO() (dto.Node, error) {
 	err := out.FromConstraintNode(dto.ConstraintNode{
 		Id:         node.GetID(),
 		Name:       node.GetName(),
-		Edges:      cloneEdgesToDTO(node.GetEdges()),
+		Edges:      emptyRelationsToDTO(),
 		Attributes: cloneConstraintAttributes(node.Attributes),
 	})
 	if err != nil {
@@ -135,7 +135,7 @@ func (node *IndexNode) ToDTO() (dto.Node, error) {
 	err := out.FromIndexNode(dto.IndexNode{
 		Id:         node.GetID(),
 		Name:       node.GetName(),
-		Edges:      cloneEdgesToDTO(node.GetEdges()),
+		Edges:      emptyRelationsToDTO(),
 		Attributes: cloneIndexAttributes(node.Attributes),
 	})
 	if err != nil {
@@ -152,7 +152,7 @@ func (node *TriggerNode) ToDTO() (dto.Node, error) {
 	err := out.FromTriggerNode(dto.TriggerNode{
 		Id:         node.GetID(),
 		Name:       node.GetName(),
-		Edges:      cloneEdgesToDTO(node.GetEdges()),
+		Edges:      emptyRelationsToDTO(),
 		Attributes: cloneTriggerAttributes(node.Attributes),
 	})
 	if err != nil {
@@ -161,15 +161,95 @@ func (node *TriggerNode) ToDTO() (dto.Node, error) {
 	return out, nil
 }
 
-func cloneEdgesToDTO(edges map[string]EdgeList) map[string]dto.NodeEdge {
-	if len(edges) == 0 {
-		return map[string]dto.NodeEdge{}
+func emptyRelationsToDTO() map[string]dto.NodeEdge {
+	return map[string]dto.NodeEdge{}
+}
+
+func databaseRelationsToDTO(node *DatabaseNode) map[string]dto.NodeEdge {
+	if node == nil {
+		return emptyRelationsToDTO()
 	}
-	out := make(map[string]dto.NodeEdge, len(edges))
-	for kind, edge := range edges {
-		items := make([]string, len(edge.Items))
-		copy(items, edge.Items)
-		out[kind] = dto.NodeEdge{Items: items, Truncated: edge.Truncated}
+	out := make(map[string]dto.NodeEdge, 2)
+	if node.TablesLoaded {
+		out[NodeRelationTables] = relationToDTO(node.Tables, node.TablesTruncated)
+	}
+	if node.ViewsLoaded {
+		out[NodeRelationViews] = relationToDTO(node.Views, node.ViewsTruncated)
+	}
+	if len(out) == 0 {
+		return emptyRelationsToDTO()
 	}
 	return out
+}
+
+func schemaRelationsToDTO(node *SchemaNode) map[string]dto.NodeEdge {
+	if node == nil {
+		return emptyRelationsToDTO()
+	}
+	out := make(map[string]dto.NodeEdge, 2)
+	if node.TablesLoaded {
+		out[NodeRelationTables] = relationToDTO(node.Tables, node.TablesTruncated)
+	}
+	if node.ViewsLoaded {
+		out[NodeRelationViews] = relationToDTO(node.Views, node.ViewsTruncated)
+	}
+	if len(out) == 0 {
+		return emptyRelationsToDTO()
+	}
+	return out
+}
+
+func tableRelationsToDTO(node *TableNode) map[string]dto.NodeEdge {
+	if node == nil {
+		return emptyRelationsToDTO()
+	}
+	out := make(map[string]dto.NodeEdge, 5)
+	if node.PartitionsLoaded {
+		out[NodeRelationPartitions] = relationToDTO(node.Partitions, node.PartitionsTruncated)
+	}
+	if node.ColumnsLoaded {
+		out[NodeRelationColumns] = relationToDTO(node.Columns, node.ColumnsTruncated)
+	}
+	if node.ConstraintsLoaded {
+		out[NodeRelationConstraints] = relationToDTO(node.Constraints, node.ConstraintsTruncated)
+	}
+	if node.IndexesLoaded {
+		out[NodeRelationIndexes] = relationToDTO(node.Indexes, node.IndexesTruncated)
+	}
+	if node.TriggersLoaded {
+		out[NodeRelationTriggers] = relationToDTO(node.Triggers, node.TriggersTruncated)
+	}
+	if len(out) == 0 {
+		return emptyRelationsToDTO()
+	}
+	return out
+}
+
+func viewRelationsToDTO(node *ViewNode) map[string]dto.NodeEdge {
+	if node == nil {
+		return emptyRelationsToDTO()
+	}
+	out := make(map[string]dto.NodeEdge, 4)
+	if node.ColumnsLoaded {
+		out[NodeRelationColumns] = relationToDTO(node.Columns, node.ColumnsTruncated)
+	}
+	if node.ConstraintsLoaded {
+		out[NodeRelationConstraints] = relationToDTO(node.Constraints, node.ConstraintsTruncated)
+	}
+	if node.IndexesLoaded {
+		out[NodeRelationIndexes] = relationToDTO(node.Indexes, node.IndexesTruncated)
+	}
+	if node.TriggersLoaded {
+		out[NodeRelationTriggers] = relationToDTO(node.Triggers, node.TriggersTruncated)
+	}
+	if len(out) == 0 {
+		return emptyRelationsToDTO()
+	}
+	return out
+}
+
+func relationToDTO(ids []string, truncated bool) dto.NodeEdge {
+	items := make([]string, len(ids))
+	copy(items, ids)
+	return dto.NodeEdge{Items: items, Truncated: truncated}
 }

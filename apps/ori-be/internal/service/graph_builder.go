@@ -157,9 +157,9 @@ func (b *GraphBuilder) BuildRelationNode(scope model.ScopeID, rel model.Relation
 }
 
 // BuildColumnNodes creates nodes for table columns.
-func (b *GraphBuilder) BuildColumnNodes(scope model.ScopeID, relation string, columns []model.Column) ([]model.Node, model.EdgeList) {
+func (b *GraphBuilder) BuildColumnNodes(scope model.ScopeID, relation string, columns []model.Column) ([]model.Node, []string) {
 	nodes := make([]model.Node, 0, len(columns))
-	edge := model.EdgeList{Items: make([]string, 0, len(columns))}
+	columnIDs := make([]string, 0, len(columns))
 
 	for _, col := range columns {
 		attrs := dto.ColumnNodeAttributes{
@@ -198,14 +198,14 @@ func (b *GraphBuilder) BuildColumnNodes(scope model.ScopeID, relation string, co
 			Attributes: attrs,
 		}
 		nodes = append(nodes, node)
-		edge.Items = append(edge.Items, node.GetID())
+		columnIDs = append(columnIDs, node.GetID())
 	}
 
-	return nodes, edge
+	return nodes, columnIDs
 }
 
 // BuildConstraintNodes creates nodes for table constraints.
-func (b *GraphBuilder) BuildConstraintNodes(scope model.ScopeID, relation string, constraints []model.Constraint) ([]model.Node, model.EdgeList) {
+func (b *GraphBuilder) BuildConstraintNodes(scope model.ScopeID, relation string, constraints []model.Constraint) ([]model.Node, []string) {
 	sorted := make([]model.Constraint, len(constraints))
 	copy(sorted, constraints)
 	sort.Slice(sorted, func(i, j int) bool {
@@ -216,7 +216,7 @@ func (b *GraphBuilder) BuildConstraintNodes(scope model.ScopeID, relation string
 	})
 
 	nodes := make([]model.Node, 0, len(sorted))
-	edge := model.EdgeList{Items: make([]string, 0, len(sorted))}
+	constraintIDs := make([]string, 0, len(sorted))
 
 	for _, c := range sorted {
 		attrs := dto.ConstraintNodeAttributes{
@@ -264,14 +264,14 @@ func (b *GraphBuilder) BuildConstraintNodes(scope model.ScopeID, relation string
 			Attributes: attrs,
 		}
 		nodes = append(nodes, node)
-		edge.Items = append(edge.Items, node.GetID())
+		constraintIDs = append(constraintIDs, node.GetID())
 	}
 
-	return nodes, edge
+	return nodes, constraintIDs
 }
 
 // BuildIndexNodes creates nodes for table/view indexes.
-func (b *GraphBuilder) BuildIndexNodes(scope model.ScopeID, relation string, indexes []model.Index) ([]model.Node, model.EdgeList) {
+func (b *GraphBuilder) BuildIndexNodes(scope model.ScopeID, relation string, indexes []model.Index) ([]model.Node, []string) {
 	sorted := make([]model.Index, len(indexes))
 	copy(sorted, indexes)
 	sort.Slice(sorted, func(i, j int) bool {
@@ -279,7 +279,7 @@ func (b *GraphBuilder) BuildIndexNodes(scope model.ScopeID, relation string, ind
 	})
 
 	nodes := make([]model.Node, 0, len(sorted))
-	edge := model.EdgeList{Items: make([]string, 0, len(sorted))}
+	indexIDs := make([]string, 0, len(sorted))
 
 	for _, idx := range sorted {
 		attrs := dto.IndexNodeAttributes{
@@ -316,14 +316,14 @@ func (b *GraphBuilder) BuildIndexNodes(scope model.ScopeID, relation string, ind
 			Attributes: attrs,
 		}
 		nodes = append(nodes, node)
-		edge.Items = append(edge.Items, node.GetID())
+		indexIDs = append(indexIDs, node.GetID())
 	}
 
-	return nodes, edge
+	return nodes, indexIDs
 }
 
 // BuildTriggerNodes creates nodes for table/view triggers.
-func (b *GraphBuilder) BuildTriggerNodes(scope model.ScopeID, relation string, triggers []model.Trigger) ([]model.Node, model.EdgeList) {
+func (b *GraphBuilder) BuildTriggerNodes(scope model.ScopeID, relation string, triggers []model.Trigger) ([]model.Node, []string) {
 	sorted := make([]model.Trigger, len(triggers))
 	copy(sorted, triggers)
 	sort.Slice(sorted, func(i, j int) bool {
@@ -331,7 +331,7 @@ func (b *GraphBuilder) BuildTriggerNodes(scope model.ScopeID, relation string, t
 	})
 
 	nodes := make([]model.Node, 0, len(sorted))
-	edge := model.EdgeList{Items: make([]string, 0, len(sorted))}
+	triggerIDs := make([]string, 0, len(sorted))
 
 	for _, trg := range sorted {
 		attrs := dto.TriggerNodeAttributes{
@@ -368,10 +368,10 @@ func (b *GraphBuilder) BuildTriggerNodes(scope model.ScopeID, relation string, t
 			Attributes: attrs,
 		}
 		nodes = append(nodes, node)
-		edge.Items = append(edge.Items, node.GetID())
+		triggerIDs = append(triggerIDs, node.GetID())
 	}
 
-	return nodes, edge
+	return nodes, triggerIDs
 }
 
 func constraintTypeOrder(t string) int {

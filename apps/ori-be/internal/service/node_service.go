@@ -134,8 +134,8 @@ func (ns *NodeService) hydrateScope(ctx context.Context, handle *ConnectionHandl
 	builder := NewGraphBuilder(handle)
 
 	childNodes := []model.Node{node}
-	tableEdge := model.EdgeList{Items: make([]string, 0)}
-	viewEdge := model.EdgeList{Items: make([]string, 0)}
+	tableIDs := make([]string, 0)
+	viewIDs := make([]string, 0)
 	partitionEdges := make(map[string][]string)
 	relationNodes := make(map[string]model.Node, len(relations))
 
@@ -157,10 +157,10 @@ func (ns *NodeService) hydrateScope(ctx context.Context, handle *ConnectionHandl
 				parentID := builder.RelationNodeID(parentScope, parentRel)
 				partitionEdges[parentID] = append(partitionEdges[parentID], relNode.GetID())
 			} else {
-				tableEdge.Items = append(tableEdge.Items, relNode.GetID())
+				tableIDs = append(tableIDs, relNode.GetID())
 			}
 		} else {
-			viewEdge.Items = append(viewEdge.Items, relNode.GetID())
+			viewIDs = append(viewIDs, relNode.GetID())
 		}
 	}
 
@@ -173,17 +173,17 @@ func (ns *NodeService) hydrateScope(ctx context.Context, handle *ConnectionHandl
 		if !ok {
 			return nil, fmt.Errorf("partition parent %s is not a table node", parentID)
 		}
-		parentTable.SetPartitions(model.EdgeList{Items: childIDs})
+		parentTable.SetPartitions(childIDs)
 	}
 
 	switch typed := node.(type) {
 	case *model.DatabaseNode:
-		typed.SetTables(tableEdge)
-		typed.SetViews(viewEdge)
+		typed.SetTables(tableIDs)
+		typed.SetViews(viewIDs)
 		typed.SetHydrated(true)
 	case *model.SchemaNode:
-		typed.SetTables(tableEdge)
-		typed.SetViews(viewEdge)
+		typed.SetTables(tableIDs)
+		typed.SetViews(viewIDs)
 		typed.SetHydrated(true)
 	default:
 		return nil, fmt.Errorf("node %s cannot hold tables/views edges", node.GetID())
@@ -233,23 +233,23 @@ func (ns *NodeService) hydrateRelation(ctx context.Context, handle *ConnectionHa
 
 	builder := NewGraphBuilder(handle)
 
-	columnNodes, columnEdge := builder.BuildColumnNodes(scope, relation, columns)
-	constraintNodes, constraintEdge := builder.BuildConstraintNodes(scope, relation, constraints)
-	indexNodes, indexEdge := builder.BuildIndexNodes(scope, relation, indexes)
-	triggerNodes, triggerEdge := builder.BuildTriggerNodes(scope, relation, triggers)
+	columnNodes, columnIDs := builder.BuildColumnNodes(scope, relation, columns)
+	constraintNodes, constraintIDs := builder.BuildConstraintNodes(scope, relation, constraints)
+	indexNodes, indexIDs := builder.BuildIndexNodes(scope, relation, indexes)
+	triggerNodes, triggerIDs := builder.BuildTriggerNodes(scope, relation, triggers)
 
 	switch typed := node.(type) {
 	case *model.TableNode:
-		typed.SetColumns(columnEdge)
-		typed.SetConstraints(constraintEdge)
-		typed.SetIndexes(indexEdge)
-		typed.SetTriggers(triggerEdge)
+		typed.SetColumns(columnIDs)
+		typed.SetConstraints(constraintIDs)
+		typed.SetIndexes(indexIDs)
+		typed.SetTriggers(triggerIDs)
 		typed.SetHydrated(true)
 	case *model.ViewNode:
-		typed.SetColumns(columnEdge)
-		typed.SetConstraints(constraintEdge)
-		typed.SetIndexes(indexEdge)
-		typed.SetTriggers(triggerEdge)
+		typed.SetColumns(columnIDs)
+		typed.SetConstraints(constraintIDs)
+		typed.SetIndexes(indexIDs)
+		typed.SetTriggers(triggerIDs)
 		typed.SetHydrated(true)
 	default:
 		return nil, fmt.Errorf("node %s cannot hold relation child edges", node.GetID())
@@ -403,24 +403,6 @@ func cloneNodeWithEdgeLimit(src model.Node, edgeLimit int) model.Node {
 		return nil
 	}
 	return src.Clone(edgeLimit)
-}
-
-func cloneEdgeMap(edges map[string]model.EdgeList, edgeLimit int) map[string]model.EdgeList {
-	if len(edges) == 0 {
-		return map[string]model.EdgeList{}
-	}
-	out := make(map[string]model.EdgeList, len(edges))
-	for kind, edge := range edges {
-		total := len(edge.Items)
-		max := total
-		if edgeLimit > 0 && edgeLimit < total {
-			max = edgeLimit
-		}
-		items := make([]string, max)
-		copy(items, edge.Items[:max])
-		out[kind] = model.EdgeList{Items: items, Truncated: edge.Truncated || total > max}
-	}
-	return out
 }
 
 func (ns *NodeService) EdgeLimit() int {
