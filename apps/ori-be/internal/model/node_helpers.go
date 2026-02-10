@@ -11,20 +11,10 @@ func cloneScope(scope ScopeID) ScopeID {
 	return cloned
 }
 
-func cloneStringSlice(src []string) []string {
-	copyOf := make([]string, len(src))
-	copy(copyOf, src)
-	return copyOf
-}
-
 func cloneRelationIDs(ids []string) []string {
 	cloned := make([]string, len(ids))
 	copy(cloned, ids)
 	return cloned
-}
-
-func emptyRelationsToDTO() map[string]dto.NodeEdge {
-	return map[string]dto.NodeEdge{}
 }
 
 func relationToDTO(ids []string) dto.NodeEdge {

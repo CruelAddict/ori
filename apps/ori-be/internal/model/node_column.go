@@ -29,7 +29,7 @@ func (node *ColumnNode) ToDTO() (dto.Node, error) {
 	err := out.FromColumnNode(dto.ColumnNode{
 		Id:         node.GetID(),
 		Name:       node.GetName(),
-		Edges:      emptyRelationsToDTO(),
+		Edges:      map[string]dto.NodeEdge{},
 		Attributes: cloneColumnAttributes(node.Attributes),
 	})
 	if err != nil {

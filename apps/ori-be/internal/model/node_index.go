@@ -29,7 +29,7 @@ func (node *IndexNode) ToDTO() (dto.Node, error) {
 	err := out.FromIndexNode(dto.IndexNode{
 		Id:         node.GetID(),
 		Name:       node.GetName(),
-		Edges:      emptyRelationsToDTO(),
+		Edges:      map[string]dto.NodeEdge{},
 		Attributes: cloneIndexAttributes(node.Attributes),
 	})
 	if err != nil {

@@ -25,20 +25,6 @@ func (n *DatabaseNode) Clone() Node {
 	return &clone
 }
 
-func (n *DatabaseNode) SetTables(tableIDs []string) {
-	if n == nil {
-		return
-	}
-	n.Tables = cloneStringSlice(tableIDs)
-}
-
-func (n *DatabaseNode) SetViews(viewIDs []string) {
-	if n == nil {
-		return
-	}
-	n.Views = cloneStringSlice(viewIDs)
-}
-
 func (node *DatabaseNode) ToDTO() (dto.Node, error) {
 	if node == nil {
 		return dto.Node{}, fmt.Errorf("database node is nil")
@@ -58,17 +44,14 @@ func (node *DatabaseNode) ToDTO() (dto.Node, error) {
 
 func databaseRelationsToDTO(node *DatabaseNode) map[string]dto.NodeEdge {
 	if node == nil {
-		return emptyRelationsToDTO()
+		return map[string]dto.NodeEdge{}
 	}
-	out := make(map[string]dto.NodeEdge, 2)
+	out := map[string]dto.NodeEdge{}
 	if node.IsHydrated() || len(node.Tables) > 0 {
 		out[NodeRelationTables] = relationToDTO(node.Tables)
 	}
 	if node.IsHydrated() || len(node.Views) > 0 {
 		out[NodeRelationViews] = relationToDTO(node.Views)
-	}
-	if len(out) == 0 {
-		return emptyRelationsToDTO()
 	}
 	return out
 }

@@ -29,7 +29,7 @@ func (node *TriggerNode) ToDTO() (dto.Node, error) {
 	err := out.FromTriggerNode(dto.TriggerNode{
 		Id:         node.GetID(),
 		Name:       node.GetName(),
-		Edges:      emptyRelationsToDTO(),
+		Edges:      map[string]dto.NodeEdge{},
 		Attributes: cloneTriggerAttributes(node.Attributes),
 	})
 	if err != nil {

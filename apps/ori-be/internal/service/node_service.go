@@ -170,17 +170,17 @@ func (ns *NodeService) hydrateScope(ctx context.Context, handle *ConnectionHandl
 		if !ok {
 			return nil, fmt.Errorf("partition parent %s is not a table node", parentID)
 		}
-		parentTable.SetPartitions(childIDs)
+		parentTable.Partitions = childIDs
 	}
 
 	switch typed := node.(type) {
 	case *model.DatabaseNode:
-		typed.SetTables(tableIDs)
-		typed.SetViews(viewIDs)
+		typed.Tables = tableIDs
+		typed.Views = viewIDs
 		typed.SetHydrated(true)
 	case *model.SchemaNode:
-		typed.SetTables(tableIDs)
-		typed.SetViews(viewIDs)
+		typed.Tables = tableIDs
+		typed.Views = viewIDs
 		typed.SetHydrated(true)
 	default:
 		return nil, fmt.Errorf("node %s cannot hold tables/views edges", node.GetID())
@@ -237,16 +237,16 @@ func (ns *NodeService) hydrateRelation(ctx context.Context, handle *ConnectionHa
 
 	switch typed := node.(type) {
 	case *model.TableNode:
-		typed.SetColumns(columnIDs)
-		typed.SetConstraints(constraintIDs)
-		typed.SetIndexes(indexIDs)
-		typed.SetTriggers(triggerIDs)
+		typed.Columns = columnIDs
+		typed.Constraints = constraintIDs
+		typed.Indexes = indexIDs
+		typed.Triggers = triggerIDs
 		typed.SetHydrated(true)
 	case *model.ViewNode:
-		typed.SetColumns(columnIDs)
-		typed.SetConstraints(constraintIDs)
-		typed.SetIndexes(indexIDs)
-		typed.SetTriggers(triggerIDs)
+		typed.Columns = columnIDs
+		typed.Constraints = constraintIDs
+		typed.Indexes = indexIDs
+		typed.Triggers = triggerIDs
 		typed.SetHydrated(true)
 	default:
 		return nil, fmt.Errorf("node %s cannot hold relation child edges", node.GetID())

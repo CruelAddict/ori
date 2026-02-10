@@ -29,7 +29,7 @@ func (node *ConstraintNode) ToDTO() (dto.Node, error) {
 	err := out.FromConstraintNode(dto.ConstraintNode{
 		Id:         node.GetID(),
 		Name:       node.GetName(),
-		Edges:      emptyRelationsToDTO(),
+		Edges:      map[string]dto.NodeEdge{},
 		Attributes: cloneConstraintAttributes(node.Attributes),
 	})
 	if err != nil {

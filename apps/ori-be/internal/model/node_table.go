@@ -31,41 +31,6 @@ func (n *TableNode) Clone() Node {
 	return &clone
 }
 
-func (n *TableNode) SetPartitions(partitionIDs []string) {
-	if n == nil {
-		return
-	}
-	n.Partitions = cloneStringSlice(partitionIDs)
-}
-
-func (n *TableNode) SetColumns(columnIDs []string) {
-	if n == nil {
-		return
-	}
-	n.Columns = cloneStringSlice(columnIDs)
-}
-
-func (n *TableNode) SetConstraints(constraintIDs []string) {
-	if n == nil {
-		return
-	}
-	n.Constraints = cloneStringSlice(constraintIDs)
-}
-
-func (n *TableNode) SetIndexes(indexIDs []string) {
-	if n == nil {
-		return
-	}
-	n.Indexes = cloneStringSlice(indexIDs)
-}
-
-func (n *TableNode) SetTriggers(triggerIDs []string) {
-	if n == nil {
-		return
-	}
-	n.Triggers = cloneStringSlice(triggerIDs)
-}
-
 func (n *TableNode) RelationName() string {
 	if n == nil {
 		return ""
@@ -92,9 +57,9 @@ func (node *TableNode) ToDTO() (dto.Node, error) {
 
 func tableRelationsToDTO(node *TableNode) map[string]dto.NodeEdge {
 	if node == nil {
-		return emptyRelationsToDTO()
+		return map[string]dto.NodeEdge{}
 	}
-	out := make(map[string]dto.NodeEdge, 5)
+	out := map[string]dto.NodeEdge{}
 	if len(node.Partitions) > 0 {
 		out[NodeRelationPartitions] = relationToDTO(node.Partitions)
 	}
@@ -109,9 +74,6 @@ func tableRelationsToDTO(node *TableNode) map[string]dto.NodeEdge {
 	}
 	if node.IsHydrated() || len(node.Triggers) > 0 {
 		out[NodeRelationTriggers] = relationToDTO(node.Triggers)
-	}
-	if len(out) == 0 {
-		return emptyRelationsToDTO()
 	}
 	return out
 }
