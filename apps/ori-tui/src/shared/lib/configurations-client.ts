@@ -5,28 +5,26 @@ import axios, { type AxiosInstance } from "axios"
 import {
   ColumnNode,
   type ConfigurationsResponse,
-  type ConnectionResult as ContractConnectionResult,
   ConstraintNode,
+  type ConnectionResult as ContractConnectionResult,
   DatabaseNode,
+  type ErrorPayload,
   IndexNode,
   type Node,
-  SchemaNode,
-  TableNode,
-  TriggerNode,
-  ViewNode,
-  type ErrorPayload,
   type NodesResponse,
   OpenAPI,
   type OpenAPIConfig,
   type QueryExecRequest,
   type QueryExecResponse,
   type QueryResultResponse,
+  SchemaNode,
+  TableNode,
+  TriggerNode,
+  ViewNode,
 } from "contract"
 import type { ApiRequestOptions } from "contract/core/ApiRequestOptions"
 import { request as contractRequest } from "contract/core/request"
 import type { Logger } from "pino"
-
-export type ClientMode = "sdk" | "stub"
 
 export type ConnectResult = {
   result: "success" | "fail" | "connecting"
@@ -81,7 +79,6 @@ export type OriClient = {
 }
 
 export type CreateClientOptions = {
-  mode: ClientMode
   host?: string
   port?: number
   socketPath?: string
@@ -242,7 +239,7 @@ class RestOriClient implements OriClient {
       baseURL: this.apiConfig.BASE,
     })
     if (isUnixOptions(this.options)) {
-      ; (client.defaults as typeof client.defaults & { socketPath?: string }).socketPath = this.options.socketPath
+      ;(client.defaults as typeof client.defaults & { socketPath?: string }).socketPath = this.options.socketPath
     }
     return client
   }
@@ -267,91 +264,7 @@ class RestOriClient implements OriClient {
   }
 }
 
-class StubOriClient implements OriClient {
-  async listConfigurations(): Promise<Configuration[]> {
-    return STUB_CONFIGURATIONS
-  }
-
-  async connect(): Promise<ConnectResult> {
-    return { result: "success" }
-  }
-
-  async getNodes(configurationName: string, nodeIDs?: string[]): Promise<Node[]> {
-    const graph = ensureStubGraph(configurationName)
-    if (!nodeIDs || nodeIDs.length === 0) {
-      const root = graph.get(rootNodeId(configurationName))
-      return root ? [root] : []
-    }
-    const nodes: Node[] = []
-    for (const id of nodeIDs) {
-      const node = graph.get(id)
-      if (node) {
-        nodes.push(node)
-      }
-    }
-    return nodes
-  }
-
-  async queryExec(
-    _configurationName: string,
-    jobId: string,
-    _query: string,
-    _params?: Record<string, unknown>,
-  ): Promise<QueryExecResult> {
-    return {
-      jobId,
-      status: "running",
-    }
-  }
-
-  async queryGetResult(): Promise<QueryResultView> {
-    return {
-      columns: [
-        { name: "id", type: "integer" },
-        { name: "name", type: "text" },
-      ],
-      rows: [
-        [1, "Sample Row 1"],
-        [2, "Sample Row 2"],
-      ],
-      rowCount: 2,
-      truncated: false,
-    }
-  }
-
-  async queryCancel(): Promise<void> {
-    return
-  }
-
-  openEventStream(): () => void {
-    return () => undefined
-  }
-}
-
-const STUB_CONFIGURATIONS: Configuration[] = [
-  {
-    name: "Local Demo",
-    type: "sqlite",
-    host: "127.0.0.1",
-    port: 0,
-    database: "demo.db",
-    username: "demo",
-  },
-  {
-    name: "Analytics Warehouse",
-    type: "postgres",
-    host: "warehouse.local",
-    port: 5432,
-    database: "analytics",
-    username: "analyst",
-  },
-]
-
 export function createOriClient(options: CreateClientOptions): OriClient {
-  if (options.mode === "stub") {
-    return new StubOriClient()
-  }
-
   if (options.socketPath) {
     return new RestOriClient({ socketPath: options.socketPath, logger: options.logger })
   }
@@ -371,124 +284,4 @@ function isErrorPayload(value: unknown): value is ErrorPayload {
 
 function mapNode(node: Node): Node {
   return node
-}
-
-function rootNodeId(configurationName: string): string {
-  return `${slugify(configurationName)}-database`
-}
-
-const stubGraphs = new Map<string, Map<string, Node>>()
-
-// TODO: remove this garbage
-function ensureStubGraph(configurationName: string): Map<string, Node> {
-  const existing = stubGraphs.get(configurationName)
-  if (existing) {
-    return existing
-  }
-
-  const graph = buildStubGraph(configurationName)
-  stubGraphs.set(configurationName, graph)
-  return graph
-}
-
-function buildStubGraph(configurationName: string): Map<string, Node> {
-  const connectionSlug = slugify(configurationName)
-  const databaseId = `${connectionSlug}-database`
-  const tableId = `${connectionSlug}-table`
-  const columnId = `${connectionSlug}-column`
-  const indexId = `${connectionSlug}-index`
-  const triggerId = `${connectionSlug}-trigger`
-  const databaseName = `${connectionSlug}_db`
-
-  const databaseNode: Node = {
-    id: databaseId,
-    type: NodeType.DATABASE,
-    name: databaseName,
-    attributes: {
-      connection: configurationName,
-      engine: "sqlite",
-    },
-    edges: {
-      tables: { items: [tableId], truncated: false },
-    },
-  }
-
-  const tableNode: Node = {
-    id: tableId,
-    type: NodeType.TABLE,
-    name: "public.sample",
-    attributes: {
-      connection: configurationName,
-      table: "sample",
-      tableType: "table",
-    },
-    edges: {
-      columns: { items: [columnId], truncated: false },
-      indexes: { items: [indexId], truncated: false },
-      triggers: { items: [triggerId], truncated: false },
-    },
-  }
-
-  const columnNode: Node = {
-    id: columnId,
-    type: NodeType.COLUMN,
-    name: "id",
-    attributes: {
-      connection: configurationName,
-      table: "sample",
-      column: "id",
-      ordinal: 1,
-      dataType: "integer",
-      notNull: true,
-      primaryKeyPosition: 1,
-    },
-    edges: {},
-  }
-
-  const indexNode: Node = {
-    id: indexId,
-    type: NodeType.INDEX,
-    name: "sample_idx",
-    attributes: {
-      connection: configurationName,
-      table: "sample",
-      indexName: "sample_idx",
-      unique: true,
-      primary: false,
-      columns: ["id"],
-    },
-    edges: {},
-  }
-
-  const triggerNode: Node = {
-    id: triggerId,
-    type: NodeType.TRIGGER,
-    name: "sample_trigger",
-    attributes: {
-      connection: configurationName,
-      table: "sample",
-      triggerName: "sample_trigger",
-      timing: "BEFORE",
-      events: ["INSERT"],
-      orientation: "ROW",
-    },
-    edges: {},
-  }
-
-  return new Map<string, Node>([
-    [databaseNode.id, databaseNode],
-    [tableNode.id, tableNode],
-    [columnNode.id, columnNode],
-    [indexNode.id, indexNode],
-    [triggerNode.id, triggerNode],
-  ])
-}
-
-function slugify(input: string): string {
-  const normalized = input
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-  return normalized || "connection"
 }

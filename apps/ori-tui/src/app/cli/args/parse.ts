@@ -1,4 +1,3 @@
-import type { ClientMode } from "@shared/lib/configurations-client"
 import type { LogLevel } from "@shared/lib/logger"
 import type { ParsedArgs } from "./types"
 
@@ -20,19 +19,11 @@ function normalizeLogLevel(value?: string, def: LogLevel = "warn"): LogLevel {
   return def
 }
 
-function normalizeMode(value?: string, def: ClientMode = "sdk"): ClientMode {
-  if (!value) {
-    return def
-  }
-  return value === "stub" ? "stub" : def
-}
-
 export function parseArgs(args: string[]): ParsedArgs {
   let configPath: string | undefined
   let backendPath: string | undefined
   let socketPath: string | undefined
   let serverAddress: string | undefined
-  let mode: ClientMode = "sdk"
   let logLevel: LogLevel = "warn"
   let logLevelSet = false
   let theme: string | undefined
@@ -107,18 +98,6 @@ export function parseArgs(args: string[]): ParsedArgs {
         }
       },
     },
-    "--mode": {
-      requiresValue: true,
-      handle: (v) => {
-        mode = normalizeMode(v, mode)
-      },
-    },
-    "-mode": {
-      requiresValue: true,
-      handle: (v) => {
-        mode = normalizeMode(v, mode)
-      },
-    },
     "--log-level": {
       requiresValue: true,
       handle: (v) => {
@@ -147,18 +126,6 @@ export function parseArgs(args: string[]): ParsedArgs {
         }
       },
     },
-    "--stub": {
-      requiresValue: false,
-      handle: () => {
-        mode = "stub"
-      },
-    },
-    "--sdk": {
-      requiresValue: false,
-      handle: () => {
-        mode = "sdk"
-      },
-    },
   }
 
   for (let index = 0; index < args.length; index += 1) {
@@ -181,7 +148,6 @@ export function parseArgs(args: string[]): ParsedArgs {
     logLevelSet,
     socketPath,
     serverAddress,
-    mode,
     theme,
   }
 }

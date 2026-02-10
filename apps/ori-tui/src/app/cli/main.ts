@@ -91,7 +91,6 @@ export async function main(argv = process.argv.slice(2)) {
 
   installShutdownHooks(backendHandle)
   startTui({
-    mode: parsed.mode,
     socketPath,
     host,
     port,

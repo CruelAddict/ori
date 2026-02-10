@@ -1,4 +1,3 @@
-import type { ClientMode } from "@shared/lib/configurations-client"
 import type { LogLevel } from "@shared/lib/logger"
 
 export type ParsedArgs = {
@@ -8,6 +7,5 @@ export type ParsedArgs = {
   logLevelSet: boolean
   socketPath?: string
   serverAddress?: string
-  mode: ClientMode
   theme?: string
 }

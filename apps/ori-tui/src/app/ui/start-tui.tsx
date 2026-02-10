@@ -9,7 +9,6 @@ import { RouteOutlet } from "@app/routes/RouteOutlet"
 import { useRouteNavigation } from "@app/routes/router"
 import { render, useRenderer } from "@opentui/solid"
 import { copyTextToClipboard, getSelectionOverrideText } from "@shared/lib/clipboard"
-import type { ClientMode } from "@shared/lib/configurations-client"
 import type { LogLevel } from "@shared/lib/logger"
 import { KeymapProvider, KeyScope, SYSTEM_LAYER } from "@src/core/services/key-scopes"
 import { ConfigurationEntityProvider } from "@src/entities/configuration/providers/configuration-entity-provider"
@@ -28,7 +27,6 @@ const AUTO_OPEN_WELCOME_PICKER = process.env.ORI_AUTO_OPEN_PICKER !== "0"
 type RendererHandle = ReturnType<typeof render>
 
 type StartTuiOptions = {
-  mode: ClientMode
   socketPath?: string
   host?: string
   port?: number
@@ -170,16 +168,13 @@ export function startTui(options: StartTuiOptions): RendererHandle {
       transport,
       host: transport === "tcp" ? host : undefined,
       port: transport === "tcp" ? port : undefined,
-      mode: options.mode,
       socketPath: options.socketPath,
       theme: options.theme,
     },
     "tui started",
   )
 
-  const clientOptions = options.socketPath
-    ? { mode: options.mode, socketPath: options.socketPath }
-    : { mode: options.mode, host, port }
+  const clientOptions = options.socketPath ? { socketPath: options.socketPath } : { host, port }
 
   return render(
     () => (
