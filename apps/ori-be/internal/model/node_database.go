@@ -47,11 +47,7 @@ func databaseRelationsToDTO(node *DatabaseNode) map[string]dto.NodeEdge {
 		return map[string]dto.NodeEdge{}
 	}
 	out := map[string]dto.NodeEdge{}
-	if node.IsHydrated() || len(node.Tables) > 0 {
-		out[NodeRelationTables] = relationToDTO(node.Tables)
-	}
-	if node.IsHydrated() || len(node.Views) > 0 {
-		out[NodeRelationViews] = relationToDTO(node.Views)
-	}
+	out[NodeRelationTables] = relationToDTO(node.Tables)
+	out[NodeRelationViews] = relationToDTO(node.Views)
 	return out
 }

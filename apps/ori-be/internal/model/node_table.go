@@ -60,20 +60,10 @@ func tableRelationsToDTO(node *TableNode) map[string]dto.NodeEdge {
 		return map[string]dto.NodeEdge{}
 	}
 	out := map[string]dto.NodeEdge{}
-	if len(node.Partitions) > 0 {
-		out[NodeRelationPartitions] = relationToDTO(node.Partitions)
-	}
-	if node.IsHydrated() || len(node.Columns) > 0 {
-		out[NodeRelationColumns] = relationToDTO(node.Columns)
-	}
-	if node.IsHydrated() || len(node.Constraints) > 0 {
-		out[NodeRelationConstraints] = relationToDTO(node.Constraints)
-	}
-	if node.IsHydrated() || len(node.Indexes) > 0 {
-		out[NodeRelationIndexes] = relationToDTO(node.Indexes)
-	}
-	if node.IsHydrated() || len(node.Triggers) > 0 {
-		out[NodeRelationTriggers] = relationToDTO(node.Triggers)
-	}
+	out[NodeRelationPartitions] = relationToDTO(node.Partitions)
+	out[NodeRelationColumns] = relationToDTO(node.Columns)
+	out[NodeRelationConstraints] = relationToDTO(node.Constraints)
+	out[NodeRelationIndexes] = relationToDTO(node.Indexes)
+	out[NodeRelationTriggers] = relationToDTO(node.Triggers)
 	return out
 }
