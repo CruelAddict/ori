@@ -46,13 +46,12 @@ const buildConfig: BunBuildConfig = {
 const result = await Bun.build(buildConfig)
 
 if (result.success) {
-  console.log("✓ Build complete: bin/ori")
   // Copy SQL assets to bunfs root so TreeSitterClient’s bunfs normalization finds them.
   const targetWasm = path.join(dir, "tree-sitter-sql.wasm")
   const targetHighlights = path.join(dir, "highlights.scm")
   await Bun.write(targetWasm, await Bun.file("./src/assets/tree-sitter-sql.wasm").arrayBuffer())
   await Bun.write(targetHighlights, await Bun.file("./src/assets/highlights.scm").text())
-  console.log("✓ Copied SQL assets to bunfs root flattening targets")
+  console.log("✓ Build complete: bin/ori")
 } else {
   console.error("✗ Build failed")
   result.logs?.forEach((log) => {

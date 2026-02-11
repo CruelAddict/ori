@@ -11,9 +11,12 @@ make install
 
 This will:
 - Build all components
-- Install `ori` to `/usr/local/bin/`
-- Install backend `ori-be` to `/usr/local/libexec/`
-- Create empty config file at `~/.config/ori/config.example.yaml`
+- Install `ori` using a user-local managed layout under `~/.ori/`
+- Place versioned binaries in `~/.ori/releases/<release-id>/` and switch `~/.ori/current` atomically
+- Create launcher at `~/.ori/bin/ori`
+- Prune old releases automatically if they are no longer in use
+- Add `~/.ori/bin` to your shell PATH (unless `--no-modify-path` is used)
+- Create example config file at `~/.config/ori/config.example.yaml`
 
 ## Usage
 
