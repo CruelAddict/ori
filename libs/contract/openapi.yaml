@@ -126,6 +126,36 @@ paths:
                 $ref: '#/components/schemas/ErrorPayload'
         default:
           $ref: '#/components/responses/ErrorResponse'
+  /queries/{jobId}/cancel:
+    post:
+      summary: Cancel a running query job
+      operationId: cancelQuery
+      parameters:
+        - name: jobId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '202':
+          description: Cancel request accepted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                required:
+                  - status
+        '404':
+          description: Job not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorPayload'
+        default:
+          $ref: '#/components/responses/ErrorResponse'
   /queries/{jobId}/result:
     get:
       summary: Retrieve a previously stored query result view

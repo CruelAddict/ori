@@ -6,8 +6,5 @@
   "module": "./index.ts",
   "types": "./index.ts",
   "sideEffects": false,
-  "dependencies": {
-    "axios": "^1.7.7",
-    "form-data": "^4.0.0"
-  }
+  "dependencies": {}
 }

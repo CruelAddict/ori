@@ -8,7 +8,6 @@
     "build": "./build.ts",
     "lint": "bunx biome check --reporter summary",
     "lint:fix": "bunx biome check --write",
-    "postinstall": "patch -p1 -N -r- < patches/follow-redirects+1.15.11.patch || true",
     "test": "bun test",
     "test:run": "bun test",
     "test:watch": "bun test --watch",
@@ -24,7 +23,6 @@
   "dependencies": {
     "@opentui/core": "0.1.77",
     "@opentui/solid": "0.1.77",
-    "axios": "^1.7.7",
     "contract": "file:../../libs/contract/typescript",
     "fuzzysort": "^3.1.0",
     "pino": "^9.5.0",

@@ -2,8 +2,9 @@ import { type ChildProcess, type StdioOptions, spawn } from "node:child_process"
 import fs from "node:fs/promises"
 import path from "node:path"
 import type { LogLevel } from "@shared/lib/logger"
-import axios from "axios"
 import type { Logger } from "pino"
+
+type BunRequestInit = RequestInit & { unix?: string }
 
 export type BackendHandle = {
   socketPath: string
@@ -13,24 +14,15 @@ export type BackendHandle = {
 }
 
 export async function healthcheckUnix(socketPath: string, timeoutMs: number): Promise<boolean> {
-  const client = axios.create({
-    baseURL: "http://unix",
-    timeout: timeoutMs,
-    socketPath,
-    validateStatus: () => true,
-  })
-
   try {
-    const response = await client.get("/health")
+    const response = await fetch("http://localhost/health", {
+      signal: AbortSignal.timeout(timeoutMs),
+      unix: socketPath,
+    } as BunRequestInit)
     if (response.status !== 200) {
       return false
     }
-    let bodyText = ""
-    if (typeof response.data === "string") {
-      bodyText = response.data
-    } else {
-      bodyText = String(response.data ?? "")
-    }
+    const bodyText = await response.text()
     return bodyText.startsWith("ok")
   } catch {
     return false
@@ -38,23 +30,14 @@ export async function healthcheckUnix(socketPath: string, timeoutMs: number): Pr
 }
 
 export async function healthcheckTcp(host: string, port: number, timeoutMs: number): Promise<boolean> {
-  const client = axios.create({
-    baseURL: `http://${host}:${port}`,
-    timeout: timeoutMs,
-    validateStatus: () => true,
-  })
-
   try {
-    const response = await client.get("/health")
+    const response = await fetch(`http://${host}:${port}/health`, {
+      signal: AbortSignal.timeout(timeoutMs),
+    })
     if (response.status !== 200) {
       return false
     }
-    let bodyText = ""
-    if (typeof response.data === "string") {
-      bodyText = response.data
-    } else {
-      bodyText = String(response.data ?? "")
-    }
+    const bodyText = await response.text()
     return bodyText.startsWith("ok")
   } catch {
     return false

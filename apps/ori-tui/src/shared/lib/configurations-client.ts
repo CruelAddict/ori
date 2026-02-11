@@ -1,30 +1,22 @@
 import type { Configuration } from "@shared/lib/configuration"
 import { decodeServerEvent, type ServerEvent } from "@shared/lib/events"
 import { createSSEStream, type SSEMessage } from "@shared/lib/sse-client"
-import axios, { type AxiosInstance } from "axios"
 import {
-  ColumnNode,
-  type ConfigurationsResponse,
-  ConstraintNode,
-  type ConnectionResult as ContractConnectionResult,
-  DatabaseNode,
+  cancelQuery,
   type ErrorPayload,
-  IndexNode,
+  execQuery,
+  getNodes,
+  getQueryResult,
+  listConfigurations,
   type Node,
-  type NodesResponse,
-  OpenAPI,
-  type OpenAPIConfig,
   type QueryExecRequest,
-  type QueryExecResponse,
-  type QueryResultResponse,
-  SchemaNode,
-  TableNode,
-  TriggerNode,
-  ViewNode,
+  startConnection,
 } from "contract"
-import type { ApiRequestOptions } from "contract/core/ApiRequestOptions"
-import { request as contractRequest } from "contract/core/request"
+import { type Client as ContractClient, createClient } from "contract/client"
 import type { Logger } from "pino"
+
+type BunRequest = Request & { timeout?: boolean }
+type BunRequestInit = RequestInit & { unix?: string }
 
 export type ConnectResult = {
   result: "success" | "fail" | "connecting"
@@ -34,14 +26,14 @@ export type ConnectResult = {
 export type { Node, NodeEdge } from "contract"
 
 export const NodeType = {
-  DATABASE: DatabaseNode.type.DATABASE,
-  SCHEMA: SchemaNode.type.SCHEMA,
-  TABLE: TableNode.type.TABLE,
-  VIEW: ViewNode.type.VIEW,
-  COLUMN: ColumnNode.type.COLUMN,
-  CONSTRAINT: ConstraintNode.type.CONSTRAINT,
-  INDEX: IndexNode.type.INDEX,
-  TRIGGER: TriggerNode.type.TRIGGER,
+  DATABASE: "database",
+  SCHEMA: "schema",
+  TABLE: "table",
+  VIEW: "view",
+  COLUMN: "column",
+  CONSTRAINT: "constraint",
+  INDEX: "index",
+  TRIGGER: "trigger",
 } as const
 
 export type QueryExecResult = {
@@ -86,8 +78,7 @@ export type CreateClientOptions = {
 }
 
 export class RestOriClient implements OriClient {
-  private readonly apiConfig: OpenAPIConfig
-  private readonly httpClient: AxiosInstance
+  private readonly httpClient: ContractClient
   private readonly logger: Logger
   private readonly socketPath?: string
   private readonly host: string
@@ -98,16 +89,16 @@ export class RestOriClient implements OriClient {
     this.socketPath = options.socketPath
     this.host = options.host ?? "localhost"
     this.port = options.port ?? 8080
-    this.apiConfig = this.createApiConfig()
     this.httpClient = this.createHttpClient()
   }
 
   async listConfigurations(): Promise<Configuration[]> {
-    const payload = await this.send<ConfigurationsResponse>({
-      method: "GET",
-      url: "/configurations",
-    })
-    return payload.connections.map((conn: ConfigurationsResponse["connections"][number]) => ({
+    const response = await listConfigurations({
+      client: this.httpClient,
+      throwOnError: true,
+    }).catch(throwNormalizedError)
+    const payload = response.data
+    return payload.connections.map((conn) => ({
       name: conn.name,
       type: conn.type,
       host: conn.host ?? "",
@@ -119,12 +110,12 @@ export class RestOriClient implements OriClient {
   }
 
   async connect(configurationName: string): Promise<ConnectResult> {
-    const payload = await this.send<ContractConnectionResult>({
-      method: "POST",
-      url: "/connections",
+    const response = await startConnection({
       body: { configurationName },
-      mediaType: "application/json",
-    })
+      client: this.httpClient,
+      throwOnError: true,
+    }).catch(throwNormalizedError)
+    const payload = response.data
     return {
       result: payload.result,
       userMessage: payload.userMessage ?? undefined,
@@ -132,12 +123,13 @@ export class RestOriClient implements OriClient {
   }
 
   async getNodes(configurationName: string, nodeIDs?: string[]): Promise<Node[]> {
-    const payload = await this.send<NodesResponse>({
-      method: "GET",
-      url: "/configurations/{configurationName}/nodes",
+    const response = await getNodes({
+      client: this.httpClient,
       path: { configurationName },
       query: { nodeId: nodeIDs },
-    })
+      throwOnError: true,
+    }).catch(throwNormalizedError)
+    const payload = response.data
     return payload.nodes
   }
 
@@ -151,12 +143,12 @@ export class RestOriClient implements OriClient {
     if (params !== undefined) {
       request.params = params
     }
-    const payload = await this.send<QueryExecResponse>({
-      method: "POST",
-      url: "/queries",
+    const response = await execQuery({
       body: request,
-      mediaType: "application/json",
-    })
+      client: this.httpClient,
+      throwOnError: true,
+    }).catch(throwNormalizedError)
+    const payload = response.data
     return {
       jobId: payload.jobId,
       status: payload.status,
@@ -165,14 +157,15 @@ export class RestOriClient implements OriClient {
   }
 
   async queryGetResult(jobId: string, limit?: number, offset?: number): Promise<QueryResultView> {
-    const payload = await this.send<QueryResultResponse>({
-      method: "GET",
-      url: "/queries/{jobId}/result",
+    const response = await getQueryResult({
+      client: this.httpClient,
       path: { jobId },
       query: { limit, offset },
-    })
+      throwOnError: true,
+    }).catch(throwNormalizedError)
+    const payload = response.data
     return {
-      columns: payload.columns.map((col: QueryResultResponse["columns"][number]) => ({
+      columns: payload.columns.map((col) => ({
         name: col.name,
         type: col.type,
       })),
@@ -184,11 +177,11 @@ export class RestOriClient implements OriClient {
   }
 
   async queryCancel(jobId: string): Promise<void> {
-    await this.send<void>({
-      method: "POST",
-      url: "/queries/{jobId}/cancel",
+    await cancelQuery({
+      client: this.httpClient,
       path: { jobId },
-    })
+      throwOnError: true,
+    }).catch(throwNormalizedError)
   }
 
   openEventStream(onEvent: (event: ServerEvent) => void): () => void {
@@ -224,39 +217,44 @@ export class RestOriClient implements OriClient {
     }
   }
 
-  private createApiConfig(): OpenAPIConfig {
-    const baseConfig: OpenAPIConfig = { ...OpenAPI }
-    baseConfig.BASE = this.buildBaseURL()
-    baseConfig.WITH_CREDENTIALS = false
-    return baseConfig
-  }
-
-  private createHttpClient(): AxiosInstance {
-    const client = axios.create({
-      baseURL: this.apiConfig.BASE,
+  private createHttpClient(): ContractClient {
+    return createClient({
+      baseUrl: this.buildBaseURL(),
+      fetch: createRuntimeFetch(this.socketPath),
     })
-    if (this.socketPath) {
-      ;(client.defaults as typeof client.defaults & { socketPath?: string }).socketPath = this.socketPath
-    }
-    return client
   }
 
   private buildBaseURL(): string {
     if (this.socketPath) {
-      return "http://unix"
+      return "http://localhost"
     }
     return `http://${this.host}:${this.port}`
   }
+}
 
-  private async send<T>(options: ApiRequestOptions): Promise<T> {
-    const result = await contractRequest<T | ErrorPayload>(this.apiConfig, options, this.httpClient)
-    return this.unwrap<T>(result)
-  }
-
-  private unwrap<T>(result: T | ErrorPayload): T {
-    if (typeof result === "object" && result !== null && "code" in result) {
-      throw new Error(result.message ?? "request failed")
+function createRuntimeFetch(socketPath?: string): typeof fetch {
+  const customFetch = (async (input: Request | URL | string, init?: RequestInit) => {
+    const request = input instanceof Request ? new Request(input, init) : new Request(String(input), init)
+    const requestWithTimeout = request as BunRequest
+    requestWithTimeout.timeout = false
+    if (socketPath) {
+      return fetch(request, { unix: socketPath } as BunRequestInit)
     }
-    return result
+    return fetch(request)
+  }) as typeof fetch
+  return customFetch
+}
+
+function throwNormalizedError(err: unknown): never {
+  if (err instanceof Error) {
+    throw err
   }
+  if (isErrorPayload(err)) {
+    throw new Error(err.message ?? "request failed")
+  }
+  throw new Error(String(err))
+}
+
+function isErrorPayload(value: unknown): value is ErrorPayload {
+  return typeof value === "object" && value !== null && "code" in value
 }

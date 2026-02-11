@@ -38,11 +38,10 @@ echo -e "${YELLOW}Generating TypeScript SDK...${NC}"
 rm -rf "$TS_DIR"
 mkdir -p "$TS_DIR"
 
-npx --yes openapi-typescript-codegen \
+npx --yes @hey-api/openapi-ts@0.92.3 \
     --input "$SPEC_FILE" \
     --output "$TS_DIR" \
-    --client axios \
-    --useOptions
+    --client @hey-api/client-fetch
 
 cat <<'EOF' >"$TS_DIR/package.json"
 {
@@ -53,10 +52,7 @@ cat <<'EOF' >"$TS_DIR/package.json"
   "module": "./index.ts",
   "types": "./index.ts",
   "sideEffects": false,
-  "dependencies": {
-    "axios": "^1.7.7",
-    "form-data": "^4.0.0"
-  }
+  "dependencies": {}
 }
 EOF
 

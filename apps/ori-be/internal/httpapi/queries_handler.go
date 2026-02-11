@@ -77,7 +77,7 @@ func (h *Handler) execQuery(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) cancelQuery(w http.ResponseWriter, r *http.Request) {
-	jobID, err := decodePathParam(r, "jobID")
+	jobID, err := decodePathParam(r, "jobId")
 	if err != nil {
 		respondError(w, http.StatusBadRequest, "invalid_job", err.Error(), nil)
 		return

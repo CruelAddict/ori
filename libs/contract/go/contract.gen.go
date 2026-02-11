@@ -852,6 +852,9 @@ type ClientInterface interface {
 
 	ExecQuery(ctx context.Context, body ExecQueryJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// CancelQuery request
+	CancelQuery(ctx context.Context, jobId string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// GetQueryResult request
 	GetQueryResult(ctx context.Context, jobId string, params *GetQueryResultParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 }
@@ -942,6 +945,18 @@ func (c *Client) ExecQueryWithBody(ctx context.Context, contentType string, body
 
 func (c *Client) ExecQuery(ctx context.Context, body ExecQueryJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewExecQueryRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) CancelQuery(ctx context.Context, jobId string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCancelQueryRequest(c.Server, jobId)
 	if err != nil {
 		return nil, err
 	}
@@ -1181,6 +1196,40 @@ func NewExecQueryRequestWithBody(server string, contentType string, body io.Read
 	return req, nil
 }
 
+// NewCancelQueryRequest generates requests for CancelQuery
+func NewCancelQueryRequest(server string, jobId string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "jobId", runtime.ParamLocationPath, jobId)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/queries/%s/cancel", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewGetQueryResultRequest generates requests for GetQueryResult
 func NewGetQueryResultRequest(server string, jobId string, params *GetQueryResultParams) (*http.Request, error) {
 	var err error
@@ -1317,6 +1366,9 @@ type ClientWithResponsesInterface interface {
 	ExecQueryWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ExecQueryResponse, error)
 
 	ExecQueryWithResponse(ctx context.Context, body ExecQueryJSONRequestBody, reqEditors ...RequestEditorFn) (*ExecQueryResponse, error)
+
+	// CancelQueryWithResponse request
+	CancelQueryWithResponse(ctx context.Context, jobId string, reqEditors ...RequestEditorFn) (*CancelQueryResponse, error)
 
 	// GetQueryResultWithResponse request
 	GetQueryResultWithResponse(ctx context.Context, jobId string, params *GetQueryResultParams, reqEditors ...RequestEditorFn) (*GetQueryResultResponse, error)
@@ -1462,6 +1514,32 @@ func (r ExecQueryResponse) StatusCode() int {
 	return 0
 }
 
+type CancelQueryResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON202      *struct {
+		Status string `json:"status"`
+	}
+	JSON404     *ErrorPayload
+	JSONDefault *ErrorResponse
+}
+
+// Status returns HTTPResponse.Status
+func (r CancelQueryResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r CancelQueryResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 type GetQueryResultResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -1554,6 +1632,15 @@ func (c *ClientWithResponses) ExecQueryWithResponse(ctx context.Context, body Ex
 		return nil, err
 	}
 	return ParseExecQueryResponse(rsp)
+}
+
+// CancelQueryWithResponse request returning *CancelQueryResponse
+func (c *ClientWithResponses) CancelQueryWithResponse(ctx context.Context, jobId string, reqEditors ...RequestEditorFn) (*CancelQueryResponse, error) {
+	rsp, err := c.CancelQuery(ctx, jobId, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCancelQueryResponse(rsp)
 }
 
 // GetQueryResultWithResponse request returning *GetQueryResultResponse
@@ -1753,6 +1840,48 @@ func ParseExecQueryResponse(rsp *http.Response) (*ExecQueryResponse, error) {
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
 		var dest QueryExecResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON202 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest ErrorPayload
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseCancelQueryResponse parses an HTTP response from a CancelQueryWithResponse call
+func ParseCancelQueryResponse(rsp *http.Response) (*CancelQueryResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &CancelQueryResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest struct {
+			Status string `json:"status"`
+		}
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
