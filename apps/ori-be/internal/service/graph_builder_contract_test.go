@@ -17,11 +17,13 @@ func TestGraphBuilderNodesConvertToDTO(t *testing.T) {
 	b := NewGraphBuilder(handle)
 
 	scope := model.Database{
-		Name:     "main",
-		File:     stringPtr("/tmp/main.db"),
-		Sequence: intPtr(0),
-		PageSize: int64Ptr(4096),
-		Encoding: stringPtr("UTF-8"),
+		Engine:         "sqlite",
+		ConnectionName: "local-sqlite",
+		Name:           "main",
+		File:           stringPtr("/tmp/main.db"),
+		Sequence:       intPtr(0),
+		PageSize:       int64Ptr(4096),
+		Encoding:       stringPtr("UTF-8"),
 	}
 
 	relation := model.Relation{Name: "users", Type: "table", Definition: "create table users (...)"}
@@ -35,7 +37,7 @@ func TestGraphBuilderNodesConvertToDTO(t *testing.T) {
 		Name:              "users_email_key",
 		Type:              "FOREIGN KEY",
 		Columns:           []string{"email"},
-		ReferencedScope:   &model.ScopeID{Database: "main"},
+		ReferencedScope:   model.Database{Engine: "sqlite", ConnectionName: "local-sqlite", Name: "main"},
 		ReferencedTable:   "accounts",
 		ReferencedColumns: []string{"email"},
 		OnUpdate:          "CASCADE",
@@ -67,9 +69,8 @@ func TestGraphBuilderNodesConvertToDTO(t *testing.T) {
 		Definition:   "create trigger users_audit ...",
 	}
 
-	scopeID := scope.ID()
-	nodes := []model.Node{b.BuildScopeNode(scope), b.BuildRelationNode(scopeID, relation)}
-	columnNodes, _ := b.BuildColumnNodes(scopeID, relation.Name, []model.Column{{
+	nodes := []model.Node{b.BuildScopeNode(scope), b.BuildRelationNode(scope, relation)}
+	columnNodes, _ := b.BuildColumnNodes(scope, relation.Name, []model.Column{{
 		Name:             "id",
 		Ordinal:          1,
 		DataType:         "uuid",
@@ -80,9 +81,9 @@ func TestGraphBuilderNodesConvertToDTO(t *testing.T) {
 		NumericPrecision: &numericPrecision,
 		NumericScale:     &numericScale,
 	}})
-	constraintNodes, _ := b.BuildConstraintNodes(scopeID, relation.Name, []model.Constraint{constraint})
-	indexNodes, _ := b.BuildIndexNodes(scopeID, relation.Name, []model.Index{index})
-	triggerNodes, _ := b.BuildTriggerNodes(scopeID, relation.Name, []model.Trigger{trigger})
+	constraintNodes, _ := b.BuildConstraintNodes(scope, relation.Name, []model.Constraint{constraint})
+	indexNodes, _ := b.BuildIndexNodes(scope, relation.Name, []model.Index{index})
+	triggerNodes, _ := b.BuildTriggerNodes(scope, relation.Name, []model.Trigger{trigger})
 
 	nodes = append(nodes, columnNodes...)
 	nodes = append(nodes, constraintNodes...)

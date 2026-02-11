@@ -10,7 +10,7 @@ import (
 type Node interface {
 	GetID() string
 	GetName() string
-	GetScope() ScopeID
+	GetScope() Scope
 	IsHydrated() bool
 	SetHydrated(value bool)
 	Clone() Node
@@ -52,7 +52,7 @@ func (nodes Nodes) ToDTO() ([]dto.Node, error) {
 type BaseNode struct {
 	ID       string
 	Name     string
-	Scope    ScopeID
+	Scope    Scope
 	Hydrated bool
 }
 
@@ -70,16 +70,14 @@ func (n *BaseNode) GetName() string {
 	return n.Name
 }
 
-func (n *BaseNode) GetScope() ScopeID {
+func (n *BaseNode) GetScope() Scope {
 	if n == nil {
-		return ScopeID{}
+		return nil
 	}
-	scope := ScopeID{Database: n.Scope.Database}
-	if n.Scope.Schema != nil {
-		schema := *n.Scope.Schema
-		scope.Schema = &schema
+	if n.Scope == nil {
+		return nil
 	}
-	return scope
+	return n.Scope.Clone()
 }
 
 func (n *BaseNode) IsHydrated() bool {

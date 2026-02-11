@@ -3,9 +3,10 @@ package model
 import (
 	"fmt"
 
+	dto "github.com/crueladdict/ori/libs/contract/go"
+
 	"github.com/crueladdict/ori/apps/ori-server/internal/pkg/cloneutil"
 	"github.com/crueladdict/ori/apps/ori-server/internal/pkg/stringutil"
-	dto "github.com/crueladdict/ori/libs/contract/go"
 )
 
 type ColumnNode struct {
@@ -23,26 +24,21 @@ type ColumnNode struct {
 	Table              string
 }
 
-func NewColumnNode(engine, connectionName string, scope ScopeID, relation string, col Column) *ColumnNode {
+func NewColumnNode(scope Scope, relation string, col Column) *ColumnNode {
 	var primaryKeyPosition *int
 	if col.PrimaryKeyPos > 0 {
 		v := col.PrimaryKeyPos
 		primaryKeyPosition = &v
 	}
 
-	id := stringutil.Slug(engine, connectionName, "column", scope.Database, relation, col.Name)
-	if scope.Schema != nil {
-		id = stringutil.Slug(engine, connectionName, "column", *scope.Schema, relation, col.Name)
-	}
-
 	return &ColumnNode{
 		BaseNode: BaseNode{
-			ID:       id,
+			ID:       stringutil.Slug(scope.Slug(), relation, col.Name, "column"),
 			Name:     col.Name,
-			Scope:    scope,
+			Scope:    scope.Clone(),
 			Hydrated: true,
 		},
-		Connection:         connectionName,
+		Connection:         scope.Connection(),
 		Table:              relation,
 		Column:             col.Name,
 		Ordinal:            col.Ordinal,

@@ -3,9 +3,10 @@ package model
 import (
 	"fmt"
 
+	dto "github.com/crueladdict/ori/libs/contract/go"
+
 	"github.com/crueladdict/ori/apps/ori-server/internal/pkg/cloneutil"
 	"github.com/crueladdict/ori/apps/ori-server/internal/pkg/stringutil"
-	dto "github.com/crueladdict/ori/libs/contract/go"
 )
 
 type TriggerNode struct {
@@ -22,20 +23,15 @@ type TriggerNode struct {
 	TriggerName  string
 }
 
-func NewTriggerNode(engine, connectionName string, scope ScopeID, relation string, trg Trigger) *TriggerNode {
-	id := stringutil.Slug(engine, connectionName, "trigger", scope.Database, relation, trg.Name)
-	if scope.Schema != nil {
-		id = stringutil.Slug(engine, connectionName, "trigger", *scope.Schema, relation, trg.Name)
-	}
-
+func NewTriggerNode(scope Scope, relation string, trg Trigger) *TriggerNode {
 	return &TriggerNode{
 		BaseNode: BaseNode{
-			ID:       id,
+			ID:       stringutil.Slug(scope.Slug(), relation, trg.Name, "trigger"),
 			Name:     trg.Name,
-			Scope:    scope,
+			Scope:    scope.Clone(),
 			Hydrated: true,
 		},
-		Connection:   connectionName,
+		Connection:   scope.Connection(),
 		Table:        relation,
 		TriggerName:  trg.Name,
 		Timing:       trg.Timing,

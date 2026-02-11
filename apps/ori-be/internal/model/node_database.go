@@ -3,9 +3,9 @@ package model
 import (
 	"fmt"
 
-	"github.com/crueladdict/ori/apps/ori-server/internal/pkg/cloneutil"
-	"github.com/crueladdict/ori/apps/ori-server/internal/pkg/stringutil"
 	dto "github.com/crueladdict/ori/libs/contract/go"
+
+	"github.com/crueladdict/ori/apps/ori-server/internal/pkg/cloneutil"
 )
 
 type DatabaseNode struct {
@@ -20,22 +20,16 @@ type DatabaseNode struct {
 	Views      []string
 }
 
-func NewDatabaseNode(engine, connectionName string, scope Database) *DatabaseNode {
-	scopeID := scope.ID()
-	id := stringutil.Slug(engine, connectionName, "database", scopeID.Database)
-	if scopeID.Schema != nil {
-		id = stringutil.Slug(engine, connectionName, "schema", *scopeID.Schema)
-	}
-
+func NewDatabaseNode(scope Database) *DatabaseNode {
 	return &DatabaseNode{
 		BaseNode: BaseNode{
-			ID:       id,
+			ID:       scope.Slug(),
 			Name:     scope.Name,
-			Scope:    scopeID,
+			Scope:    scope.Clone(),
 			Hydrated: false,
 		},
-		Connection: connectionName,
-		Engine:     engine,
+		Connection: scope.ConnectionName,
+		Engine:     scope.Engine,
 		File:       cloneutil.Ptr(scope.File),
 		Sequence:   cloneutil.Ptr(scope.Sequence),
 		PageSize:   cloneutil.Ptr(scope.PageSize),

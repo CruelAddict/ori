@@ -32,8 +32,10 @@ func (a *Adapter) GetScopes(ctx context.Context) ([]model.Scope, error) {
 			return nil, fmt.Errorf("failed to scan schema: %w", err)
 		}
 		scopes = append(scopes, model.Schema{
-			Database: a.config.Database,
-			Name:     schemaName,
+			Engine:         "postgres",
+			ConnectionName: a.connectionName,
+			Database:       a.config.Database,
+			Name:           schemaName,
 		})
 	}
 	if err := rows.Err(); err != nil {
@@ -42,8 +44,9 @@ func (a *Adapter) GetScopes(ctx context.Context) ([]model.Scope, error) {
 	return scopes, nil
 }
 
-func (a *Adapter) GetRelations(ctx context.Context, scope model.ScopeID) ([]model.Relation, error) {
-	if scope.Schema == nil {
+func (a *Adapter) GetRelations(ctx context.Context, scope model.Scope) ([]model.Relation, error) {
+	schema := scope.SchemaName()
+	if schema == nil {
 		return nil, fmt.Errorf("postgres requires schema in scope")
 	}
 
@@ -67,7 +70,7 @@ func (a *Adapter) GetRelations(ctx context.Context, scope model.ScopeID) ([]mode
 			)
 		ORDER BY n.nspname, c.relname
 	`
-	rows, err := a.db.QueryxContext(ctx, query, *scope.Schema)
+	rows, err := a.db.QueryxContext(ctx, query, *schema)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch relations: %w", err)
 	}
@@ -118,8 +121,9 @@ func (a *Adapter) GetRelations(ctx context.Context, scope model.ScopeID) ([]mode
 	return relations, nil
 }
 
-func (a *Adapter) GetColumns(ctx context.Context, scope model.ScopeID, relation string) ([]model.Column, error) {
-	if scope.Schema == nil {
+func (a *Adapter) GetColumns(ctx context.Context, scope model.Scope, relation string) ([]model.Column, error) {
+	schema := scope.SchemaName()
+	if schema == nil {
 		return nil, fmt.Errorf("postgres requires schema in scope")
 	}
 
@@ -151,7 +155,7 @@ func (a *Adapter) GetColumns(ctx context.Context, scope model.ScopeID, relation 
 		WHERE c.table_schema = $1 AND c.table_name = $2
 		ORDER BY c.ordinal_position
 	`
-	rows, err := a.db.QueryxContext(ctx, query, *scope.Schema, relation)
+	rows, err := a.db.QueryxContext(ctx, query, *schema, relation)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read columns: %w", err)
 	}
@@ -203,16 +207,18 @@ func (a *Adapter) GetColumns(ctx context.Context, scope model.ScopeID, relation 
 	return columns, nil
 }
 
-func (a *Adapter) GetConstraints(ctx context.Context, scope model.ScopeID, relation string) ([]model.Constraint, error) {
-	if scope.Schema == nil {
+func (a *Adapter) GetConstraints(ctx context.Context, scope model.Scope, relation string) ([]model.Constraint, error) {
+	schema := scope.SchemaName()
+	if schema == nil {
 		return nil, fmt.Errorf("postgres requires schema in scope")
 	}
 
-	return a.getConstraintsFromCatalog(ctx, *scope.Schema, relation)
+	return a.getConstraintsFromCatalog(ctx, *schema, relation)
 }
 
-func (a *Adapter) GetIndexes(ctx context.Context, scope model.ScopeID, relation string) ([]model.Index, error) {
-	if scope.Schema == nil {
+func (a *Adapter) GetIndexes(ctx context.Context, scope model.Scope, relation string) ([]model.Index, error) {
+	schema := scope.SchemaName()
+	if schema == nil {
 		return nil, fmt.Errorf("postgres requires schema in scope")
 	}
 
@@ -269,7 +275,7 @@ func (a *Adapter) GetIndexes(ctx context.Context, scope model.ScopeID, relation 
 		primary        bool
 	}
 
-	rows, err := a.db.QueryxContext(ctx, query, *scope.Schema, relation)
+	rows, err := a.db.QueryxContext(ctx, query, *schema, relation)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read indexes: %w", err)
 	}
@@ -315,8 +321,9 @@ func (a *Adapter) GetIndexes(ctx context.Context, scope model.ScopeID, relation 
 	return indexes, nil
 }
 
-func (a *Adapter) GetTriggers(ctx context.Context, scope model.ScopeID, relation string) ([]model.Trigger, error) {
-	if scope.Schema == nil {
+func (a *Adapter) GetTriggers(ctx context.Context, scope model.Scope, relation string) ([]model.Trigger, error) {
+	schema := scope.SchemaName()
+	if schema == nil {
 		return nil, fmt.Errorf("postgres requires schema in scope")
 	}
 
@@ -341,7 +348,7 @@ func (a *Adapter) GetTriggers(ctx context.Context, scope model.ScopeID, relation
 		ORDER BY tg.tgname
 	`
 
-	rows, err := a.db.QueryxContext(ctx, query, *scope.Schema, relation)
+	rows, err := a.db.QueryxContext(ctx, query, *schema, relation)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read triggers: %w", err)
 	}
@@ -588,9 +595,11 @@ func (a *Adapter) getConstraintsFromCatalog(ctx context.Context, schema, table s
 		}
 
 		if constraintType == "FOREIGN KEY" {
-			c.ReferencedScope = &model.ScopeID{
-				Database: a.config.Database,
-				Schema:   &refSchema,
+			c.ReferencedScope = model.Schema{
+				Engine:         "postgres",
+				ConnectionName: a.connectionName,
+				Database:       a.config.Database,
+				Name:           refSchema,
 			}
 			c.ReferencedTable = refTable
 			c.ReferencedColumns = splitCSV(refColumnsStr)

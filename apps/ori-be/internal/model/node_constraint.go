@@ -3,9 +3,10 @@ package model
 import (
 	"fmt"
 
+	dto "github.com/crueladdict/ori/libs/contract/go"
+
 	"github.com/crueladdict/ori/apps/ori-server/internal/pkg/cloneutil"
 	"github.com/crueladdict/ori/apps/ori-server/internal/pkg/stringutil"
-	dto "github.com/crueladdict/ori/libs/contract/go"
 )
 
 type ConstraintNode struct {
@@ -26,7 +27,7 @@ type ConstraintNode struct {
 	Table              string
 }
 
-func NewConstraintNode(engine, connectionName string, scope ScopeID, relation string, c Constraint) *ConstraintNode {
+func NewConstraintNode(scope Scope, relation string, c Constraint) *ConstraintNode {
 	columns := cloneutil.SlicePtrIfNotEmpty(c.Columns)
 	referencedTable := stringPtrIfNotEmpty(c.ReferencedTable)
 	var referencedDatabase *string
@@ -38,9 +39,9 @@ func NewConstraintNode(engine, connectionName string, scope ScopeID, relation st
 
 	if c.Type == "FOREIGN KEY" {
 		if c.ReferencedScope != nil {
-			referencedDatabase = stringPtrIfNotEmpty(c.ReferencedScope.Database)
-			if c.ReferencedScope.Schema != nil {
-				referencedSchema = cloneutil.Ptr(c.ReferencedScope.Schema)
+			referencedDatabase = stringPtrIfNotEmpty(c.ReferencedScope.DatabaseName())
+			if schema := c.ReferencedScope.SchemaName(); schema != nil {
+				referencedSchema = cloneutil.Ptr(schema)
 			}
 		}
 		referencedColumns = cloneutil.SlicePtrIfNotEmpty(c.ReferencedColumns)
@@ -48,19 +49,15 @@ func NewConstraintNode(engine, connectionName string, scope ScopeID, relation st
 
 	indexName := cloneutil.Ptr(c.UnderlyingIndex)
 	checkClause := stringPtrIfNotEmpty(c.CheckClause)
-	id := stringutil.Slug(engine, connectionName, "constraint", scope.Database, relation, c.Name)
-	if scope.Schema != nil {
-		id = stringutil.Slug(engine, connectionName, "constraint", *scope.Schema, relation, c.Name)
-	}
 
 	return &ConstraintNode{
 		BaseNode: BaseNode{
-			ID:       id,
+			ID:       stringutil.Slug(scope.Slug(), relation, c.Name, "constraint"),
 			Name:     c.Name,
-			Scope:    scope,
+			Scope:    scope.Clone(),
 			Hydrated: true,
 		},
-		Connection:         connectionName,
+		Connection:         scope.Connection(),
 		Table:              relation,
 		ConstraintName:     c.Name,
 		ConstraintType:     c.Type,

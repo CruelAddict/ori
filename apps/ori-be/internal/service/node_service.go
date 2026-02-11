@@ -122,7 +122,7 @@ func (ns *NodeService) hydrateNode(ctx context.Context, graph *connectionGraph, 
 
 func (ns *NodeService) hydrateScope(ctx context.Context, handle *ConnectionHandle, node model.Node) ([]model.Node, error) {
 	scope := node.GetScope()
-	if scope.Database == "" {
+	if scope == nil || scope.DatabaseName() == "" {
 		return nil, fmt.Errorf("node %s missing scope", node.GetID())
 	}
 
@@ -140,19 +140,13 @@ func (ns *NodeService) hydrateScope(ctx context.Context, handle *ConnectionHandl
 	relationNodes := make(map[string]model.Node, len(relations))
 
 	for _, rel := range relations {
-		relScope := scope
-		if rel.Schema != nil && *rel.Schema != "" {
-			relScope.Schema = rel.Schema
-		}
+		relScope := scope.WithSchema(rel.Schema)
 		relNode := builder.BuildRelationNode(relScope, rel)
 		childNodes = append(childNodes, relNode)
 		relationNodes[relNode.GetID()] = relNode
 		if rel.Type == "table" {
 			if rel.ParentTable != nil {
-				parentScope := scope
-				if rel.ParentSchema != nil && *rel.ParentSchema != "" {
-					parentScope.Schema = rel.ParentSchema
-				}
+				parentScope := scope.WithSchema(rel.ParentSchema)
 				parentRel := model.Relation{Name: *rel.ParentTable, Type: "table"}
 				parentID := builder.BuildRelationNode(parentScope, parentRel).GetID()
 				partitionEdges[parentID] = append(partitionEdges[parentID], relNode.GetID())
@@ -194,7 +188,7 @@ func (ns *NodeService) hydrateScope(ctx context.Context, handle *ConnectionHandl
 
 func (ns *NodeService) hydrateRelation(ctx context.Context, handle *ConnectionHandle, node model.Node) ([]model.Node, error) {
 	scope := node.GetScope()
-	if scope.Database == "" {
+	if scope == nil || scope.DatabaseName() == "" {
 		return nil, fmt.Errorf("node %s missing scope", node.GetID())
 	}
 

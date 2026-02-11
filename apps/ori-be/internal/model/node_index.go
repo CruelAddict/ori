@@ -3,9 +3,10 @@ package model
 import (
 	"fmt"
 
+	dto "github.com/crueladdict/ori/libs/contract/go"
+
 	"github.com/crueladdict/ori/apps/ori-server/internal/pkg/cloneutil"
 	"github.com/crueladdict/ori/apps/ori-server/internal/pkg/stringutil"
-	dto "github.com/crueladdict/ori/libs/contract/go"
 )
 
 type IndexNode struct {
@@ -22,20 +23,15 @@ type IndexNode struct {
 	Unique         bool
 }
 
-func NewIndexNode(engine, connectionName string, scope ScopeID, relation string, idx Index) *IndexNode {
-	id := stringutil.Slug(engine, connectionName, "index", scope.Database, relation, idx.Name)
-	if scope.Schema != nil {
-		id = stringutil.Slug(engine, connectionName, "index", *scope.Schema, relation, idx.Name)
-	}
-
+func NewIndexNode(scope Scope, relation string, idx Index) *IndexNode {
 	return &IndexNode{
 		BaseNode: BaseNode{
-			ID:       id,
+			ID:       stringutil.Slug(scope.Slug(), relation, idx.Name, "index"),
 			Name:     idx.Name,
-			Scope:    scope,
+			Scope:    scope.Clone(),
 			Hydrated: true,
 		},
-		Connection:     connectionName,
+		Connection:     scope.Connection(),
 		Table:          relation,
 		IndexName:      idx.Name,
 		Unique:         idx.Unique,

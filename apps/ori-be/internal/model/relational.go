@@ -1,47 +1,108 @@
 package model
 
-// ScopeID identifies a namespace for relations (database + optional schema).
-type ScopeID struct {
-	Database string
-	Schema   *string // nil if engine doesn't support schemas
-}
+import "github.com/crueladdict/ori/apps/ori-server/internal/pkg/stringutil"
 
-// Scope identifies a root namespace that can create its root graph node.
+// Scope identifies a namespace for relations and can create its root graph node.
 type Scope interface {
-	ID() ScopeID
-	NewRootNode(engine, connectionName string) Node
+	Slug() string
+	Connection() string
+	DatabaseName() string
+	SchemaName() *string
+	WithSchema(name *string) Scope
+	Clone() Scope
+	NewRootNode() Node
 }
 
 // Database is a root scope for engines without schemas (for example sqlite).
 type Database struct {
-	Name     string
-	File     *string
-	Sequence *int
-	PageSize *int64
-	Encoding *string
+	Engine         string
+	ConnectionName string
+	Name           string
+	File           *string
+	Sequence       *int
+	PageSize       *int64
+	Encoding       *string
 }
 
-func (s Database) ID() ScopeID {
-	return ScopeID{Database: s.Name}
+func (s Database) Slug() string {
+	return stringutil.Slug(s.Engine, s.ConnectionName, s.Name)
 }
 
-func (s Database) NewRootNode(engine, connectionName string) Node {
-	return NewDatabaseNode(engine, connectionName, s)
+func (s Database) Connection() string {
+	return s.ConnectionName
+}
+
+func (s Database) DatabaseName() string {
+	return s.Name
+}
+
+func (s Database) SchemaName() *string {
+	return nil
+}
+
+func (s Database) WithSchema(name *string) Scope {
+	if name == nil || *name == "" {
+		return s
+	}
+	return Schema{
+		Engine:         s.Engine,
+		ConnectionName: s.ConnectionName,
+		Database:       s.Name,
+		Name:           *name,
+	}
+}
+
+func (s Database) Clone() Scope {
+	return s
+}
+
+func (s Database) NewRootNode() Node {
+	return NewDatabaseNode(s)
 }
 
 // Schema is a root scope for engines with schemas (for example postgres).
 type Schema struct {
-	Database string
-	Name     string
+	Engine         string
+	ConnectionName string
+	Database       string
+	Name           string
 }
 
-func (s Schema) ID() ScopeID {
+func (s Schema) Slug() string {
+	return stringutil.Slug(s.Engine, s.ConnectionName, s.Name)
+}
+
+func (s Schema) Connection() string {
+	return s.ConnectionName
+}
+
+func (s Schema) DatabaseName() string {
+	return s.Database
+}
+
+func (s Schema) SchemaName() *string {
 	schema := s.Name
-	return ScopeID{Database: s.Database, Schema: &schema}
+	return &schema
 }
 
-func (s Schema) NewRootNode(engine, connectionName string) Node {
-	return NewSchemaNode(engine, connectionName, s)
+func (s Schema) WithSchema(name *string) Scope {
+	if name == nil || *name == "" {
+		return s
+	}
+	return Schema{
+		Engine:         s.Engine,
+		ConnectionName: s.ConnectionName,
+		Database:       s.Database,
+		Name:           *name,
+	}
+}
+
+func (s Schema) Clone() Scope {
+	return s
+}
+
+func (s Schema) NewRootNode() Node {
+	return NewSchemaNode(s)
 }
 
 // Relation describes a table or view.
@@ -72,7 +133,7 @@ type Constraint struct {
 	Name              string
 	Type              string // "PRIMARY KEY", "UNIQUE", "FOREIGN KEY", "CHECK"
 	Columns           []string
-	ReferencedScope   *ScopeID // FK: target scope
+	ReferencedScope   Scope    // FK: target scope
 	ReferencedTable   string   // FK: target table
 	ReferencedColumns []string // FK: target columns (parallel to Columns)
 	OnUpdate          string   // FK: update rule

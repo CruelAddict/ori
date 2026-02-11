@@ -50,11 +50,13 @@ func (a *Adapter) GetScopes(ctx context.Context) ([]model.Scope, error) {
 		}
 
 		scopes = append(scopes, model.Database{
-			Name:     name,
-			File:     &fileValue,
-			Sequence: &sequence,
-			PageSize: pageSizeValue,
-			Encoding: encodingValue,
+			Engine:         "sqlite",
+			ConnectionName: a.connectionName,
+			Name:           name,
+			File:           &fileValue,
+			Sequence:       &sequence,
+			PageSize:       pageSizeValue,
+			Encoding:       encodingValue,
 		})
 	}
 
@@ -75,10 +77,11 @@ func (a *Adapter) pragmaText(ctx context.Context, schema, pragma string) (string
 	return value, err
 }
 
-func (a *Adapter) GetRelations(ctx context.Context, scope model.ScopeID) ([]model.Relation, error) {
+func (a *Adapter) GetRelations(ctx context.Context, scope model.Scope) ([]model.Relation, error) {
+	database := scope.DatabaseName()
 	query := fmt.Sprintf(
 		`SELECT name, type, COALESCE(sql, '') as sql FROM "%s".sqlite_master WHERE type IN ('table', 'view') AND name NOT LIKE 'sqlite_%%' ORDER BY name`,
-		stringutil.EscapeIdentifier(scope.Database),
+		stringutil.EscapeIdentifier(database),
 	)
 	rows, err := a.db.QueryxContext(ctx, query)
 	if err != nil {
@@ -103,10 +106,11 @@ func (a *Adapter) GetRelations(ctx context.Context, scope model.ScopeID) ([]mode
 	return relations, rows.Err()
 }
 
-func (a *Adapter) GetColumns(ctx context.Context, scope model.ScopeID, relation string) ([]model.Column, error) {
+func (a *Adapter) GetColumns(ctx context.Context, scope model.Scope, relation string) ([]model.Column, error) {
+	database := scope.DatabaseName()
 	query := fmt.Sprintf(
 		`PRAGMA "%s".table_info(%s)`,
-		stringutil.EscapeIdentifier(scope.Database),
+		stringutil.EscapeIdentifier(database),
 		stringutil.QuoteLiteral(relation),
 	)
 	rows, err := a.db.QueryxContext(ctx, query)
@@ -143,11 +147,12 @@ func (a *Adapter) GetColumns(ctx context.Context, scope model.ScopeID, relation 
 	return columns, rows.Err()
 }
 
-func (a *Adapter) GetConstraints(ctx context.Context, scope model.ScopeID, relation string) ([]model.Constraint, error) {
+func (a *Adapter) GetConstraints(ctx context.Context, scope model.Scope, relation string) ([]model.Constraint, error) {
+	database := scope.DatabaseName()
 	var constraints []model.Constraint
 
 	// Primary key from columns
-	pkConstraint, err := a.getPrimaryKeyConstraint(ctx, scope.Database, relation)
+	pkConstraint, err := a.getPrimaryKeyConstraint(ctx, database, relation)
 	if err != nil {
 		return nil, err
 	}
@@ -156,14 +161,14 @@ func (a *Adapter) GetConstraints(ctx context.Context, scope model.ScopeID, relat
 	}
 
 	// Unique constraints from indexes
-	uniqueConstraints, err := a.getUniqueConstraints(ctx, scope.Database, relation)
+	uniqueConstraints, err := a.getUniqueConstraints(ctx, database, relation)
 	if err != nil {
 		return nil, err
 	}
 	constraints = append(constraints, uniqueConstraints...)
 
 	// Foreign keys
-	fkConstraints, err := a.getForeignKeyConstraints(ctx, scope.Database, relation)
+	fkConstraints, err := a.getForeignKeyConstraints(ctx, database, relation)
 	if err != nil {
 		return nil, err
 	}
@@ -172,10 +177,11 @@ func (a *Adapter) GetConstraints(ctx context.Context, scope model.ScopeID, relat
 	return constraints, nil
 }
 
-func (a *Adapter) GetIndexes(ctx context.Context, scope model.ScopeID, relation string) ([]model.Index, error) {
+func (a *Adapter) GetIndexes(ctx context.Context, scope model.Scope, relation string) ([]model.Index, error) {
+	database := scope.DatabaseName()
 	query := fmt.Sprintf(
 		`PRAGMA "%s".index_list(%s)`,
-		stringutil.EscapeIdentifier(scope.Database),
+		stringutil.EscapeIdentifier(database),
 		stringutil.QuoteLiteral(relation),
 	)
 	rows, err := a.db.QueryxContext(ctx, query)
@@ -208,11 +214,11 @@ func (a *Adapter) GetIndexes(ctx context.Context, scope model.ScopeID, relation 
 
 	indexes := make([]model.Index, 0, len(entries))
 	for _, entry := range entries {
-		columns, err := a.getIndexColumns(ctx, scope.Database, entry.name)
+		columns, err := a.getIndexColumns(ctx, database, entry.name)
 		if err != nil {
 			return nil, err
 		}
-		definition, err := a.getIndexDefinition(ctx, scope.Database, entry.name)
+		definition, err := a.getIndexDefinition(ctx, database, entry.name)
 		if err != nil {
 			return nil, err
 		}
@@ -228,10 +234,11 @@ func (a *Adapter) GetIndexes(ctx context.Context, scope model.ScopeID, relation 
 	return indexes, nil
 }
 
-func (a *Adapter) GetTriggers(ctx context.Context, scope model.ScopeID, relation string) ([]model.Trigger, error) {
+func (a *Adapter) GetTriggers(ctx context.Context, scope model.Scope, relation string) ([]model.Trigger, error) {
+	database := scope.DatabaseName()
 	query := fmt.Sprintf(
 		`SELECT name, sql FROM "%s".sqlite_master WHERE type = 'trigger' AND tbl_name = %s ORDER BY name`,
-		stringutil.EscapeIdentifier(scope.Database),
+		stringutil.EscapeIdentifier(database),
 		stringutil.QuoteLiteral(relation),
 	)
 	rows, err := a.db.QueryxContext(ctx, query)
@@ -562,13 +569,10 @@ func (a *Adapter) getForeignKeyConstraints(ctx context.Context, database, table 
 	for _, id := range ids {
 		grp := groups[id]
 		constraints = append(constraints, model.Constraint{
-			Name:    fmt.Sprintf("FK on %s", grp.refTable),
-			Type:    "FOREIGN KEY",
-			Columns: grp.columns,
-			ReferencedScope: &model.ScopeID{
-				Database: database,
-				Schema:   nil,
-			},
+			Name:              fmt.Sprintf("FK on %s", grp.refTable),
+			Type:              "FOREIGN KEY",
+			Columns:           grp.columns,
+			ReferencedScope:   model.Database{Engine: "sqlite", ConnectionName: a.connectionName, Name: database},
 			ReferencedTable:   grp.refTable,
 			ReferencedColumns: grp.refColumns,
 			OnUpdate:          grp.onUpdate,

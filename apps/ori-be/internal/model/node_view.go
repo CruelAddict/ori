@@ -20,20 +20,17 @@ type ViewNode struct {
 	Triggers    []string
 }
 
-func NewViewNode(engine, connectionName string, scope ScopeID, rel Relation) *ViewNode {
-	id := stringutil.Slug(engine, connectionName, rel.Type, scope.Database, rel.Name)
-	if scope.Schema != nil {
-		id = stringutil.Slug(engine, connectionName, rel.Type, *scope.Schema, rel.Name)
-	}
+func NewViewNode(scope Scope, rel Relation) *ViewNode {
+	id := stringutil.Slug(scope.Slug(), rel.Name, rel.Type)
 
 	return &ViewNode{
 		BaseNode: BaseNode{
 			ID:       id,
 			Name:     rel.Name,
-			Scope:    scope,
+			Scope:    scope.Clone(),
 			Hydrated: false,
 		},
-		Connection: connectionName,
+		Connection: scope.Connection(),
 		Definition: stringPtrIfNotEmpty(rel.Definition),
 		Table:      rel.Name,
 		TableType:  rel.Type,

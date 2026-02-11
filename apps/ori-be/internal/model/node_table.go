@@ -21,27 +21,24 @@ type TableNode struct {
 	Triggers    []string
 }
 
-func NewRelationNode(engine, connectionName string, scope ScopeID, rel Relation) Node {
+func NewRelationNode(scope Scope, rel Relation) Node {
 	if rel.Type == "view" {
-		return NewViewNode(engine, connectionName, scope, rel)
+		return NewViewNode(scope, rel)
 	}
-	return NewTableNode(engine, connectionName, scope, rel)
+	return NewTableNode(scope, rel)
 }
 
-func NewTableNode(engine, connectionName string, scope ScopeID, rel Relation) *TableNode {
-	id := stringutil.Slug(engine, connectionName, rel.Type, scope.Database, rel.Name)
-	if scope.Schema != nil {
-		id = stringutil.Slug(engine, connectionName, rel.Type, *scope.Schema, rel.Name)
-	}
+func NewTableNode(scope Scope, rel Relation) *TableNode {
+	id := stringutil.Slug(scope.Slug(), rel.Name, rel.Type)
 
 	return &TableNode{
 		BaseNode: BaseNode{
 			ID:       id,
 			Name:     rel.Name,
-			Scope:    scope,
+			Scope:    scope.Clone(),
 			Hydrated: false,
 		},
-		Connection: connectionName,
+		Connection: scope.Connection(),
 		Definition: stringPtrIfNotEmpty(rel.Definition),
 		Table:      rel.Name,
 		TableType:  rel.Type,
