@@ -31,7 +31,7 @@ func NewViewNode(scope Scope, rel Relation) *ViewNode {
 			Hydrated: false,
 		},
 		Connection: scope.Connection(),
-		Definition: stringPtrIfNotEmpty(rel.Definition),
+		Definition: &rel.Definition,
 		Table:      rel.Name,
 		TableType:  rel.Type,
 	}

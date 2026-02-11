@@ -39,7 +39,7 @@ func NewTableNode(scope Scope, rel Relation) *TableNode {
 			Hydrated: false,
 		},
 		Connection: scope.Connection(),
-		Definition: stringPtrIfNotEmpty(rel.Definition),
+		Definition: &rel.Definition,
 		Table:      rel.Name,
 		TableType:  rel.Type,
 	}

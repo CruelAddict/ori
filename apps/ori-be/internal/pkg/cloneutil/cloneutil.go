@@ -21,11 +21,3 @@ func SlicePtr[T any](src *[]T) *[]T {
 	values := slices.Clone(*src)
 	return &values
 }
-
-func SlicePtrIfNotEmpty[T any](src []T) *[]T {
-	if len(src) == 0 {
-		return nil
-	}
-	values := src
-	return &values
-}

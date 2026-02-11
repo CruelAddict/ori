@@ -122,7 +122,7 @@ func (ns *NodeService) hydrateDatabase(ctx context.Context, handle *ConnectionHa
 	if node == nil {
 		return nil, fmt.Errorf("database node is nil")
 	}
-	if node.Scope == nil || node.Scope.DatabaseName() == "" {
+	if node.Scope == nil {
 		return nil, fmt.Errorf("node %s missing scope", node.GetID())
 	}
 
@@ -140,7 +140,7 @@ func (ns *NodeService) hydrateSchema(ctx context.Context, handle *ConnectionHand
 	if node == nil {
 		return nil, fmt.Errorf("schema node is nil")
 	}
-	if node.Scope == nil || node.Scope.DatabaseName() == "" {
+	if node.Scope == nil {
 		return nil, fmt.Errorf("node %s missing scope", node.GetID())
 	}
 
@@ -216,11 +216,8 @@ func (ns *NodeService) hydrateRelation(ctx context.Context, handle *ConnectionHa
 	default:
 		return nil, fmt.Errorf("node %s is not a relation node", node.GetID())
 	}
-	if scope == nil || scope.DatabaseName() == "" {
+	if scope == nil {
 		return nil, fmt.Errorf("node %s missing scope", node.GetID())
-	}
-	if relation == "" {
-		return nil, fmt.Errorf("relation node %s missing relation name", node.GetID())
 	}
 
 	columns, err := handle.Adapter.GetColumns(ctx, scope, relation)

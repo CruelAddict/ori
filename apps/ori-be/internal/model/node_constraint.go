@@ -28,27 +28,20 @@ type ConstraintNode struct {
 }
 
 func NewConstraintNode(scope Scope, relation string, c Constraint) *ConstraintNode {
-	columns := cloneutil.SlicePtrIfNotEmpty(c.Columns)
-	referencedTable := stringPtrIfNotEmpty(c.ReferencedTable)
 	var referencedDatabase *string
 	var referencedSchema *string
 	var referencedColumns *[]string
-	onUpdate := stringPtrIfNotEmpty(c.OnUpdate)
-	onDelete := stringPtrIfNotEmpty(c.OnDelete)
-	match := stringPtrIfNotEmpty(c.Match)
 
 	if c.Type == "FOREIGN KEY" {
 		if c.ReferencedScope != nil {
-			referencedDatabase = stringPtrIfNotEmpty(c.ReferencedScope.DatabaseName())
+			databaseName := c.ReferencedScope.DatabaseName()
+			referencedDatabase = &databaseName
 			if schema := c.ReferencedScope.SchemaName(); schema != nil {
-				referencedSchema = cloneutil.Ptr(schema)
+				referencedSchema = schema
 			}
 		}
-		referencedColumns = cloneutil.SlicePtrIfNotEmpty(c.ReferencedColumns)
+		referencedColumns = &c.ReferencedColumns
 	}
-
-	indexName := cloneutil.Ptr(c.UnderlyingIndex)
-	checkClause := stringPtrIfNotEmpty(c.CheckClause)
 
 	return &ConstraintNode{
 		BaseNode: BaseNode{
@@ -61,16 +54,16 @@ func NewConstraintNode(scope Scope, relation string, c Constraint) *ConstraintNo
 		Table:              relation,
 		ConstraintName:     c.Name,
 		ConstraintType:     c.Type,
-		Columns:            columns,
-		ReferencedTable:    referencedTable,
+		Columns:            &c.Columns,
+		ReferencedTable:    &c.ReferencedTable,
 		ReferencedDatabase: referencedDatabase,
 		ReferencedSchema:   referencedSchema,
 		ReferencedColumns:  referencedColumns,
-		OnUpdate:           onUpdate,
-		OnDelete:           onDelete,
-		Match:              match,
-		IndexName:          indexName,
-		CheckClause:        checkClause,
+		OnUpdate:           &c.OnUpdate,
+		OnDelete:           &c.OnDelete,
+		Match:              &c.Match,
+		IndexName:          c.UnderlyingIndex,
+		CheckClause:        &c.CheckClause,
 	}
 }
 

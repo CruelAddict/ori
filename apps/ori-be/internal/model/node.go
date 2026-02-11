@@ -101,11 +101,3 @@ func relationToDTO(ids []string) dto.NodeEdge {
 	}
 	return dto.NodeEdge{Items: ids, Truncated: false}
 }
-
-func stringPtrIfNotEmpty(value string) *string {
-	if value == "" {
-		return nil
-	}
-	v := value
-	return &v
-}

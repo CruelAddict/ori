@@ -75,9 +75,6 @@ func (cs *ConnectionService) RegisterAdapter(dbType string, factory ConnectionAd
 		return
 	}
 	normalized := strings.ToLower(strings.TrimSpace(dbType))
-	if normalized == "" {
-		return
-	}
 	cs.factoryMu.Lock()
 	cs.factories[normalized] = factory
 	cs.factoryMu.Unlock()

@@ -30,10 +30,10 @@ func NewDatabaseNode(scope Database) *DatabaseNode {
 		},
 		Connection: scope.ConnectionName,
 		Engine:     scope.Engine,
-		File:       cloneutil.Ptr(scope.File),
-		Sequence:   cloneutil.Ptr(scope.Sequence),
-		PageSize:   cloneutil.Ptr(scope.PageSize),
-		Encoding:   cloneutil.Ptr(scope.Encoding),
+		File:       scope.File,
+		Sequence:   scope.Sequence,
+		PageSize:   scope.PageSize,
+		Encoding:   scope.Encoding,
 	}
 }
 

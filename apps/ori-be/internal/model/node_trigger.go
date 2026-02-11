@@ -36,11 +36,11 @@ func NewTriggerNode(scope Scope, relation string, trg Trigger) *TriggerNode {
 		TriggerName:  trg.Name,
 		Timing:       trg.Timing,
 		Orientation:  trg.Orientation,
-		Events:       cloneutil.SlicePtrIfNotEmpty(trg.Events),
-		Statement:    stringPtrIfNotEmpty(trg.Statement),
-		Condition:    stringPtrIfNotEmpty(trg.Condition),
-		EnabledState: stringPtrIfNotEmpty(trg.EnabledState),
-		Definition:   stringPtrIfNotEmpty(trg.Definition),
+		Events:       &trg.Events,
+		Statement:    &trg.Statement,
+		Condition:    &trg.Condition,
+		EnabledState: &trg.EnabledState,
+		Definition:   &trg.Definition,
 	}
 }
 

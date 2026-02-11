@@ -44,11 +44,11 @@ func NewColumnNode(scope Scope, relation string, col Column) *ColumnNode {
 		Ordinal:            col.Ordinal,
 		DataType:           col.DataType,
 		NotNull:            col.NotNull,
-		DefaultValue:       cloneutil.Ptr(col.DefaultValue),
+		DefaultValue:       col.DefaultValue,
 		PrimaryKeyPosition: primaryKeyPosition,
-		CharMaxLength:      cloneutil.Ptr(col.CharMaxLength),
-		NumericPrecision:   cloneutil.Ptr(col.NumericPrecision),
-		NumericScale:       cloneutil.Ptr(col.NumericScale),
+		CharMaxLength:      col.CharMaxLength,
+		NumericPrecision:   col.NumericPrecision,
+		NumericScale:       col.NumericScale,
 	}
 }
 

@@ -41,7 +41,7 @@ func (s Database) SchemaName() *string {
 }
 
 func (s Database) WithSchema(name *string) Scope {
-	if name == nil || *name == "" {
+	if name == nil {
 		return s
 	}
 	return Schema{
@@ -86,7 +86,7 @@ func (s Schema) SchemaName() *string {
 }
 
 func (s Schema) WithSchema(name *string) Scope {
-	if name == nil || *name == "" {
+	if name == nil {
 		return s
 	}
 	return Schema{

@@ -36,11 +36,11 @@ func NewIndexNode(scope Scope, relation string, idx Index) *IndexNode {
 		IndexName:      idx.Name,
 		Unique:         idx.Unique,
 		Primary:        idx.Primary,
-		Columns:        cloneutil.SlicePtrIfNotEmpty(idx.Columns),
-		IncludeColumns: cloneutil.SlicePtrIfNotEmpty(idx.IncludeColumns),
-		Definition:     stringPtrIfNotEmpty(idx.Definition),
-		Method:         stringPtrIfNotEmpty(idx.Method),
-		Predicate:      stringPtrIfNotEmpty(idx.Predicate),
+		Columns:        &idx.Columns,
+		IncludeColumns: &idx.IncludeColumns,
+		Definition:     &idx.Definition,
+		Method:         &idx.Method,
+		Predicate:      &idx.Predicate,
 	}
 }
 
