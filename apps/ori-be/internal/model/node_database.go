@@ -25,7 +25,7 @@ func NewDatabaseNode(scope Database) *DatabaseNode {
 		BaseNode: BaseNode{
 			ID:       scope.Slug(),
 			Name:     scope.Name,
-			Scope:    scope.Clone(),
+			Scope:    scope,
 			Hydrated: false,
 		},
 		Connection: scope.ConnectionName,

@@ -35,7 +35,7 @@ func NewTableNode(scope Scope, rel Relation) *TableNode {
 		BaseNode: BaseNode{
 			ID:       id,
 			Name:     rel.Name,
-			Scope:    scope.Clone(),
+			Scope:    scope,
 			Hydrated: false,
 		},
 		Connection: scope.Connection(),

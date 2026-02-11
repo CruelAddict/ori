@@ -27,7 +27,7 @@ func NewViewNode(scope Scope, rel Relation) *ViewNode {
 		BaseNode: BaseNode{
 			ID:       id,
 			Name:     rel.Name,
-			Scope:    scope.Clone(),
+			Scope:    scope,
 			Hydrated: false,
 		},
 		Connection: scope.Connection(),

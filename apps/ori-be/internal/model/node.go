@@ -10,7 +10,6 @@ import (
 type Node interface {
 	GetID() string
 	GetName() string
-	GetScope() Scope
 	IsHydrated() bool
 	SetHydrated(value bool)
 	Clone() Node
@@ -70,16 +69,6 @@ func (n *BaseNode) GetName() string {
 	return n.Name
 }
 
-func (n *BaseNode) GetScope() Scope {
-	if n == nil {
-		return nil
-	}
-	if n.Scope == nil {
-		return nil
-	}
-	return n.Scope.Clone()
-}
-
 func (n *BaseNode) IsHydrated() bool {
 	if n == nil {
 		return false
@@ -101,7 +90,7 @@ func (n *BaseNode) cloneBase() BaseNode {
 	return BaseNode{
 		ID:       n.ID,
 		Name:     n.Name,
-		Scope:    n.GetScope(),
+		Scope:    n.Scope,
 		Hydrated: n.Hydrated,
 	}
 }

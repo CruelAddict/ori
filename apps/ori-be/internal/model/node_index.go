@@ -28,7 +28,7 @@ func NewIndexNode(scope Scope, relation string, idx Index) *IndexNode {
 		BaseNode: BaseNode{
 			ID:       stringutil.Slug(scope.Slug(), relation, idx.Name, "index"),
 			Name:     idx.Name,
-			Scope:    scope.Clone(),
+			Scope:    scope,
 			Hydrated: true,
 		},
 		Connection:     scope.Connection(),

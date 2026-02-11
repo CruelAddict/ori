@@ -28,7 +28,7 @@ func NewTriggerNode(scope Scope, relation string, trg Trigger) *TriggerNode {
 		BaseNode: BaseNode{
 			ID:       stringutil.Slug(scope.Slug(), relation, trg.Name, "trigger"),
 			Name:     trg.Name,
-			Scope:    scope.Clone(),
+			Scope:    scope,
 			Hydrated: true,
 		},
 		Connection:   scope.Connection(),

@@ -98,9 +98,11 @@ func (ns *NodeService) hydrateNode(ctx context.Context, graph *connectionGraph, 
 	var nodes []model.Node
 	var err error
 
-	switch node.(type) {
-	case *model.DatabaseNode, *model.SchemaNode:
-		nodes, err = ns.hydrateScope(ctx, handle, node)
+	switch typed := node.(type) {
+	case *model.DatabaseNode:
+		nodes, err = ns.hydrateDatabase(ctx, handle, typed)
+	case *model.SchemaNode:
+		nodes, err = ns.hydrateSchema(ctx, handle, typed)
 	case *model.TableNode, *model.ViewNode:
 		nodes, err = ns.hydrateRelation(ctx, handle, node)
 	default:
@@ -116,20 +118,51 @@ func (ns *NodeService) hydrateNode(ctx context.Context, graph *connectionGraph, 
 	return nil
 }
 
-func (ns *NodeService) hydrateScope(ctx context.Context, handle *ConnectionHandle, node model.Node) ([]model.Node, error) {
-	scope := node.GetScope()
-	if scope == nil || scope.DatabaseName() == "" {
+func (ns *NodeService) hydrateDatabase(ctx context.Context, handle *ConnectionHandle, node *model.DatabaseNode) ([]model.Node, error) {
+	if node == nil {
+		return nil, fmt.Errorf("database node is nil")
+	}
+	if node.Scope == nil || node.Scope.DatabaseName() == "" {
 		return nil, fmt.Errorf("node %s missing scope", node.GetID())
 	}
 
-	relations, err := handle.Adapter.GetRelations(ctx, scope)
+	nodes, tableIDs, viewIDs, err := ns.getScopeRelations(ctx, handle, node.Scope, node)
 	if err != nil {
 		return nil, err
+	}
+	node.Tables = tableIDs
+	node.Views = viewIDs
+	node.SetHydrated(true)
+	return nodes, nil
+}
+
+func (ns *NodeService) hydrateSchema(ctx context.Context, handle *ConnectionHandle, node *model.SchemaNode) ([]model.Node, error) {
+	if node == nil {
+		return nil, fmt.Errorf("schema node is nil")
+	}
+	if node.Scope == nil || node.Scope.DatabaseName() == "" {
+		return nil, fmt.Errorf("node %s missing scope", node.GetID())
+	}
+
+	nodes, tableIDs, viewIDs, err := ns.getScopeRelations(ctx, handle, node.Scope, node)
+	if err != nil {
+		return nil, err
+	}
+	node.Tables = tableIDs
+	node.Views = viewIDs
+	node.SetHydrated(true)
+	return nodes, nil
+}
+
+func (ns *NodeService) getScopeRelations(ctx context.Context, handle *ConnectionHandle, scope model.Scope, root model.Node) ([]model.Node, []string, []string, error) {
+	relations, err := handle.Adapter.GetRelations(ctx, scope)
+	if err != nil {
+		return nil, nil, nil, err
 	}
 
 	builder := NewGraphBuilder(handle)
 
-	childNodes := []model.Node{node}
+	childNodes := []model.Node{root}
 	tableIDs := make([]string, 0)
 	viewIDs := make([]string, 0)
 	partitionEdges := make(map[string][]string)
@@ -161,41 +194,30 @@ func (ns *NodeService) hydrateScope(ctx context.Context, handle *ConnectionHandl
 		}
 		parentTable, ok := parentNode.(*model.TableNode)
 		if !ok {
-			return nil, fmt.Errorf("partition parent %s is not a table node", parentID)
+			return nil, nil, nil, fmt.Errorf("partition parent %s is not a table node", parentID)
 		}
 		parentTable.Partitions = childIDs
 	}
 
-	switch typed := node.(type) {
-	case *model.DatabaseNode:
-		typed.Tables = tableIDs
-		typed.Views = viewIDs
-		typed.SetHydrated(true)
-	case *model.SchemaNode:
-		typed.Tables = tableIDs
-		typed.Views = viewIDs
-		typed.SetHydrated(true)
-	default:
-		return nil, fmt.Errorf("node %s cannot hold tables/views edges", node.GetID())
-	}
-
-	return childNodes, nil
+	return childNodes, tableIDs, viewIDs, nil
 }
 
 func (ns *NodeService) hydrateRelation(ctx context.Context, handle *ConnectionHandle, node model.Node) ([]model.Node, error) {
-	scope := node.GetScope()
-	if scope == nil || scope.DatabaseName() == "" {
-		return nil, fmt.Errorf("node %s missing scope", node.GetID())
-	}
+	var scope model.Scope
 
 	var relation string
 	switch typed := node.(type) {
 	case *model.TableNode:
+		scope = typed.Scope
 		relation = typed.RelationName()
 	case *model.ViewNode:
+		scope = typed.Scope
 		relation = typed.RelationName()
 	default:
 		return nil, fmt.Errorf("node %s is not a relation node", node.GetID())
+	}
+	if scope == nil || scope.DatabaseName() == "" {
+		return nil, fmt.Errorf("node %s missing scope", node.GetID())
 	}
 	if relation == "" {
 		return nil, fmt.Errorf("relation node %s missing relation name", node.GetID())

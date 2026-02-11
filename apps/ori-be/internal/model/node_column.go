@@ -35,7 +35,7 @@ func NewColumnNode(scope Scope, relation string, col Column) *ColumnNode {
 		BaseNode: BaseNode{
 			ID:       stringutil.Slug(scope.Slug(), relation, col.Name, "column"),
 			Name:     col.Name,
-			Scope:    scope.Clone(),
+			Scope:    scope,
 			Hydrated: true,
 		},
 		Connection:         scope.Connection(),

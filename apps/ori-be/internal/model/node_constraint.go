@@ -54,7 +54,7 @@ func NewConstraintNode(scope Scope, relation string, c Constraint) *ConstraintNo
 		BaseNode: BaseNode{
 			ID:       stringutil.Slug(scope.Slug(), relation, c.Name, "constraint"),
 			Name:     c.Name,
-			Scope:    scope.Clone(),
+			Scope:    scope,
 			Hydrated: true,
 		},
 		Connection:         scope.Connection(),
