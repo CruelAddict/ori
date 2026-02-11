@@ -141,7 +141,7 @@ class RestOriClient implements OriClient {
       path: { configurationName },
       query: { nodeId: nodeIDs },
     })
-    return payload.nodes.map(mapNode)
+    return payload.nodes
   }
 
   async queryExec(
@@ -239,7 +239,7 @@ class RestOriClient implements OriClient {
       baseURL: this.apiConfig.BASE,
     })
     if (isUnixOptions(this.options)) {
-      ;(client.defaults as typeof client.defaults & { socketPath?: string }).socketPath = this.options.socketPath
+      ; (client.defaults as typeof client.defaults & { socketPath?: string }).socketPath = this.options.socketPath
     }
     return client
   }
@@ -280,8 +280,4 @@ function isUnixOptions(options: HttpClientOptions | UnixClientOptions): options 
 
 function isErrorPayload(value: unknown): value is ErrorPayload {
   return typeof value === "object" && value !== null && "code" in value
-}
-
-function mapNode(node: Node): Node {
-  return node
 }
