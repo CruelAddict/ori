@@ -95,21 +95,17 @@ func (ns *NodeService) hydrateNode(ctx context.Context, graph *connectionGraph, 
 		return nil
 	}
 
-	nodeCopy := node.Clone()
-	if nodeCopy == nil {
-		return fmt.Errorf("node %s clone failed", nodeID)
-	}
 	var nodes []model.Node
 	var err error
 
-	switch nodeCopy.(type) {
+	switch node.(type) {
 	case *model.DatabaseNode, *model.SchemaNode:
-		nodes, err = ns.hydrateScope(ctx, handle, nodeCopy)
+		nodes, err = ns.hydrateScope(ctx, handle, node)
 	case *model.TableNode, *model.ViewNode:
-		nodes, err = ns.hydrateRelation(ctx, handle, nodeCopy)
+		nodes, err = ns.hydrateRelation(ctx, handle, node)
 	default:
-		nodeCopy.SetHydrated(true)
-		nodes = []model.Node{nodeCopy}
+		node.SetHydrated(true)
+		nodes = []model.Node{node}
 	}
 
 	if err != nil {
@@ -365,7 +361,7 @@ func (s *connectionGraph) get(id string) (model.Node, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	node, ok := s.nodes[id]
-	return node, ok
+	return node.Clone(), ok
 }
 
 func (s *connectionGraph) snapshot(ids []string) (model.Nodes, error) {
