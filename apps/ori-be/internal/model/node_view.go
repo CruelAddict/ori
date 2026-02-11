@@ -9,7 +9,10 @@ import (
 
 type ViewNode struct {
 	BaseNode
-	Attributes  dto.ViewNodeAttributes
+	Connection  string
+	Definition  *string
+	Table       string
+	TableType   string
 	Columns     []string
 	Constraints []string
 	Indexes     []string
@@ -22,12 +25,7 @@ func (n *ViewNode) Clone() Node {
 	}
 	clone := *n
 	clone.BaseNode = n.cloneBase()
-	clone.Attributes = dto.ViewNodeAttributes{
-		Connection: n.Attributes.Connection,
-		Definition: cloneutil.Ptr(n.Attributes.Definition),
-		Table:      n.Attributes.Table,
-		TableType:  n.Attributes.TableType,
-	}
+	clone.Definition = cloneutil.Ptr(n.Definition)
 	clone.Columns = cloneutil.Slice(n.Columns)
 	clone.Constraints = cloneutil.Slice(n.Constraints)
 	clone.Indexes = cloneutil.Slice(n.Indexes)
@@ -39,7 +37,7 @@ func (n *ViewNode) RelationName() string {
 	if n == nil {
 		return ""
 	}
-	return n.Attributes.Table
+	return n.Table
 }
 
 func (node *ViewNode) ToDTO() (dto.Node, error) {
@@ -56,7 +54,12 @@ func (node *ViewNode) ToDTO() (dto.Node, error) {
 			NodeRelationIndexes:     relationToDTO(node.Indexes),
 			NodeRelationTriggers:    relationToDTO(node.Triggers),
 		},
-		Attributes: node.Attributes,
+		Attributes: dto.ViewNodeAttributes{
+			Connection: node.Connection,
+			Definition: node.Definition,
+			Table:      node.Table,
+			TableType:  node.TableType,
+		},
 	})
 	if err != nil {
 		return dto.Node{}, fmt.Errorf("node %s: %w", node.GetID(), err)

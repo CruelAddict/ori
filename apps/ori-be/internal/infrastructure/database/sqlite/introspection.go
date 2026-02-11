@@ -34,16 +34,19 @@ func (a *Adapter) GetScopes(ctx context.Context) ([]model.Scope, error) {
 			continue
 		}
 
-		attrs := map[string]any{
-			"file":     file.String,
-			"sequence": seq,
-		}
+		fileValue := file.String
+		sequence := seq
+
+		var pageSizeValue *int64
 
 		if pageSize, err := a.pragmaInt(ctx, name, "page_size"); err == nil {
-			attrs["pageSize"] = pageSize
+			value := pageSize
+			pageSizeValue = &value
 		}
+		var encodingValue *string
 		if encoding, err := a.pragmaText(ctx, name, "encoding"); err == nil && encoding != "" {
-			attrs["encoding"] = encoding
+			value := encoding
+			encodingValue = &value
 		}
 
 		scopes = append(scopes, model.Scope{
@@ -51,7 +54,10 @@ func (a *Adapter) GetScopes(ctx context.Context) ([]model.Scope, error) {
 				Database: name,
 				Schema:   nil,
 			},
-			Attrs: attrs,
+			File:     &fileValue,
+			Sequence: &sequence,
+			PageSize: pageSizeValue,
+			Encoding: encodingValue,
 		})
 	}
 

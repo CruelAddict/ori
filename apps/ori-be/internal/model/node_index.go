@@ -9,7 +9,16 @@ import (
 
 type IndexNode struct {
 	BaseNode
-	Attributes dto.IndexNodeAttributes
+	Columns        *[]string
+	Connection     string
+	Definition     *string
+	IncludeColumns *[]string
+	IndexName      string
+	Method         *string
+	Predicate      *string
+	Primary        bool
+	Table          string
+	Unique         bool
 }
 
 func (n *IndexNode) Clone() Node {
@@ -18,18 +27,11 @@ func (n *IndexNode) Clone() Node {
 	}
 	clone := *n
 	clone.BaseNode = n.cloneBase()
-	clone.Attributes = dto.IndexNodeAttributes{
-		Columns:        cloneutil.SlicePtr(n.Attributes.Columns),
-		Connection:     n.Attributes.Connection,
-		Definition:     cloneutil.Ptr(n.Attributes.Definition),
-		IncludeColumns: cloneutil.SlicePtr(n.Attributes.IncludeColumns),
-		IndexName:      n.Attributes.IndexName,
-		Method:         cloneutil.Ptr(n.Attributes.Method),
-		Predicate:      cloneutil.Ptr(n.Attributes.Predicate),
-		Primary:        n.Attributes.Primary,
-		Table:          n.Attributes.Table,
-		Unique:         n.Attributes.Unique,
-	}
+	clone.Columns = cloneutil.SlicePtr(n.Columns)
+	clone.Definition = cloneutil.Ptr(n.Definition)
+	clone.IncludeColumns = cloneutil.SlicePtr(n.IncludeColumns)
+	clone.Method = cloneutil.Ptr(n.Method)
+	clone.Predicate = cloneutil.Ptr(n.Predicate)
 	return &clone
 }
 
@@ -39,10 +41,21 @@ func (node *IndexNode) ToDTO() (dto.Node, error) {
 	}
 	out := dto.Node{}
 	err := out.FromIndexNode(dto.IndexNode{
-		Id:         node.GetID(),
-		Name:       node.GetName(),
-		Edges:      map[string]dto.NodeEdge{},
-		Attributes: node.Attributes,
+		Id:    node.GetID(),
+		Name:  node.GetName(),
+		Edges: map[string]dto.NodeEdge{},
+		Attributes: dto.IndexNodeAttributes{
+			Columns:        node.Columns,
+			Connection:     node.Connection,
+			Definition:     node.Definition,
+			IncludeColumns: node.IncludeColumns,
+			IndexName:      node.IndexName,
+			Method:         node.Method,
+			Predicate:      node.Predicate,
+			Primary:        node.Primary,
+			Table:          node.Table,
+			Unique:         node.Unique,
+		},
 	})
 	if err != nil {
 		return dto.Node{}, fmt.Errorf("node %s: %w", node.GetID(), err)

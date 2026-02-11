@@ -17,13 +17,11 @@ func TestGraphBuilderNodesConvertToDTO(t *testing.T) {
 	b := NewGraphBuilder(handle)
 
 	scope := model.Scope{
-		ScopeID: model.ScopeID{Database: "main"},
-		Attrs: map[string]any{
-			"file":     "/tmp/main.db",
-			"sequence": 0,
-			"pageSize": int64(4096),
-			"encoding": "UTF-8",
-		},
+		ScopeID:  model.ScopeID{Database: "main"},
+		File:     stringPtr("/tmp/main.db"),
+		Sequence: intPtr(0),
+		PageSize: int64Ptr(4096),
+		Encoding: stringPtr("UTF-8"),
 	}
 
 	relation := model.Relation{Name: "users", Type: "table", Definition: "create table users (...)"}
@@ -93,4 +91,16 @@ func TestGraphBuilderNodesConvertToDTO(t *testing.T) {
 	if _, err := model.ConvertNodesToDTO(nodes); err != nil {
 		t.Fatalf("expected GraphBuilder output to match contract, got error: %v", err)
 	}
+}
+
+func stringPtr(v string) *string {
+	return &v
+}
+
+func intPtr(v int) *int {
+	return &v
+}
+
+func int64Ptr(v int64) *int64 {
+	return &v
 }

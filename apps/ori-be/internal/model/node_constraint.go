@@ -9,7 +9,20 @@ import (
 
 type ConstraintNode struct {
 	BaseNode
-	Attributes dto.ConstraintNodeAttributes
+	CheckClause        *string
+	Columns            *[]string
+	Connection         string
+	ConstraintName     string
+	ConstraintType     string
+	IndexName          *string
+	Match              *string
+	OnDelete           *string
+	OnUpdate           *string
+	ReferencedColumns  *[]string
+	ReferencedDatabase *string
+	ReferencedSchema   *string
+	ReferencedTable    *string
+	Table              string
 }
 
 func (n *ConstraintNode) Clone() Node {
@@ -18,22 +31,16 @@ func (n *ConstraintNode) Clone() Node {
 	}
 	clone := *n
 	clone.BaseNode = n.cloneBase()
-	clone.Attributes = dto.ConstraintNodeAttributes{
-		CheckClause:        cloneutil.Ptr(n.Attributes.CheckClause),
-		Columns:            cloneutil.SlicePtr(n.Attributes.Columns),
-		Connection:         n.Attributes.Connection,
-		ConstraintName:     n.Attributes.ConstraintName,
-		ConstraintType:     n.Attributes.ConstraintType,
-		IndexName:          cloneutil.Ptr(n.Attributes.IndexName),
-		Match:              cloneutil.Ptr(n.Attributes.Match),
-		OnDelete:           cloneutil.Ptr(n.Attributes.OnDelete),
-		OnUpdate:           cloneutil.Ptr(n.Attributes.OnUpdate),
-		ReferencedColumns:  cloneutil.SlicePtr(n.Attributes.ReferencedColumns),
-		ReferencedDatabase: cloneutil.Ptr(n.Attributes.ReferencedDatabase),
-		ReferencedSchema:   cloneutil.Ptr(n.Attributes.ReferencedSchema),
-		ReferencedTable:    cloneutil.Ptr(n.Attributes.ReferencedTable),
-		Table:              n.Attributes.Table,
-	}
+	clone.CheckClause = cloneutil.Ptr(n.CheckClause)
+	clone.Columns = cloneutil.SlicePtr(n.Columns)
+	clone.IndexName = cloneutil.Ptr(n.IndexName)
+	clone.Match = cloneutil.Ptr(n.Match)
+	clone.OnDelete = cloneutil.Ptr(n.OnDelete)
+	clone.OnUpdate = cloneutil.Ptr(n.OnUpdate)
+	clone.ReferencedColumns = cloneutil.SlicePtr(n.ReferencedColumns)
+	clone.ReferencedDatabase = cloneutil.Ptr(n.ReferencedDatabase)
+	clone.ReferencedSchema = cloneutil.Ptr(n.ReferencedSchema)
+	clone.ReferencedTable = cloneutil.Ptr(n.ReferencedTable)
 	return &clone
 }
 
@@ -43,10 +50,25 @@ func (node *ConstraintNode) ToDTO() (dto.Node, error) {
 	}
 	out := dto.Node{}
 	err := out.FromConstraintNode(dto.ConstraintNode{
-		Id:         node.GetID(),
-		Name:       node.GetName(),
-		Edges:      map[string]dto.NodeEdge{},
-		Attributes: node.Attributes,
+		Id:    node.GetID(),
+		Name:  node.GetName(),
+		Edges: map[string]dto.NodeEdge{},
+		Attributes: dto.ConstraintNodeAttributes{
+			CheckClause:        node.CheckClause,
+			Columns:            node.Columns,
+			Connection:         node.Connection,
+			ConstraintName:     node.ConstraintName,
+			ConstraintType:     node.ConstraintType,
+			IndexName:          node.IndexName,
+			Match:              node.Match,
+			OnDelete:           node.OnDelete,
+			OnUpdate:           node.OnUpdate,
+			ReferencedColumns:  node.ReferencedColumns,
+			ReferencedDatabase: node.ReferencedDatabase,
+			ReferencedSchema:   node.ReferencedSchema,
+			ReferencedTable:    node.ReferencedTable,
+			Table:              node.Table,
+		},
 	})
 	if err != nil {
 		return dto.Node{}, fmt.Errorf("node %s: %w", node.GetID(), err)

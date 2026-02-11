@@ -6,7 +6,6 @@ import (
 	"github.com/crueladdict/ori/apps/ori-server/internal/model"
 	"github.com/crueladdict/ori/apps/ori-server/internal/pkg/cloneutil"
 	"github.com/crueladdict/ori/apps/ori-server/internal/pkg/stringutil"
-	dto "github.com/crueladdict/ori/libs/contract/go"
 )
 
 // GraphBuilder converts relational metadata into graph nodes.
@@ -75,34 +74,10 @@ func (b *GraphBuilder) TriggerNodeID(scope model.ScopeID, relation, triggerName 
 // BuildScopeNode creates a node for a scope.
 func (b *GraphBuilder) BuildScopeNode(scope model.Scope) model.Node {
 	if scope.Schema == nil {
-		attrs := dto.DatabaseNodeAttributes{
-			Connection: b.connectionName,
-			Engine:     b.engine,
-		}
-		if file, ok := attributeAsString(scope.Attrs, "file"); ok {
-			attrs.File = &file
-		}
-		if v, ok := scope.Attrs["sequence"]; ok {
-			switch sequence := v.(type) {
-			case int:
-				attrs.Sequence = &sequence
-			case int64:
-				seq := int(sequence)
-				attrs.Sequence = &seq
-			}
-		}
-		if v, ok := scope.Attrs["pageSize"]; ok {
-			switch pageSize := v.(type) {
-			case int64:
-				attrs.PageSize = &pageSize
-			case int:
-				sz := int64(pageSize)
-				attrs.PageSize = &sz
-			}
-		}
-		if encoding, ok := attributeAsString(scope.Attrs, "encoding"); ok {
-			attrs.Encoding = &encoding
-		}
+		file := cloneutil.Ptr(scope.File)
+		sequence := cloneutil.Ptr(scope.Sequence)
+		pageSize := cloneutil.Ptr(scope.PageSize)
+		encoding := cloneutil.Ptr(scope.Encoding)
 		return &model.DatabaseNode{
 			BaseNode: model.BaseNode{
 				ID:       b.ScopeNodeID(scope.ScopeID),
@@ -110,7 +85,12 @@ func (b *GraphBuilder) BuildScopeNode(scope model.Scope) model.Node {
 				Scope:    scope.ScopeID,
 				Hydrated: false,
 			},
-			Attributes: attrs,
+			Connection: b.connectionName,
+			Engine:     b.engine,
+			File:       file,
+			Sequence:   sequence,
+			PageSize:   pageSize,
+			Encoding:   encoding,
 		}
 	}
 
@@ -121,24 +101,15 @@ func (b *GraphBuilder) BuildScopeNode(scope model.Scope) model.Node {
 			Scope:    scope.ScopeID,
 			Hydrated: false,
 		},
-		Attributes: dto.SchemaNodeAttributes{
-			Connection: b.connectionName,
-			Engine:     b.engine,
-		},
+		Connection: b.connectionName,
+		Engine:     b.engine,
 	}
 }
 
 // BuildRelationNode creates a node for a table or view.
 func (b *GraphBuilder) BuildRelationNode(scope model.ScopeID, rel model.Relation) model.Node {
 	if rel.Type == "view" {
-		attrs := dto.ViewNodeAttributes{
-			Connection: b.connectionName,
-			Table:      rel.Name,
-			TableType:  rel.Type,
-		}
-		if rel.Definition != "" {
-			attrs.Definition = &rel.Definition
-		}
+		definition := stringPtrIfNotEmpty(rel.Definition)
 		return &model.ViewNode{
 			BaseNode: model.BaseNode{
 				ID:       b.RelationNodeID(scope, rel),
@@ -146,18 +117,14 @@ func (b *GraphBuilder) BuildRelationNode(scope model.ScopeID, rel model.Relation
 				Scope:    scope,
 				Hydrated: false,
 			},
-			Attributes: attrs,
+			Connection: b.connectionName,
+			Definition: definition,
+			Table:      rel.Name,
+			TableType:  rel.Type,
 		}
 	}
 
-	attrs := dto.TableNodeAttributes{
-		Connection: b.connectionName,
-		Table:      rel.Name,
-		TableType:  rel.Type,
-	}
-	if rel.Definition != "" {
-		attrs.Definition = &rel.Definition
-	}
+	definition := stringPtrIfNotEmpty(rel.Definition)
 	return &model.TableNode{
 		BaseNode: model.BaseNode{
 			ID:       b.RelationNodeID(scope, rel),
@@ -165,7 +132,10 @@ func (b *GraphBuilder) BuildRelationNode(scope model.ScopeID, rel model.Relation
 			Scope:    scope,
 			Hydrated: false,
 		},
-		Attributes: attrs,
+		Connection: b.connectionName,
+		Definition: definition,
+		Table:      rel.Name,
+		TableType:  rel.Type,
 	}
 }
 
@@ -175,31 +145,15 @@ func (b *GraphBuilder) BuildColumnNodes(scope model.ScopeID, relation string, co
 	columnIDs := make([]string, 0, len(columns))
 
 	for _, col := range columns {
-		attrs := dto.ColumnNodeAttributes{
-			Connection: b.connectionName,
-			Table:      relation,
-			Column:     col.Name,
-			Ordinal:    col.Ordinal,
-			DataType:   col.DataType,
-			NotNull:    col.NotNull,
-		}
-
-		if col.DefaultValue != nil {
-			attrs.DefaultValue = cloneutil.Ptr(col.DefaultValue)
-		}
+		defaultValue := cloneutil.Ptr(col.DefaultValue)
+		var primaryKeyPosition *int
 		if col.PrimaryKeyPos > 0 {
 			v := col.PrimaryKeyPos
-			attrs.PrimaryKeyPosition = &v
+			primaryKeyPosition = &v
 		}
-		if col.CharMaxLength != nil {
-			attrs.CharMaxLength = cloneutil.Ptr(col.CharMaxLength)
-		}
-		if col.NumericPrecision != nil {
-			attrs.NumericPrecision = cloneutil.Ptr(col.NumericPrecision)
-		}
-		if col.NumericScale != nil {
-			attrs.NumericScale = cloneutil.Ptr(col.NumericScale)
-		}
+		charMaxLength := cloneutil.Ptr(col.CharMaxLength)
+		numericPrecision := cloneutil.Ptr(col.NumericPrecision)
+		numericScale := cloneutil.Ptr(col.NumericScale)
 
 		node := &model.ColumnNode{
 			BaseNode: model.BaseNode{
@@ -208,7 +162,17 @@ func (b *GraphBuilder) BuildColumnNodes(scope model.ScopeID, relation string, co
 				Scope:    scope,
 				Hydrated: true,
 			},
-			Attributes: attrs,
+			Connection:         b.connectionName,
+			Table:              relation,
+			Column:             col.Name,
+			Ordinal:            col.Ordinal,
+			DataType:           col.DataType,
+			NotNull:            col.NotNull,
+			DefaultValue:       defaultValue,
+			PrimaryKeyPosition: primaryKeyPosition,
+			CharMaxLength:      charMaxLength,
+			NumericPrecision:   numericPrecision,
+			NumericScale:       numericScale,
 		}
 		nodes = append(nodes, node)
 		columnIDs = append(columnIDs, node.GetID())
@@ -230,40 +194,27 @@ func (b *GraphBuilder) BuildConstraintNodes(scope model.ScopeID, relation string
 	constraintIDs := make([]string, 0, len(constraints))
 
 	for _, c := range constraints {
-		attrs := dto.ConstraintNodeAttributes{
-			Connection:     b.connectionName,
-			Table:          relation,
-			ConstraintName: c.Name,
-			ConstraintType: c.Type,
-		}
-
-		if len(c.Columns) > 0 {
-			attrs.Columns = cloneutil.SlicePtrIfNotEmpty(c.Columns)
-		}
+		columns := cloneutil.SlicePtrIfNotEmpty(c.Columns)
+		referencedTable := stringPtrIfNotEmpty(c.ReferencedTable)
+		var referencedDatabase *string
+		var referencedSchema *string
+		var referencedColumns *[]string
+		onUpdate := stringPtrIfNotEmpty(c.OnUpdate)
+		onDelete := stringPtrIfNotEmpty(c.OnDelete)
+		match := stringPtrIfNotEmpty(c.Match)
 
 		if c.Type == "FOREIGN KEY" {
-			attrs.ReferencedTable = stringPtrIfNotEmpty(c.ReferencedTable)
 			if c.ReferencedScope != nil {
-				attrs.ReferencedDatabase = stringPtrIfNotEmpty(c.ReferencedScope.Database)
+				referencedDatabase = stringPtrIfNotEmpty(c.ReferencedScope.Database)
 				if c.ReferencedScope.Schema != nil {
-					attrs.ReferencedSchema = cloneutil.Ptr(c.ReferencedScope.Schema)
+					referencedSchema = cloneutil.Ptr(c.ReferencedScope.Schema)
 				}
 			}
-			if len(c.ReferencedColumns) > 0 {
-				attrs.ReferencedColumns = cloneutil.SlicePtrIfNotEmpty(c.ReferencedColumns)
-			}
-			attrs.OnUpdate = stringPtrIfNotEmpty(c.OnUpdate)
-			attrs.OnDelete = stringPtrIfNotEmpty(c.OnDelete)
-			attrs.Match = stringPtrIfNotEmpty(c.Match)
+			referencedColumns = cloneutil.SlicePtrIfNotEmpty(c.ReferencedColumns)
 		}
 
-		if c.UnderlyingIndex != nil {
-			attrs.IndexName = cloneutil.Ptr(c.UnderlyingIndex)
-		}
-
-		if c.CheckClause != "" {
-			attrs.CheckClause = stringPtrIfNotEmpty(c.CheckClause)
-		}
+		indexName := cloneutil.Ptr(c.UnderlyingIndex)
+		checkClause := stringPtrIfNotEmpty(c.CheckClause)
 
 		node := &model.ConstraintNode{
 			BaseNode: model.BaseNode{
@@ -272,7 +223,20 @@ func (b *GraphBuilder) BuildConstraintNodes(scope model.ScopeID, relation string
 				Scope:    scope,
 				Hydrated: true,
 			},
-			Attributes: attrs,
+			Connection:         b.connectionName,
+			Table:              relation,
+			ConstraintName:     c.Name,
+			ConstraintType:     c.Type,
+			Columns:            columns,
+			ReferencedTable:    referencedTable,
+			ReferencedDatabase: referencedDatabase,
+			ReferencedSchema:   referencedSchema,
+			ReferencedColumns:  referencedColumns,
+			OnUpdate:           onUpdate,
+			OnDelete:           onDelete,
+			Match:              match,
+			IndexName:          indexName,
+			CheckClause:        checkClause,
 		}
 		nodes = append(nodes, node)
 		constraintIDs = append(constraintIDs, node.GetID())
@@ -291,29 +255,11 @@ func (b *GraphBuilder) BuildIndexNodes(scope model.ScopeID, relation string, ind
 	indexIDs := make([]string, 0, len(indexes))
 
 	for _, idx := range indexes {
-		attrs := dto.IndexNodeAttributes{
-			Connection: b.connectionName,
-			Table:      relation,
-			IndexName:  idx.Name,
-			Unique:     idx.Unique,
-			Primary:    idx.Primary,
-		}
-
-		if len(idx.Columns) > 0 {
-			attrs.Columns = cloneutil.SlicePtrIfNotEmpty(idx.Columns)
-		}
-		if len(idx.IncludeColumns) > 0 {
-			attrs.IncludeColumns = cloneutil.SlicePtrIfNotEmpty(idx.IncludeColumns)
-		}
-		if idx.Definition != "" {
-			attrs.Definition = stringPtrIfNotEmpty(idx.Definition)
-		}
-		if idx.Method != "" {
-			attrs.Method = stringPtrIfNotEmpty(idx.Method)
-		}
-		if idx.Predicate != "" {
-			attrs.Predicate = stringPtrIfNotEmpty(idx.Predicate)
-		}
+		columns := cloneutil.SlicePtrIfNotEmpty(idx.Columns)
+		includeColumns := cloneutil.SlicePtrIfNotEmpty(idx.IncludeColumns)
+		definition := stringPtrIfNotEmpty(idx.Definition)
+		method := stringPtrIfNotEmpty(idx.Method)
+		predicate := stringPtrIfNotEmpty(idx.Predicate)
 
 		node := &model.IndexNode{
 			BaseNode: model.BaseNode{
@@ -322,7 +268,16 @@ func (b *GraphBuilder) BuildIndexNodes(scope model.ScopeID, relation string, ind
 				Scope:    scope,
 				Hydrated: true,
 			},
-			Attributes: attrs,
+			Connection:     b.connectionName,
+			Table:          relation,
+			IndexName:      idx.Name,
+			Unique:         idx.Unique,
+			Primary:        idx.Primary,
+			Columns:        columns,
+			IncludeColumns: includeColumns,
+			Definition:     definition,
+			Method:         method,
+			Predicate:      predicate,
 		}
 		nodes = append(nodes, node)
 		indexIDs = append(indexIDs, node.GetID())
@@ -341,29 +296,11 @@ func (b *GraphBuilder) BuildTriggerNodes(scope model.ScopeID, relation string, t
 	triggerIDs := make([]string, 0, len(triggers))
 
 	for _, trg := range triggers {
-		attrs := dto.TriggerNodeAttributes{
-			Connection:  b.connectionName,
-			Table:       relation,
-			TriggerName: trg.Name,
-			Timing:      trg.Timing,
-			Orientation: trg.Orientation,
-		}
-
-		if len(trg.Events) > 0 {
-			attrs.Events = cloneutil.SlicePtrIfNotEmpty(trg.Events)
-		}
-		if trg.Statement != "" {
-			attrs.Statement = stringPtrIfNotEmpty(trg.Statement)
-		}
-		if trg.Condition != "" {
-			attrs.Condition = stringPtrIfNotEmpty(trg.Condition)
-		}
-		if trg.EnabledState != "" {
-			attrs.EnabledState = stringPtrIfNotEmpty(trg.EnabledState)
-		}
-		if trg.Definition != "" {
-			attrs.Definition = stringPtrIfNotEmpty(trg.Definition)
-		}
+		events := cloneutil.SlicePtrIfNotEmpty(trg.Events)
+		statement := stringPtrIfNotEmpty(trg.Statement)
+		condition := stringPtrIfNotEmpty(trg.Condition)
+		enabledState := stringPtrIfNotEmpty(trg.EnabledState)
+		definition := stringPtrIfNotEmpty(trg.Definition)
 
 		node := &model.TriggerNode{
 			BaseNode: model.BaseNode{
@@ -372,7 +309,16 @@ func (b *GraphBuilder) BuildTriggerNodes(scope model.ScopeID, relation string, t
 				Scope:    scope,
 				Hydrated: true,
 			},
-			Attributes: attrs,
+			Connection:   b.connectionName,
+			Table:        relation,
+			TriggerName:  trg.Name,
+			Timing:       trg.Timing,
+			Orientation:  trg.Orientation,
+			Events:       events,
+			Statement:    statement,
+			Condition:    condition,
+			EnabledState: enabledState,
+			Definition:   definition,
 		}
 		nodes = append(nodes, node)
 		triggerIDs = append(triggerIDs, node.GetID())
@@ -394,18 +340,6 @@ func constraintTypeOrder(t string) int {
 	default:
 		return 4
 	}
-}
-
-func attributeAsString(attrs map[string]any, key string) (string, bool) {
-	v, ok := attrs[key]
-	if !ok {
-		return "", false
-	}
-	s, ok := v.(string)
-	if !ok {
-		return "", false
-	}
-	return s, true
 }
 
 func stringPtrIfNotEmpty(value string) *string {

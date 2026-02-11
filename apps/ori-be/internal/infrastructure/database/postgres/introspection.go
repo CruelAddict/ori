@@ -36,7 +36,6 @@ func (a *Adapter) GetScopes(ctx context.Context) ([]model.Scope, error) {
 				Database: a.config.Database,
 				Schema:   &schemaName,
 			},
-			Attrs: map[string]any{},
 		})
 	}
 	if err := rows.Err(); err != nil {

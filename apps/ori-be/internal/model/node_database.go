@@ -9,7 +9,12 @@ import (
 
 type DatabaseNode struct {
 	BaseNode
-	Attributes dto.DatabaseNodeAttributes
+	Connection string
+	Encoding   *string
+	Engine     string
+	File       *string
+	PageSize   *int64
+	Sequence   *int
 	Tables     []string
 	Views      []string
 }
@@ -20,14 +25,10 @@ func (n *DatabaseNode) Clone() Node {
 	}
 	clone := *n
 	clone.BaseNode = n.cloneBase()
-	clone.Attributes = dto.DatabaseNodeAttributes{
-		Connection: n.Attributes.Connection,
-		Encoding:   cloneutil.Ptr(n.Attributes.Encoding),
-		Engine:     n.Attributes.Engine,
-		File:       cloneutil.Ptr(n.Attributes.File),
-		PageSize:   cloneutil.Ptr(n.Attributes.PageSize),
-		Sequence:   cloneutil.Ptr(n.Attributes.Sequence),
-	}
+	clone.Encoding = cloneutil.Ptr(n.Encoding)
+	clone.File = cloneutil.Ptr(n.File)
+	clone.PageSize = cloneutil.Ptr(n.PageSize)
+	clone.Sequence = cloneutil.Ptr(n.Sequence)
 	clone.Tables = cloneutil.Slice(n.Tables)
 	clone.Views = cloneutil.Slice(n.Views)
 	return &clone
@@ -45,7 +46,14 @@ func (node *DatabaseNode) ToDTO() (dto.Node, error) {
 			NodeRelationTables: relationToDTO(node.Tables),
 			NodeRelationViews:  relationToDTO(node.Views),
 		},
-		Attributes: node.Attributes,
+		Attributes: dto.DatabaseNodeAttributes{
+			Connection: node.Connection,
+			Encoding:   node.Encoding,
+			Engine:     node.Engine,
+			File:       node.File,
+			PageSize:   node.PageSize,
+			Sequence:   node.Sequence,
+		},
 	})
 	if err != nil {
 		return dto.Node{}, fmt.Errorf("node %s: %w", node.GetID(), err)

@@ -9,7 +9,8 @@ import (
 
 type SchemaNode struct {
 	BaseNode
-	Attributes dto.SchemaNodeAttributes
+	Connection string
+	Engine     string
 	Tables     []string
 	Views      []string
 }
@@ -20,7 +21,6 @@ func (n *SchemaNode) Clone() Node {
 	}
 	clone := *n
 	clone.BaseNode = n.cloneBase()
-	clone.Attributes = n.Attributes
 	clone.Tables = cloneutil.Slice(n.Tables)
 	clone.Views = cloneutil.Slice(n.Views)
 	return &clone
@@ -38,7 +38,10 @@ func (node *SchemaNode) ToDTO() (dto.Node, error) {
 			NodeRelationTables: relationToDTO(node.Tables),
 			NodeRelationViews:  relationToDTO(node.Views),
 		},
-		Attributes: node.Attributes,
+		Attributes: dto.SchemaNodeAttributes{
+			Connection: node.Connection,
+			Engine:     node.Engine,
+		},
 	})
 	if err != nil {
 		return dto.Node{}, fmt.Errorf("node %s: %w", node.GetID(), err)

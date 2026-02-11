@@ -9,7 +9,10 @@ type ScopeID struct {
 // Scope is a ScopeID with additional engine-specific attributes.
 type Scope struct {
 	ScopeID
-	Attrs map[string]any
+	File     *string
+	Sequence *int
+	PageSize *int64
+	Encoding *string
 }
 
 // Relation describes a table or view.

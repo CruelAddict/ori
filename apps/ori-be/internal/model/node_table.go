@@ -9,7 +9,10 @@ import (
 
 type TableNode struct {
 	BaseNode
-	Attributes  dto.TableNodeAttributes
+	Connection  string
+	Definition  *string
+	Table       string
+	TableType   string
 	Partitions  []string
 	Columns     []string
 	Constraints []string
@@ -23,12 +26,7 @@ func (n *TableNode) Clone() Node {
 	}
 	clone := *n
 	clone.BaseNode = n.cloneBase()
-	clone.Attributes = dto.TableNodeAttributes{
-		Connection: n.Attributes.Connection,
-		Definition: cloneutil.Ptr(n.Attributes.Definition),
-		Table:      n.Attributes.Table,
-		TableType:  n.Attributes.TableType,
-	}
+	clone.Definition = cloneutil.Ptr(n.Definition)
 	clone.Partitions = cloneutil.Slice(n.Partitions)
 	clone.Columns = cloneutil.Slice(n.Columns)
 	clone.Constraints = cloneutil.Slice(n.Constraints)
@@ -41,7 +39,7 @@ func (n *TableNode) RelationName() string {
 	if n == nil {
 		return ""
 	}
-	return n.Attributes.Table
+	return n.Table
 }
 
 func (node *TableNode) ToDTO() (dto.Node, error) {
@@ -59,7 +57,12 @@ func (node *TableNode) ToDTO() (dto.Node, error) {
 			NodeRelationIndexes:     relationToDTO(node.Indexes),
 			NodeRelationTriggers:    relationToDTO(node.Triggers),
 		},
-		Attributes: node.Attributes,
+		Attributes: dto.TableNodeAttributes{
+			Connection: node.Connection,
+			Definition: node.Definition,
+			Table:      node.Table,
+			TableType:  node.TableType,
+		},
 	})
 	if err != nil {
 		return dto.Node{}, fmt.Errorf("node %s: %w", node.GetID(), err)
