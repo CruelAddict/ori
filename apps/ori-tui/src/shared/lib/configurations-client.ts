@@ -85,22 +85,19 @@ export type CreateClientOptions = {
   logger: Logger
 }
 
-type HttpClientOptions = {
-  host: string
-  port: number
-  logger: Logger
-}
-
-type UnixClientOptions = {
-  socketPath: string
-  logger: Logger
-}
-
-class RestOriClient implements OriClient {
+export class RestOriClient implements OriClient {
   private readonly apiConfig: OpenAPIConfig
   private readonly httpClient: AxiosInstance
+  private readonly logger: Logger
+  private readonly socketPath?: string
+  private readonly host: string
+  private readonly port: number
 
-  constructor(private readonly options: HttpClientOptions | UnixClientOptions) {
+  constructor(options: CreateClientOptions) {
+    this.logger = options.logger
+    this.socketPath = options.socketPath
+    this.host = options.host ?? "localhost"
+    this.port = options.port ?? 8080
     this.apiConfig = this.createApiConfig()
     this.httpClient = this.createHttpClient()
   }
@@ -195,22 +192,22 @@ class RestOriClient implements OriClient {
   }
 
   openEventStream(onEvent: (event: ServerEvent) => void): () => void {
-    if (isUnixOptions(this.options)) {
+    if (this.socketPath) {
       return createSSEStream(
         {
-          socketPath: this.options.socketPath,
+          socketPath: this.socketPath,
           path: "/events",
-          logger: this.options.logger,
+          logger: this.logger,
         },
         (message) => this.dispatchEvent(message, onEvent),
       )
     }
     return createSSEStream(
       {
-        host: this.options.host,
-        port: this.options.port,
+        host: this.host,
+        port: this.port,
         path: "/events",
-        logger: this.options.logger,
+        logger: this.logger,
       },
       (message) => this.dispatchEvent(message, onEvent),
     )
@@ -223,7 +220,7 @@ class RestOriClient implements OriClient {
         onEvent(event)
       }
     } catch (err) {
-      this.options.logger.error({ err }, "failed to decode SSE payload")
+      this.logger.error({ err }, "failed to decode SSE payload")
     }
   }
 
@@ -238,17 +235,17 @@ class RestOriClient implements OriClient {
     const client = axios.create({
       baseURL: this.apiConfig.BASE,
     })
-    if (isUnixOptions(this.options)) {
-      ; (client.defaults as typeof client.defaults & { socketPath?: string }).socketPath = this.options.socketPath
+    if (this.socketPath) {
+      ;(client.defaults as typeof client.defaults & { socketPath?: string }).socketPath = this.socketPath
     }
     return client
   }
 
   private buildBaseURL(): string {
-    if (isUnixOptions(this.options)) {
+    if (this.socketPath) {
       return "http://unix"
     }
-    return `http://${this.options.host}:${this.options.port}`
+    return `http://${this.host}:${this.port}`
   }
 
   private async send<T>(options: ApiRequestOptions): Promise<T> {
@@ -257,27 +254,9 @@ class RestOriClient implements OriClient {
   }
 
   private unwrap<T>(result: T | ErrorPayload): T {
-    if (isErrorPayload(result)) {
+    if (typeof result === "object" && result !== null && "code" in result) {
       throw new Error(result.message ?? "request failed")
     }
     return result
   }
-}
-
-export function createOriClient(options: CreateClientOptions): OriClient {
-  if (options.socketPath) {
-    return new RestOriClient({ socketPath: options.socketPath, logger: options.logger })
-  }
-
-  const host = options.host ?? "localhost"
-  const port = options.port ?? 8080
-  return new RestOriClient({ host, port, logger: options.logger })
-}
-
-function isUnixOptions(options: HttpClientOptions | UnixClientOptions): options is UnixClientOptions {
-  return (options as UnixClientOptions).socketPath !== undefined
-}
-
-function isErrorPayload(value: unknown): value is ErrorPayload {
-  return typeof value === "object" && value !== null && "code" in value
 }

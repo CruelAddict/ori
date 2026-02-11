@@ -1,5 +1,5 @@
 import type { CreateClientOptions, OriClient } from "@shared/lib/configurations-client"
-import { createOriClient } from "@shared/lib/configurations-client"
+import { RestOriClient } from "@shared/lib/configurations-client"
 import type { JSX } from "solid-js"
 import { createComponent, createContext, useContext } from "solid-js"
 import { useLogger } from "./logger"
@@ -20,7 +20,7 @@ export type ClientProviderProps = {
 
 export function ClientProvider(props: ClientProviderProps) {
   const logger = useLogger()
-  const client = createOriClient({ ...props.options, logger })
+  const client = new RestOriClient({ ...props.options, logger })
   const value: ClientContextValue = {
     client,
     host: props.options.host,
