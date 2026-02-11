@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/crueladdict/ori/apps/ori-server/internal/pkg/cloneutil"
+	"github.com/crueladdict/ori/apps/ori-server/internal/pkg/stringutil"
 	dto "github.com/crueladdict/ori/libs/contract/go"
 )
 
@@ -29,9 +30,14 @@ func NewColumnNode(engine, connectionName string, scope ScopeID, relation string
 		primaryKeyPosition = &v
 	}
 
+	id := stringutil.Slug(engine, connectionName, "column", scope.Database, relation, col.Name)
+	if scope.Schema != nil {
+		id = stringutil.Slug(engine, connectionName, "column", *scope.Schema, relation, col.Name)
+	}
+
 	return &ColumnNode{
 		BaseNode: BaseNode{
-			ID:       columnNodeID(engine, connectionName, scope, relation, col.Name),
+			ID:       id,
 			Name:     col.Name,
 			Scope:    scope,
 			Hydrated: true,

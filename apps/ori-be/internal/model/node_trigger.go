@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/crueladdict/ori/apps/ori-server/internal/pkg/cloneutil"
+	"github.com/crueladdict/ori/apps/ori-server/internal/pkg/stringutil"
 	dto "github.com/crueladdict/ori/libs/contract/go"
 )
 
@@ -22,9 +23,14 @@ type TriggerNode struct {
 }
 
 func NewTriggerNode(engine, connectionName string, scope ScopeID, relation string, trg Trigger) *TriggerNode {
+	id := stringutil.Slug(engine, connectionName, "trigger", scope.Database, relation, trg.Name)
+	if scope.Schema != nil {
+		id = stringutil.Slug(engine, connectionName, "trigger", *scope.Schema, relation, trg.Name)
+	}
+
 	return &TriggerNode{
 		BaseNode: BaseNode{
-			ID:       triggerNodeID(engine, connectionName, scope, relation, trg.Name),
+			ID:       id,
 			Name:     trg.Name,
 			Scope:    scope,
 			Hydrated: true,

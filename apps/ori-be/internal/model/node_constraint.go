@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/crueladdict/ori/apps/ori-server/internal/pkg/cloneutil"
+	"github.com/crueladdict/ori/apps/ori-server/internal/pkg/stringutil"
 	dto "github.com/crueladdict/ori/libs/contract/go"
 )
 
@@ -47,10 +48,14 @@ func NewConstraintNode(engine, connectionName string, scope ScopeID, relation st
 
 	indexName := cloneutil.Ptr(c.UnderlyingIndex)
 	checkClause := stringPtrIfNotEmpty(c.CheckClause)
+	id := stringutil.Slug(engine, connectionName, "constraint", scope.Database, relation, c.Name)
+	if scope.Schema != nil {
+		id = stringutil.Slug(engine, connectionName, "constraint", *scope.Schema, relation, c.Name)
+	}
 
 	return &ConstraintNode{
 		BaseNode: BaseNode{
-			ID:       constraintNodeID(engine, connectionName, scope, relation, c.Name),
+			ID:       id,
 			Name:     c.Name,
 			Scope:    scope,
 			Hydrated: true,

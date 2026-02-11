@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/crueladdict/ori/apps/ori-server/internal/pkg/cloneutil"
+	"github.com/crueladdict/ori/apps/ori-server/internal/pkg/stringutil"
 	dto "github.com/crueladdict/ori/libs/contract/go"
 )
 
@@ -22,9 +23,14 @@ type IndexNode struct {
 }
 
 func NewIndexNode(engine, connectionName string, scope ScopeID, relation string, idx Index) *IndexNode {
+	id := stringutil.Slug(engine, connectionName, "index", scope.Database, relation, idx.Name)
+	if scope.Schema != nil {
+		id = stringutil.Slug(engine, connectionName, "index", *scope.Schema, relation, idx.Name)
+	}
+
 	return &IndexNode{
 		BaseNode: BaseNode{
-			ID:       indexNodeID(engine, connectionName, scope, relation, idx.Name),
+			ID:       id,
 			Name:     idx.Name,
 			Scope:    scope,
 			Hydrated: true,

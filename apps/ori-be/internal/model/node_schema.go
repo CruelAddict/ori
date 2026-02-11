@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/crueladdict/ori/apps/ori-server/internal/pkg/cloneutil"
+	"github.com/crueladdict/ori/apps/ori-server/internal/pkg/stringutil"
 	dto "github.com/crueladdict/ori/libs/contract/go"
 )
 
@@ -17,10 +18,14 @@ type SchemaNode struct {
 
 func NewSchemaNode(engine, connectionName string, scope Schema) *SchemaNode {
 	scopeID := scope.ID()
+	id := stringutil.Slug(engine, connectionName, "database", scopeID.Database)
+	if scopeID.Schema != nil {
+		id = stringutil.Slug(engine, connectionName, "schema", *scopeID.Schema)
+	}
 
 	return &SchemaNode{
 		BaseNode: BaseNode{
-			ID:       scopeNodeID(engine, connectionName, scopeID),
+			ID:       id,
 			Name:     scope.Name,
 			Scope:    scopeID,
 			Hydrated: false,

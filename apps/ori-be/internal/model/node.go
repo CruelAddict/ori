@@ -3,7 +3,6 @@ package model
 import (
 	"fmt"
 
-	"github.com/crueladdict/ori/apps/ori-server/internal/pkg/stringutil"
 	dto "github.com/crueladdict/ori/libs/contract/go"
 )
 
@@ -114,49 +113,6 @@ func relationToDTO(ids []string) dto.NodeEdge {
 		ids = []string{}
 	}
 	return dto.NodeEdge{Items: ids, Truncated: false}
-}
-
-func scopeNodeID(engine, connectionName string, scope ScopeID) string {
-	if scope.Schema == nil {
-		return stringutil.Slug(engine, connectionName, "database", scope.Database)
-	}
-	return stringutil.Slug(engine, connectionName, "schema", *scope.Schema)
-}
-
-func relationNodeID(engine, connectionName string, scope ScopeID, rel Relation) string {
-	nodeType := rel.Type
-	if scope.Schema == nil {
-		return stringutil.Slug(engine, connectionName, nodeType, scope.Database, rel.Name)
-	}
-	return stringutil.Slug(engine, connectionName, nodeType, *scope.Schema, rel.Name)
-}
-
-func columnNodeID(engine, connectionName string, scope ScopeID, relation, column string) string {
-	if scope.Schema == nil {
-		return stringutil.Slug(engine, connectionName, "column", scope.Database, relation, column)
-	}
-	return stringutil.Slug(engine, connectionName, "column", *scope.Schema, relation, column)
-}
-
-func constraintNodeID(engine, connectionName string, scope ScopeID, relation, constraintName string) string {
-	if scope.Schema == nil {
-		return stringutil.Slug(engine, connectionName, "constraint", scope.Database, relation, constraintName)
-	}
-	return stringutil.Slug(engine, connectionName, "constraint", *scope.Schema, relation, constraintName)
-}
-
-func indexNodeID(engine, connectionName string, scope ScopeID, relation, indexName string) string {
-	if scope.Schema == nil {
-		return stringutil.Slug(engine, connectionName, "index", scope.Database, relation, indexName)
-	}
-	return stringutil.Slug(engine, connectionName, "index", *scope.Schema, relation, indexName)
-}
-
-func triggerNodeID(engine, connectionName string, scope ScopeID, relation, triggerName string) string {
-	if scope.Schema == nil {
-		return stringutil.Slug(engine, connectionName, "trigger", scope.Database, relation, triggerName)
-	}
-	return stringutil.Slug(engine, connectionName, "trigger", *scope.Schema, relation, triggerName)
 }
 
 func stringPtrIfNotEmpty(value string) *string {

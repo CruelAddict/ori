@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/crueladdict/ori/apps/ori-server/internal/pkg/cloneutil"
+	"github.com/crueladdict/ori/apps/ori-server/internal/pkg/stringutil"
 	dto "github.com/crueladdict/ori/libs/contract/go"
 )
 
@@ -20,9 +21,14 @@ type ViewNode struct {
 }
 
 func NewViewNode(engine, connectionName string, scope ScopeID, rel Relation) *ViewNode {
+	id := stringutil.Slug(engine, connectionName, rel.Type, scope.Database, rel.Name)
+	if scope.Schema != nil {
+		id = stringutil.Slug(engine, connectionName, rel.Type, *scope.Schema, rel.Name)
+	}
+
 	return &ViewNode{
 		BaseNode: BaseNode{
-			ID:       relationNodeID(engine, connectionName, scope, rel),
+			ID:       id,
 			Name:     rel.Name,
 			Scope:    scope,
 			Hydrated: false,
