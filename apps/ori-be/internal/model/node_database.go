@@ -19,6 +19,24 @@ type DatabaseNode struct {
 	Views      []string
 }
 
+func NewDatabaseNode(engine, connectionName string, scope Database) *DatabaseNode {
+	scopeID := scope.ID()
+	return &DatabaseNode{
+		BaseNode: BaseNode{
+			ID:       scopeNodeID(engine, connectionName, scopeID),
+			Name:     scope.Name,
+			Scope:    scopeID,
+			Hydrated: false,
+		},
+		Connection: connectionName,
+		Engine:     engine,
+		File:       cloneutil.Ptr(scope.File),
+		Sequence:   cloneutil.Ptr(scope.Sequence),
+		PageSize:   cloneutil.Ptr(scope.PageSize),
+		Encoding:   cloneutil.Ptr(scope.Encoding),
+	}
+}
+
 func (n *DatabaseNode) Clone() Node {
 	if n == nil {
 		return nil

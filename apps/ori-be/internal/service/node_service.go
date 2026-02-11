@@ -154,7 +154,7 @@ func (ns *NodeService) hydrateScope(ctx context.Context, handle *ConnectionHandl
 					parentScope.Schema = rel.ParentSchema
 				}
 				parentRel := model.Relation{Name: *rel.ParentTable, Type: "table"}
-				parentID := builder.RelationNodeID(parentScope, parentRel)
+				parentID := builder.BuildRelationNode(parentScope, parentRel).GetID()
 				partitionEdges[parentID] = append(partitionEdges[parentID], relNode.GetID())
 			} else {
 				tableIDs = append(tableIDs, relNode.GetID())

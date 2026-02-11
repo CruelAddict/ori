@@ -25,6 +25,53 @@ type ConstraintNode struct {
 	Table              string
 }
 
+func NewConstraintNode(engine, connectionName string, scope ScopeID, relation string, c Constraint) *ConstraintNode {
+	columns := cloneutil.SlicePtrIfNotEmpty(c.Columns)
+	referencedTable := stringPtrIfNotEmpty(c.ReferencedTable)
+	var referencedDatabase *string
+	var referencedSchema *string
+	var referencedColumns *[]string
+	onUpdate := stringPtrIfNotEmpty(c.OnUpdate)
+	onDelete := stringPtrIfNotEmpty(c.OnDelete)
+	match := stringPtrIfNotEmpty(c.Match)
+
+	if c.Type == "FOREIGN KEY" {
+		if c.ReferencedScope != nil {
+			referencedDatabase = stringPtrIfNotEmpty(c.ReferencedScope.Database)
+			if c.ReferencedScope.Schema != nil {
+				referencedSchema = cloneutil.Ptr(c.ReferencedScope.Schema)
+			}
+		}
+		referencedColumns = cloneutil.SlicePtrIfNotEmpty(c.ReferencedColumns)
+	}
+
+	indexName := cloneutil.Ptr(c.UnderlyingIndex)
+	checkClause := stringPtrIfNotEmpty(c.CheckClause)
+
+	return &ConstraintNode{
+		BaseNode: BaseNode{
+			ID:       constraintNodeID(engine, connectionName, scope, relation, c.Name),
+			Name:     c.Name,
+			Scope:    scope,
+			Hydrated: true,
+		},
+		Connection:         connectionName,
+		Table:              relation,
+		ConstraintName:     c.Name,
+		ConstraintType:     c.Type,
+		Columns:            columns,
+		ReferencedTable:    referencedTable,
+		ReferencedDatabase: referencedDatabase,
+		ReferencedSchema:   referencedSchema,
+		ReferencedColumns:  referencedColumns,
+		OnUpdate:           onUpdate,
+		OnDelete:           onDelete,
+		Match:              match,
+		IndexName:          indexName,
+		CheckClause:        checkClause,
+	}
+}
+
 func (n *ConstraintNode) Clone() Node {
 	if n == nil {
 		return nil

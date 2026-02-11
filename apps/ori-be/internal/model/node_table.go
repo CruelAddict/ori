@@ -20,6 +20,28 @@ type TableNode struct {
 	Triggers    []string
 }
 
+func NewRelationNode(engine, connectionName string, scope ScopeID, rel Relation) Node {
+	if rel.Type == "view" {
+		return NewViewNode(engine, connectionName, scope, rel)
+	}
+	return NewTableNode(engine, connectionName, scope, rel)
+}
+
+func NewTableNode(engine, connectionName string, scope ScopeID, rel Relation) *TableNode {
+	return &TableNode{
+		BaseNode: BaseNode{
+			ID:       relationNodeID(engine, connectionName, scope, rel),
+			Name:     rel.Name,
+			Scope:    scope,
+			Hydrated: false,
+		},
+		Connection: connectionName,
+		Definition: stringPtrIfNotEmpty(rel.Definition),
+		Table:      rel.Name,
+		TableType:  rel.Type,
+	}
+}
+
 func (n *TableNode) Clone() Node {
 	if n == nil {
 		return nil

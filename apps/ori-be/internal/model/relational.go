@@ -6,13 +6,42 @@ type ScopeID struct {
 	Schema   *string // nil if engine doesn't support schemas
 }
 
-// Scope is a ScopeID with additional engine-specific attributes.
-type Scope struct {
-	ScopeID
+// Scope identifies a root namespace that can create its root graph node.
+type Scope interface {
+	ID() ScopeID
+	NewRootNode(engine, connectionName string) Node
+}
+
+// Database is a root scope for engines without schemas (for example sqlite).
+type Database struct {
+	Name     string
 	File     *string
 	Sequence *int
 	PageSize *int64
 	Encoding *string
+}
+
+func (s Database) ID() ScopeID {
+	return ScopeID{Database: s.Name}
+}
+
+func (s Database) NewRootNode(engine, connectionName string) Node {
+	return NewDatabaseNode(engine, connectionName, s)
+}
+
+// Schema is a root scope for engines with schemas (for example postgres).
+type Schema struct {
+	Database string
+	Name     string
+}
+
+func (s Schema) ID() ScopeID {
+	schema := s.Name
+	return ScopeID{Database: s.Database, Schema: &schema}
+}
+
+func (s Schema) NewRootNode(engine, connectionName string) Node {
+	return NewSchemaNode(engine, connectionName, s)
 }
 
 // Relation describes a table or view.

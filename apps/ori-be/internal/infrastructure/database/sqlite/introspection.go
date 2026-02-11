@@ -49,11 +49,8 @@ func (a *Adapter) GetScopes(ctx context.Context) ([]model.Scope, error) {
 			encodingValue = &value
 		}
 
-		scopes = append(scopes, model.Scope{
-			ScopeID: model.ScopeID{
-				Database: name,
-				Schema:   nil,
-			},
+		scopes = append(scopes, model.Database{
+			Name:     name,
 			File:     &fileValue,
 			Sequence: &sequence,
 			PageSize: pageSizeValue,

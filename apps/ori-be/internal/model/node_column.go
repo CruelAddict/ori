@@ -22,6 +22,34 @@ type ColumnNode struct {
 	Table              string
 }
 
+func NewColumnNode(engine, connectionName string, scope ScopeID, relation string, col Column) *ColumnNode {
+	var primaryKeyPosition *int
+	if col.PrimaryKeyPos > 0 {
+		v := col.PrimaryKeyPos
+		primaryKeyPosition = &v
+	}
+
+	return &ColumnNode{
+		BaseNode: BaseNode{
+			ID:       columnNodeID(engine, connectionName, scope, relation, col.Name),
+			Name:     col.Name,
+			Scope:    scope,
+			Hydrated: true,
+		},
+		Connection:         connectionName,
+		Table:              relation,
+		Column:             col.Name,
+		Ordinal:            col.Ordinal,
+		DataType:           col.DataType,
+		NotNull:            col.NotNull,
+		DefaultValue:       cloneutil.Ptr(col.DefaultValue),
+		PrimaryKeyPosition: primaryKeyPosition,
+		CharMaxLength:      cloneutil.Ptr(col.CharMaxLength),
+		NumericPrecision:   cloneutil.Ptr(col.NumericPrecision),
+		NumericScale:       cloneutil.Ptr(col.NumericScale),
+	}
+}
+
 func (n *ColumnNode) Clone() Node {
 	if n == nil {
 		return nil

@@ -21,6 +21,27 @@ type IndexNode struct {
 	Unique         bool
 }
 
+func NewIndexNode(engine, connectionName string, scope ScopeID, relation string, idx Index) *IndexNode {
+	return &IndexNode{
+		BaseNode: BaseNode{
+			ID:       indexNodeID(engine, connectionName, scope, relation, idx.Name),
+			Name:     idx.Name,
+			Scope:    scope,
+			Hydrated: true,
+		},
+		Connection:     connectionName,
+		Table:          relation,
+		IndexName:      idx.Name,
+		Unique:         idx.Unique,
+		Primary:        idx.Primary,
+		Columns:        cloneutil.SlicePtrIfNotEmpty(idx.Columns),
+		IncludeColumns: cloneutil.SlicePtrIfNotEmpty(idx.IncludeColumns),
+		Definition:     stringPtrIfNotEmpty(idx.Definition),
+		Method:         stringPtrIfNotEmpty(idx.Method),
+		Predicate:      stringPtrIfNotEmpty(idx.Predicate),
+	}
+}
+
 func (n *IndexNode) Clone() Node {
 	if n == nil {
 		return nil

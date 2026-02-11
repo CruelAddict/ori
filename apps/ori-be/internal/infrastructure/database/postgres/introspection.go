@@ -31,11 +31,9 @@ func (a *Adapter) GetScopes(ctx context.Context) ([]model.Scope, error) {
 		if err := rows.Scan(&schemaName); err != nil {
 			return nil, fmt.Errorf("failed to scan schema: %w", err)
 		}
-		scopes = append(scopes, model.Scope{
-			ScopeID: model.ScopeID{
-				Database: a.config.Database,
-				Schema:   &schemaName,
-			},
+		scopes = append(scopes, model.Schema{
+			Database: a.config.Database,
+			Name:     schemaName,
 		})
 	}
 	if err := rows.Err(); err != nil {

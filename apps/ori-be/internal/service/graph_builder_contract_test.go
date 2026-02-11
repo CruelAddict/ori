@@ -16,8 +16,8 @@ func TestGraphBuilderNodesConvertToDTO(t *testing.T) {
 	}
 	b := NewGraphBuilder(handle)
 
-	scope := model.Scope{
-		ScopeID:  model.ScopeID{Database: "main"},
+	scope := model.Database{
+		Name:     "main",
 		File:     stringPtr("/tmp/main.db"),
 		Sequence: intPtr(0),
 		PageSize: int64Ptr(4096),
@@ -67,8 +67,9 @@ func TestGraphBuilderNodesConvertToDTO(t *testing.T) {
 		Definition:   "create trigger users_audit ...",
 	}
 
-	nodes := []model.Node{b.BuildScopeNode(scope), b.BuildRelationNode(scope.ScopeID, relation)}
-	columnNodes, _ := b.BuildColumnNodes(scope.ScopeID, relation.Name, []model.Column{{
+	scopeID := scope.ID()
+	nodes := []model.Node{b.BuildScopeNode(scope), b.BuildRelationNode(scopeID, relation)}
+	columnNodes, _ := b.BuildColumnNodes(scopeID, relation.Name, []model.Column{{
 		Name:             "id",
 		Ordinal:          1,
 		DataType:         "uuid",
@@ -79,9 +80,9 @@ func TestGraphBuilderNodesConvertToDTO(t *testing.T) {
 		NumericPrecision: &numericPrecision,
 		NumericScale:     &numericScale,
 	}})
-	constraintNodes, _ := b.BuildConstraintNodes(scope.ScopeID, relation.Name, []model.Constraint{constraint})
-	indexNodes, _ := b.BuildIndexNodes(scope.ScopeID, relation.Name, []model.Index{index})
-	triggerNodes, _ := b.BuildTriggerNodes(scope.ScopeID, relation.Name, []model.Trigger{trigger})
+	constraintNodes, _ := b.BuildConstraintNodes(scopeID, relation.Name, []model.Constraint{constraint})
+	indexNodes, _ := b.BuildIndexNodes(scopeID, relation.Name, []model.Index{index})
+	triggerNodes, _ := b.BuildTriggerNodes(scopeID, relation.Name, []model.Trigger{trigger})
 
 	nodes = append(nodes, columnNodes...)
 	nodes = append(nodes, constraintNodes...)

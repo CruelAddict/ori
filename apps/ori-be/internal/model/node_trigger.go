@@ -21,6 +21,27 @@ type TriggerNode struct {
 	TriggerName  string
 }
 
+func NewTriggerNode(engine, connectionName string, scope ScopeID, relation string, trg Trigger) *TriggerNode {
+	return &TriggerNode{
+		BaseNode: BaseNode{
+			ID:       triggerNodeID(engine, connectionName, scope, relation, trg.Name),
+			Name:     trg.Name,
+			Scope:    scope,
+			Hydrated: true,
+		},
+		Connection:   connectionName,
+		Table:        relation,
+		TriggerName:  trg.Name,
+		Timing:       trg.Timing,
+		Orientation:  trg.Orientation,
+		Events:       cloneutil.SlicePtrIfNotEmpty(trg.Events),
+		Statement:    stringPtrIfNotEmpty(trg.Statement),
+		Condition:    stringPtrIfNotEmpty(trg.Condition),
+		EnabledState: stringPtrIfNotEmpty(trg.EnabledState),
+		Definition:   stringPtrIfNotEmpty(trg.Definition),
+	}
+}
+
 func (n *TriggerNode) Clone() Node {
 	if n == nil {
 		return nil

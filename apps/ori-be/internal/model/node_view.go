@@ -19,6 +19,21 @@ type ViewNode struct {
 	Triggers    []string
 }
 
+func NewViewNode(engine, connectionName string, scope ScopeID, rel Relation) *ViewNode {
+	return &ViewNode{
+		BaseNode: BaseNode{
+			ID:       relationNodeID(engine, connectionName, scope, rel),
+			Name:     rel.Name,
+			Scope:    scope,
+			Hydrated: false,
+		},
+		Connection: connectionName,
+		Definition: stringPtrIfNotEmpty(rel.Definition),
+		Table:      rel.Name,
+		TableType:  rel.Type,
+	}
+}
+
 func (n *ViewNode) Clone() Node {
 	if n == nil {
 		return nil

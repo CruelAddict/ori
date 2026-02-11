@@ -15,6 +15,21 @@ type SchemaNode struct {
 	Views      []string
 }
 
+func NewSchemaNode(engine, connectionName string, scope Schema) *SchemaNode {
+	scopeID := scope.ID()
+
+	return &SchemaNode{
+		BaseNode: BaseNode{
+			ID:       scopeNodeID(engine, connectionName, scopeID),
+			Name:     scope.Name,
+			Scope:    scopeID,
+			Hydrated: false,
+		},
+		Connection: connectionName,
+		Engine:     engine,
+	}
+}
+
 func (n *SchemaNode) Clone() Node {
 	if n == nil {
 		return nil
