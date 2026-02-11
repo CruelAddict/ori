@@ -23,7 +23,12 @@ func (n *TableNode) Clone() Node {
 	}
 	clone := *n
 	clone.BaseNode = n.cloneBase()
-	clone.Attributes = cloneTableAttributes(n.Attributes)
+	clone.Attributes = dto.TableNodeAttributes{
+		Connection: n.Attributes.Connection,
+		Definition: cloneutil.Ptr(n.Attributes.Definition),
+		Table:      n.Attributes.Table,
+		TableType:  n.Attributes.TableType,
+	}
 	clone.Partitions = cloneutil.Slice(n.Partitions)
 	clone.Columns = cloneutil.Slice(n.Columns)
 	clone.Constraints = cloneutil.Slice(n.Constraints)
@@ -45,35 +50,19 @@ func (node *TableNode) ToDTO() (dto.Node, error) {
 	}
 	out := dto.Node{}
 	err := out.FromTableNode(dto.TableNode{
-		Id:         node.GetID(),
-		Name:       node.GetName(),
-		Edges:      tableRelationsToDTO(node),
+		Id:   node.GetID(),
+		Name: node.GetName(),
+		Edges: map[string]dto.NodeEdge{
+			NodeRelationPartitions:  relationToDTO(node.Partitions),
+			NodeRelationColumns:     relationToDTO(node.Columns),
+			NodeRelationConstraints: relationToDTO(node.Constraints),
+			NodeRelationIndexes:     relationToDTO(node.Indexes),
+			NodeRelationTriggers:    relationToDTO(node.Triggers),
+		},
 		Attributes: node.Attributes,
 	})
 	if err != nil {
 		return dto.Node{}, fmt.Errorf("node %s: %w", node.GetID(), err)
 	}
 	return out, nil
-}
-
-func tableRelationsToDTO(node *TableNode) map[string]dto.NodeEdge {
-	if node == nil {
-		return map[string]dto.NodeEdge{}
-	}
-	out := map[string]dto.NodeEdge{}
-	out[NodeRelationPartitions] = relationToDTO(node.Partitions)
-	out[NodeRelationColumns] = relationToDTO(node.Columns)
-	out[NodeRelationConstraints] = relationToDTO(node.Constraints)
-	out[NodeRelationIndexes] = relationToDTO(node.Indexes)
-	out[NodeRelationTriggers] = relationToDTO(node.Triggers)
-	return out
-}
-
-func cloneTableAttributes(attrs dto.TableNodeAttributes) dto.TableNodeAttributes {
-	return dto.TableNodeAttributes{
-		Connection: attrs.Connection,
-		Definition: cloneutil.Ptr(attrs.Definition),
-		Table:      attrs.Table,
-		TableType:  attrs.TableType,
-	}
 }

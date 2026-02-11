@@ -18,7 +18,18 @@ func (n *IndexNode) Clone() Node {
 	}
 	clone := *n
 	clone.BaseNode = n.cloneBase()
-	clone.Attributes = cloneIndexAttributes(n.Attributes)
+	clone.Attributes = dto.IndexNodeAttributes{
+		Columns:        cloneutil.SlicePtr(n.Attributes.Columns),
+		Connection:     n.Attributes.Connection,
+		Definition:     cloneutil.Ptr(n.Attributes.Definition),
+		IncludeColumns: cloneutil.SlicePtr(n.Attributes.IncludeColumns),
+		IndexName:      n.Attributes.IndexName,
+		Method:         cloneutil.Ptr(n.Attributes.Method),
+		Predicate:      cloneutil.Ptr(n.Attributes.Predicate),
+		Primary:        n.Attributes.Primary,
+		Table:          n.Attributes.Table,
+		Unique:         n.Attributes.Unique,
+	}
 	return &clone
 }
 
@@ -37,19 +48,4 @@ func (node *IndexNode) ToDTO() (dto.Node, error) {
 		return dto.Node{}, fmt.Errorf("node %s: %w", node.GetID(), err)
 	}
 	return out, nil
-}
-
-func cloneIndexAttributes(attrs dto.IndexNodeAttributes) dto.IndexNodeAttributes {
-	return dto.IndexNodeAttributes{
-		Columns:        cloneutil.SlicePtr(attrs.Columns),
-		Connection:     attrs.Connection,
-		Definition:     cloneutil.Ptr(attrs.Definition),
-		IncludeColumns: cloneutil.SlicePtr(attrs.IncludeColumns),
-		IndexName:      attrs.IndexName,
-		Method:         cloneutil.Ptr(attrs.Method),
-		Predicate:      cloneutil.Ptr(attrs.Predicate),
-		Primary:        attrs.Primary,
-		Table:          attrs.Table,
-		Unique:         attrs.Unique,
-	}
 }

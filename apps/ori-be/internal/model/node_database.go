@@ -20,7 +20,14 @@ func (n *DatabaseNode) Clone() Node {
 	}
 	clone := *n
 	clone.BaseNode = n.cloneBase()
-	clone.Attributes = cloneDatabaseAttributes(n.Attributes)
+	clone.Attributes = dto.DatabaseNodeAttributes{
+		Connection: n.Attributes.Connection,
+		Encoding:   cloneutil.Ptr(n.Attributes.Encoding),
+		Engine:     n.Attributes.Engine,
+		File:       cloneutil.Ptr(n.Attributes.File),
+		PageSize:   cloneutil.Ptr(n.Attributes.PageSize),
+		Sequence:   cloneutil.Ptr(n.Attributes.Sequence),
+	}
 	clone.Tables = cloneutil.Slice(n.Tables)
 	clone.Views = cloneutil.Slice(n.Views)
 	return &clone
@@ -32,34 +39,16 @@ func (node *DatabaseNode) ToDTO() (dto.Node, error) {
 	}
 	out := dto.Node{}
 	err := out.FromDatabaseNode(dto.DatabaseNode{
-		Id:         node.GetID(),
-		Name:       node.GetName(),
-		Edges:      databaseRelationsToDTO(node),
+		Id:   node.GetID(),
+		Name: node.GetName(),
+		Edges: map[string]dto.NodeEdge{
+			NodeRelationTables: relationToDTO(node.Tables),
+			NodeRelationViews:  relationToDTO(node.Views),
+		},
 		Attributes: node.Attributes,
 	})
 	if err != nil {
 		return dto.Node{}, fmt.Errorf("node %s: %w", node.GetID(), err)
 	}
 	return out, nil
-}
-
-func databaseRelationsToDTO(node *DatabaseNode) map[string]dto.NodeEdge {
-	if node == nil {
-		return map[string]dto.NodeEdge{}
-	}
-	out := map[string]dto.NodeEdge{}
-	out[NodeRelationTables] = relationToDTO(node.Tables)
-	out[NodeRelationViews] = relationToDTO(node.Views)
-	return out
-}
-
-func cloneDatabaseAttributes(attrs dto.DatabaseNodeAttributes) dto.DatabaseNodeAttributes {
-	return dto.DatabaseNodeAttributes{
-		Connection: attrs.Connection,
-		Encoding:   cloneutil.Ptr(attrs.Encoding),
-		Engine:     attrs.Engine,
-		File:       cloneutil.Ptr(attrs.File),
-		PageSize:   cloneutil.Ptr(attrs.PageSize),
-		Sequence:   cloneutil.Ptr(attrs.Sequence),
-	}
 }

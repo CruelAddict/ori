@@ -361,11 +361,15 @@ func (a *Adapter) GetTriggers(ctx context.Context, scope model.ScopeID, relation
 			return nil, fmt.Errorf("failed to scan trigger: %w", err)
 		}
 		enabledState := parsePostgresTriggerEnabledState(enabledFlag)
+		orientation := "STATEMENT"
+		if rowLevel {
+			orientation = "ROW"
+		}
 		triggers = append(triggers, model.Trigger{
 			Name:         name,
 			Timing:       timing,
 			Events:       triggerEventsFromBits(eventBits),
-			Orientation:  triggerOrientation(rowLevel),
+			Orientation:  orientation,
 			EnabledState: enabledState,
 			Definition:   definition,
 		})
@@ -429,13 +433,6 @@ func triggerEventsFromBits(bits int) []string {
 		return nil
 	}
 	return events
-}
-
-func triggerOrientation(rowLevel bool) string {
-	if rowLevel {
-		return "ROW"
-	}
-	return "STATEMENT"
 }
 
 func constraintTypeFromCode(code string) string {

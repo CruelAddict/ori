@@ -44,6 +44,24 @@ func (c *Config) ConvertToDTO() *dto.ConfigurationsResponse {
 func ConvertConfigurationsToDTO(configs []Configuration) *dto.ConfigurationsResponse {
 	dtoConfigs := make([]dto.Configuration, len(configs))
 	for i, cfg := range configs {
+		var password *dto.PasswordConfig
+		if cfg.Password != nil {
+			password = &dto.PasswordConfig{
+				Type: dto.PasswordConfigType(cfg.Password.Type),
+				Key:  cfg.Password.Key,
+			}
+		}
+
+		var tls *dto.TlsConfig
+		if cfg.TLS != nil {
+			tls = &dto.TlsConfig{
+				Mode:       cloneutil.Ptr(cfg.TLS.Mode),
+				CaCertPath: cloneutil.Ptr(cfg.TLS.CACertPath),
+				CertPath:   cloneutil.Ptr(cfg.TLS.CertPath),
+				KeyPath:    cloneutil.Ptr(cfg.TLS.KeyPath),
+			}
+		}
+
 		dtoConfigs[i] = dto.Configuration{
 			Name:     cfg.Name,
 			Type:     cfg.Type,
@@ -51,36 +69,11 @@ func ConvertConfigurationsToDTO(configs []Configuration) *dto.ConfigurationsResp
 			Host:     cloneutil.Ptr(cfg.Host),
 			Port:     cloneutil.Ptr(cfg.Port),
 			Username: cloneutil.Ptr(cfg.Username),
-			Password: clonePassword(cfg.Password),
-			Tls:      cloneTLS(cfg.TLS),
+			Password: password,
+			Tls:      tls,
 		}
 	}
 	return &dto.ConfigurationsResponse{Connections: dtoConfigs}
-}
-
-// clonePassword converts the model password into a DTO-friendly struct.
-func clonePassword(src *PasswordConfig) *dto.PasswordConfig {
-	if src == nil {
-		return nil
-	}
-
-	return &dto.PasswordConfig{
-		Type: dto.PasswordConfigType(src.Type),
-		Key:  src.Key,
-	}
-}
-
-func cloneTLS(src *TLSConfig) *dto.TlsConfig {
-	if src == nil {
-		return nil
-	}
-
-	return &dto.TlsConfig{
-		Mode:       cloneutil.Ptr(src.Mode),
-		CaCertPath: cloneutil.Ptr(src.CACertPath),
-		CertPath:   cloneutil.Ptr(src.CertPath),
-		KeyPath:    cloneutil.Ptr(src.KeyPath),
-	}
 }
 
 func ResolveTLSPaths(tls *TLSConfig, baseDir string) *TLSConfig {

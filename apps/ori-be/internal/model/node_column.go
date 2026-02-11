@@ -18,7 +18,19 @@ func (n *ColumnNode) Clone() Node {
 	}
 	clone := *n
 	clone.BaseNode = n.cloneBase()
-	clone.Attributes = cloneColumnAttributes(n.Attributes)
+	clone.Attributes = dto.ColumnNodeAttributes{
+		CharMaxLength:      cloneutil.Ptr(n.Attributes.CharMaxLength),
+		Column:             n.Attributes.Column,
+		Connection:         n.Attributes.Connection,
+		DataType:           n.Attributes.DataType,
+		DefaultValue:       cloneutil.Ptr(n.Attributes.DefaultValue),
+		NotNull:            n.Attributes.NotNull,
+		NumericPrecision:   cloneutil.Ptr(n.Attributes.NumericPrecision),
+		NumericScale:       cloneutil.Ptr(n.Attributes.NumericScale),
+		Ordinal:            n.Attributes.Ordinal,
+		PrimaryKeyPosition: cloneutil.Ptr(n.Attributes.PrimaryKeyPosition),
+		Table:              n.Attributes.Table,
+	}
 	return &clone
 }
 
@@ -37,20 +49,4 @@ func (node *ColumnNode) ToDTO() (dto.Node, error) {
 		return dto.Node{}, fmt.Errorf("node %s: %w", node.GetID(), err)
 	}
 	return out, nil
-}
-
-func cloneColumnAttributes(attrs dto.ColumnNodeAttributes) dto.ColumnNodeAttributes {
-	return dto.ColumnNodeAttributes{
-		CharMaxLength:      cloneutil.Ptr(attrs.CharMaxLength),
-		Column:             attrs.Column,
-		Connection:         attrs.Connection,
-		DataType:           attrs.DataType,
-		DefaultValue:       cloneutil.Ptr(attrs.DefaultValue),
-		NotNull:            attrs.NotNull,
-		NumericPrecision:   cloneutil.Ptr(attrs.NumericPrecision),
-		NumericScale:       cloneutil.Ptr(attrs.NumericScale),
-		Ordinal:            attrs.Ordinal,
-		PrimaryKeyPosition: cloneutil.Ptr(attrs.PrimaryKeyPosition),
-		Table:              attrs.Table,
-	}
 }

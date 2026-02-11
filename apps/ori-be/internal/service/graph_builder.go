@@ -82,11 +82,23 @@ func (b *GraphBuilder) BuildScopeNode(scope model.Scope) model.Node {
 		if file, ok := attributeAsString(scope.Attrs, "file"); ok {
 			attrs.File = &file
 		}
-		if sequence, ok := attributeAsInt(scope.Attrs, "sequence"); ok {
-			attrs.Sequence = &sequence
+		if v, ok := scope.Attrs["sequence"]; ok {
+			switch sequence := v.(type) {
+			case int:
+				attrs.Sequence = &sequence
+			case int64:
+				seq := int(sequence)
+				attrs.Sequence = &seq
+			}
 		}
-		if pageSize, ok := attributeAsInt64(scope.Attrs, "pageSize"); ok {
-			attrs.PageSize = &pageSize
+		if v, ok := scope.Attrs["pageSize"]; ok {
+			switch pageSize := v.(type) {
+			case int64:
+				attrs.PageSize = &pageSize
+			case int:
+				sz := int64(pageSize)
+				attrs.PageSize = &sz
+			}
 		}
 		if encoding, ok := attributeAsString(scope.Attrs, "encoding"); ok {
 			attrs.Encoding = &encoding
@@ -394,38 +406,6 @@ func attributeAsString(attrs map[string]any, key string) (string, bool) {
 		return "", false
 	}
 	return s, true
-}
-
-func attributeAsInt(attrs map[string]any, key string) (int, bool) {
-	v, ok := attrs[key]
-	if !ok {
-		return 0, false
-	}
-	i, ok := v.(int)
-	if ok {
-		return i, true
-	}
-	i64, ok := v.(int64)
-	if ok {
-		return int(i64), true
-	}
-	return 0, false
-}
-
-func attributeAsInt64(attrs map[string]any, key string) (int64, bool) {
-	v, ok := attrs[key]
-	if !ok {
-		return 0, false
-	}
-	i64, ok := v.(int64)
-	if ok {
-		return i64, true
-	}
-	i, ok := v.(int)
-	if ok {
-		return int64(i), true
-	}
-	return 0, false
 }
 
 func stringPtrIfNotEmpty(value string) *string {

@@ -18,7 +18,22 @@ func (n *ConstraintNode) Clone() Node {
 	}
 	clone := *n
 	clone.BaseNode = n.cloneBase()
-	clone.Attributes = cloneConstraintAttributes(n.Attributes)
+	clone.Attributes = dto.ConstraintNodeAttributes{
+		CheckClause:        cloneutil.Ptr(n.Attributes.CheckClause),
+		Columns:            cloneutil.SlicePtr(n.Attributes.Columns),
+		Connection:         n.Attributes.Connection,
+		ConstraintName:     n.Attributes.ConstraintName,
+		ConstraintType:     n.Attributes.ConstraintType,
+		IndexName:          cloneutil.Ptr(n.Attributes.IndexName),
+		Match:              cloneutil.Ptr(n.Attributes.Match),
+		OnDelete:           cloneutil.Ptr(n.Attributes.OnDelete),
+		OnUpdate:           cloneutil.Ptr(n.Attributes.OnUpdate),
+		ReferencedColumns:  cloneutil.SlicePtr(n.Attributes.ReferencedColumns),
+		ReferencedDatabase: cloneutil.Ptr(n.Attributes.ReferencedDatabase),
+		ReferencedSchema:   cloneutil.Ptr(n.Attributes.ReferencedSchema),
+		ReferencedTable:    cloneutil.Ptr(n.Attributes.ReferencedTable),
+		Table:              n.Attributes.Table,
+	}
 	return &clone
 }
 
@@ -37,23 +52,4 @@ func (node *ConstraintNode) ToDTO() (dto.Node, error) {
 		return dto.Node{}, fmt.Errorf("node %s: %w", node.GetID(), err)
 	}
 	return out, nil
-}
-
-func cloneConstraintAttributes(attrs dto.ConstraintNodeAttributes) dto.ConstraintNodeAttributes {
-	return dto.ConstraintNodeAttributes{
-		CheckClause:        cloneutil.Ptr(attrs.CheckClause),
-		Columns:            cloneutil.SlicePtr(attrs.Columns),
-		Connection:         attrs.Connection,
-		ConstraintName:     attrs.ConstraintName,
-		ConstraintType:     attrs.ConstraintType,
-		IndexName:          cloneutil.Ptr(attrs.IndexName),
-		Match:              cloneutil.Ptr(attrs.Match),
-		OnDelete:           cloneutil.Ptr(attrs.OnDelete),
-		OnUpdate:           cloneutil.Ptr(attrs.OnUpdate),
-		ReferencedColumns:  cloneutil.SlicePtr(attrs.ReferencedColumns),
-		ReferencedDatabase: cloneutil.Ptr(attrs.ReferencedDatabase),
-		ReferencedSchema:   cloneutil.Ptr(attrs.ReferencedSchema),
-		ReferencedTable:    cloneutil.Ptr(attrs.ReferencedTable),
-		Table:              attrs.Table,
-	}
 }

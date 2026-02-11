@@ -32,23 +32,16 @@ func (node *SchemaNode) ToDTO() (dto.Node, error) {
 	}
 	out := dto.Node{}
 	err := out.FromSchemaNode(dto.SchemaNode{
-		Id:         node.GetID(),
-		Name:       node.GetName(),
-		Edges:      schemaRelationsToDTO(node),
+		Id:   node.GetID(),
+		Name: node.GetName(),
+		Edges: map[string]dto.NodeEdge{
+			NodeRelationTables: relationToDTO(node.Tables),
+			NodeRelationViews:  relationToDTO(node.Views),
+		},
 		Attributes: node.Attributes,
 	})
 	if err != nil {
 		return dto.Node{}, fmt.Errorf("node %s: %w", node.GetID(), err)
 	}
 	return out, nil
-}
-
-func schemaRelationsToDTO(node *SchemaNode) map[string]dto.NodeEdge {
-	if node == nil {
-		return map[string]dto.NodeEdge{}
-	}
-	out := map[string]dto.NodeEdge{}
-	out[NodeRelationTables] = relationToDTO(node.Tables)
-	out[NodeRelationViews] = relationToDTO(node.Views)
-	return out
 }

@@ -22,7 +22,12 @@ func (n *ViewNode) Clone() Node {
 	}
 	clone := *n
 	clone.BaseNode = n.cloneBase()
-	clone.Attributes = cloneViewAttributes(n.Attributes)
+	clone.Attributes = dto.ViewNodeAttributes{
+		Connection: n.Attributes.Connection,
+		Definition: cloneutil.Ptr(n.Attributes.Definition),
+		Table:      n.Attributes.Table,
+		TableType:  n.Attributes.TableType,
+	}
 	clone.Columns = cloneutil.Slice(n.Columns)
 	clone.Constraints = cloneutil.Slice(n.Constraints)
 	clone.Indexes = cloneutil.Slice(n.Indexes)
@@ -43,34 +48,18 @@ func (node *ViewNode) ToDTO() (dto.Node, error) {
 	}
 	out := dto.Node{}
 	err := out.FromViewNode(dto.ViewNode{
-		Id:         node.GetID(),
-		Name:       node.GetName(),
-		Edges:      viewRelationsToDTO(node),
+		Id:   node.GetID(),
+		Name: node.GetName(),
+		Edges: map[string]dto.NodeEdge{
+			NodeRelationColumns:     relationToDTO(node.Columns),
+			NodeRelationConstraints: relationToDTO(node.Constraints),
+			NodeRelationIndexes:     relationToDTO(node.Indexes),
+			NodeRelationTriggers:    relationToDTO(node.Triggers),
+		},
 		Attributes: node.Attributes,
 	})
 	if err != nil {
 		return dto.Node{}, fmt.Errorf("node %s: %w", node.GetID(), err)
 	}
 	return out, nil
-}
-
-func viewRelationsToDTO(node *ViewNode) map[string]dto.NodeEdge {
-	if node == nil {
-		return map[string]dto.NodeEdge{}
-	}
-	out := map[string]dto.NodeEdge{}
-	out[NodeRelationColumns] = relationToDTO(node.Columns)
-	out[NodeRelationConstraints] = relationToDTO(node.Constraints)
-	out[NodeRelationIndexes] = relationToDTO(node.Indexes)
-	out[NodeRelationTriggers] = relationToDTO(node.Triggers)
-	return out
-}
-
-func cloneViewAttributes(attrs dto.ViewNodeAttributes) dto.ViewNodeAttributes {
-	return dto.ViewNodeAttributes{
-		Connection: attrs.Connection,
-		Definition: cloneutil.Ptr(attrs.Definition),
-		Table:      attrs.Table,
-		TableType:  attrs.TableType,
-	}
 }

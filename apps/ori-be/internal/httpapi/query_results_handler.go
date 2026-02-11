@@ -44,19 +44,17 @@ func (h *Handler) getQueryResult(w http.ResponseWriter, r *http.Request) {
 		columns[i] = dto.QueryResultColumn{Name: col.Name, Type: col.Type}
 	}
 
+	var rowsAffected *int
+	if view.RowsAffected != nil {
+		v := int(*view.RowsAffected)
+		rowsAffected = &v
+	}
+
 	respondJSON(w, http.StatusOK, dto.QueryResultResponse{
 		Columns:      columns,
 		Rows:         view.Rows,
 		RowCount:     view.RowCount,
 		Truncated:    view.Truncated,
-		RowsAffected: toIntPtr(view.RowsAffected),
+		RowsAffected: rowsAffected,
 	})
-}
-
-func toIntPtr(value *int64) *int {
-	if value == nil {
-		return nil
-	}
-	v := int(*value)
-	return &v
 }

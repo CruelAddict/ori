@@ -18,7 +18,18 @@ func (n *TriggerNode) Clone() Node {
 	}
 	clone := *n
 	clone.BaseNode = n.cloneBase()
-	clone.Attributes = cloneTriggerAttributes(n.Attributes)
+	clone.Attributes = dto.TriggerNodeAttributes{
+		Condition:    cloneutil.Ptr(n.Attributes.Condition),
+		Connection:   n.Attributes.Connection,
+		Definition:   cloneutil.Ptr(n.Attributes.Definition),
+		EnabledState: cloneutil.Ptr(n.Attributes.EnabledState),
+		Events:       cloneutil.SlicePtr(n.Attributes.Events),
+		Orientation:  n.Attributes.Orientation,
+		Statement:    cloneutil.Ptr(n.Attributes.Statement),
+		Table:        n.Attributes.Table,
+		Timing:       n.Attributes.Timing,
+		TriggerName:  n.Attributes.TriggerName,
+	}
 	return &clone
 }
 
@@ -37,19 +48,4 @@ func (node *TriggerNode) ToDTO() (dto.Node, error) {
 		return dto.Node{}, fmt.Errorf("node %s: %w", node.GetID(), err)
 	}
 	return out, nil
-}
-
-func cloneTriggerAttributes(attrs dto.TriggerNodeAttributes) dto.TriggerNodeAttributes {
-	return dto.TriggerNodeAttributes{
-		Condition:    cloneutil.Ptr(attrs.Condition),
-		Connection:   attrs.Connection,
-		Definition:   cloneutil.Ptr(attrs.Definition),
-		EnabledState: cloneutil.Ptr(attrs.EnabledState),
-		Events:       cloneutil.SlicePtr(attrs.Events),
-		Orientation:  attrs.Orientation,
-		Statement:    cloneutil.Ptr(attrs.Statement),
-		Table:        attrs.Table,
-		Timing:       attrs.Timing,
-		TriggerName:  attrs.TriggerName,
-	}
 }
