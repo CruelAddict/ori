@@ -3,6 +3,7 @@ package model
 import (
 	"fmt"
 
+	"github.com/crueladdict/ori/apps/ori-server/internal/pkg/cloneutil"
 	dto "github.com/crueladdict/ori/libs/contract/go"
 )
 
@@ -30,10 +31,29 @@ func (node *ConstraintNode) ToDTO() (dto.Node, error) {
 		Id:         node.GetID(),
 		Name:       node.GetName(),
 		Edges:      map[string]dto.NodeEdge{},
-		Attributes: cloneConstraintAttributes(node.Attributes),
+		Attributes: node.Attributes,
 	})
 	if err != nil {
 		return dto.Node{}, fmt.Errorf("node %s: %w", node.GetID(), err)
 	}
 	return out, nil
+}
+
+func cloneConstraintAttributes(attrs dto.ConstraintNodeAttributes) dto.ConstraintNodeAttributes {
+	return dto.ConstraintNodeAttributes{
+		CheckClause:        cloneutil.Ptr(attrs.CheckClause),
+		Columns:            cloneutil.SlicePtr(attrs.Columns),
+		Connection:         attrs.Connection,
+		ConstraintName:     attrs.ConstraintName,
+		ConstraintType:     attrs.ConstraintType,
+		IndexName:          cloneutil.Ptr(attrs.IndexName),
+		Match:              cloneutil.Ptr(attrs.Match),
+		OnDelete:           cloneutil.Ptr(attrs.OnDelete),
+		OnUpdate:           cloneutil.Ptr(attrs.OnUpdate),
+		ReferencedColumns:  cloneutil.SlicePtr(attrs.ReferencedColumns),
+		ReferencedDatabase: cloneutil.Ptr(attrs.ReferencedDatabase),
+		ReferencedSchema:   cloneutil.Ptr(attrs.ReferencedSchema),
+		ReferencedTable:    cloneutil.Ptr(attrs.ReferencedTable),
+		Table:              attrs.Table,
+	}
 }

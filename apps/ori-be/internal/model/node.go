@@ -74,7 +74,12 @@ func (n *BaseNode) GetScope() ScopeID {
 	if n == nil {
 		return ScopeID{}
 	}
-	return cloneScope(n.Scope)
+	scope := ScopeID{Database: n.Scope.Database}
+	if n.Scope.Schema != nil {
+		schema := *n.Scope.Schema
+		scope.Schema = &schema
+	}
+	return scope
 }
 
 func (n *BaseNode) IsHydrated() bool {
@@ -98,7 +103,14 @@ func (n *BaseNode) cloneBase() BaseNode {
 	return BaseNode{
 		ID:       n.ID,
 		Name:     n.Name,
-		Scope:    cloneScope(n.Scope),
+		Scope:    n.GetScope(),
 		Hydrated: n.Hydrated,
 	}
+}
+
+func relationToDTO(ids []string) dto.NodeEdge {
+	if ids == nil {
+		ids = []string{}
+	}
+	return dto.NodeEdge{Items: ids, Truncated: false}
 }

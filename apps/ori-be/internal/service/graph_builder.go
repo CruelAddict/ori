@@ -4,6 +4,7 @@ import (
 	"sort"
 
 	"github.com/crueladdict/ori/apps/ori-server/internal/model"
+	"github.com/crueladdict/ori/apps/ori-server/internal/pkg/cloneutil"
 	"github.com/crueladdict/ori/apps/ori-server/internal/pkg/stringutil"
 	dto "github.com/crueladdict/ori/libs/contract/go"
 )
@@ -172,20 +173,20 @@ func (b *GraphBuilder) BuildColumnNodes(scope model.ScopeID, relation string, co
 		}
 
 		if col.DefaultValue != nil {
-			attrs.DefaultValue = cloneStringPtr(col.DefaultValue)
+			attrs.DefaultValue = cloneutil.Ptr(col.DefaultValue)
 		}
 		if col.PrimaryKeyPos > 0 {
 			v := col.PrimaryKeyPos
 			attrs.PrimaryKeyPosition = &v
 		}
 		if col.CharMaxLength != nil {
-			attrs.CharMaxLength = cloneInt64Ptr(col.CharMaxLength)
+			attrs.CharMaxLength = cloneutil.Ptr(col.CharMaxLength)
 		}
 		if col.NumericPrecision != nil {
-			attrs.NumericPrecision = cloneInt64Ptr(col.NumericPrecision)
+			attrs.NumericPrecision = cloneutil.Ptr(col.NumericPrecision)
 		}
 		if col.NumericScale != nil {
-			attrs.NumericScale = cloneInt64Ptr(col.NumericScale)
+			attrs.NumericScale = cloneutil.Ptr(col.NumericScale)
 		}
 
 		node := &model.ColumnNode{
@@ -206,19 +207,17 @@ func (b *GraphBuilder) BuildColumnNodes(scope model.ScopeID, relation string, co
 
 // BuildConstraintNodes creates nodes for table constraints.
 func (b *GraphBuilder) BuildConstraintNodes(scope model.ScopeID, relation string, constraints []model.Constraint) ([]model.Node, []string) {
-	sorted := make([]model.Constraint, len(constraints))
-	copy(sorted, constraints)
-	sort.Slice(sorted, func(i, j int) bool {
-		if sorted[i].Type != sorted[j].Type {
-			return constraintTypeOrder(sorted[i].Type) < constraintTypeOrder(sorted[j].Type)
+	sort.Slice(constraints, func(i, j int) bool {
+		if constraints[i].Type != constraints[j].Type {
+			return constraintTypeOrder(constraints[i].Type) < constraintTypeOrder(constraints[j].Type)
 		}
-		return sorted[i].Name < sorted[j].Name
+		return constraints[i].Name < constraints[j].Name
 	})
 
-	nodes := make([]model.Node, 0, len(sorted))
-	constraintIDs := make([]string, 0, len(sorted))
+	nodes := make([]model.Node, 0, len(constraints))
+	constraintIDs := make([]string, 0, len(constraints))
 
-	for _, c := range sorted {
+	for _, c := range constraints {
 		attrs := dto.ConstraintNodeAttributes{
 			Connection:     b.connectionName,
 			Table:          relation,
@@ -227,7 +226,7 @@ func (b *GraphBuilder) BuildConstraintNodes(scope model.ScopeID, relation string
 		}
 
 		if len(c.Columns) > 0 {
-			attrs.Columns = copyStringsPtr(c.Columns)
+			attrs.Columns = cloneutil.SlicePtrIfNotEmpty(c.Columns)
 		}
 
 		if c.Type == "FOREIGN KEY" {
@@ -235,11 +234,11 @@ func (b *GraphBuilder) BuildConstraintNodes(scope model.ScopeID, relation string
 			if c.ReferencedScope != nil {
 				attrs.ReferencedDatabase = stringPtrIfNotEmpty(c.ReferencedScope.Database)
 				if c.ReferencedScope.Schema != nil {
-					attrs.ReferencedSchema = cloneStringPtr(c.ReferencedScope.Schema)
+					attrs.ReferencedSchema = cloneutil.Ptr(c.ReferencedScope.Schema)
 				}
 			}
 			if len(c.ReferencedColumns) > 0 {
-				attrs.ReferencedColumns = copyStringsPtr(c.ReferencedColumns)
+				attrs.ReferencedColumns = cloneutil.SlicePtrIfNotEmpty(c.ReferencedColumns)
 			}
 			attrs.OnUpdate = stringPtrIfNotEmpty(c.OnUpdate)
 			attrs.OnDelete = stringPtrIfNotEmpty(c.OnDelete)
@@ -247,11 +246,11 @@ func (b *GraphBuilder) BuildConstraintNodes(scope model.ScopeID, relation string
 		}
 
 		if c.UnderlyingIndex != nil {
-			attrs.IndexName = cloneStringPtr(c.UnderlyingIndex)
+			attrs.IndexName = cloneutil.Ptr(c.UnderlyingIndex)
 		}
 
 		if c.CheckClause != "" {
-			attrs.CheckClause = &c.CheckClause
+			attrs.CheckClause = stringPtrIfNotEmpty(c.CheckClause)
 		}
 
 		node := &model.ConstraintNode{
@@ -272,16 +271,14 @@ func (b *GraphBuilder) BuildConstraintNodes(scope model.ScopeID, relation string
 
 // BuildIndexNodes creates nodes for table/view indexes.
 func (b *GraphBuilder) BuildIndexNodes(scope model.ScopeID, relation string, indexes []model.Index) ([]model.Node, []string) {
-	sorted := make([]model.Index, len(indexes))
-	copy(sorted, indexes)
-	sort.Slice(sorted, func(i, j int) bool {
-		return sorted[i].Name < sorted[j].Name
+	sort.Slice(indexes, func(i, j int) bool {
+		return indexes[i].Name < indexes[j].Name
 	})
 
-	nodes := make([]model.Node, 0, len(sorted))
-	indexIDs := make([]string, 0, len(sorted))
+	nodes := make([]model.Node, 0, len(indexes))
+	indexIDs := make([]string, 0, len(indexes))
 
-	for _, idx := range sorted {
+	for _, idx := range indexes {
 		attrs := dto.IndexNodeAttributes{
 			Connection: b.connectionName,
 			Table:      relation,
@@ -291,19 +288,19 @@ func (b *GraphBuilder) BuildIndexNodes(scope model.ScopeID, relation string, ind
 		}
 
 		if len(idx.Columns) > 0 {
-			attrs.Columns = copyStringsPtr(idx.Columns)
+			attrs.Columns = cloneutil.SlicePtrIfNotEmpty(idx.Columns)
 		}
 		if len(idx.IncludeColumns) > 0 {
-			attrs.IncludeColumns = copyStringsPtr(idx.IncludeColumns)
+			attrs.IncludeColumns = cloneutil.SlicePtrIfNotEmpty(idx.IncludeColumns)
 		}
 		if idx.Definition != "" {
-			attrs.Definition = &idx.Definition
+			attrs.Definition = stringPtrIfNotEmpty(idx.Definition)
 		}
 		if idx.Method != "" {
-			attrs.Method = &idx.Method
+			attrs.Method = stringPtrIfNotEmpty(idx.Method)
 		}
 		if idx.Predicate != "" {
-			attrs.Predicate = &idx.Predicate
+			attrs.Predicate = stringPtrIfNotEmpty(idx.Predicate)
 		}
 
 		node := &model.IndexNode{
@@ -324,16 +321,14 @@ func (b *GraphBuilder) BuildIndexNodes(scope model.ScopeID, relation string, ind
 
 // BuildTriggerNodes creates nodes for table/view triggers.
 func (b *GraphBuilder) BuildTriggerNodes(scope model.ScopeID, relation string, triggers []model.Trigger) ([]model.Node, []string) {
-	sorted := make([]model.Trigger, len(triggers))
-	copy(sorted, triggers)
-	sort.Slice(sorted, func(i, j int) bool {
-		return sorted[i].Name < sorted[j].Name
+	sort.Slice(triggers, func(i, j int) bool {
+		return triggers[i].Name < triggers[j].Name
 	})
 
-	nodes := make([]model.Node, 0, len(sorted))
-	triggerIDs := make([]string, 0, len(sorted))
+	nodes := make([]model.Node, 0, len(triggers))
+	triggerIDs := make([]string, 0, len(triggers))
 
-	for _, trg := range sorted {
+	for _, trg := range triggers {
 		attrs := dto.TriggerNodeAttributes{
 			Connection:  b.connectionName,
 			Table:       relation,
@@ -343,19 +338,19 @@ func (b *GraphBuilder) BuildTriggerNodes(scope model.ScopeID, relation string, t
 		}
 
 		if len(trg.Events) > 0 {
-			attrs.Events = copyStringsPtr(trg.Events)
+			attrs.Events = cloneutil.SlicePtrIfNotEmpty(trg.Events)
 		}
 		if trg.Statement != "" {
-			attrs.Statement = &trg.Statement
+			attrs.Statement = stringPtrIfNotEmpty(trg.Statement)
 		}
 		if trg.Condition != "" {
-			attrs.Condition = &trg.Condition
+			attrs.Condition = stringPtrIfNotEmpty(trg.Condition)
 		}
 		if trg.EnabledState != "" {
-			attrs.EnabledState = &trg.EnabledState
+			attrs.EnabledState = stringPtrIfNotEmpty(trg.EnabledState)
 		}
 		if trg.Definition != "" {
-			attrs.Definition = &trg.Definition
+			attrs.Definition = stringPtrIfNotEmpty(trg.Definition)
 		}
 
 		node := &model.TriggerNode{
@@ -433,35 +428,10 @@ func attributeAsInt64(attrs map[string]any, key string) (int64, bool) {
 	return 0, false
 }
 
-func cloneStringPtr(src *string) *string {
-	if src == nil {
-		return nil
-	}
-	copy := *src
-	return &copy
-}
-
-func cloneInt64Ptr(src *int64) *int64 {
-	if src == nil {
-		return nil
-	}
-	copy := *src
-	return &copy
-}
-
 func stringPtrIfNotEmpty(value string) *string {
 	if value == "" {
 		return nil
 	}
 	v := value
 	return &v
-}
-
-func copyStringsPtr(values []string) *[]string {
-	if len(values) == 0 {
-		return nil
-	}
-	copyOf := make([]string, len(values))
-	copy(copyOf, values)
-	return &copyOf
 }

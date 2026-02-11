@@ -47,13 +47,3 @@ func EscapeIdentifier(input string) string {
 func QuoteLiteral(input string) string {
 	return fmt.Sprintf("'%s'", strings.ReplaceAll(input, "'", "''"))
 }
-
-// CopyStrings creates a copy of a string slice.
-func CopyStrings(src []string) []string {
-	if len(src) == 0 {
-		return nil
-	}
-	dst := make([]string, len(src))
-	copy(dst, src)
-	return dst
-}

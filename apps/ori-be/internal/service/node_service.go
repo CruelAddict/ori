@@ -95,7 +95,10 @@ func (ns *NodeService) hydrateNode(ctx context.Context, graph *connectionGraph, 
 		return nil
 	}
 
-	nodeCopy := cloneNode(node)
+	nodeCopy := node.Clone()
+	if nodeCopy == nil {
+		return fmt.Errorf("node %s clone failed", nodeID)
+	}
 	var nodes []model.Node
 	var err error
 
@@ -341,6 +344,7 @@ func (s *connectionGraph) rootIDList() []string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	ids := make([]string, len(s.rootIDs))
+	// Return a detached ID list to protect cache internals.
 	copy(ids, s.rootIDs)
 	return ids
 }
@@ -353,9 +357,13 @@ func (s *connectionGraph) setRootNodes(nodes []model.Node) {
 		if node == nil {
 			continue
 		}
-		copyNode := cloneNode(node)
-		s.nodes[copyNode.GetID()] = copyNode
-		s.rootIDs = append(s.rootIDs, copyNode.GetID())
+		// Store an owned copy so callers cannot mutate cache state.
+		cloned := node.Clone()
+		if cloned == nil {
+			continue
+		}
+		s.nodes[cloned.GetID()] = cloned
+		s.rootIDs = append(s.rootIDs, cloned.GetID())
 	}
 }
 
@@ -375,7 +383,12 @@ func (s *connectionGraph) snapshot(ids []string) (model.Nodes, error) {
 		if !ok {
 			return nil, fmt.Errorf("%w: %s", ErrUnknownNode, id)
 		}
-		result = append(result, cloneNode(node))
+		// Return clones so API callers cannot mutate cache state.
+		cloned := node.Clone()
+		if cloned == nil {
+			continue
+		}
+		result = append(result, cloned)
 	}
 	return result, nil
 }
@@ -387,15 +400,13 @@ func (s *connectionGraph) upsert(nodes []model.Node) {
 		if node == nil {
 			continue
 		}
-		s.nodes[node.GetID()] = cloneNode(node)
+		// Clone on write to keep graph ownership local.
+		cloned := node.Clone()
+		if cloned == nil {
+			continue
+		}
+		s.nodes[cloned.GetID()] = cloned
 	}
-}
-
-func cloneNode(src model.Node) model.Node {
-	if src == nil {
-		return nil
-	}
-	return src.Clone()
 }
 
 func uniqueStrings(values []string) []string {

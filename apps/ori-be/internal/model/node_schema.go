@@ -3,6 +3,7 @@ package model
 import (
 	"fmt"
 
+	"github.com/crueladdict/ori/apps/ori-server/internal/pkg/cloneutil"
 	dto "github.com/crueladdict/ori/libs/contract/go"
 )
 
@@ -20,8 +21,8 @@ func (n *SchemaNode) Clone() Node {
 	clone := *n
 	clone.BaseNode = n.cloneBase()
 	clone.Attributes = n.Attributes
-	clone.Tables = cloneRelationIDs(n.Tables)
-	clone.Views = cloneRelationIDs(n.Views)
+	clone.Tables = cloneutil.Slice(n.Tables)
+	clone.Views = cloneutil.Slice(n.Views)
 	return &clone
 }
 

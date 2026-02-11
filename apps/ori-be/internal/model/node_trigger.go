@@ -3,6 +3,7 @@ package model
 import (
 	"fmt"
 
+	"github.com/crueladdict/ori/apps/ori-server/internal/pkg/cloneutil"
 	dto "github.com/crueladdict/ori/libs/contract/go"
 )
 
@@ -30,10 +31,25 @@ func (node *TriggerNode) ToDTO() (dto.Node, error) {
 		Id:         node.GetID(),
 		Name:       node.GetName(),
 		Edges:      map[string]dto.NodeEdge{},
-		Attributes: cloneTriggerAttributes(node.Attributes),
+		Attributes: node.Attributes,
 	})
 	if err != nil {
 		return dto.Node{}, fmt.Errorf("node %s: %w", node.GetID(), err)
 	}
 	return out, nil
+}
+
+func cloneTriggerAttributes(attrs dto.TriggerNodeAttributes) dto.TriggerNodeAttributes {
+	return dto.TriggerNodeAttributes{
+		Condition:    cloneutil.Ptr(attrs.Condition),
+		Connection:   attrs.Connection,
+		Definition:   cloneutil.Ptr(attrs.Definition),
+		EnabledState: cloneutil.Ptr(attrs.EnabledState),
+		Events:       cloneutil.SlicePtr(attrs.Events),
+		Orientation:  attrs.Orientation,
+		Statement:    cloneutil.Ptr(attrs.Statement),
+		Table:        attrs.Table,
+		Timing:       attrs.Timing,
+		TriggerName:  attrs.TriggerName,
+	}
 }

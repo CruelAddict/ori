@@ -1,8 +1,10 @@
 package model
 
 import (
-	dto "github.com/crueladdict/ori/libs/contract/go"
 	"path/filepath"
+
+	"github.com/crueladdict/ori/apps/ori-server/internal/pkg/cloneutil"
+	dto "github.com/crueladdict/ori/libs/contract/go"
 )
 
 type PasswordConfig struct {
@@ -46,32 +48,14 @@ func ConvertConfigurationsToDTO(configs []Configuration) *dto.ConfigurationsResp
 			Name:     cfg.Name,
 			Type:     cfg.Type,
 			Database: cfg.Database,
-			Host:     cloneString(cfg.Host),
-			Port:     cloneInt(cfg.Port),
-			Username: cloneString(cfg.Username),
+			Host:     cloneutil.Ptr(cfg.Host),
+			Port:     cloneutil.Ptr(cfg.Port),
+			Username: cloneutil.Ptr(cfg.Username),
 			Password: clonePassword(cfg.Password),
 			Tls:      cloneTLS(cfg.TLS),
 		}
 	}
 	return &dto.ConfigurationsResponse{Connections: dtoConfigs}
-}
-
-// cloneString duplicates the pointer so DTOs receive independent values.
-func cloneString(src *string) *string {
-	if src == nil {
-		return nil
-	}
-	copy := *src
-	return &copy
-}
-
-// cloneInt duplicates the pointer so DTOs receive independent values.
-func cloneInt(src *int) *int {
-	if src == nil {
-		return nil
-	}
-	copy := *src
-	return &copy
 }
 
 // clonePassword converts the model password into a DTO-friendly struct.
@@ -92,10 +76,10 @@ func cloneTLS(src *TLSConfig) *dto.TlsConfig {
 	}
 
 	return &dto.TlsConfig{
-		Mode:       cloneString(src.Mode),
-		CaCertPath: cloneString(src.CACertPath),
-		CertPath:   cloneString(src.CertPath),
-		KeyPath:    cloneString(src.KeyPath),
+		Mode:       cloneutil.Ptr(src.Mode),
+		CaCertPath: cloneutil.Ptr(src.CACertPath),
+		CertPath:   cloneutil.Ptr(src.CertPath),
+		KeyPath:    cloneutil.Ptr(src.KeyPath),
 	}
 }
 
@@ -105,7 +89,7 @@ func ResolveTLSPaths(tls *TLSConfig, baseDir string) *TLSConfig {
 	}
 
 	return &TLSConfig{
-		Mode:       cloneString(tls.Mode),
+		Mode:       cloneutil.Ptr(tls.Mode),
 		CACertPath: resolveTLSPath(baseDir, tls.CACertPath),
 		CertPath:   resolveTLSPath(baseDir, tls.CertPath),
 		KeyPath:    resolveTLSPath(baseDir, tls.KeyPath),
@@ -118,7 +102,7 @@ func resolveTLSPath(baseDir string, value *string) *string {
 	}
 
 	if filepath.IsAbs(*value) {
-		return cloneString(value)
+		return cloneutil.Ptr(value)
 	}
 
 	resolved := filepath.Clean(filepath.Join(baseDir, *value))

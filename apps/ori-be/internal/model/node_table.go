@@ -3,6 +3,7 @@ package model
 import (
 	"fmt"
 
+	"github.com/crueladdict/ori/apps/ori-server/internal/pkg/cloneutil"
 	dto "github.com/crueladdict/ori/libs/contract/go"
 )
 
@@ -23,11 +24,11 @@ func (n *TableNode) Clone() Node {
 	clone := *n
 	clone.BaseNode = n.cloneBase()
 	clone.Attributes = cloneTableAttributes(n.Attributes)
-	clone.Partitions = cloneRelationIDs(n.Partitions)
-	clone.Columns = cloneRelationIDs(n.Columns)
-	clone.Constraints = cloneRelationIDs(n.Constraints)
-	clone.Indexes = cloneRelationIDs(n.Indexes)
-	clone.Triggers = cloneRelationIDs(n.Triggers)
+	clone.Partitions = cloneutil.Slice(n.Partitions)
+	clone.Columns = cloneutil.Slice(n.Columns)
+	clone.Constraints = cloneutil.Slice(n.Constraints)
+	clone.Indexes = cloneutil.Slice(n.Indexes)
+	clone.Triggers = cloneutil.Slice(n.Triggers)
 	return &clone
 }
 
@@ -47,7 +48,7 @@ func (node *TableNode) ToDTO() (dto.Node, error) {
 		Id:         node.GetID(),
 		Name:       node.GetName(),
 		Edges:      tableRelationsToDTO(node),
-		Attributes: cloneTableAttributes(node.Attributes),
+		Attributes: node.Attributes,
 	})
 	if err != nil {
 		return dto.Node{}, fmt.Errorf("node %s: %w", node.GetID(), err)
@@ -66,4 +67,13 @@ func tableRelationsToDTO(node *TableNode) map[string]dto.NodeEdge {
 	out[NodeRelationIndexes] = relationToDTO(node.Indexes)
 	out[NodeRelationTriggers] = relationToDTO(node.Triggers)
 	return out
+}
+
+func cloneTableAttributes(attrs dto.TableNodeAttributes) dto.TableNodeAttributes {
+	return dto.TableNodeAttributes{
+		Connection: attrs.Connection,
+		Definition: cloneutil.Ptr(attrs.Definition),
+		Table:      attrs.Table,
+		TableType:  attrs.TableType,
+	}
 }

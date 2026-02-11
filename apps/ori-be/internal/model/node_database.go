@@ -3,6 +3,7 @@ package model
 import (
 	"fmt"
 
+	"github.com/crueladdict/ori/apps/ori-server/internal/pkg/cloneutil"
 	dto "github.com/crueladdict/ori/libs/contract/go"
 )
 
@@ -20,8 +21,8 @@ func (n *DatabaseNode) Clone() Node {
 	clone := *n
 	clone.BaseNode = n.cloneBase()
 	clone.Attributes = cloneDatabaseAttributes(n.Attributes)
-	clone.Tables = cloneRelationIDs(n.Tables)
-	clone.Views = cloneRelationIDs(n.Views)
+	clone.Tables = cloneutil.Slice(n.Tables)
+	clone.Views = cloneutil.Slice(n.Views)
 	return &clone
 }
 
@@ -34,7 +35,7 @@ func (node *DatabaseNode) ToDTO() (dto.Node, error) {
 		Id:         node.GetID(),
 		Name:       node.GetName(),
 		Edges:      databaseRelationsToDTO(node),
-		Attributes: cloneDatabaseAttributes(node.Attributes),
+		Attributes: node.Attributes,
 	})
 	if err != nil {
 		return dto.Node{}, fmt.Errorf("node %s: %w", node.GetID(), err)
@@ -50,4 +51,15 @@ func databaseRelationsToDTO(node *DatabaseNode) map[string]dto.NodeEdge {
 	out[NodeRelationTables] = relationToDTO(node.Tables)
 	out[NodeRelationViews] = relationToDTO(node.Views)
 	return out
+}
+
+func cloneDatabaseAttributes(attrs dto.DatabaseNodeAttributes) dto.DatabaseNodeAttributes {
+	return dto.DatabaseNodeAttributes{
+		Connection: attrs.Connection,
+		Encoding:   cloneutil.Ptr(attrs.Encoding),
+		Engine:     attrs.Engine,
+		File:       cloneutil.Ptr(attrs.File),
+		PageSize:   cloneutil.Ptr(attrs.PageSize),
+		Sequence:   cloneutil.Ptr(attrs.Sequence),
+	}
 }

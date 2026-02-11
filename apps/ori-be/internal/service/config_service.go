@@ -47,6 +47,7 @@ func (cs *ConfigService) ListConfigurations() ([]model.Configuration, error) {
 	}
 
 	configs := make([]model.Configuration, len(cs.config.Configurations))
+	// Return a detached top-level slice to avoid exposing internal storage.
 	copy(configs, cs.config.Configurations)
 
 	return configs, nil
