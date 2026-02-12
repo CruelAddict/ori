@@ -167,16 +167,12 @@ export function Buffer(props: BufferProps) {
           return
         }
         lineRef.insertText("\t")
-        const cursor = lineRef.logicalCursor
-        bufferModel.setFocusedRow(ctx.index)
-        bufferModel.setNavColumn(cursor.col)
       }),
     },
     {
       pattern: "up",
       handler: withCursor((ctx, event) => {
         event.preventDefault()
-        bufferModel.setNavColumn(ctx.cursorCol)
         autoScrollIfAtEdge(ctx, -1)
         bufferModel.handleVerticalMove(ctx.index, -1)
       }),
@@ -185,7 +181,6 @@ export function Buffer(props: BufferProps) {
       pattern: "down",
       handler: withCursor((ctx, event) => {
         event.preventDefault()
-        bufferModel.setNavColumn(ctx.cursorCol)
         autoScrollIfAtEdge(ctx, 1)
         bufferModel.handleVerticalMove(ctx.index, 1)
       }),
@@ -193,7 +188,6 @@ export function Buffer(props: BufferProps) {
     {
       pattern: "left",
       handler: withCursor((ctx, event) => {
-        bufferModel.setNavColumn(ctx.cursorCol)
         const atStart = ctx.cursorCol === 0 && ctx.cursorRow === 0
         if (atStart) {
           event.preventDefault()
@@ -202,9 +196,8 @@ export function Buffer(props: BufferProps) {
       }),
     },
     {
-      pattern: "alt+left",
+      pattern: ["alt+left", "meta+left", "alt+b", "meta+b"],
       handler: withCursor((ctx, event) => {
-        bufferModel.setNavColumn(ctx.cursorCol)
         const atStart = ctx.cursorCol === 0 && ctx.cursorRow === 0
         if (atStart) {
           event.preventDefault()
@@ -215,7 +208,6 @@ export function Buffer(props: BufferProps) {
     {
       pattern: "right",
       handler: withCursor((ctx, event) => {
-        bufferModel.setNavColumn(ctx.cursorCol)
         const eolCol = bufferModel.getVisualEOLColumn(ctx.index)
         const atEnd = ctx.cursorCol === eolCol && ctx.cursorRow === 0
         if (atEnd) {
@@ -225,9 +217,8 @@ export function Buffer(props: BufferProps) {
       }),
     },
     {
-      pattern: "alt+right",
+      pattern: ["alt+right", "meta+right", "alt+f", "meta+f"],
       handler: withCursor((ctx, event) => {
-        bufferModel.setNavColumn(ctx.cursorCol)
         const eolCol = bufferModel.getVisualEOLColumn(ctx.index)
         const atEnd = ctx.cursorCol === eolCol && ctx.cursorRow === 0
         if (atEnd) {
@@ -239,7 +230,6 @@ export function Buffer(props: BufferProps) {
     {
       pattern: "backspace",
       handler: withCursor((ctx, event) => {
-        bufferModel.setNavColumn(ctx.cursorCol)
         const atStart = ctx.cursorCol === 0 && ctx.cursorRow === 0
         if (atStart) {
           event.preventDefault()
@@ -251,7 +241,6 @@ export function Buffer(props: BufferProps) {
     {
       pattern: "delete",
       handler: withCursor((ctx, event) => {
-        bufferModel.setNavColumn(ctx.cursorCol)
         const eolCol = bufferModel.getVisualEOLColumn(ctx.index)
         const atEnd = ctx.cursorCol === eolCol && ctx.cursorRow === 0
         if (atEnd) {
@@ -263,7 +252,6 @@ export function Buffer(props: BufferProps) {
     {
       pattern: "ctrl+h",
       handler: withCursor((ctx, event) => {
-        bufferModel.setNavColumn(ctx.cursorCol)
         const atStart = ctx.cursorCol === 0 && ctx.cursorRow === 0
         if (atStart) {
           event.preventDefault()
@@ -275,7 +263,6 @@ export function Buffer(props: BufferProps) {
     {
       pattern: "ctrl+w",
       handler: withCursor((ctx, event) => {
-        bufferModel.setNavColumn(ctx.cursorCol)
         const atStart = ctx.cursorCol === 0 && ctx.cursorRow === 0
         if (atStart) {
           event.preventDefault()
@@ -287,7 +274,6 @@ export function Buffer(props: BufferProps) {
     {
       pattern: "ctrl+d",
       handler: withCursor((ctx, event) => {
-        bufferModel.setNavColumn(ctx.cursorCol)
         const eolCol = bufferModel.getVisualEOLColumn(ctx.index)
         const atEnd = ctx.cursorCol === eolCol && ctx.cursorRow === 0
         if (atEnd) {
@@ -404,6 +390,14 @@ export function Buffer(props: BufferProps) {
                       keyBindings={[]}
                       onMouseDown={(event: MouseEvent) => {
                         handleMouseDown(indexAccessor(), event)
+                      }}
+                      onCursorChange={() => {
+                        const idx = indexAccessor()
+                        const ref = bufferModel.getLineRef(idx)
+                        if (!ref) {
+                          return
+                        }
+                        bufferModel.setNavColumn(ref.logicalCursor.col)
                       }}
                       initialValue={initialText}
                       onContentChange={() => bufferModel.handleTextAreaChange(indexAccessor())}
