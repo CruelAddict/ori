@@ -287,7 +287,7 @@ export function Buffer(props: BufferProps) {
   createEffect(
     on(props.isFocused, (isFocused) => {
       bufferModel.handleFocusChange(isFocused)
-    })
+    }),
   )
 
   const lineBg = (row: number) => {
@@ -359,7 +359,9 @@ export function Buffer(props: BufferProps) {
                           if (target?.startLine === indexAccessor()) {
                             return "󰻃 "
                           }
-                          const hasStart = bufferModel.statements().some((statement) => statement.startLine === indexAccessor())
+                          const hasStart = bufferModel
+                            .statements()
+                            .some((statement) => statement.startLine === indexAccessor())
                           return hasStart ? "• " : ""
                         })()}
                       </text>

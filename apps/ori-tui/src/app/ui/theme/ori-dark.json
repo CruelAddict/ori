@@ -16,7 +16,9 @@
     "info": "#56b6c2",
     "editorBg": "#161616",
     "editorBgFocus": "#1e1e1e",
-    "editorText": "#eeeeee"
+    "editorText": "#eeeeee",
+    "resultsRowAltBg": "#1a1a1a",
+    "resultsHeaderBg": "#1c1c1c"
   },
   "theme": {
     "primary": "primary",
@@ -35,6 +37,8 @@
     "info": "info",
     "editorBackground": "editorBg",
     "editorBackgroundFocused": "editorBgFocus",
-    "editorText": "editorText"
+    "editorText": "editorText",
+    "resultsRowAltBackground": "resultsRowAltBg",
+    "resultsHeaderBackground": "resultsHeaderBg"
   }
 }

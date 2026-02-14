@@ -90,13 +90,15 @@ export function TreeScrollbox(props: TreeScrollboxProps) {
         flexGrow: 1,
         flexShrink: 0
       }}
-      verticalScrollbarOptions={{
+      horizontalScrollbarOptions={{
         trackOptions: {
+          foregroundColor: useTheme().theme().text,
           backgroundColor: useTheme().theme().backgroundPanel,
         },
       }}
-      horizontalScrollbarOptions={{
+      verticalScrollbarOptions={{
         trackOptions: {
+          foregroundColor: useTheme().theme().text,
           backgroundColor: useTheme().theme().backgroundPanel,
         },
       }}

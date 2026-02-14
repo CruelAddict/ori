@@ -1,3 +1,6 @@
+import kanagawaDragon from "./kanagawa-dragon.json" with { type: "json" }
+import kanagawaLotus from "./kanagawa-lotus.json" with { type: "json" }
+import kanagawaWave from "./kanagawa-wave.json" with { type: "json" }
 import oriDark from "./ori-dark.json" with { type: "json" }
 import oriLight from "./ori-light.json" with { type: "json" }
 
@@ -19,6 +22,8 @@ export type Theme = {
   editorBackground: string
   editorBackgroundFocused: string
   editorText: string
+  resultsRowAltBackground: string
+  resultsHeaderBackground: string
 }
 
 type HexColor = `#${string}`
@@ -39,6 +44,9 @@ type ThemeDefinition = {
 export const THEME_DEFINITIONS = {
   "ori-dark": { label: "Ori Dark", data: oriDark },
   "ori-light": { label: "Ori Light", data: oriLight },
+  "kanagawa-wave": { label: "Kanagawa Wave", data: kanagawaWave },
+  "kanagawa-lotus": { label: "Kanagawa Lotus", data: kanagawaLotus },
+  "kanagawa-dragon": { label: "Kanagawa Dragon", data: kanagawaDragon },
 } as const satisfies Record<string, ThemeDefinition>
 
 export type ThemeName = keyof typeof THEME_DEFINITIONS

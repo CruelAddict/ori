@@ -67,7 +67,6 @@ export function TreePanel(props: TreePanelProps) {
         border={["right"]}
         borderColor={theme().border}
         paddingRight={1}
-        paddingBottom={1}
       >
         <box
           paddingLeft={1}
@@ -77,9 +76,6 @@ export function TreePanel(props: TreePanelProps) {
           height="100%"
           onMouseDown={handleEmptySpaceClick}
         >
-          <Show when={pane.loading()}>
-            <text fg={theme().text}>Loading schema graph...</text>
-          </Show>
           <Show when={pane.error()}>
             {(message: Accessor<string | null>) => <text fg={theme().error}>Failed to load graph: {message()}</text>}
           </Show>
