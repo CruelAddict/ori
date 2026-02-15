@@ -66,6 +66,7 @@ export type NodeEdge = {
 export type DatabaseNodeAttributes = {
     connection: string;
     engine: string;
+    isDefault: boolean;
     file?: string;
     sequence?: number;
     pageSize?: number;
@@ -75,6 +76,7 @@ export type DatabaseNodeAttributes = {
 export type SchemaNodeAttributes = {
     connection: string;
     engine: string;
+    isDefault: boolean;
 };
 
 export type TableNodeAttributes = {

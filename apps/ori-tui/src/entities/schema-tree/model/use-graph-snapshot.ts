@@ -5,7 +5,7 @@ import { createEffect, createMemo, createSignal } from "solid-js"
 import { createStore } from "solid-js/store"
 import type { GraphSnapshot } from "../api/graph"
 import { loadGraphIncremental } from "../api/graph"
-import type { Node } from "@shared/lib/configurations-client"
+import { type Node, NodeType } from "@shared/lib/configurations-client"
 
 type GraphSnapshotControls = {
   nodesById: Accessor<Record<string, Node>>
@@ -45,7 +45,11 @@ export function useResourceGraphSnapshot(configurationName: Accessor<string | nu
         {
           onRoots: (_nodes, ids) => {
             if (requestId !== currentRequest) return
-            setRootIds(ids)
+            const byId = new Map(_nodes.map((node) => [node.id, node]))
+            const ordered = [...ids].sort((leftId, rightId) =>
+              compareRootIds(leftId, rightId, byId.get(leftId), byId.get(rightId)),
+            )
+            setRootIds(ordered)
           },
           onNode: (node) => {
             if (requestId !== currentRequest) return
@@ -93,4 +97,25 @@ export function useResourceGraphSnapshot(configurationName: Accessor<string | nu
     error,
     refresh,
   }
+}
+
+function compareRootIds(leftId: string, rightId: string, leftNode?: Node, rightNode?: Node): number {
+  const leftDefault = isDefaultRoot(leftNode)
+  const rightDefault = isDefaultRoot(rightNode)
+  if (leftDefault !== rightDefault) {
+    return leftDefault ? -1 : 1
+  }
+
+  const byName = (leftNode?.name ?? "").toLocaleLowerCase().localeCompare((rightNode?.name ?? "").toLocaleLowerCase())
+  if (byName !== 0) {
+    return byName
+  }
+
+  return leftId.localeCompare(rightId)
+}
+
+function isDefaultRoot(node?: Node): boolean {
+  if (!node) return false
+  if (node.type !== NodeType.DATABASE && node.type !== NodeType.SCHEMA) return false
+  return node.attributes.isDefault
 }

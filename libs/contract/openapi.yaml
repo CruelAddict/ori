@@ -320,6 +320,8 @@ components:
           type: string
         engine:
           type: string
+        isDefault:
+          type: boolean
         file:
           type: string
         sequence:
@@ -332,6 +334,7 @@ components:
       required:
         - connection
         - engine
+        - isDefault
     SchemaNodeAttributes:
       type: object
       additionalProperties: false
@@ -340,9 +343,12 @@ components:
           type: string
         engine:
           type: string
+        isDefault:
+          type: boolean
       required:
         - connection
         - engine
+        - isDefault
     TableNodeAttributes:
       type: object
       additionalProperties: false

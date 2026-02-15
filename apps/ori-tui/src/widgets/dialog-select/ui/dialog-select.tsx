@@ -52,7 +52,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
   createEffect(() => {
     vm.filter()
     if (!scrollRef) return
-    ;(scrollRef as ScrollBoxWithScrollTo).scrollTo?.(0)
+      ; (scrollRef as ScrollBoxWithScrollTo).scrollTo?.(0)
   })
 
   createEffect(() => {
@@ -115,6 +115,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
             value={vm.filter()}
             placeholder={placeholder}
             cursorColor={palette().primary}
+            textColor={palette().text}
             backgroundColor={palette().backgroundPanel}
             focusedBackgroundColor={palette().backgroundPanel}
             onInput={(value) => {

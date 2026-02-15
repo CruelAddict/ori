@@ -13,6 +13,7 @@ type DatabaseNode struct {
 	Connection string
 	Encoding   *string
 	Engine     string
+	IsDefault  bool
 	File       *string
 	PageSize   *int64
 	Sequence   *int
@@ -30,6 +31,7 @@ func NewDatabaseNode(scope Database) *DatabaseNode {
 		},
 		Connection: scope.ConnectionName,
 		Engine:     scope.Engine,
+		IsDefault:  scope.IsDefault,
 		File:       scope.File,
 		Sequence:   scope.Sequence,
 		PageSize:   scope.PageSize,
@@ -68,6 +70,7 @@ func (node *DatabaseNode) ToDTO() (dto.Node, error) {
 			Connection: node.Connection,
 			Encoding:   node.Encoding,
 			Engine:     node.Engine,
+			IsDefault:  node.IsDefault,
 			File:       node.File,
 			PageSize:   node.PageSize,
 			Sequence:   node.Sequence,

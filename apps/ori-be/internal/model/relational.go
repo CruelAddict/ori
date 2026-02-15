@@ -18,6 +18,7 @@ type Database struct {
 	Engine         string
 	ConnectionName string
 	Name           string
+	IsDefault      bool
 	File           *string
 	Sequence       *int
 	PageSize       *int64
@@ -49,6 +50,7 @@ func (s Database) WithSchema(name *string) Scope {
 		ConnectionName: s.ConnectionName,
 		Database:       s.Name,
 		Name:           *name,
+		IsDefault:      false,
 	}
 }
 
@@ -66,6 +68,7 @@ type Schema struct {
 	ConnectionName string
 	Database       string
 	Name           string
+	IsDefault      bool
 }
 
 func (s Schema) Slug() string {
@@ -94,6 +97,7 @@ func (s Schema) WithSchema(name *string) Scope {
 		ConnectionName: s.ConnectionName,
 		Database:       s.Database,
 		Name:           *name,
+		IsDefault:      s.Name == *name,
 	}
 }
 

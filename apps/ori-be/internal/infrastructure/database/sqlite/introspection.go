@@ -36,6 +36,7 @@ func (a *Adapter) GetScopes(ctx context.Context) ([]model.Scope, error) {
 
 		fileValue := file.String
 		sequence := seq
+		isDefault := strings.EqualFold(name, "main")
 
 		var pageSizeValue *int64
 
@@ -53,6 +54,7 @@ func (a *Adapter) GetScopes(ctx context.Context) ([]model.Scope, error) {
 			Engine:         "sqlite",
 			ConnectionName: a.connectionName,
 			Name:           name,
+			IsDefault:      isDefault,
 			File:           &fileValue,
 			Sequence:       &sequence,
 			PageSize:       pageSizeValue,

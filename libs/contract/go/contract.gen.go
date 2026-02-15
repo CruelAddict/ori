@@ -184,6 +184,7 @@ type DatabaseNodeAttributes struct {
 	Encoding   *string `json:"encoding,omitempty"`
 	Engine     string  `json:"engine"`
 	File       *string `json:"file,omitempty"`
+	IsDefault  bool    `json:"isDefault"`
 	PageSize   *int64  `json:"pageSize,omitempty"`
 	Sequence   *int    `json:"sequence,omitempty"`
 }
@@ -322,6 +323,7 @@ type SchemaNodeType string
 type SchemaNodeAttributes struct {
 	Connection string `json:"connection"`
 	Engine     string `json:"engine"`
+	IsDefault  bool   `json:"isDefault"`
 }
 
 // TableNode defines model for TableNode.

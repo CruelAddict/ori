@@ -11,11 +11,15 @@ import (
 
 func (a *Adapter) GetScopes(ctx context.Context) ([]model.Scope, error) {
 	query := `
-		SELECT s.schema_name
+		SELECT
+			s.schema_name,
+			COALESCE(s.schema_name = current_schema(), false) AS is_default
 		FROM information_schema.schemata s
 		WHERE s.schema_name != 'information_schema'
 		  AND s.schema_name NOT LIKE 'pg_%'
-		ORDER BY s.schema_name
+		ORDER BY
+			CASE WHEN s.schema_name = current_schema() THEN 0 ELSE 1 END,
+			s.schema_name
 	`
 	rows, err := a.db.QueryxContext(ctx, query)
 	if err != nil {
@@ -28,7 +32,8 @@ func (a *Adapter) GetScopes(ctx context.Context) ([]model.Scope, error) {
 	var scopes []model.Scope
 	for rows.Next() {
 		var schemaName string
-		if err := rows.Scan(&schemaName); err != nil {
+		var isDefault bool
+		if err := rows.Scan(&schemaName, &isDefault); err != nil {
 			return nil, fmt.Errorf("failed to scan schema: %w", err)
 		}
 		scopes = append(scopes, model.Schema{
@@ -36,6 +41,7 @@ func (a *Adapter) GetScopes(ctx context.Context) ([]model.Scope, error) {
 			ConnectionName: a.connectionName,
 			Database:       a.config.Database,
 			Name:           schemaName,
+			IsDefault:      isDefault,
 		})
 	}
 	if err := rows.Err(); err != nil {

@@ -12,6 +12,7 @@ type SchemaNode struct {
 	BaseNode
 	Connection string
 	Engine     string
+	IsDefault  bool
 	Tables     []string
 	Views      []string
 }
@@ -26,6 +27,7 @@ func NewSchemaNode(scope Schema) *SchemaNode {
 		},
 		Connection: scope.ConnectionName,
 		Engine:     scope.Engine,
+		IsDefault:  scope.IsDefault,
 	}
 }
 
@@ -55,6 +57,7 @@ func (node *SchemaNode) ToDTO() (dto.Node, error) {
 		Attributes: dto.SchemaNodeAttributes{
 			Connection: node.Connection,
 			Engine:     node.Engine,
+			IsDefault:  node.IsDefault,
 		},
 	})
 	if err != nil {
