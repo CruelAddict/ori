@@ -135,6 +135,7 @@ export function ConnectionViewPage(props: ConnectionViewPageProps) {
           backgroundColor={palette().backgroundPanel}
           marginTop={1}
           marginLeft={2}
+          marginBottom={1}
         >
           <Show when={vm.isPaneVisible("tree")}>
             <TreePanel viewModel={vm.treePane} />

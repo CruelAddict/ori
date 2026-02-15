@@ -67,6 +67,7 @@ export function TreePanel(props: TreePanelProps) {
         border={["right"]}
         borderColor={theme().border}
         paddingRight={1}
+        marginBottom={1}
       >
         <box
           paddingLeft={1}

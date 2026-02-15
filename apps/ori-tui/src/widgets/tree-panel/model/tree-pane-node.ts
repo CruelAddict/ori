@@ -1,4 +1,4 @@
-import { NodeType, type Node, type NodeEdge } from "@shared/lib/configurations-client"
+import { type Node, type NodeEdge, NodeType } from "@shared/lib/configurations-client"
 
 export type TreePaneNode = SnapshotTreePaneNode | EdgeTreePaneNode
 
@@ -29,7 +29,6 @@ export interface EdgeTreePaneNode extends BaseTreePaneNode {
   truncated: boolean
 }
 
-type ColumnNode = Extract<Node, { type: typeof NodeType.COLUMN }>
 type ConstraintNode = Extract<Node, { type: typeof NodeType.CONSTRAINT }>
 type IndexNode = Extract<Node, { type: typeof NodeType.INDEX }>
 type TriggerNode = Extract<Node, { type: typeof NodeType.TRIGGER }>
@@ -95,7 +94,7 @@ function edgeEntityId(nodeId: string, edgeName: string): string {
 }
 
 function edgeLabel(edgeName: string): string {
-  return edgeName
+  return edgeName.replaceAll("_", " ")
 }
 
 function describeEdge(edge: NodeEdge): string | undefined {
@@ -124,7 +123,7 @@ function describeNode(node: Node): string | undefined {
       if (table.trim().toLowerCase() === node.name.trim().toLowerCase()) {
         return undefined
       }
-      return table
+      return table.toLowerCase()
     }
     case NodeType.VIEW: {
       const table = node.attributes.table ?? ""
@@ -134,7 +133,7 @@ function describeNode(node: Node): string | undefined {
       if (table.trim().toLowerCase() === node.name.trim().toLowerCase()) {
         return undefined
       }
-      return table
+      return table.toLowerCase()
     }
     case NodeType.COLUMN:
       return node.attributes.dataType?.toLowerCase()
@@ -152,7 +151,7 @@ function nodeBadges(node: Node): string[] {
   if (node.type === NodeType.COLUMN) {
     const badges: string[] = []
     if ((node.attributes.primaryKeyPosition ?? 0) > 0) {
-      badges.push("PK")
+      badges.push("pk")
     }
     if (node.attributes.notNull) {
       badges.push("!null")
@@ -168,7 +167,7 @@ function nodeBadges(node: Node): string[] {
   if (node.type === NodeType.TRIGGER) {
     const state = node.attributes.enabledState ?? ""
     if (!state) return []
-    return [state.toUpperCase()]
+    return [state.toLowerCase()]
   }
   return []
 }
@@ -177,59 +176,52 @@ function describeConstraint(attrs: ConstraintNode["attributes"]): string | undef
   const constraintType = attrs.constraintType ?? ""
   if (!constraintType) return undefined
   if (constraintType === "CHECK") {
-    return attrs.checkClause
+    const clause = attrs.checkClause ?? ""
+    if (!clause) return "check"
+    return clause.toLowerCase()
   }
   if (constraintType === "FOREIGN KEY") {
     const refSchema = attrs.referencedSchema ?? ""
     const refTable = attrs.referencedTable ?? ""
     const reference = [refSchema, refTable].filter(Boolean).join(".")
     if (reference) {
-      return `foreigh key: ${reference}`
+      return `references ${reference.toLowerCase()}`
     }
+    return "foreign key"
   }
   if (constraintType === "UNIQUE") {
     const indexName = attrs.indexName ?? ""
     if (indexName) {
-      return `unique (index ${indexName})`
+      return `index ${indexName.toLowerCase()}`
     }
+    return ""
   }
   return constraintType.toLowerCase()
 }
 
-function constraintBadges(attrs: ConstraintNode["attributes"]): string[] {
-  const constraintType = attrs.constraintType ?? ""
-  if (constraintType !== "FOREIGN KEY") return []
-  const badges: string[] = []
-  const match = attrs.match ?? ""
-  const onUpdate = attrs.onUpdate ?? ""
-  const onDelete = attrs.onDelete ?? ""
-  if (match) badges.push(`match ${match}`)
-  if (onUpdate) badges.push(`on update ${onUpdate}`)
-  if (onDelete) badges.push(`on delete ${onDelete}`)
-  return badges
+function constraintBadges(_attrs: ConstraintNode["attributes"]): string[] {
+  return []
 }
 
 function describeIndex(attrs: IndexNode["attributes"]): string | undefined {
   const predicate = attrs.predicate ?? ""
   if (predicate) {
-    return `where ${predicate}`
+    return `where ${predicate.toLowerCase()}`
   }
-  return attrs.unique ? "unique" : "index"
+  return "index"
 }
 
-function describeTrigger(attrs: TriggerNode["attributes"]): string | undefined {
-  const timing = attrs.timing ?? ""
-  const events = (attrs.events ?? []).filter((event: string) => event.length > 0)
-  const eventsLabel = events.join(" or ")
-  if (timing && eventsLabel) {
-    return `${timing} ${eventsLabel}`
-  }
-  return timing || eventsLabel || undefined
+function describeTrigger(_attrs: TriggerNode["attributes"]): string | undefined {
+  return undefined
 }
 
 function indexBadges(attrs: IndexNode["attributes"]): string[] {
   const badges: string[] = []
-  if (attrs.primary) { badges.push("primary") }
-  if (attrs.unique) { badges.push("unique") }
+  if (attrs.primary) {
+    badges.push("primary")
+  }
+  if (attrs.unique) {
+    badges.push("unique")
+  }
   return badges
 }

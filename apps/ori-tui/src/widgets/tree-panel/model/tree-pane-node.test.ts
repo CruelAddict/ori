@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { NodeType, type Node, type NodeEdge } from "@shared/lib/configurations-client"
+import { type Node, type NodeEdge, NodeType } from "@shared/lib/configurations-client"
 import { createEdgeTreePaneNode, createSnapshotTreePaneNode } from "./tree-pane-node"
 
 type NodeOverrides = {
@@ -40,14 +40,17 @@ const makeNode = (overrides: NodeOverrides): Node => {
       type: kind,
       name,
       attributes: {
-        ...Object.assign({
-          connection: "test",
-          table: "users",
-          column: name,
-          ordinal: 1,
-          dataType: "text",
-          notNull: false,
-        }, overrides.attributes ?? {}),
+        ...Object.assign(
+          {
+            connection: "test",
+            table: "users",
+            column: name,
+            ordinal: 1,
+            dataType: "text",
+            notNull: false,
+          },
+          overrides.attributes ?? {},
+        ),
       },
       edges: overrides.edges ?? {},
     } as Node
@@ -59,12 +62,15 @@ const makeNode = (overrides: NodeOverrides): Node => {
       type: kind,
       name,
       attributes: {
-        ...Object.assign({
-          connection: "test",
-          table: "users",
-          constraintName: name,
-          constraintType: "CHECK",
-        }, overrides.attributes ?? {}),
+        ...Object.assign(
+          {
+            connection: "test",
+            table: "users",
+            constraintName: name,
+            constraintType: "CHECK",
+          },
+          overrides.attributes ?? {},
+        ),
       },
       edges: overrides.edges ?? {},
     } as Node
@@ -76,13 +82,16 @@ const makeNode = (overrides: NodeOverrides): Node => {
       type: kind,
       name,
       attributes: {
-        ...Object.assign({
-          connection: "test",
-          table: "users",
-          indexName: name,
-          unique: false,
-          primary: false,
-        }, overrides.attributes ?? {}),
+        ...Object.assign(
+          {
+            connection: "test",
+            table: "users",
+            indexName: name,
+            unique: false,
+            primary: false,
+          },
+          overrides.attributes ?? {},
+        ),
       },
       edges: overrides.edges ?? {},
     } as Node
@@ -94,13 +103,16 @@ const makeNode = (overrides: NodeOverrides): Node => {
       type: kind,
       name,
       attributes: {
-        ...Object.assign({
-          connection: "test",
-          table: "users",
-          triggerName: name,
-          timing: "BEFORE",
-          orientation: "ROW",
-        }, overrides.attributes ?? {}),
+        ...Object.assign(
+          {
+            connection: "test",
+            table: "users",
+            triggerName: name,
+            timing: "BEFORE",
+            orientation: "ROW",
+          },
+          overrides.attributes ?? {},
+        ),
       },
       edges: overrides.edges ?? {},
     } as Node
@@ -174,7 +186,7 @@ describe("createSnapshotTreePaneNode", () => {
     expect(view.description).toBe("active_users")
   })
 
-  test("describes columns and badges primary/not null", () => {
+  test("describes columns and badges primary/!null", () => {
     const entity = createSnapshotTreePaneNode(
       makeNode({
         id: "col-1",
@@ -184,7 +196,7 @@ describe("createSnapshotTreePaneNode", () => {
       }),
     )
     expect(entity.description).toBe("uuid")
-    expect(entity.badges).toEqual(["PK", "NOT NULL"])
+    expect(entity.badges).toEqual(["pk", "!null"])
   })
 
   test("describes CHECK constraints", () => {
@@ -215,8 +227,8 @@ describe("createSnapshotTreePaneNode", () => {
         },
       }),
     )
-    expect(entity.description).toBe("foreigh key: public.users")
-    expect(entity.badges).toEqual(["match FULL", "on update CASCADE", "on delete RESTRICT"])
+    expect(entity.description).toBe("foreign key: public.users")
+    expect(entity.badges).toEqual([])
   })
 
   test("describes UNIQUE constraints with index name", () => {
@@ -228,7 +240,7 @@ describe("createSnapshotTreePaneNode", () => {
         attributes: { constraintType: "UNIQUE", indexName: "users_email_idx" },
       }),
     )
-    expect(entity.description).toBe("unique (index users_email_idx)")
+    expect(entity.description).toBe("index users_email_idx")
   })
 
   test("describes indexes with predicate and badges", () => {
@@ -253,8 +265,8 @@ describe("createSnapshotTreePaneNode", () => {
         attributes: { timing: "BEFORE", events: ["INSERT", "UPDATE"], enabledState: "enabled" },
       }),
     )
-    expect(entity.description).toBe("BEFORE INSERT or UPDATE")
-    expect(entity.badges).toEqual(["ENABLED"])
+    expect(entity.description).toBeUndefined()
+    expect(entity.badges).toEqual(["enabled"])
   })
 })
 
@@ -265,6 +277,12 @@ describe("createEdgeTreePaneNode", () => {
     expect(edge.id).toBe("edge:table-1:columns")
     expect(edge.label).toBe("columns")
     expect(edge.description).toBe("2")
+  })
+
+  test("renders action rule edge label with spaces", () => {
+    const node = makeNode({ id: "trg-1", type: NodeType.TRIGGER, name: "users_audit" })
+    const edge = createEdgeTreePaneNode(node, "action_rules", makeEdge(["rule-1"]))
+    expect(edge.label).toBe("action rules")
   })
 
   test("renders truncated edge descriptions", () => {

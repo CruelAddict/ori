@@ -1,4 +1,4 @@
-import { NodeType, type Node, type NodeEdge } from "@shared/lib/configurations-client"
+import { type Node, type NodeEdge, NodeType } from "@shared/lib/configurations-client"
 import type { Accessor } from "solid-js"
 import { batch, createEffect, createMemo, createSignal } from "solid-js"
 import { createStore, produce, type SetStoreFunction } from "solid-js/store"
@@ -11,6 +11,9 @@ export type VisibleRow = {
   parentId?: string
   depth: number
 }
+
+type ConstraintNode = Extract<Node, { type: typeof NodeType.CONSTRAINT }>
+type TriggerNode = Extract<Node, { type: typeof NodeType.TRIGGER }>
 
 export function convertSnapshotNodeEntities(node: Node, nodes: Record<string, Node>): TreePaneNode[] {
   const entities: TreePaneNode[] = []
@@ -64,6 +67,17 @@ export function convertSnapshotNodeEntities(node: Node, nodes: Record<string, No
   if (node.type === NodeType.CONSTRAINT) {
     attachSyntheticEdge("columns", node.attributes.columns ?? [])
     attachSyntheticEdge("references", node.attributes.referencedColumns ?? [])
+    const rules = buildConstraintActionRules(node.attributes)
+    if (rules) {
+      attachSyntheticEdge("action_rules", [rules])
+    }
+  }
+
+  if (node.type === NodeType.TRIGGER) {
+    const rules = buildTriggerActionRules(node.attributes)
+    if (rules) {
+      attachSyntheticEdge("action_rules", [rules])
+    }
   }
 
   const entries = Object.entries(node.edges) as Array<[string, NodeEdge]>
@@ -77,6 +91,48 @@ export function convertSnapshotNodeEntities(node: Node, nodes: Record<string, No
   }
 
   return entities
+}
+
+function buildConstraintActionRules(attrs: ConstraintNode["attributes"]): string | undefined {
+  const rules: string[] = []
+  const match = attrs.match ?? ""
+  const onUpdate = attrs.onUpdate ?? ""
+  const onDelete = attrs.onDelete ?? ""
+  if (match) rules.push(`match ${match.toLowerCase()}`)
+  if (onUpdate) rules.push(`on update ${onUpdate.toLowerCase()}`)
+  if (onDelete) rules.push(`on delete ${onDelete.toLowerCase()}`)
+  if (rules.length === 0) return undefined
+  return rules.join(", ")
+}
+
+function buildTriggerActionRules(attrs: TriggerNode["attributes"]): string | undefined {
+  const rules: string[] = []
+  const timing = attrs.timing ?? ""
+  const events = (attrs.events ?? []).filter((event: string) => event.length > 0)
+  const eventsLabel = events.map((event: string) => event.toLowerCase()).join(" or ")
+  const orientation = attrs.orientation ?? ""
+  const condition = attrs.condition ?? ""
+  const statement = attrs.statement ?? ""
+  if (timing && eventsLabel) {
+    rules.push(`${timing.toLowerCase()} ${eventsLabel}`)
+  }
+  if (!timing && eventsLabel) {
+    rules.push(eventsLabel)
+  }
+  if (timing && !eventsLabel) {
+    rules.push(timing.toLowerCase())
+  }
+  if (orientation) {
+    rules.push(`for each ${orientation.toLowerCase()}`)
+  }
+  if (condition) {
+    rules.push(`when ${condition.toLowerCase()}`)
+  }
+  if (statement) {
+    rules.push(statement.toLowerCase())
+  }
+  if (rules.length === 0) return undefined
+  return rules.join(", ")
 }
 
 export function useTreePaneGraph(nodesById: Accessor<Record<string, Node>>, rootIds: Accessor<string[]>) {

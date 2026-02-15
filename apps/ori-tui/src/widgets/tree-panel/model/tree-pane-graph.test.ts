@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { NodeType, type Node, type NodeEdge } from "@shared/lib/configurations-client"
+import { type Node, type NodeEdge, NodeType } from "@shared/lib/configurations-client"
 import { convertSnapshotNodeEntities } from "./tree-pane-graph"
 import type { TreePaneNode } from "./tree-pane-node"
 
@@ -31,14 +31,17 @@ const makeNode = (overrides: NodeOverrides): Node => {
       type: kind,
       name,
       attributes: {
-        ...Object.assign({
-          connection: "test",
-          table: "users",
-          column: name,
-          ordinal: 1,
-          dataType: "text",
-          notNull: false,
-        }, overrides.attributes ?? {}),
+        ...Object.assign(
+          {
+            connection: "test",
+            table: "users",
+            column: name,
+            ordinal: 1,
+            dataType: "text",
+            notNull: false,
+          },
+          overrides.attributes ?? {},
+        ),
       },
       edges: overrides.edges ?? {},
     } as Node
@@ -50,12 +53,15 @@ const makeNode = (overrides: NodeOverrides): Node => {
       type: kind,
       name,
       attributes: {
-        ...Object.assign({
-          connection: "test",
-          table: "users",
-          constraintName: name,
-          constraintType: "FOREIGN KEY",
-        }, overrides.attributes ?? {}),
+        ...Object.assign(
+          {
+            connection: "test",
+            table: "users",
+            constraintName: name,
+            constraintType: "FOREIGN KEY",
+          },
+          overrides.attributes ?? {},
+        ),
       },
       edges: overrides.edges ?? {},
     } as Node
@@ -67,13 +73,16 @@ const makeNode = (overrides: NodeOverrides): Node => {
       type: kind,
       name,
       attributes: {
-        ...Object.assign({
-          connection: "test",
-          table: "users",
-          indexName: name,
-          unique: false,
-          primary: false,
-        }, overrides.attributes ?? {}),
+        ...Object.assign(
+          {
+            connection: "test",
+            table: "users",
+            indexName: name,
+            unique: false,
+            primary: false,
+          },
+          overrides.attributes ?? {},
+        ),
       },
       edges: overrides.edges ?? {},
     } as Node
@@ -85,13 +94,16 @@ const makeNode = (overrides: NodeOverrides): Node => {
       type: kind,
       name,
       attributes: {
-        ...Object.assign({
-          connection: "test",
-          table: "users",
-          triggerName: name,
-          timing: "BEFORE",
-          orientation: "ROW",
-        }, overrides.attributes ?? {}),
+        ...Object.assign(
+          {
+            connection: "test",
+            table: "users",
+            triggerName: name,
+            timing: "BEFORE",
+            orientation: "ROW",
+          },
+          overrides.attributes ?? {},
+        ),
       },
       edges: overrides.edges ?? {},
     } as Node
@@ -199,23 +211,61 @@ describe("convertSnapshotNodeEntities", () => {
     expect(includeColumn?.label).toBe("created_at")
   })
 
-  test("creates synthetic edges for constraint columns and references", () => {
+  test("creates synthetic edges for constraint columns, references, and action rules", () => {
     const constraint = makeNode({
       id: "fk-1",
       type: NodeType.CONSTRAINT,
       name: "orders_user_id_fkey",
-      attributes: { columns: ["user_id"], referencedColumns: ["users.id"] },
+      attributes: {
+        columns: ["user_id"],
+        referencedColumns: ["users.id"],
+        match: "FULL",
+        onUpdate: "CASCADE",
+        onDelete: "RESTRICT",
+      },
     })
 
     const entities = toEntityMap(constraint, { [constraint.id]: constraint })
 
     const constraintEntity = entities[constraint.id]
-    expect(constraintEntity?.childIds).toEqual([edgeId(constraint.id, "columns"), edgeId(constraint.id, "references")])
+    expect(constraintEntity?.childIds).toEqual([
+      edgeId(constraint.id, "columns"),
+      edgeId(constraint.id, "references"),
+      edgeId(constraint.id, "action_rules"),
+    ])
 
     const columnsEdge = entities[edgeId(constraint.id, "columns")]
     const referencesEdge = entities[edgeId(constraint.id, "references")]
+    const rulesEdge = entities[edgeId(constraint.id, "action_rules")]
     expect(columnsEdge?.childIds).toEqual([syntheticId(constraint.id, "columns", 0)])
     expect(referencesEdge?.childIds).toEqual([syntheticId(constraint.id, "references", 0)])
+    expect(rulesEdge?.childIds).toEqual([syntheticId(constraint.id, "action_rules", 0)])
+    const actionRule = entities[syntheticId(constraint.id, "action_rules", 0)]
+    expect(actionRule?.label).toBe("match full, on update cascade, on delete restrict")
+  })
+
+  test("creates synthetic action rules edge for triggers", () => {
+    const trigger = makeNode({
+      id: "trg-1",
+      type: NodeType.TRIGGER,
+      name: "users_audit",
+      attributes: {
+        timing: "BEFORE",
+        events: ["INSERT", "UPDATE"],
+        orientation: "ROW",
+        condition: "NEW.active = TRUE",
+      },
+    })
+
+    const entities = toEntityMap(trigger, { [trigger.id]: trigger })
+
+    const triggerEntity = entities[trigger.id]
+    expect(triggerEntity?.childIds).toEqual([edgeId(trigger.id, "action_rules")])
+
+    const rulesEdge = entities[edgeId(trigger.id, "action_rules")]
+    expect(rulesEdge?.childIds).toEqual([syntheticId(trigger.id, "action_rules", 0)])
+    const actionRule = entities[syntheticId(trigger.id, "action_rules", 0)]
+    expect(actionRule?.label).toBe("before insert or update, for each row, when new.active = true")
   })
 
   test("skips synthetic edges when arrays are empty", () => {
