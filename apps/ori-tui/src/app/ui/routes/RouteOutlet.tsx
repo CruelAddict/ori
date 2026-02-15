@@ -1,54 +1,53 @@
-import { useTheme } from "@app/providers/theme"
-import { ConnectionViewPage } from "@pages/connection-view/connection-view"
+import { ResourceViewPage } from "@pages/resource-view/resource-view"
 import { WelcomePage } from "@pages/welcome/welcome-page"
 import { type KeyBinding, KeyScope } from "@src/core/services/key-scopes"
 import { createMemo, For } from "solid-js"
 import { useRouteNavigation } from "./router"
-import { type ConnectionRoute, connectionRoute, type RouteLocation } from "./types"
+import { type ResourceRoute, resourceRoute, type RouteLocation } from "./types"
 
 export function RouteOutlet() {
   const navigation = useRouteNavigation()
   const stack = navigation.stack
   const current = navigation.current
 
-  const connections = createMemo(() => stack().filter(isConnectionRoute))
-  const activeConnectionName = createMemo(() => {
+  const resources = createMemo(() => stack().filter(isResourceRoute))
+  const activeResourceName = createMemo(() => {
     const route = current()
-    if (route.type === "connection") {
-      return route.configurationName
+    if (route.type === "resource") {
+      return route.resourceName
     }
     return null
   })
-  const showWelcome = createMemo(() => activeConnectionName() === null)
-  const previousConnectionName = createMemo(() => {
-    const currentName = activeConnectionName()
+  const showWelcome = createMemo(() => activeResourceName() === null)
+  const previousResourceName = createMemo(() => {
+    const currentName = activeResourceName()
     if (!currentName) {
       return null
     }
-    const list = connections()
-    const index = list.findIndex((route) => route.configurationName === currentName)
+    const list = resources()
+    const index = list.findIndex((route) => route.resourceName === currentName)
     if (index <= 0) {
       return null
     }
-    return list[index - 1]?.configurationName ?? null
+    return list[index - 1]?.resourceName ?? null
   })
 
-  const goToPreviousConnection = () => {
-    const name = previousConnectionName()
+  const goToPreviousResource = () => {
+    const name = previousResourceName()
     if (!name) {
       return
     }
-    navigation.push(connectionRoute(name))
+    navigation.push(resourceRoute(name))
   }
 
   const hotkeys: KeyBinding[] = [
     {
       pattern: "shift+tab",
-      handler: goToPreviousConnection,
+      handler: goToPreviousResource,
       preventDefault: true,
-      description: "Switch to previous connection",
+      description: "Switch to previous resource",
       commandPaletteSection: "Navigation",
-      enabled: () => previousConnectionName() !== null,
+      enabled: () => previousResourceName() !== null,
     },
   ]
 
@@ -64,9 +63,9 @@ export function RouteOutlet() {
         >
           <WelcomePage />
         </box>
-        <For each={connections()}>
+        <For each={resources()}>
           {(route) => {
-            const isActive = () => activeConnectionName() === route.configurationName
+            const isActive = () => activeResourceName() === route.resourceName
             return (
               <box
                 flexGrow={1}
@@ -77,8 +76,8 @@ export function RouteOutlet() {
                 bottom={0}
                 visible={isActive()}
               >
-                <ConnectionViewPage
-                  configurationName={route.configurationName}
+                <ResourceViewPage
+                  resourceName={route.resourceName}
                   isActive={isActive()}
                 />
               </box>
@@ -90,6 +89,6 @@ export function RouteOutlet() {
   )
 }
 
-function isConnectionRoute(route: RouteLocation): route is ConnectionRoute {
-  return route.type === "connection"
+function isResourceRoute(route: RouteLocation): route is ResourceRoute {
+  return route.type === "resource"
 }

@@ -2,7 +2,7 @@ import fs from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 
-const DEFAULT_CONFIG_CONTENT = '{\n  "connections": []\n}\n'
+const DEFAULT_RESOURCES_CONTENT = '{\n  "resources": []\n}\n'
 
 async function fileExists(target: string): Promise<boolean> {
   try {
@@ -13,7 +13,7 @@ async function fileExists(target: string): Promise<boolean> {
   }
 }
 
-export async function resolveConfigPath(explicit?: string): Promise<string> {
+export async function resolveResourcesPath(explicit?: string): Promise<string> {
   if (explicit) {
     const absolute = path.resolve(explicit)
     if (!(await fileExists(absolute))) {
@@ -41,6 +41,6 @@ export async function resolveConfigPath(explicit?: string): Promise<string> {
     return userConfig
   }
 
-  await fs.writeFile(userConfig, DEFAULT_CONFIG_CONTENT, { mode: 0o644 })
+  await fs.writeFile(userConfig, DEFAULT_RESOURCES_CONTENT, { mode: 0o644 })
   return userConfig
 }

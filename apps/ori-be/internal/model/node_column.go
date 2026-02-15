@@ -78,7 +78,7 @@ func (node *ColumnNode) ToDTO() (dto.Node, error) {
 		Attributes: dto.ColumnNodeAttributes{
 			CharMaxLength:      node.CharMaxLength,
 			Column:             node.Column,
-			Connection:         node.Connection,
+			Resource:           node.Connection,
 			DataType:           node.DataType,
 			DefaultValue:       node.DefaultValue,
 			NotNull:            node.NotNull,

@@ -20,8 +20,8 @@ import (
 )
 
 const (
-	DefaultConfigPath = "./resources.json"
-	DefaultPort       = 8080
+	DefaultResourcesPath = "./resources.json"
+	DefaultPort          = 8080
 )
 
 var (
@@ -37,7 +37,7 @@ func main() {
 
 func run() int {
 	// Parse command-line flags
-	configPath := flag.String("config", DefaultConfigPath, "Path to configuration file")
+	resourcesPath := flag.String("config", DefaultResourcesPath, "Path to resource file")
 	port := flag.Int("port", DefaultPort, "Port to listen on (TCP, optional)")
 	socketPath := flag.String("socket", "", "Unix domain socket path (preferred)")
 	logLevelFlag := flag.String("log-level", "info", "Log level: debug|info|warn|error")
@@ -74,17 +74,17 @@ func run() int {
 		slog.InfoContext(ctx, "standalone mode: parent monitor disabled")
 	}
 
-	configService := service.NewConfigService(*configPath)
+	configService := service.NewResourceCatalogService(*resourcesPath)
 
-	slog.InfoContext(ctx, "loading configuration", slog.String("path", *configPath))
-	if err := configService.LoadConfig(); err != nil {
-		slog.ErrorContext(ctx, "failed to load configuration", slog.Any("err", err))
+	slog.InfoContext(ctx, "loading resource", slog.String("path", *resourcesPath))
+	if err := configService.LoadResources(); err != nil {
+		slog.ErrorContext(ctx, "failed to load resource", slog.Any("err", err))
 		return 1
 	}
-	slog.InfoContext(ctx, "configuration loaded")
+	slog.InfoContext(ctx, "resource loaded")
 
 	eventHub := events.NewHub()
-	connectionService := service.NewConnectionService(configService, eventHub)
+	connectionService := service.NewResourceSessionService(configService, eventHub)
 	connectionService.RegisterAdapter("sqlite", sqliteadapter.NewAdapter)
 	connectionService.RegisterAdapter("postgresql", postgresadapter.NewAdapter)
 	connectionService.RegisterAdapter("postgres", postgresadapter.NewAdapter)

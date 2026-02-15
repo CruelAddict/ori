@@ -1,24 +1,24 @@
-# Configuration Schema for Database Connections
+# Resource Schema for Database Resources
 # Version: 1.0.0
 
-connections:
-  - name: string              # Human-readable connection name
+resources:
+  - name: string              # Human-readable resource name
     type: string              # Database type (mysql, postgresql, etc.)
     host: string              # Database host address
     port: integer             # Database port number
     database: string          # Database name
     username: string          # Database username
-    password:                 # Password retrieval configuration
+    password:                 # Password retrieval settings
       type: string            # Password provider type (plain_text, shell, keychain)
       key: string             # Provider-specific value (password text, shell command, or keychain account)
-    tls:                      # TLS configuration (optional)
+    tls:                      # TLS settings (optional)
       mode: string            # TLS mode (e.g. disable, require, verify-ca, verify-full)
       caCertPath: string      # CA certificate path
       certPath: string        # Client certificate path
       keyPath: string         # Client key path
 
 # Example:
-# connections:
+# resources:
 #   - name: "production-mysql"
 #     type: "mysql"
 #     host: "localhost"

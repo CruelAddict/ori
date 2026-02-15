@@ -1,4 +1,4 @@
-export type Configuration = {
+export type Resource = {
   name: string
   type: string
   host: string

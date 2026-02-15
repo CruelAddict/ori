@@ -1,13 +1,13 @@
 import { useRouteNavigation } from "@app/routes/router"
-import { connectionRoute } from "@app/routes/types"
-import type { Configuration } from "@src/entities/configuration/model/configuration"
-import { useConfigurationListStore } from "@src/entities/configuration/model/configuration-list-store"
+import { resourceRoute } from "@app/routes/types"
 import { type ConnectionRecord, useConnectionState } from "@src/entities/connection/model/connection-state"
+import type { Resource } from "@src/entities/resource/model/resource"
+import { useResourceListStore } from "@src/entities/resource/model/resource-list-store"
 import { DialogSelect, type DialogSelectOption } from "@widgets/dialog-select"
 import { createEffect, createMemo, createSignal } from "solid-js"
 import type { OverlayComponentProps } from "./overlay-store"
 
-const getConnectionPrefix = (record?: ConnectionRecord) => {
+const getResourcePrefix = (record?: ConnectionRecord) => {
   if (!record || record.status === "idle") return "–"
   if (record.status === "connected") return "∿"
   if (record.status === "failed") return "×"
@@ -15,29 +15,29 @@ const getConnectionPrefix = (record?: ConnectionRecord) => {
   return "–"
 }
 
-export function ConfigurationPickerOverlay(props: OverlayComponentProps) {
-  const store = useConfigurationListStore()
+export function ResourcePickerOverlay(props: OverlayComponentProps) {
+  const store = useResourceListStore()
   const connectionState = useConnectionState()
   const navigation = useRouteNavigation()
   const [pendingName, setPendingName] = createSignal<string | null>(null)
 
-  const options = createMemo<DialogSelectOption<Configuration>[]>(() => {
-    const list = store.configurations()
+  const options = createMemo<DialogSelectOption<Resource>[]>(() => {
+    const list = store.resources()
     const records = connectionState.records()
-    return list.map((configuration) => {
-      const record = records[configuration.name]
-      const prefix = getConnectionPrefix(record)
+    return list.map((resource) => {
+      const record = records[resource.name]
+      const prefix = getResourcePrefix(record)
       return {
-        id: configuration.name,
-        title: `${prefix} ${configuration.name}`,
-        badge: `${configuration.type}`,
-        value: configuration,
-      } satisfies DialogSelectOption<Configuration>
+        id: resource.name,
+        title: `${prefix} ${resource.name}`,
+        badge: `${resource.type}`,
+        value: resource,
+      } satisfies DialogSelectOption<Resource>
     })
   })
 
-  const navigateToConfiguration = (configurationName: string) => {
-    navigation.push(connectionRoute(configurationName))
+  const navigateToResource = (resourceName: string) => {
+    navigation.push(resourceRoute(resourceName))
     setPendingName(null)
     props.close()
   }
@@ -49,7 +49,7 @@ export function ConfigurationPickerOverlay(props: OverlayComponentProps) {
     const record = records[intent]
     if (!record) return
     if (record.status === "connected") {
-      navigateToConfiguration(intent)
+      navigateToResource(intent)
     }
   })
 
@@ -62,14 +62,14 @@ export function ConfigurationPickerOverlay(props: OverlayComponentProps) {
     }
   })
 
-  const handleSelect = (option: DialogSelectOption<Configuration>) => {
+  const handleSelect = (option: DialogSelectOption<Resource>) => {
     const name = option.value.name
     setPendingName(name)
     const records = connectionState.records()
     const record = records[name]
 
     if (record?.status === "connected") {
-      navigateToConfiguration(name)
+      navigateToResource(name)
       return
     }
 
@@ -85,9 +85,9 @@ export function ConfigurationPickerOverlay(props: OverlayComponentProps) {
 
   return (
     <DialogSelect
-      title="Select database"
+      title="Select resource"
       placeholder="Type to search"
-      emptyMessage="No configurations available"
+      emptyMessage="No resources available"
       width={80}
       maxHeight={16}
       options={options}

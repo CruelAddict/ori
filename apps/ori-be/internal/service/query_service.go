@@ -31,7 +31,7 @@ type QueryResultView struct {
 
 // QueryService manages query job execution
 type QueryService struct {
-	connectionService *ConnectionService
+	connectionService *ResourceSessionService
 	eventHub          *events.Hub
 	resultStore       *ResultStore
 	mu                sync.RWMutex
@@ -40,7 +40,7 @@ type QueryService struct {
 }
 
 // NewQueryService creates a new query service
-func NewQueryService(connectionService *ConnectionService, eventHub *events.Hub, rootCtx context.Context) *QueryService {
+func NewQueryService(connectionService *ResourceSessionService, eventHub *events.Hub, rootCtx context.Context) *QueryService {
 	return &QueryService{
 		connectionService: connectionService,
 		eventHub:          eventHub,
@@ -62,7 +62,7 @@ func (qs *QueryService) newJobContext(ctx context.Context) context.Context {
 }
 
 // Exec starts execution of a database query asynchronously
-func (qs *QueryService) Exec(ctx context.Context, configurationName, jobID, query string, params interface{}, options *QueryExecOptions) (*QueryJob, error) {
+func (qs *QueryService) Exec(ctx context.Context, resourceName, jobID, query string, params interface{}, options *QueryExecOptions) (*QueryJob, error) {
 	jobID = strings.TrimSpace(jobID)
 	if jobID == "" {
 		return nil, fmt.Errorf("job ID cannot be empty")
@@ -84,20 +84,20 @@ func (qs *QueryService) Exec(ctx context.Context, configurationName, jobID, quer
 	}
 
 	// Check if connection is available
-	handle, ok := qs.connectionService.GetConnection(configurationName)
+	handle, ok := qs.connectionService.GetConnection(resourceName)
 	if !ok || handle == nil || handle.Adapter == nil {
-		return nil, fmt.Errorf("%w: %s", ErrConnectionUnavailable, configurationName)
+		return nil, fmt.Errorf("%w: %s", ErrConnectionUnavailable, resourceName)
 	}
 
 	// Create job
 	job := &QueryJob{
-		ID:                jobID,
-		ConfigurationName: configurationName,
-		Query:             query,
-		Params:            params,
-		Options:           options,
-		Status:            JobStatusRunning,
-		CreatedAt:         time.Now(),
+		ID:           jobID,
+		ResourceName: resourceName,
+		Query:        query,
+		Params:       params,
+		Options:      options,
+		Status:       JobStatusRunning,
+		CreatedAt:    time.Now(),
 	}
 
 	// Create cancellable context for this job, independent of request lifecycle
@@ -224,7 +224,7 @@ func (qs *QueryService) Stop() {
 }
 
 // runJob executes a query job
-func (qs *QueryService) runJob(ctx context.Context, job *QueryJob, handle *ConnectionHandle) {
+func (qs *QueryService) runJob(ctx context.Context, job *QueryJob, handle *ResourceHandle) {
 	startTime := time.Now()
 	job.StartedAt = &startTime
 
@@ -253,12 +253,12 @@ func (qs *QueryService) runJob(ctx context.Context, job *QueryJob, handle *Conne
 		// Store failed result (FinishedAt will be set by defer)
 		finishTime := time.Now()
 		failedResult := &QueryResult{
-			JobID:             job.ID,
-			ConfigurationName: job.ConfigurationName,
-			Status:            JobStatusFailed,
-			Error:             err.Error(),
-			FinishedAt:        finishTime,
-			DurationMs:        finishTime.Sub(*job.StartedAt).Milliseconds(),
+			JobID:        job.ID,
+			ResourceName: job.ResourceName,
+			Status:       JobStatusFailed,
+			Error:        err.Error(),
+			FinishedAt:   finishTime,
+			DurationMs:   finishTime.Sub(*job.StartedAt).Milliseconds(),
 		}
 		qs.resultStore.Add(failedResult)
 		return
@@ -267,7 +267,7 @@ func (qs *QueryService) runJob(ctx context.Context, job *QueryJob, handle *Conne
 	// Fill in job metadata for the result
 	finishTime := time.Now()
 	result.JobID = job.ID
-	result.ConfigurationName = job.ConfigurationName
+	result.ResourceName = job.ResourceName
 	result.FinishedAt = finishTime
 	result.DurationMs = finishTime.Sub(*job.StartedAt).Milliseconds()
 
@@ -283,11 +283,11 @@ func (qs *QueryService) emitJobCompletion(job *QueryJob) {
 	}
 
 	payload := events.QueryJobCompletedPayload{
-		JobID:             job.ID,
-		ConfigurationName: job.ConfigurationName,
-		Status:            string(job.Status),
-		FinishedAt:        job.FinishedAt.Format(time.RFC3339),
-		DurationMs:        job.DurationMs,
+		JobID:        job.ID,
+		ResourceName: job.ResourceName,
+		Status:       string(job.Status),
+		FinishedAt:   job.FinishedAt.Format(time.RFC3339),
+		DurationMs:   job.DurationMs,
 	}
 
 	if job.Error != "" {

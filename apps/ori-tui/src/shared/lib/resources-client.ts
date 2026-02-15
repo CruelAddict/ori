@@ -1,4 +1,4 @@
-import type { Configuration } from "@shared/lib/configuration"
+import type { Resource } from "@shared/lib/resource"
 import { decodeServerEvent, type ServerEvent } from "@shared/lib/events"
 import { createSSEStream, type SSEMessage } from "@shared/lib/sse-client"
 import {
@@ -7,10 +7,10 @@ import {
   execQuery,
   getNodes,
   getQueryResult,
-  listConfigurations,
+  listResources,
   type Node,
   type QueryExecRequest,
-  startConnection,
+  connectResource,
 } from "contract"
 import { type Client as ContractClient, createClient } from "contract/client"
 import type { Logger } from "pino"
@@ -18,7 +18,7 @@ import type { Logger } from "pino"
 type BunRequest = Request & { timeout?: boolean }
 type BunRequestInit = RequestInit & { unix?: string }
 
-export type ConnectResult = {
+export type ResourceConnectResult = {
   result: "success" | "fail" | "connecting"
   userMessage?: string
 }
@@ -56,11 +56,11 @@ export type QueryResultView = {
 }
 
 export type OriClient = {
-  listConfigurations(): Promise<Configuration[]>
-  connect(configurationName: string): Promise<ConnectResult>
-  getNodes(configurationName: string, nodeIDs?: string[]): Promise<Node[]>
+  listResources(): Promise<Resource[]>
+  connect(resourceName: string): Promise<ResourceConnectResult>
+  getNodes(resourceName: string, nodeIDs?: string[]): Promise<Node[]>
   queryExec(
-    configurationName: string,
+    resourceName: string,
     jobId: string,
     query: string,
     params?: Record<string, unknown>,
@@ -92,13 +92,13 @@ export class RestOriClient implements OriClient {
     this.httpClient = this.createHttpClient()
   }
 
-  async listConfigurations(): Promise<Configuration[]> {
-    const response = await listConfigurations({
+  async listResources(): Promise<Resource[]> {
+    const response = await listResources({
       client: this.httpClient,
       throwOnError: true,
     }).catch(throwNormalizedError)
     const payload = response.data
-    return payload.connections.map((conn) => ({
+    return payload.resources.map((conn) => ({
       name: conn.name,
       type: conn.type,
       host: conn.host ?? "",
@@ -109,9 +109,9 @@ export class RestOriClient implements OriClient {
     }))
   }
 
-  async connect(configurationName: string): Promise<ConnectResult> {
-    const response = await startConnection({
-      body: { configurationName },
+  async connect(resourceName: string): Promise<ResourceConnectResult> {
+    const response = await connectResource({
+      body: { resourceName },
       client: this.httpClient,
       throwOnError: true,
     }).catch(throwNormalizedError)
@@ -122,10 +122,10 @@ export class RestOriClient implements OriClient {
     }
   }
 
-  async getNodes(configurationName: string, nodeIDs?: string[]): Promise<Node[]> {
+  async getNodes(resourceName: string, nodeIDs?: string[]): Promise<Node[]> {
     const response = await getNodes({
       client: this.httpClient,
-      path: { configurationName },
+      path: { resourceName },
       query: { nodeId: nodeIDs },
       throwOnError: true,
     }).catch(throwNormalizedError)
@@ -134,12 +134,12 @@ export class RestOriClient implements OriClient {
   }
 
   async queryExec(
-    configurationName: string,
+    resourceName: string,
     jobId: string,
     query: string,
     params?: Record<string, unknown>,
   ): Promise<QueryExecResult> {
-    const request: QueryExecRequest = { configurationName, jobId, query }
+    const request: QueryExecRequest = { resourceName, jobId, query }
     if (params !== undefined) {
       request.params = params
     }

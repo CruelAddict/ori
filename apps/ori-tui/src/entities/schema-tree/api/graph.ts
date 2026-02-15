@@ -1,4 +1,4 @@
-import type { Node, OriClient } from "@shared/lib/configurations-client"
+import type { Node, OriClient } from "@shared/lib/resources-client"
 import type { Logger } from "pino"
 
 export type GraphSnapshot = {
@@ -10,16 +10,16 @@ const BATCH_SIZE = 16
 
 export async function loadFullGraph(
   client: OriClient,
-  configurationName: string,
+  resourceName: string,
   logger?: Logger,
 ): Promise<GraphSnapshot> {
-  logger?.debug({ configuration: configurationName }, "schema load starting")
+  logger?.debug({ resource: resourceName }, "schema load starting")
   const nodes = new Map<string, Node>()
   const queue = new Set<string>()
 
-  logger?.debug({ configuration: configurationName }, "fetching root nodes")
-  const rootNodes = await client.getNodes(configurationName)
-  logger?.debug({ configuration: configurationName, rootCount: rootNodes.length }, "fetched root nodes")
+  logger?.debug({ resource: resourceName }, "fetching root nodes")
+  const rootNodes = await client.getNodes(resourceName)
+  logger?.debug({ resource: resourceName, rootCount: rootNodes.length }, "fetched root nodes")
   for (const node of rootNodes) {
     nodes.set(node.id, node)
     enqueueEdges(node, queue, nodes)
@@ -33,11 +33,11 @@ export async function loadFullGraph(
 
     try {
       logger?.debug(
-        { configuration: configurationName, batchSize: batch.length, queueRemaining: queue.size },
+        { resource: resourceName, batchSize: batch.length, queueRemaining: queue.size },
         "fetching node batch",
       )
-      const fetched = await client.getNodes(configurationName, batch)
-      logger?.debug({ configuration: configurationName, fetchedCount: fetched.length }, "fetched node batch")
+      const fetched = await client.getNodes(resourceName, batch)
+      logger?.debug({ resource: resourceName, fetchedCount: fetched.length }, "fetched node batch")
       for (const node of fetched) {
         nodes.set(node.id, node)
         enqueueEdges(node, queue, nodes)
@@ -53,7 +53,7 @@ export async function loadFullGraph(
     rootIds: rootNodes.map((node) => node.id),
   }
   logger?.debug(
-    { configuration: configurationName, totalNodes: nodes.size, rootCount: result.rootIds.length },
+    { resource: resourceName, totalNodes: nodes.size, rootCount: result.rootIds.length },
     "schema load completed",
   )
   return result
@@ -66,17 +66,17 @@ type GraphIncrementalHandlers = {
 
 export async function loadGraphIncremental(
   client: OriClient,
-  configurationName: string,
+  resourceName: string,
   handlers: GraphIncrementalHandlers,
   logger?: Logger,
 ): Promise<GraphSnapshot> {
-  logger?.debug({ configuration: configurationName }, "schema load starting")
+  logger?.debug({ resource: resourceName }, "schema load starting")
   const nodes = new Map<string, Node>()
   const queue = new Set<string>()
 
-  logger?.debug({ configuration: configurationName }, "fetching root nodes")
-  const rootNodes = await client.getNodes(configurationName)
-  logger?.debug({ configuration: configurationName, rootCount: rootNodes.length }, "fetched root nodes")
+  logger?.debug({ resource: resourceName }, "fetching root nodes")
+  const rootNodes = await client.getNodes(resourceName)
+  logger?.debug({ resource: resourceName, rootCount: rootNodes.length }, "fetched root nodes")
 
   const rootIds = rootNodes.map((node) => node.id)
   handlers.onRoots?.(rootNodes, rootIds)
@@ -95,11 +95,11 @@ export async function loadGraphIncremental(
 
     try {
       logger?.debug(
-        { configuration: configurationName, batchSize: batch.length, queueRemaining: queue.size },
+        { resource: resourceName, batchSize: batch.length, queueRemaining: queue.size },
         "fetching node batch",
       )
-      const fetched = await client.getNodes(configurationName, batch)
-      logger?.debug({ configuration: configurationName, fetchedCount: fetched.length }, "fetched node batch")
+      const fetched = await client.getNodes(resourceName, batch)
+      logger?.debug({ resource: resourceName, fetchedCount: fetched.length }, "fetched node batch")
       for (const node of fetched) {
         nodes.set(node.id, node)
         handlers.onNode?.(node)
@@ -116,7 +116,7 @@ export async function loadGraphIncremental(
     rootIds,
   }
   logger?.debug(
-    { configuration: configurationName, totalNodes: nodes.size, rootCount: result.rootIds.length },
+    { resource: resourceName, totalNodes: nodes.size, rootCount: result.rootIds.length },
     "schema load completed",
   )
   return result

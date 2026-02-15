@@ -2,8 +2,8 @@ import { startTui } from "@app/start-tui"
 import { parseArgs } from "@cli/args/parse"
 import type { BackendHandle } from "@cli/runtime/backend"
 import { cleanupStaleSockets, ensureBackend } from "@cli/runtime/backend"
-import { resolveConfigPath } from "@cli/runtime/config"
-import { ensureRuntimeDir, socketPathForConfig } from "@cli/runtime/paths"
+import { resolveResourcesPath } from "@cli/runtime/config"
+import { ensureRuntimeDir, socketPathForResources } from "@cli/runtime/paths"
 import { createLogger } from "@shared/lib/logger"
 
 function parseServer(address?: string): { host: string; port: number } {
@@ -61,7 +61,7 @@ export async function main(argv = process.argv.slice(2)) {
   let backendHandle: BackendHandle | undefined
 
   try {
-    const configPath = await resolveConfigPath(parsed.configPath)
+    const resourcesPath = await resolveResourcesPath(parsed.resourcesPath)
 
     if (parsed.serverAddress) {
       const server = parseServer(parsed.serverAddress)
@@ -70,7 +70,7 @@ export async function main(argv = process.argv.slice(2)) {
     } else {
       const runtimeDir = await ensureRuntimeDir()
       await cleanupStaleSockets(runtimeDir, logger)
-      socketPath = parsed.socketPath ?? socketPathForConfig(runtimeDir, configPath)
+      socketPath = parsed.socketPath ?? socketPathForResources(runtimeDir, resourcesPath)
     }
 
     backendHandle = await ensureBackend({
@@ -78,7 +78,7 @@ export async function main(argv = process.argv.slice(2)) {
       port,
       socketPath,
       backendPathOverride: parsed.backendPath,
-      configPath,
+      resourcesPath,
       logLevel: parsed.logLevel,
       logLevelSet: parsed.logLevelSet,
       logger,

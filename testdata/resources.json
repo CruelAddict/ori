@@ -1,5 +1,5 @@
 {
-  "connections": [
+  "resources": [
     {
       "name": "test-mysql",
       "type": "mysql",

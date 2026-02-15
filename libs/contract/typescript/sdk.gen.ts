@@ -2,7 +2,7 @@
 
 import type { Client, Options as Options2, TDataShape } from './client';
 import { client } from './client.gen';
-import type { CancelQueryData, CancelQueryErrors, CancelQueryResponses, ExecQueryData, ExecQueryErrors, ExecQueryResponses, GetHealthData, GetHealthErrors, GetHealthResponses, GetNodesData, GetNodesErrors, GetNodesResponses, GetQueryResultData, GetQueryResultErrors, GetQueryResultResponses, ListConfigurationsData, ListConfigurationsErrors, ListConfigurationsResponses, StartConnectionData, StartConnectionErrors, StartConnectionResponses, StreamEventsData, StreamEventsErrors, StreamEventsResponses } from './types.gen';
+import type { CancelQueryData, CancelQueryErrors, CancelQueryResponses, ConnectResourceData, ConnectResourceErrors, ConnectResourceResponses, ExecQueryData, ExecQueryErrors, ExecQueryResponses, GetHealthData, GetHealthErrors, GetHealthResponses, GetNodesData, GetNodesErrors, GetNodesResponses, GetQueryResultData, GetQueryResultErrors, GetQueryResultResponses, ListResourcesData, ListResourcesErrors, ListResourcesResponses, StreamEventsData, StreamEventsErrors, StreamEventsResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean> = Options2<TData, ThrowOnError> & {
     /**
@@ -24,15 +24,15 @@ export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends 
 export const getHealth = <ThrowOnError extends boolean = false>(options?: Options<GetHealthData, ThrowOnError>) => (options?.client ?? client).get<GetHealthResponses, GetHealthErrors, ThrowOnError>({ url: '/health', ...options });
 
 /**
- * List saved connection configurations
+ * List saved resource definitions
  */
-export const listConfigurations = <ThrowOnError extends boolean = false>(options?: Options<ListConfigurationsData, ThrowOnError>) => (options?.client ?? client).get<ListConfigurationsResponses, ListConfigurationsErrors, ThrowOnError>({ url: '/configurations', ...options });
+export const listResources = <ThrowOnError extends boolean = false>(options?: Options<ListResourcesData, ThrowOnError>) => (options?.client ?? client).get<ListResourcesResponses, ListResourcesErrors, ThrowOnError>({ url: '/resources', ...options });
 
 /**
- * Start (or refresh) a connection session for a configuration
+ * Start (or refresh) a resource session for a resource
  */
-export const startConnection = <ThrowOnError extends boolean = false>(options: Options<StartConnectionData, ThrowOnError>) => (options.client ?? client).post<StartConnectionResponses, StartConnectionErrors, ThrowOnError>({
-    url: '/connections',
+export const connectResource = <ThrowOnError extends boolean = false>(options: Options<ConnectResourceData, ThrowOnError>) => (options.client ?? client).post<ConnectResourceResponses, ConnectResourceErrors, ThrowOnError>({
+    url: '/resources/connect',
     ...options,
     headers: {
         'Content-Type': 'application/json',
@@ -41,9 +41,9 @@ export const startConnection = <ThrowOnError extends boolean = false>(options: O
 });
 
 /**
- * Fetch schema nodes for a configuration
+ * Fetch schema nodes for a resource
  */
-export const getNodes = <ThrowOnError extends boolean = false>(options: Options<GetNodesData, ThrowOnError>) => (options.client ?? client).get<GetNodesResponses, GetNodesErrors, ThrowOnError>({ url: '/configurations/{configurationName}/nodes', ...options });
+export const getNodes = <ThrowOnError extends boolean = false>(options: Options<GetNodesData, ThrowOnError>) => (options.client ?? client).get<GetNodesResponses, GetNodesErrors, ThrowOnError>({ url: '/resources/{resourceName}/nodes', ...options });
 
 /**
  * Execute a SQL query asynchronously
@@ -68,6 +68,6 @@ export const cancelQuery = <ThrowOnError extends boolean = false>(options: Optio
 export const getQueryResult = <ThrowOnError extends boolean = false>(options: Options<GetQueryResultData, ThrowOnError>) => (options.client ?? client).get<GetQueryResultResponses, GetQueryResultErrors, ThrowOnError>({ url: '/queries/{jobId}/result', ...options });
 
 /**
- * Subscribe to server-sent events for connection and query notifications
+ * Subscribe to server-sent events for resource and query notifications
  */
 export const streamEvents = <ThrowOnError extends boolean = false>(options?: Options<StreamEventsData, ThrowOnError>) => (options?.client ?? client).sse.get<StreamEventsResponses, StreamEventsErrors, ThrowOnError>({ url: '/events', ...options });

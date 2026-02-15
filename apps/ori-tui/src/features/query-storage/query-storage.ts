@@ -2,25 +2,25 @@ import fs from "node:fs"
 import path from "node:path"
 import { getAppDataDir } from "@src/shared/lib/data-storage"
 
-function getConnectionDir(connectionName: string): string {
-  return path.join(getAppDataDir(), "connections", connectionName)
+function getResourceDir(resourceName: string): string {
+  return path.join(getAppDataDir(), "resources", resourceName)
 }
 
-export function getConsoleFilePath(connectionName: string): string {
-  return path.join(getConnectionDir(connectionName), ".console.sql")
+export function getConsoleFilePath(resourceName: string): string {
+  return path.join(getResourceDir(resourceName), ".console.sql")
 }
 
-export function readConsoleQuery(connectionName: string): string | undefined {
-  const filepath = getConsoleFilePath(connectionName)
+export function readConsoleQuery(resourceName: string): string | undefined {
+  const filepath = getConsoleFilePath(resourceName)
   if (!fs.existsSync(filepath)) {
     return undefined
   }
   return fs.readFileSync(filepath, "utf8")
 }
 
-export function writeConsoleQuery(connectionName: string, query: string): boolean {
-  const dir = getConnectionDir(connectionName)
+export function writeConsoleQuery(resourceName: string, query: string): boolean {
+  const dir = getResourceDir(resourceName)
   fs.mkdirSync(dir, { recursive: true })
-  fs.writeFileSync(getConsoleFilePath(connectionName), query, "utf8")
+  fs.writeFileSync(getConsoleFilePath(resourceName), query, "utf8")
   return true
 }

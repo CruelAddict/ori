@@ -1,5 +1,5 @@
-import type { CreateClientOptions, OriClient } from "@shared/lib/configurations-client"
-import { RestOriClient } from "@shared/lib/configurations-client"
+import type { CreateClientOptions, OriClient } from "@shared/lib/resources-client"
+import { RestOriClient } from "@shared/lib/resources-client"
 import type { JSX } from "solid-js"
 import { createComponent, createContext, useContext } from "solid-js"
 import { useLogger } from "./logger"

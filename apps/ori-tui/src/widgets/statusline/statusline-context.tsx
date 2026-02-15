@@ -29,7 +29,7 @@ interface StatuslineContextValue extends StatuslineMethods {
 const StatuslineContext = createContext<StatuslineContextValue>()
 
 export type StatuslineProviderProps = {
-  configurationName: string
+  resourceName: string
   children: JSX.Element
 }
 
@@ -67,7 +67,7 @@ export function StatuslineProvider(props: StatuslineProviderProps) {
         maxHeight={1}
       >
         <text fg={palette.get("success")}>• </text>
-        <text fg={palette.get("text")}>{props.configurationName}</text>
+        <text fg={palette.get("text")}>{props.resourceName}</text>
       </box>,
     ]
 

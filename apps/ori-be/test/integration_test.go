@@ -21,7 +21,7 @@ import (
 	"github.com/crueladdict/ori/apps/ori-server/internal/service"
 )
 
-func TestListConfigurationsAndConnectSQLiteOverUDS(t *testing.T) {
+func TestListResourcesAndConnectSQLiteOverUDS(t *testing.T) {
 	ctx := context.Background()
 	fixtureConfigPath, err := filepath.Abs("../../../testdata/resources.json")
 	if err != nil {
@@ -45,13 +45,13 @@ func TestListConfigurationsAndConnectSQLiteOverUDS(t *testing.T) {
 	}
 	ensureSampleData(t, tempDBPath)
 
-	configService := service.NewConfigService(tempConfigPath)
-	if err := configService.LoadConfig(); err != nil {
+	configService := service.NewResourceCatalogService(tempConfigPath)
+	if err := configService.LoadResources(); err != nil {
 		t.Fatalf("Failed to load config: %v", err)
 	}
 
 	eventHub := events.NewHub()
-	connectionService := service.NewConnectionService(configService, eventHub)
+	connectionService := service.NewResourceSessionService(configService, eventHub)
 	connectionService.RegisterAdapter("sqlite", sqliteadapter.NewAdapter)
 	nodeService := service.NewNodeService(configService, connectionService)
 	queryService := service.NewQueryService(connectionService, eventHub, ctx)
@@ -69,19 +69,19 @@ func TestListConfigurationsAndConnectSQLiteOverUDS(t *testing.T) {
 
 	client := newContractClient(t, sockPath)
 
-	listResp, err := client.ListConfigurationsWithResponse(ctx)
+	listResp, err := client.ListResourcesWithResponse(ctx)
 	if err != nil {
-		t.Fatalf("ListConfigurations failed: %v", err)
+		t.Fatalf("ListResources failed: %v", err)
 	}
-	if listResp.JSON200 == nil || len(listResp.JSON200.Connections) == 0 {
-		t.Fatalf("expected at least one configuration")
+	if listResp.JSON200 == nil || len(listResp.JSON200.Resources) == 0 {
+		t.Fatalf("expected at least one resource")
 	}
 
-	connectReq := dto.StartConnectionJSONRequestBody{ConfigurationName: "local-sqlite"}
-	var connectionReady bool
+	connectReq := dto.ConnectResourceJSONRequestBody{ResourceName: "local-sqlite"}
+	var resourceReady bool
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
-		resp, err := client.StartConnectionWithResponse(ctx, connectReq)
+		resp, err := client.ConnectResourceWithResponse(ctx, connectReq)
 		if err != nil {
 			t.Fatalf("Connect failed: %v", err)
 		}
@@ -89,13 +89,13 @@ func TestListConfigurationsAndConnectSQLiteOverUDS(t *testing.T) {
 			t.Fatalf("expected 201 payload, got status %d", resp.StatusCode())
 		}
 		if resp.JSON201.Result == dto.Success {
-			connectionReady = true
+			resourceReady = true
 			break
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
-	if !connectionReady {
-		t.Fatalf("connection did not reach success within timeout")
+	if !resourceReady {
+		t.Fatalf("resource did not reach success within timeout")
 	}
 
 	rootResp, err := client.GetNodesWithResponse(ctx, "local-sqlite", nil)
@@ -182,13 +182,13 @@ func TestQueryExecAndGetResult(t *testing.T) {
 	}
 	ensureSampleData(t, tempDBPath)
 
-	configService := service.NewConfigService(tempConfigPath)
-	if err := configService.LoadConfig(); err != nil {
+	configService := service.NewResourceCatalogService(tempConfigPath)
+	if err := configService.LoadResources(); err != nil {
 		t.Fatalf("Failed to load config: %v", err)
 	}
 
 	eventHub := events.NewHub()
-	connectionService := service.NewConnectionService(configService, eventHub)
+	connectionService := service.NewResourceSessionService(configService, eventHub)
 	connectionService.RegisterAdapter("sqlite", sqliteadapter.NewAdapter)
 	nodeService := service.NewNodeService(configService, connectionService)
 	queryService := service.NewQueryService(connectionService, eventHub, ctx)
@@ -206,10 +206,10 @@ func TestQueryExecAndGetResult(t *testing.T) {
 
 	client := newContractClient(t, sockPath)
 
-	connectReq := dto.StartConnectionJSONRequestBody{ConfigurationName: "local-sqlite"}
+	connectReq := dto.ConnectResourceJSONRequestBody{ResourceName: "local-sqlite"}
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
-		resp, err := client.StartConnectionWithResponse(ctx, connectReq)
+		resp, err := client.ConnectResourceWithResponse(ctx, connectReq)
 		if err != nil {
 			t.Fatalf("Connect failed: %v", err)
 		}
@@ -220,9 +220,9 @@ func TestQueryExecAndGetResult(t *testing.T) {
 	}
 
 	execReq := dto.ExecQueryJSONRequestBody{
-		ConfigurationName: "local-sqlite",
-		JobId:             uuid.New(),
-		Query:             "SELECT id, name, email FROM authors WHERE id = 1",
+		ResourceName: "local-sqlite",
+		JobId:        uuid.New(),
+		Query:        "SELECT id, name, email FROM authors WHERE id = 1",
 	}
 	requestCtx, cancel := context.WithCancel(ctx)
 	execResp, err := client.ExecQueryWithResponse(requestCtx, execReq)
@@ -244,9 +244,9 @@ func TestQueryExecAndGetResult(t *testing.T) {
 	}
 
 	execReq2 := dto.ExecQueryJSONRequestBody{
-		ConfigurationName: "local-sqlite",
-		JobId:             uuid.New(),
-		Query:             "SELECT id, title FROM books ORDER BY id LIMIT 10",
+		ResourceName: "local-sqlite",
+		JobId:        uuid.New(),
+		Query:        "SELECT id, title FROM books ORDER BY id LIMIT 10",
 	}
 	execResp2, err := client.ExecQueryWithResponse(ctx, execReq2)
 	if err != nil {

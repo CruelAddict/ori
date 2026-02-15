@@ -21,8 +21,8 @@ var (
 
 // NodeService orchestrates graph retrieval, caching, and adapter dispatch.
 type NodeService struct {
-	configs     *ConfigService
-	connections *ConnectionService
+	configs     *ResourceCatalogService
+	connections *ResourceSessionService
 
 	graphsMu         sync.RWMutex
 	connectionGraphs map[string]*connectionGraph
@@ -34,7 +34,7 @@ type NodeService struct {
 }
 
 // NewNodeService builds a NodeService instance.
-func NewNodeService(configs *ConfigService, connections *ConnectionService) *NodeService {
+func NewNodeService(configs *ResourceCatalogService, connections *ResourceSessionService) *NodeService {
 	return &NodeService{
 		configs:          configs,
 		connections:      connections,
@@ -45,10 +45,10 @@ func NewNodeService(configs *ConfigService, connections *ConnectionService) *Nod
 }
 
 // GetNodes returns root nodes (when nodeIDs is empty) or hydrates the requested nodes.
-func (ns *NodeService) GetNodes(ctx context.Context, configurationName string, nodeIDs []string) (model.Nodes, error) {
-	connection, ok := ns.connections.GetConnection(configurationName)
+func (ns *NodeService) GetNodes(ctx context.Context, resourceName string, nodeIDs []string) (model.Nodes, error) {
+	connection, ok := ns.connections.GetConnection(resourceName)
 	if !ok || connection == nil || connection.Adapter == nil {
-		return nil, fmt.Errorf("%w: %s", ErrConnectionUnavailable, configurationName)
+		return nil, fmt.Errorf("%w: %s", ErrConnectionUnavailable, resourceName)
 	}
 
 	cGraph, err := ns.getOrCreateConnGraph(ctx, connection)
@@ -77,7 +77,7 @@ func (ns *NodeService) GetNodes(ctx context.Context, configurationName string, n
 	return cGraph.snapshot(uniqueIDs)
 }
 
-func (ns *NodeService) hydrateNode(ctx context.Context, graph *connectionGraph, handle *ConnectionHandle, nodeID string) error {
+func (ns *NodeService) hydrateNode(ctx context.Context, graph *connectionGraph, handle *ResourceHandle, nodeID string) error {
 	// Ensures we're not handling the same node in separate requests
 	key := hydrationKey{config: handle.Name, node: nodeID}
 	wg, owner := ns.enterHydration(key)
@@ -118,7 +118,7 @@ func (ns *NodeService) hydrateNode(ctx context.Context, graph *connectionGraph, 
 	return nil
 }
 
-func (ns *NodeService) hydrateDatabase(ctx context.Context, handle *ConnectionHandle, node *model.DatabaseNode) ([]model.Node, error) {
+func (ns *NodeService) hydrateDatabase(ctx context.Context, handle *ResourceHandle, node *model.DatabaseNode) ([]model.Node, error) {
 	if node == nil {
 		return nil, fmt.Errorf("database node is nil")
 	}
@@ -136,7 +136,7 @@ func (ns *NodeService) hydrateDatabase(ctx context.Context, handle *ConnectionHa
 	return nodes, nil
 }
 
-func (ns *NodeService) hydrateSchema(ctx context.Context, handle *ConnectionHandle, node *model.SchemaNode) ([]model.Node, error) {
+func (ns *NodeService) hydrateSchema(ctx context.Context, handle *ResourceHandle, node *model.SchemaNode) ([]model.Node, error) {
 	if node == nil {
 		return nil, fmt.Errorf("schema node is nil")
 	}
@@ -154,7 +154,7 @@ func (ns *NodeService) hydrateSchema(ctx context.Context, handle *ConnectionHand
 	return nodes, nil
 }
 
-func (ns *NodeService) getScopeRelations(ctx context.Context, handle *ConnectionHandle, scope model.Scope, root model.Node) ([]model.Node, []string, []string, error) {
+func (ns *NodeService) getScopeRelations(ctx context.Context, handle *ResourceHandle, scope model.Scope, root model.Node) ([]model.Node, []string, []string, error) {
 	relations, err := handle.Adapter.GetRelations(ctx, scope)
 	if err != nil {
 		return nil, nil, nil, err
@@ -202,7 +202,7 @@ func (ns *NodeService) getScopeRelations(ctx context.Context, handle *Connection
 	return childNodes, tableIDs, viewIDs, nil
 }
 
-func (ns *NodeService) hydrateRelation(ctx context.Context, handle *ConnectionHandle, node model.Node) ([]model.Node, error) {
+func (ns *NodeService) hydrateRelation(ctx context.Context, handle *ResourceHandle, node model.Node) ([]model.Node, error) {
 	var scope model.Scope
 
 	var relation string
@@ -294,7 +294,7 @@ func (ns *NodeService) leaveHydration(key hydrationKey) {
 	}
 }
 
-func (ns *NodeService) getOrCreateConnGraph(ctx context.Context, connection *ConnectionHandle) (*connectionGraph, error) {
+func (ns *NodeService) getOrCreateConnGraph(ctx context.Context, connection *ResourceHandle) (*connectionGraph, error) {
 	name := connection.Name
 	ns.graphsMu.RLock()
 	graph, ok := ns.connectionGraphs[name]
@@ -316,7 +316,7 @@ func (ns *NodeService) getOrCreateConnGraph(ctx context.Context, connection *Con
 	return graph, nil
 }
 
-func (ns *NodeService) createConnGraph(ctx context.Context, connection *ConnectionHandle) (*connectionGraph, error) {
+func (ns *NodeService) createConnGraph(ctx context.Context, connection *ResourceHandle) (*connectionGraph, error) {
 	graph := &connectionGraph{nodes: make(map[string]model.Node)}
 
 	scopes, err := connection.Adapter.GetScopes(ctx)
@@ -324,7 +324,7 @@ func (ns *NodeService) createConnGraph(ctx context.Context, connection *Connecti
 		return nil, err
 	}
 	if len(scopes) == 0 {
-		return nil, fmt.Errorf("no scopes found for configuration '%s'", connection.Name)
+		return nil, fmt.Errorf("no scopes found for resource '%s'", connection.Name)
 	}
 
 	builder := NewGraphBuilder(connection)

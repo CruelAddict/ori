@@ -26,7 +26,7 @@ describe("formatFilePath", () => {
 
     test("truncated under home dir", () =>
       runTest(
-        "/Users/test/Library/Application Support/ori/connections/mydb/.console.sql",
+        "/Users/test/Library/Application Support/ori/resources/connect/mydb/.console.sql",
         {
           dirPath: "~/Library/…/mydb/",
           fileName: ".console.sql",
@@ -38,7 +38,7 @@ describe("formatFilePath", () => {
 
     test("truncated non-home path", () =>
       runTest(
-        "/var/test/Library/Application Support/ori/connections/mydb/.console.sql",
+        "/var/test/Library/Application Support/ori/resources/connect/mydb/.console.sql",
         {
           dirPath: "/var/test/Library/…/mydb/",
           fileName: ".console.sql",

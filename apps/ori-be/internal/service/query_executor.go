@@ -14,7 +14,7 @@ type QueryExecOptions struct {
 // AdapterFactoryParams bundles the information required to construct a connection adapter instance.
 type AdapterFactoryParams struct {
 	ConnectionName string
-	Configuration  *model.Configuration
+	Resource       *model.Resource
 	BaseDir        string
 }
 

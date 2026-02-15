@@ -14,18 +14,18 @@ import (
 // Adapter implements service.ConnectionAdapter for SQLite databases.
 type Adapter struct {
 	connectionName string
-	config         *model.Configuration
+	config         *model.Resource
 	dbPath         string
 	db             database.DB
 }
 
 // NewAdapter creates a factory that builds SQLite connection adapters
 func NewAdapter(params service.AdapterFactoryParams) (service.ConnectionAdapter, error) {
-	if params.Configuration.Database == "" {
-		return nil, fmt.Errorf("sqlite configuration '%s' missing database path", params.ConnectionName)
+	if params.Resource.Database == "" {
+		return nil, fmt.Errorf("sqlite resource '%s' missing database path", params.ConnectionName)
 	}
 
-	path := params.Configuration.Database
+	path := params.Resource.Database
 	if !filepath.IsAbs(path) {
 		path = filepath.Join(params.BaseDir, path)
 	}
@@ -33,7 +33,7 @@ func NewAdapter(params service.AdapterFactoryParams) (service.ConnectionAdapter,
 
 	return &Adapter{
 		connectionName: params.ConnectionName,
-		config:         params.Configuration,
+		config:         params.Resource,
 		dbPath:         path,
 	}, nil
 }

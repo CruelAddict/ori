@@ -12,13 +12,13 @@ export type TreePaneViewModel = {
 }
 
 type UseTreePaneOptions = {
-  configurationName: Accessor<string>
+  resourceName: Accessor<string>
   isFocused: Accessor<boolean>
   focusSelf: () => void
 }
 
 export function useTreePane(options: UseTreePaneOptions): TreePaneViewModel {
-  const { nodesById, rootIds, loading, error, refresh } = useResourceGraphSnapshot(options.configurationName)
+  const { nodesById, rootIds, loading, error, refresh } = useResourceGraphSnapshot(options.resourceName)
   const controller = useTreePaneGraph(nodesById, rootIds)
 
   const refreshGraph = async () => {

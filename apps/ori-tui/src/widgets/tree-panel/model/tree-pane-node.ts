@@ -1,4 +1,4 @@
-import { type Node, type NodeEdge, NodeType } from "@shared/lib/configurations-client"
+import { type Node, type NodeEdge, NodeType } from "@shared/lib/resources-client"
 
 export type TreePaneNode = SnapshotTreePaneNode | EdgeTreePaneNode
 

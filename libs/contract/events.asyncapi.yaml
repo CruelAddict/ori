@@ -40,7 +40,7 @@ components:
     ConnectionState:
       name: connection.state
       title: ConnectionState
-      summary: Notifies subscribers about configuration connection lifecycle changes.
+      summary: Notifies subscribers about connection lifecycle changes.
       contentType: application/json
       payload:
         $ref: '#/components/schemas/ConnectionStateEvent'
@@ -55,12 +55,12 @@ components:
     ConnectionStateEvent:
       type: object
       required:
-        - configurationName
+        - resourceName
         - state
       properties:
-        configurationName:
+        resourceName:
           type: string
-          description: Name of the configuration as defined in the ori config file.
+          description: Name of the resource as defined in the ori config file.
         state:
           type: string
           description: Current connection state.
@@ -78,16 +78,16 @@ components:
       type: object
       required:
         - jobId
-        - configurationName
+        - resourceName
         - status
         - finishedAt
       properties:
         jobId:
           type: string
           description: Unique job identifier.
-        configurationName:
+        resourceName:
           type: string
-          description: Name of the configuration used for the query.
+          description: Name of the resource used for the query.
         status:
           type: string
           enum:

@@ -19,7 +19,7 @@ type TLSConfig struct {
 	KeyPath    *string `json:"keyPath,omitempty"`
 }
 
-type Configuration struct {
+type Resource struct {
 	Name     string          `json:"name"`
 	Type     string          `json:"type"`
 	Host     *string         `json:"host,omitempty"`
@@ -31,18 +31,18 @@ type Configuration struct {
 }
 
 type Config struct {
-	Configurations []Configuration `json:"connections"`
+	Resources []Resource `json:"resources"`
 }
 
-func (c *Config) ConvertToDTO() *dto.ConfigurationsResponse {
+func (c *Config) ConvertToDTO() *dto.ResourcesResponse {
 	if c == nil {
 		return nil
 	}
-	return ConvertConfigurationsToDTO(c.Configurations)
+	return ConvertResourcesToDTO(c.Resources)
 }
 
-func ConvertConfigurationsToDTO(configs []Configuration) *dto.ConfigurationsResponse {
-	dtoConfigs := make([]dto.Configuration, len(configs))
+func ConvertResourcesToDTO(configs []Resource) *dto.ResourcesResponse {
+	dtoConfigs := make([]dto.Resource, len(configs))
 	for i, cfg := range configs {
 		var password *dto.PasswordConfig
 		if cfg.Password != nil {
@@ -62,7 +62,7 @@ func ConvertConfigurationsToDTO(configs []Configuration) *dto.ConfigurationsResp
 			}
 		}
 
-		dtoConfigs[i] = dto.Configuration{
+		dtoConfigs[i] = dto.Resource{
 			Name:     cfg.Name,
 			Type:     cfg.Type,
 			Database: cfg.Database,
@@ -73,7 +73,7 @@ func ConvertConfigurationsToDTO(configs []Configuration) *dto.ConfigurationsResp
 			Tls:      tls,
 		}
 	}
-	return &dto.ConfigurationsResponse{Connections: dtoConfigs}
+	return &dto.ResourcesResponse{Resources: dtoConfigs}
 }
 
 func ResolveTLSPaths(tls *TLSConfig, baseDir string) *TLSConfig {

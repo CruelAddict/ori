@@ -14,15 +14,15 @@ export type NavigationStore = {
 export function createNavigationStore(): NavigationStore {
   const [stack, setStack] = createSignal<RouteLocation[]>([ROOT_ROUTE])
 
-  const findConnectionIndex = (pages: RouteLocation[], name: string) =>
-    pages.findIndex((route) => route.type === "connection" && route.configurationName === name)
+  const findResourceIndex = (pages: RouteLocation[], name: string) =>
+    pages.findIndex((route) => route.type === "resource" && route.resourceName === name)
 
   const push = (page: RouteLocation) => {
     setStack((prev) => {
-      if (page.type !== "connection") {
+      if (page.type !== "resource") {
         return [...prev, page]
       }
-      const index = findConnectionIndex(prev, page.configurationName)
+      const index = findResourceIndex(prev, page.resourceName)
       if (index === -1) {
         return [...prev, page]
       }
@@ -48,10 +48,10 @@ export function createNavigationStore(): NavigationStore {
       if (!prev.length) {
         return [page]
       }
-      if (page.type !== "connection") {
+      if (page.type !== "resource") {
         return [...prev.slice(0, -1), page]
       }
-      const index = findConnectionIndex(prev, page.configurationName)
+      const index = findResourceIndex(prev, page.resourceName)
       if (index === -1) {
         return [...prev.slice(0, -1), page]
       }

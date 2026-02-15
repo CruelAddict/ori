@@ -2,9 +2,9 @@ import { useOriClient } from "@app/providers/client"
 import { useEventStream } from "@app/providers/events"
 import { useLogger } from "@app/providers/logger"
 import { CONNECTION_STATE_EVENT, type ServerEvent } from "@shared/lib/events"
-import type { Configuration } from "@src/entities/configuration/model/configuration"
-import { useConfigurations } from "@src/entities/configuration/model/configuration-list-store"
-import type { ConnectResult } from "@src/shared/lib/configurations-client"
+import type { Resource } from "@src/entities/resource/model/resource"
+import { useResources } from "@src/entities/resource/model/resource-list-store"
+import type { ResourceConnectResult } from "@src/shared/lib/resources-client"
 import type { Accessor } from "solid-js"
 import { createContext, createMemo, onCleanup, useContext } from "solid-js"
 import { createStore, type SetStoreFunction } from "solid-js/store"
@@ -12,7 +12,7 @@ import { createStore, type SetStoreFunction } from "solid-js/store"
 export type ConnectionLifecycle = "idle" | "requesting" | "waiting" | "connected" | "failed"
 
 export type ConnectionRecord = {
-  configuration: Configuration
+  resource: Resource
   status: ConnectionLifecycle
   message?: string
   error?: string
@@ -24,17 +24,17 @@ type ConnectionStateStore = {
 }
 
 type RecordRecipe = (current: ConnectionRecord) => ConnectionRecord
-type SetRecordOptions = { configuration?: Configuration }
-type SetRecordFn = (configurationName: string, recipe: RecordRecipe, options?: SetRecordOptions) => void
+type SetRecordOptions = { resource?: Resource }
+type SetRecordFn = (resourceName: string, recipe: RecordRecipe, options?: SetRecordOptions) => void
 
 type ConnectionActions = {
-  connect(configuration: Configuration): Promise<void>
-  clear(configurationName: string): void
+  connect(resource: Resource): Promise<void>
+  clear(resourceName: string): void
 }
 
 interface ConnectionStateContextValue extends ConnectionActions {
   records: Accessor<Record<string, ConnectionRecord>>
-  getRecord: (configurationName: string) => ConnectionRecord | undefined
+  getRecord: (resourceName: string) => ConnectionRecord | undefined
 }
 
 export const ConnectionStateContext = createContext<ConnectionStateContextValue>()
@@ -43,7 +43,7 @@ export function createConnectionStateContextValue(): ConnectionStateContextValue
   const client = useOriClient()
   const logger = useLogger()
   const eventStream = useEventStream()
-  const { configurationMap } = useConfigurations()
+  const { resourceMap } = useResources()
 
   const [state, setState] = createStore<ConnectionStateStore>({
     records: {},
@@ -53,10 +53,10 @@ export function createConnectionStateContextValue(): ConnectionStateContextValue
     state,
     setState,
     logger,
-    configurationMap,
+    resourceMap,
   })
 
-  const handleConnectResult = createConnectResultHandler({
+  const handleResourceConnectResult = createResourceConnectResultHandler({
     logger,
     setRecord: recordStore.setRecord,
   })
@@ -65,12 +65,12 @@ export function createConnectionStateContextValue(): ConnectionStateContextValue
     client,
     logger,
     setRecord: recordStore.setRecord,
-    handleConnectResult,
+    handleResourceConnectResult,
   })
 
   const handleServerEvent = createServerEventHandler({
     logger,
-    resolveConfiguration: recordStore.resolveConfiguration,
+    resolveResource: recordStore.resolveResource,
     setRecord: recordStore.setRecord,
     state,
   })
@@ -90,30 +90,30 @@ type RecordStoreDeps = {
   state: ConnectionStateStore
   setState: SetStoreFunction<ConnectionStateStore>
   logger: ReturnType<typeof useLogger>
-  configurationMap: Accessor<Map<string, Configuration>>
+  resourceMap: Accessor<Map<string, Resource>>
 }
 
 function createRecordStore(deps: RecordStoreDeps) {
-  const getRecord = (configurationName: string) => deps.state.records[configurationName]
+  const getRecord = (resourceName: string) => deps.state.records[resourceName]
 
-  const resolveConfiguration = (configurationName: string): Configuration | undefined => {
-    return getRecord(configurationName)?.configuration ?? deps.configurationMap().get(configurationName)
+  const resolveResource = (resourceName: string): Resource | undefined => {
+    return getRecord(resourceName)?.resource ?? deps.resourceMap().get(resourceName)
   }
 
-  const setRecord: SetRecordFn = (configurationName, recipe, options) => {
-    deps.setState("records", configurationName, (current) => {
-      const configuration = current?.configuration ?? options?.configuration ?? resolveConfiguration(configurationName)
-      if (!configuration) {
+  const setRecord: SetRecordFn = (resourceName, recipe, options) => {
+    deps.setState("records", resourceName, (current) => {
+      const resource = current?.resource ?? options?.resource ?? resolveResource(resourceName)
+      if (!resource) {
         deps.logger.warn(
-          { configuration: configurationName },
-          "connection state update skipped for unknown configuration",
+          { resource: resourceName },
+          "connection state update skipped for unknown resource",
         )
         return current
       }
       const base =
         current ??
         ({
-          configuration,
+          resource,
           status: "idle",
           lastUpdated: Date.now(),
         } satisfies ConnectionRecord)
@@ -121,10 +121,10 @@ function createRecordStore(deps: RecordStoreDeps) {
     })
   }
 
-  const clear = (configurationName: string) => {
+  const clear = (resourceName: string) => {
     deps.setState("records", (records) => {
       const next = { ...records }
-      delete next[configurationName]
+      delete next[resourceName]
       return next
     })
   }
@@ -133,74 +133,74 @@ function createRecordStore(deps: RecordStoreDeps) {
 
   return {
     getRecord,
-    resolveConfiguration,
+    resolveResource,
     setRecord,
     clear,
     recordsAccessor,
   }
 }
 
-type ConnectResultHandler = (configurationName: string, configuration: Configuration, result: ConnectResult) => void
+type ResourceConnectResultHandler = (resourceName: string, resource: Resource, result: ResourceConnectResult) => void
 
-type ConnectResultHandlerDeps = {
+type ResourceConnectResultHandlerDeps = {
   logger: ReturnType<typeof useLogger>
   setRecord: SetRecordFn
 }
 
-function createConnectResultHandler({ logger, setRecord }: ConnectResultHandlerDeps): ConnectResultHandler {
-  return (configurationName, configuration, result) => {
-    logger.debug({ configuration: configurationName, result: result.result }, "connect RPC result")
+function createResourceConnectResultHandler({ logger, setRecord }: ResourceConnectResultHandlerDeps): ResourceConnectResultHandler {
+  return (resourceName, resource, result) => {
+    logger.debug({ resource: resourceName, result: result.result }, "connect RPC result")
     if (result.result === "success") {
       setRecord(
-        configurationName,
+        resourceName,
         (current) => ({
           ...current,
-          configuration,
+          resource,
           status: "connected",
           message: undefined,
           error: undefined,
           lastUpdated: Date.now(),
         }),
-        { configuration },
+        { resource },
       )
       return
     }
     if (result.result === "fail") {
       setRecord(
-        configurationName,
+        resourceName,
         (current) => ({
           ...current,
-          configuration,
+          resource,
           status: "failed",
           message: result.userMessage,
           error: result.userMessage,
           lastUpdated: Date.now(),
         }),
-        { configuration },
+        { resource },
       )
       return
     }
     setRecord(
-      configurationName,
+      resourceName,
       (current) => {
         if (current.status === "connected") {
           logger.debug(
-            { configuration: configurationName },
-            "connect RPC result ignored because connection already connected",
+            { resource: resourceName },
+            "connect RPC result ignored because connection is already established",
           )
           return current
         }
-        logger.debug({ configuration: configurationName }, "connect RPC indicates pending connection; marking waiting")
+        logger.debug({ resource: resourceName }, "connect RPC indicates pending connection state; marking waiting")
         return {
           ...current,
-          configuration,
+          resource,
           status: "waiting",
           message: result.userMessage ?? "Waiting for backend...",
           error: undefined,
           lastUpdated: Date.now(),
         } satisfies ConnectionRecord
       },
-      { configuration },
+      { resource },
     )
   }
 }
@@ -209,40 +209,40 @@ type ConnectActionDeps = {
   client: ReturnType<typeof useOriClient>
   logger: ReturnType<typeof useLogger>
   setRecord: SetRecordFn
-  handleConnectResult: ConnectResultHandler
+  handleResourceConnectResult: ResourceConnectResultHandler
 }
 
-function createConnectAction({ client, logger, setRecord, handleConnectResult }: ConnectActionDeps) {
-  return async (configuration: Configuration) => {
-    const { name } = configuration
+function createConnectAction({ client, logger, setRecord, handleResourceConnectResult }: ConnectActionDeps) {
+  return async (resource: Resource) => {
+    const { name } = resource
     setRecord(
       name,
       (current) => ({
         ...current,
-        configuration,
+        resource,
         status: "requesting",
         message: "Requesting connection...",
         error: undefined,
         lastUpdated: Date.now(),
       }),
-      { configuration },
+      { resource },
     )
     try {
       const result = await client.connect(name)
-      handleConnectResult(name, configuration, result)
+      handleResourceConnectResult(name, resource, result)
     } catch (err) {
-      logger.error({ err, configuration: name }, "connect RPC error")
+      logger.error({ err, resource: name }, "connect RPC error")
       setRecord(
         name,
         (current) => ({
           ...current,
-          configuration,
+          resource,
           status: "failed",
-          message: "Connection attempt failed",
+          message: "Connection request failed",
           error: err instanceof Error ? err.message : String(err),
           lastUpdated: Date.now(),
         }),
-        { configuration },
+        { resource },
       )
     }
   }
@@ -250,88 +250,88 @@ function createConnectAction({ client, logger, setRecord, handleConnectResult }:
 
 type ServerEventHandlerDeps = {
   logger: ReturnType<typeof useLogger>
-  resolveConfiguration: (configurationName: string) => Configuration | undefined
+  resolveResource: (resourceName: string) => Resource | undefined
   setRecord: SetRecordFn
   state: ConnectionStateStore
 }
 
-function createServerEventHandler({ logger, resolveConfiguration, setRecord, state }: ServerEventHandlerDeps) {
+function createServerEventHandler({ logger, resolveResource, setRecord, state }: ServerEventHandlerDeps) {
   return (event: ServerEvent) => {
     if (event.type !== CONNECTION_STATE_EVENT) {
       return
     }
-    const { configurationName, state: lifecycle, message, error } = event.payload
-    const previous = state.records[configurationName]
+    const { resourceName, state: lifecycle, message, error } = event.payload
+    const previous = state.records[resourceName]
     logger.debug(
       {
-        configuration: configurationName,
+        resource: resourceName,
         lifecycle,
         previousStatus: previous?.status,
       },
       "connection lifecycle event received",
     )
-    const configuration = resolveConfiguration(configurationName)
-    if (!configuration) {
+    const resource = resolveResource(resourceName)
+    if (!resource) {
       logger.warn(
-        { configuration: configurationName, lifecycle },
-        "received connection lifecycle event for unknown configuration",
+        { resource: resourceName, lifecycle },
+        "received connection lifecycle event for unknown resource",
       )
       return
     }
     if (lifecycle === "connected") {
-      logger.debug({ configuration: configurationName }, "marking connection as connected")
+      logger.debug({ resource: resourceName }, "marking connection as connected")
       setRecord(
-        configurationName,
+        resourceName,
         (current) => ({
           ...current,
-          configuration,
+          resource,
           status: "connected",
           message: undefined,
           error: undefined,
           lastUpdated: Date.now(),
         }),
-        { configuration },
+        { resource },
       )
       return
     }
     if (lifecycle === "failed") {
-      logger.debug({ configuration: configurationName }, "marking connection as failed")
+      logger.debug({ resource: resourceName }, "marking connection as failed")
       setRecord(
-        configurationName,
+        resourceName,
         (current) => ({
           ...current,
-          configuration,
+          resource,
           status: "failed",
-          message: message ?? "Connection failed",
+          message: message ?? "Connection request failed",
           error: error ?? message,
           lastUpdated: Date.now(),
         }),
-        { configuration },
+        { resource },
       )
       return
     }
     if (lifecycle === "connecting") {
       setRecord(
-        configurationName,
+        resourceName,
         (current) => {
           if (current.status === "connected") {
             logger.debug(
-              { configuration: configurationName },
-              "ignoring connecting event for already connected configuration",
+              { resource: resourceName },
+              "ignoring connecting event for already connected resource",
             )
             return current
           }
-          logger.debug({ configuration: configurationName }, "marking connection as waiting")
+          logger.debug({ resource: resourceName }, "marking connection as waiting")
           return {
             ...current,
-            configuration,
+            resource,
             status: "waiting",
             message: message ?? "Waiting for backend...",
             error: undefined,
             lastUpdated: Date.now(),
           } satisfies ConnectionRecord
         },
-        { configuration },
+        { resource },
       )
     }
   }
@@ -343,13 +343,4 @@ export function useConnectionState(): ConnectionStateContextValue {
     throw new Error("ConnectionEntityProvider is missing in component tree")
   }
   return ctx
-}
-
-export function useConnectionRecord(configurationName: Accessor<string | null>) {
-  const ctx = useConnectionState()
-  return createMemo(() => {
-    const name = configurationName()
-    if (!name) return undefined
-    return ctx.getRecord(name)
-  })
 }

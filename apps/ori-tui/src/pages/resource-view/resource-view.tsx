@@ -1,6 +1,6 @@
 import { useTheme } from "@app/providers/theme"
 import { type KeyBinding, KeyScope } from "@src/core/services/key-scopes"
-import { useConnectionView } from "@src/features/connection/view/use-connection-view"
+import { useResourceView } from "@src/features/connection/view/use-resource-view"
 import { EditorPanel } from "@src/widgets/editor-panel/editor-panel"
 import { ResultsPanel } from "@src/widgets/results-panel/results-panel"
 import { Statusline, StatuslineProvider } from "@src/widgets/statusline/statusline"
@@ -8,14 +8,14 @@ import { TreePanel } from "@src/widgets/tree-panel/tree-panel"
 import { WelcomePane } from "@src/widgets/welcome-pane/welcome-pane"
 import { createEffect, on, onCleanup, Show } from "solid-js"
 
-export type ConnectionViewPageProps = {
-  configurationName: string
+export type ResourceViewPageProps = {
+  resourceName: string
   isActive?: boolean
 }
 
-export function ConnectionViewPage(props: ConnectionViewPageProps) {
-  const vm = useConnectionView({
-    configurationName: () => props.configurationName,
+export function ResourceViewPage(props: ResourceViewPageProps) {
+  const vm = useResourceView({
+    resourceName: () => props.resourceName,
   })
   const { theme } = useTheme()
   const palette = theme
@@ -125,7 +125,7 @@ export function ConnectionViewPage(props: ConnectionViewPageProps) {
   ]
 
   return (
-    <StatuslineProvider configurationName={props.configurationName}>
+    <StatuslineProvider resourceName={props.resourceName}>
       <KeyScope
         bindings={screenKeyBindings}
         enabled={scopeEnabled}

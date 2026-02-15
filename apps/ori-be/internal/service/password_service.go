@@ -9,7 +9,7 @@ import (
 	"github.com/crueladdict/ori/apps/ori-server/internal/service/keychain"
 )
 
-// PasswordService resolves secrets based on password configuration
+// PasswordService resolves secrets based on password resource
 type PasswordService struct {
 	keychainClient keychain.Keychain
 }

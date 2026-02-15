@@ -1,13 +1,13 @@
 import { useOriClient } from "@app/providers/client"
 import { useEventStream } from "@app/providers/events"
 import { useLogger } from "@app/providers/logger"
-import type { QueryExecResult, QueryResultView } from "@shared/lib/configurations-client"
+import type { QueryExecResult, QueryResultView } from "@shared/lib/resources-client"
 import { QUERY_JOB_COMPLETED_EVENT, type QueryJobCompletedEvent, type ServerEvent } from "@shared/lib/events"
 import type { JSX } from "solid-js"
 import { createComponent, createContext, onCleanup, useContext } from "solid-js"
 
 export type QueryJobsApi = {
-  executeQuery(configurationName: string, query: string, jobId: string): Promise<QueryExecResult>
+  executeQuery(resourceName: string, query: string, jobId: string): Promise<QueryExecResult>
   fetchQueryResult(jobId: string): Promise<QueryResultView>
   cancelQuery(jobId: string): Promise<void>
   onJobCompleted(listener: (event: QueryJobCompletedEvent) => void): () => void
@@ -25,11 +25,11 @@ export function QueryJobsApiProvider(props: QueryJobsApiProviderProps) {
   const eventStream = useEventStream()
   const listeners = new Set<(event: QueryJobCompletedEvent) => void>()
 
-  const executeQuery = async (configurationName: string, query: string, jobId: string) => {
+  const executeQuery = async (resourceName: string, query: string, jobId: string) => {
     try {
-      return await client.queryExec(configurationName, jobId, query)
+      return await client.queryExec(resourceName, jobId, query)
     } catch (err) {
-      logger.error({ err, configurationName }, "failed to execute query")
+      logger.error({ err, resourceName }, "failed to execute query")
       throw err
     }
   }

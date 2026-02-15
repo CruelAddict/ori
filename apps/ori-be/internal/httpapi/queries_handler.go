@@ -19,8 +19,8 @@ func (h *Handler) execQuery(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if strings.TrimSpace(payload.ConfigurationName) == "" {
-		respondError(w, http.StatusBadRequest, "missing_configuration", "configurationName is required", nil)
+	if strings.TrimSpace(payload.ResourceName) == "" {
+		respondError(w, http.StatusBadRequest, "missing_resource", "resourceName is required", nil)
 		return
 	}
 	if strings.TrimSpace(payload.Query) == "" {
@@ -56,8 +56,8 @@ func (h *Handler) execQuery(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	ctx := logctx.WithField(r.Context(), "connection", payload.ConfigurationName)
-	job, err := h.queries.Exec(ctx, payload.ConfigurationName, jobID, payload.Query, params, options)
+	ctx := logctx.WithField(r.Context(), "resource", payload.ResourceName)
+	job, err := h.queries.Exec(ctx, payload.ResourceName, jobID, payload.Query, params, options)
 	if err != nil {
 		switch {
 		case errors.Is(err, service.ErrConnectionUnavailable):

@@ -1,4 +1,4 @@
-import { type Node, type NodeEdge, NodeType } from "@shared/lib/configurations-client"
+import { type Node, type NodeEdge, NodeType } from "@shared/lib/resources-client"
 import type { Accessor } from "solid-js"
 import { batch, createEffect, createMemo, createSignal } from "solid-js"
 import { createStore, produce, type SetStoreFunction } from "solid-js/store"
@@ -38,7 +38,7 @@ export function convertSnapshotNodeEntities(node: Node, nodes: Record<string, No
         type: NodeType.COLUMN,
         name: label,
         attributes: {
-          connection: "synthetic",
+          resource: "synthetic",
           table: node.name,
           column: label,
           ordinal: index,

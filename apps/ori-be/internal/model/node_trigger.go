@@ -69,7 +69,7 @@ func (node *TriggerNode) ToDTO() (dto.Node, error) {
 		Edges: map[string]dto.NodeEdge{},
 		Attributes: dto.TriggerNodeAttributes{
 			Condition:    node.Condition,
-			Connection:   node.Connection,
+			Resource:     node.Connection,
 			Definition:   node.Definition,
 			EnabledState: node.EnabledState,
 			Events:       node.Events,

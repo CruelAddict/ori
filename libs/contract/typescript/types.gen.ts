@@ -34,7 +34,7 @@ export type TlsConfig = {
     keyPath?: string | null;
 };
 
-export type Configuration = {
+export type Resource = {
     name: string;
     type: string;
     host?: string | null;
@@ -45,15 +45,15 @@ export type Configuration = {
     tls?: TlsConfig;
 };
 
-export type ConfigurationsResponse = {
-    connections: Array<Configuration>;
+export type ResourcesResponse = {
+    resources: Array<Resource>;
 };
 
-export type ConnectionRequest = {
-    configurationName: string;
+export type ResourceConnectRequest = {
+    resourceName: string;
 };
 
-export type ConnectionResult = {
+export type ResourceConnectResult = {
     result: 'success' | 'fail' | 'connecting';
     userMessage?: string | null;
 };
@@ -64,7 +64,7 @@ export type NodeEdge = {
 };
 
 export type DatabaseNodeAttributes = {
-    connection: string;
+    resource: string;
     engine: string;
     isDefault: boolean;
     file?: string;
@@ -74,27 +74,27 @@ export type DatabaseNodeAttributes = {
 };
 
 export type SchemaNodeAttributes = {
-    connection: string;
+    resource: string;
     engine: string;
     isDefault: boolean;
 };
 
 export type TableNodeAttributes = {
-    connection: string;
+    resource: string;
     table: string;
     tableType: string;
     definition?: string;
 };
 
 export type ViewNodeAttributes = {
-    connection: string;
+    resource: string;
     table: string;
     tableType: string;
     definition?: string;
 };
 
 export type ColumnNodeAttributes = {
-    connection: string;
+    resource: string;
     table: string;
     column: string;
     ordinal: number;
@@ -108,7 +108,7 @@ export type ColumnNodeAttributes = {
 };
 
 export type ConstraintNodeAttributes = {
-    connection: string;
+    resource: string;
     table: string;
     constraintName: string;
     constraintType: string;
@@ -125,7 +125,7 @@ export type ConstraintNodeAttributes = {
 };
 
 export type IndexNodeAttributes = {
-    connection: string;
+    resource: string;
     table: string;
     indexName: string;
     unique: boolean;
@@ -138,7 +138,7 @@ export type IndexNodeAttributes = {
 };
 
 export type TriggerNodeAttributes = {
-    connection: string;
+    resource: string;
     table: string;
     triggerName: string;
     timing: string;
@@ -225,7 +225,7 @@ export type QueryExecOptions = {
 };
 
 export type QueryExecRequest = {
-    configurationName: string;
+    resourceName: string;
     jobId: string;
     query: string;
     params?: {
@@ -286,41 +286,41 @@ export type GetHealthResponses = {
 
 export type GetHealthResponse = GetHealthResponses[keyof GetHealthResponses];
 
-export type ListConfigurationsData = {
+export type ListResourcesData = {
     body?: never;
     path?: never;
     query?: never;
-    url: '/configurations';
+    url: '/resources';
 };
 
-export type ListConfigurationsErrors = {
+export type ListResourcesErrors = {
     /**
      * Generic error payload
      */
     default: ErrorPayload;
 };
 
-export type ListConfigurationsError = ListConfigurationsErrors[keyof ListConfigurationsErrors];
+export type ListResourcesError = ListResourcesErrors[keyof ListResourcesErrors];
 
-export type ListConfigurationsResponses = {
+export type ListResourcesResponses = {
     /**
-     * Collection of saved configurations
+     * Collection of saved resources
      */
-    200: ConfigurationsResponse;
+    200: ResourcesResponse;
 };
 
-export type ListConfigurationsResponse = ListConfigurationsResponses[keyof ListConfigurationsResponses];
+export type ListResourcesResponse = ListResourcesResponses[keyof ListResourcesResponses];
 
-export type StartConnectionData = {
-    body: ConnectionRequest;
+export type ConnectResourceData = {
+    body: ResourceConnectRequest;
     path?: never;
     query?: never;
-    url: '/connections';
+    url: '/resources/connect';
 };
 
-export type StartConnectionErrors = {
+export type ConnectResourceErrors = {
     /**
-     * Configuration not found
+     * Resource not found
      */
     404: ErrorPayload;
     /**
@@ -333,24 +333,24 @@ export type StartConnectionErrors = {
     default: ErrorPayload;
 };
 
-export type StartConnectionError = StartConnectionErrors[keyof StartConnectionErrors];
+export type ConnectResourceError = ConnectResourceErrors[keyof ConnectResourceErrors];
 
-export type StartConnectionResponses = {
+export type ConnectResourceResponses = {
     /**
      * Connection attempt accepted
      */
-    201: ConnectionResult;
+    201: ResourceConnectResult;
 };
 
-export type StartConnectionResponse = StartConnectionResponses[keyof StartConnectionResponses];
+export type ConnectResourceResponse = ConnectResourceResponses[keyof ConnectResourceResponses];
 
 export type GetNodesData = {
     body?: never;
     path: {
         /**
-         * Name of the configuration to inspect
+         * Name of the resource to inspect
          */
-        configurationName: string;
+        resourceName: string;
     };
     query?: {
         /**
@@ -358,12 +358,12 @@ export type GetNodesData = {
          */
         nodeId?: Array<string>;
     };
-    url: '/configurations/{configurationName}/nodes';
+    url: '/resources/{resourceName}/nodes';
 };
 
 export type GetNodesErrors = {
     /**
-     * Configuration not found
+     * Resource not found
      */
     404: ErrorPayload;
     /**
@@ -392,7 +392,7 @@ export type ExecQueryData = {
 
 export type ExecQueryErrors = {
     /**
-     * Configuration not found or no active connection
+     * Resource not found or no active resource
      */
     404: ErrorPayload;
     /**

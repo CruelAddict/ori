@@ -3,7 +3,7 @@ import type { SSEMessage } from "@shared/lib/sse-client"
 export type ConnectionState = "connecting" | "connected" | "failed"
 
 export type ConnectionStatePayload = {
-  configurationName: string
+  resourceName: string
   state: ConnectionState
   message?: string
   error?: string
@@ -17,7 +17,7 @@ export type ConnectionStateEvent = {
 
 export type QueryJobCompletedPayload = {
   jobId: string
-  configurationName: string
+  resourceName: string
   status: string
   finishedAt: string
   durationMs: number

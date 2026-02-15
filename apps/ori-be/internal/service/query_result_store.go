@@ -37,7 +37,7 @@ func (s *ResultStore) Add(result *QueryResult) {
 
 	slog.Info("Query result stored",
 		slog.String("jobId", result.JobID),
-		slog.String("configuration", result.ConfigurationName),
+		slog.String("resource", result.ResourceName),
 		slog.Int("rowCount", result.RowCount),
 		slog.Bool("truncated", result.Truncated))
 
@@ -108,7 +108,7 @@ func (s *ResultStore) cleanup() {
 
 		slog.Info("Query result evicted from cache",
 			slog.String("jobId", item.result.JobID),
-			slog.String("configuration", item.result.ConfigurationName),
+			slog.String("resource", item.result.ResourceName),
 			slog.Int("rowCount", item.result.RowCount),
 			slog.Duration("age", now.Sub(item.time)))
 	}

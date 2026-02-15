@@ -69,7 +69,7 @@ func (node *IndexNode) ToDTO() (dto.Node, error) {
 		Edges: map[string]dto.NodeEdge{},
 		Attributes: dto.IndexNodeAttributes{
 			Columns:        node.Columns,
-			Connection:     node.Connection,
+			Resource:       node.Connection,
 			Definition:     node.Definition,
 			IncludeColumns: node.IncludeColumns,
 			IndexName:      node.IndexName,

@@ -12,26 +12,26 @@ import (
 // Adapter implements service.ConnectionAdapter for PostgreSQL databases.
 type Adapter struct {
 	connectionName string
-	config         *model.Configuration
+	config         *model.Resource
 	connString     string
 	db             database.DB
 }
 
 // NewAdapter creates a factory that builds PostgreSQL connection adapters
 func NewAdapter(params service.AdapterFactoryParams) (service.ConnectionAdapter, error) {
-	cfg := params.Configuration
+	cfg := params.Resource
 
 	if cfg.Host == nil || *cfg.Host == "" {
-		return nil, fmt.Errorf("postgresql configuration '%s' missing host", params.ConnectionName)
+		return nil, fmt.Errorf("postgresql resource '%s' missing host", params.ConnectionName)
 	}
 	if cfg.Port == nil || *cfg.Port == 0 {
-		return nil, fmt.Errorf("postgresql configuration '%s' missing port", params.ConnectionName)
+		return nil, fmt.Errorf("postgresql resource '%s' missing port", params.ConnectionName)
 	}
 	if cfg.Database == "" {
-		return nil, fmt.Errorf("postgresql configuration '%s' missing database", params.ConnectionName)
+		return nil, fmt.Errorf("postgresql resource '%s' missing database", params.ConnectionName)
 	}
 	if cfg.Username == nil || *cfg.Username == "" {
-		return nil, fmt.Errorf("postgresql configuration '%s' missing username", params.ConnectionName)
+		return nil, fmt.Errorf("postgresql resource '%s' missing username", params.ConnectionName)
 	}
 
 	// Resolve password
@@ -40,7 +40,7 @@ func NewAdapter(params service.AdapterFactoryParams) (service.ConnectionAdapter,
 		pwdService := service.NewPasswordService()
 		resolved, err := pwdService.Resolve(cfg.Password)
 		if err != nil {
-			return nil, fmt.Errorf("postgresql configuration '%s' password resolution failed: %w", params.ConnectionName, err)
+			return nil, fmt.Errorf("postgresql resource '%s' password resolution failed: %w", params.ConnectionName, err)
 		}
 		password = resolved
 	}

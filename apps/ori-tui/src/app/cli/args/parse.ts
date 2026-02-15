@@ -20,7 +20,7 @@ function normalizeLogLevel(value?: string, def: LogLevel = "warn"): LogLevel {
 }
 
 export function parseArgs(args: string[]): ParsedArgs {
-  let configPath: string | undefined
+  let resourcesPath: string | undefined
   let backendPath: string | undefined
   let socketPath: string | undefined
   let serverAddress: string | undefined
@@ -38,7 +38,7 @@ export function parseArgs(args: string[]): ParsedArgs {
       requiresValue: true,
       handle: (v) => {
         if (v) {
-          configPath = v
+          resourcesPath = v
         }
       },
     },
@@ -46,7 +46,7 @@ export function parseArgs(args: string[]): ParsedArgs {
       requiresValue: true,
       handle: (v) => {
         if (v) {
-          configPath = v
+          resourcesPath = v
         }
       },
     },
@@ -142,7 +142,7 @@ export function parseArgs(args: string[]): ParsedArgs {
   }
 
   return {
-    configPath,
+    resourcesPath,
     backendPath,
     logLevel,
     logLevelSet,

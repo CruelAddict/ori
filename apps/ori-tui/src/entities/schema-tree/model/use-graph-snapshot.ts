@@ -5,7 +5,7 @@ import { createEffect, createMemo, createSignal } from "solid-js"
 import { createStore } from "solid-js/store"
 import type { GraphSnapshot } from "../api/graph"
 import { loadGraphIncremental } from "../api/graph"
-import { type Node, NodeType } from "@shared/lib/configurations-client"
+import { type Node, NodeType } from "@shared/lib/resources-client"
 
 type GraphSnapshotControls = {
   nodesById: Accessor<Record<string, Node>>
@@ -15,7 +15,7 @@ type GraphSnapshotControls = {
   refresh: () => Promise<GraphSnapshot | null | undefined>
 }
 
-export function useResourceGraphSnapshot(configurationName: Accessor<string | null>): GraphSnapshotControls {
+export function useResourceGraphSnapshot(resourceName: Accessor<string | null>): GraphSnapshotControls {
   const client = useOriClient()
   const logger = useLogger()
 
@@ -36,7 +36,7 @@ export function useResourceGraphSnapshot(configurationName: Accessor<string | nu
     setError(null)
     clearState()
 
-    logger.debug({ configuration: name }, "graph snapshot fetch triggered")
+    logger.debug({ resource: name }, "graph snapshot fetch triggered")
 
     try {
       const snapshot = await loadGraphIncremental(
@@ -60,13 +60,13 @@ export function useResourceGraphSnapshot(configurationName: Accessor<string | nu
       )
 
       if (requestId !== currentRequest) return null
-      logger.debug({ configuration: name, hasSnapshot: !!snapshot }, "graph snapshot fetch completed")
+      logger.debug({ resource: name, hasSnapshot: !!snapshot }, "graph snapshot fetch completed")
       setLoading(false)
       return snapshot
     } catch (err) {
       if (requestId !== currentRequest) return null
       const message = err instanceof Error ? err.message : String(err)
-      logger.error({ err, configuration: name }, "graph snapshot load failed")
+      logger.error({ err, resource: name }, "graph snapshot load failed")
       setError(message)
       setLoading(false)
       return null
@@ -74,7 +74,7 @@ export function useResourceGraphSnapshot(configurationName: Accessor<string | nu
   }
 
   createEffect(() => {
-    const name = configurationName()
+    const name = resourceName()
     if (!name) {
       setLoading(false)
       setError(null)
@@ -85,7 +85,7 @@ export function useResourceGraphSnapshot(configurationName: Accessor<string | nu
   })
 
   const refresh = async () => {
-    const name = configurationName()
+    const name = resourceName()
     if (!name) return null
     return loadGraph(name)
   }

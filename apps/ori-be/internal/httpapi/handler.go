@@ -6,13 +6,13 @@ import (
 
 // Handler wires HTTP requests to domain services.
 type Handler struct {
-	configs     *service.ConfigService
-	connections *service.ConnectionService
+	configs     *service.ResourceCatalogService
+	connections *service.ResourceSessionService
 	nodes       *service.NodeService
 	queries     *service.QueryService
 }
 
-func NewHandler(configs *service.ConfigService, connections *service.ConnectionService, nodes *service.NodeService, queries *service.QueryService) *Handler {
+func NewHandler(configs *service.ResourceCatalogService, connections *service.ResourceSessionService, nodes *service.NodeService, queries *service.QueryService) *Handler {
 	return &Handler{
 		configs:     configs,
 		connections: connections,

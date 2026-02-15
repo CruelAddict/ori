@@ -1,17 +1,17 @@
-export type RouteLocation = WelcomeRoute | ConnectionRoute
+export type RouteLocation = WelcomeRoute | ResourceRoute
 
 export type WelcomeRoute = {
   type: "welcome"
 }
 
-export type ConnectionRoute = {
-  type: "connection"
-  configurationName: string
+export type ResourceRoute = {
+  type: "resource"
+  resourceName: string
 }
 
 export const ROOT_ROUTE: WelcomeRoute = { type: "welcome" }
 
-export const connectionRoute = (configurationName: string): ConnectionRoute => ({
-  type: "connection",
-  configurationName,
+export const resourceRoute = (resourceName: string): ResourceRoute => ({
+  type: "resource",
+  resourceName,
 })

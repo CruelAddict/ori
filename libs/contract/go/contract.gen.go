@@ -23,13 +23,6 @@ const (
 	Column ColumnNodeType = "column"
 )
 
-// Defines values for ConnectionResultResult.
-const (
-	Connecting ConnectionResultResult = "connecting"
-	Fail       ConnectionResultResult = "fail"
-	Success    ConnectionResultResult = "success"
-)
-
 // Defines values for ConstraintNodeType.
 const (
 	Constraint ConstraintNodeType = "constraint"
@@ -56,6 +49,13 @@ const (
 const (
 	Failed  QueryExecResponseStatus = "failed"
 	Running QueryExecResponseStatus = "running"
+)
+
+// Defines values for ResourceConnectResultResult.
+const (
+	Connecting ResourceConnectResultResult = "connecting"
+	Fail       ResourceConnectResultResult = "fail"
+	Success    ResourceConnectResultResult = "success"
 )
 
 // Defines values for SchemaNodeType.
@@ -94,7 +94,6 @@ type ColumnNodeType string
 type ColumnNodeAttributes struct {
 	CharMaxLength      *int64  `json:"charMaxLength,omitempty"`
 	Column             string  `json:"column"`
-	Connection         string  `json:"connection"`
 	DataType           string  `json:"dataType"`
 	DefaultValue       *string `json:"defaultValue,omitempty"`
 	NotNull            bool    `json:"notNull"`
@@ -102,39 +101,9 @@ type ColumnNodeAttributes struct {
 	NumericScale       *int64  `json:"numericScale,omitempty"`
 	Ordinal            int     `json:"ordinal"`
 	PrimaryKeyPosition *int    `json:"primaryKeyPosition,omitempty"`
+	Resource           string  `json:"resource"`
 	Table              string  `json:"table"`
 }
-
-// Configuration defines model for Configuration.
-type Configuration struct {
-	Database string          `json:"database"`
-	Host     *string         `json:"host"`
-	Name     string          `json:"name"`
-	Password *PasswordConfig `json:"password,omitempty"`
-	Port     *int            `json:"port"`
-	Tls      *TlsConfig      `json:"tls,omitempty"`
-	Type     string          `json:"type"`
-	Username *string         `json:"username"`
-}
-
-// ConfigurationsResponse defines model for ConfigurationsResponse.
-type ConfigurationsResponse struct {
-	Connections []Configuration `json:"connections"`
-}
-
-// ConnectionRequest defines model for ConnectionRequest.
-type ConnectionRequest struct {
-	ConfigurationName string `json:"configurationName"`
-}
-
-// ConnectionResult defines model for ConnectionResult.
-type ConnectionResult struct {
-	Result      ConnectionResultResult `json:"result"`
-	UserMessage *string                `json:"userMessage"`
-}
-
-// ConnectionResultResult defines model for ConnectionResult.Result.
-type ConnectionResultResult string
 
 // ConstraintNode defines model for ConstraintNode.
 type ConstraintNode struct {
@@ -152,7 +121,6 @@ type ConstraintNodeType string
 type ConstraintNodeAttributes struct {
 	CheckClause        *string   `json:"checkClause,omitempty"`
 	Columns            *[]string `json:"columns,omitempty"`
-	Connection         string    `json:"connection"`
 	ConstraintName     string    `json:"constraintName"`
 	ConstraintType     string    `json:"constraintType"`
 	IndexName          *string   `json:"indexName,omitempty"`
@@ -163,6 +131,7 @@ type ConstraintNodeAttributes struct {
 	ReferencedDatabase *string   `json:"referencedDatabase,omitempty"`
 	ReferencedSchema   *string   `json:"referencedSchema,omitempty"`
 	ReferencedTable    *string   `json:"referencedTable,omitempty"`
+	Resource           string    `json:"resource"`
 	Table              string    `json:"table"`
 }
 
@@ -180,13 +149,13 @@ type DatabaseNodeType string
 
 // DatabaseNodeAttributes defines model for DatabaseNodeAttributes.
 type DatabaseNodeAttributes struct {
-	Connection string  `json:"connection"`
-	Encoding   *string `json:"encoding,omitempty"`
-	Engine     string  `json:"engine"`
-	File       *string `json:"file,omitempty"`
-	IsDefault  bool    `json:"isDefault"`
-	PageSize   *int64  `json:"pageSize,omitempty"`
-	Sequence   *int    `json:"sequence,omitempty"`
+	Encoding  *string `json:"encoding,omitempty"`
+	Engine    string  `json:"engine"`
+	File      *string `json:"file,omitempty"`
+	IsDefault bool    `json:"isDefault"`
+	PageSize  *int64  `json:"pageSize,omitempty"`
+	Resource  string  `json:"resource"`
+	Sequence  *int    `json:"sequence,omitempty"`
 }
 
 // ErrorPayload defines model for ErrorPayload.
@@ -211,13 +180,13 @@ type IndexNodeType string
 // IndexNodeAttributes defines model for IndexNodeAttributes.
 type IndexNodeAttributes struct {
 	Columns        *[]string `json:"columns,omitempty"`
-	Connection     string    `json:"connection"`
 	Definition     *string   `json:"definition,omitempty"`
 	IncludeColumns *[]string `json:"includeColumns,omitempty"`
 	IndexName      string    `json:"indexName"`
 	Method         *string   `json:"method,omitempty"`
 	Predicate      *string   `json:"predicate,omitempty"`
 	Primary        bool      `json:"primary"`
+	Resource       string    `json:"resource"`
 	Table          string    `json:"table"`
 	Unique         bool      `json:"unique"`
 }
@@ -264,11 +233,11 @@ type QueryExecOptions struct {
 
 // QueryExecRequest defines model for QueryExecRequest.
 type QueryExecRequest struct {
-	ConfigurationName string                   `json:"configurationName"`
-	JobId             openapi_types.UUID       `json:"jobId"`
-	Options           *QueryExecOptions        `json:"options,omitempty"`
-	Params            *QueryExecRequest_Params `json:"params,omitempty"`
-	Query             string                   `json:"query"`
+	JobId        openapi_types.UUID       `json:"jobId"`
+	Options      *QueryExecOptions        `json:"options,omitempty"`
+	Params       *QueryExecRequest_Params `json:"params,omitempty"`
+	Query        string                   `json:"query"`
+	ResourceName string                   `json:"resourceName"`
 }
 
 // QueryExecRequestParams0 defines model for .
@@ -307,6 +276,37 @@ type QueryResultResponse struct {
 	Truncated    bool                `json:"truncated"`
 }
 
+// Resource defines model for Resource.
+type Resource struct {
+	Database string          `json:"database"`
+	Host     *string         `json:"host"`
+	Name     string          `json:"name"`
+	Password *PasswordConfig `json:"password,omitempty"`
+	Port     *int            `json:"port"`
+	Tls      *TlsConfig      `json:"tls,omitempty"`
+	Type     string          `json:"type"`
+	Username *string         `json:"username"`
+}
+
+// ResourceConnectRequest defines model for ResourceConnectRequest.
+type ResourceConnectRequest struct {
+	ResourceName string `json:"resourceName"`
+}
+
+// ResourceConnectResult defines model for ResourceConnectResult.
+type ResourceConnectResult struct {
+	Result      ResourceConnectResultResult `json:"result"`
+	UserMessage *string                     `json:"userMessage"`
+}
+
+// ResourceConnectResultResult defines model for ResourceConnectResult.Result.
+type ResourceConnectResultResult string
+
+// ResourcesResponse defines model for ResourcesResponse.
+type ResourcesResponse struct {
+	Resources []Resource `json:"resources"`
+}
+
 // SchemaNode defines model for SchemaNode.
 type SchemaNode struct {
 	Attributes SchemaNodeAttributes `json:"attributes"`
@@ -321,9 +321,9 @@ type SchemaNodeType string
 
 // SchemaNodeAttributes defines model for SchemaNodeAttributes.
 type SchemaNodeAttributes struct {
-	Connection string `json:"connection"`
-	Engine     string `json:"engine"`
-	IsDefault  bool   `json:"isDefault"`
+	Engine    string `json:"engine"`
+	IsDefault bool   `json:"isDefault"`
+	Resource  string `json:"resource"`
 }
 
 // TableNode defines model for TableNode.
@@ -340,8 +340,8 @@ type TableNodeType string
 
 // TableNodeAttributes defines model for TableNodeAttributes.
 type TableNodeAttributes struct {
-	Connection string  `json:"connection"`
 	Definition *string `json:"definition,omitempty"`
+	Resource   string  `json:"resource"`
 	Table      string  `json:"table"`
 	TableType  string  `json:"tableType"`
 }
@@ -376,11 +376,11 @@ type TriggerNodeType string
 // TriggerNodeAttributes defines model for TriggerNodeAttributes.
 type TriggerNodeAttributes struct {
 	Condition    *string   `json:"condition,omitempty"`
-	Connection   string    `json:"connection"`
 	Definition   *string   `json:"definition,omitempty"`
 	EnabledState *string   `json:"enabledState,omitempty"`
 	Events       *[]string `json:"events,omitempty"`
 	Orientation  string    `json:"orientation"`
+	Resource     string    `json:"resource"`
 	Statement    *string   `json:"statement,omitempty"`
 	Table        string    `json:"table"`
 	Timing       string    `json:"timing"`
@@ -401,8 +401,8 @@ type ViewNodeType string
 
 // ViewNodeAttributes defines model for ViewNodeAttributes.
 type ViewNodeAttributes struct {
-	Connection string  `json:"connection"`
 	Definition *string `json:"definition,omitempty"`
+	Resource   string  `json:"resource"`
 	Table      string  `json:"table"`
 	TableType  string  `json:"tableType"`
 }
@@ -410,23 +410,23 @@ type ViewNodeAttributes struct {
 // ErrorResponse defines model for ErrorResponse.
 type ErrorResponse = ErrorPayload
 
-// GetNodesParams defines parameters for GetNodes.
-type GetNodesParams struct {
-	// NodeId Optional repeated parameter limiting the nodes returned
-	NodeId *[]string `form:"nodeId,omitempty" json:"nodeId,omitempty"`
-}
-
 // GetQueryResultParams defines parameters for GetQueryResult.
 type GetQueryResultParams struct {
 	Limit  *int `form:"limit,omitempty" json:"limit,omitempty"`
 	Offset *int `form:"offset,omitempty" json:"offset,omitempty"`
 }
 
-// StartConnectionJSONRequestBody defines body for StartConnection for application/json ContentType.
-type StartConnectionJSONRequestBody = ConnectionRequest
+// GetNodesParams defines parameters for GetNodes.
+type GetNodesParams struct {
+	// NodeId Optional repeated parameter limiting the nodes returned
+	NodeId *[]string `form:"nodeId,omitempty" json:"nodeId,omitempty"`
+}
 
 // ExecQueryJSONRequestBody defines body for ExecQuery for application/json ContentType.
 type ExecQueryJSONRequestBody = QueryExecRequest
+
+// ConnectResourceJSONRequestBody defines body for ConnectResource for application/json ContentType.
+type ConnectResourceJSONRequestBody = ResourceConnectRequest
 
 // AsDatabaseNode returns the union data inside the Node as a DatabaseNode
 func (t Node) AsDatabaseNode() (DatabaseNode, error) {
@@ -832,17 +832,6 @@ func WithRequestEditorFn(fn RequestEditorFn) ClientOption {
 
 // The interface specification for the client above.
 type ClientInterface interface {
-	// ListConfigurations request
-	ListConfigurations(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// GetNodes request
-	GetNodes(ctx context.Context, configurationName string, params *GetNodesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// StartConnectionWithBody request with any body
-	StartConnectionWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	StartConnection(ctx context.Context, body StartConnectionJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
-
 	// StreamEvents request
 	StreamEvents(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -859,54 +848,17 @@ type ClientInterface interface {
 
 	// GetQueryResult request
 	GetQueryResult(ctx context.Context, jobId string, params *GetQueryResultParams, reqEditors ...RequestEditorFn) (*http.Response, error)
-}
 
-func (c *Client) ListConfigurations(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewListConfigurationsRequest(c.Server)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
+	// ListResources request
+	ListResources(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-func (c *Client) GetNodes(ctx context.Context, configurationName string, params *GetNodesParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewGetNodesRequest(c.Server, configurationName, params)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
+	// ConnectResourceWithBody request with any body
+	ConnectResourceWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-func (c *Client) StartConnectionWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewStartConnectionRequestWithBody(c.Server, contentType, body)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
+	ConnectResource(ctx context.Context, body ConnectResourceJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-func (c *Client) StartConnection(ctx context.Context, body StartConnectionJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewStartConnectionRequest(c.Server, body)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
+	// GetNodes request
+	GetNodes(ctx context.Context, resourceName string, params *GetNodesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 }
 
 func (c *Client) StreamEvents(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -981,127 +933,52 @@ func (c *Client) GetQueryResult(ctx context.Context, jobId string, params *GetQu
 	return c.Client.Do(req)
 }
 
-// NewListConfigurationsRequest generates requests for ListConfigurations
-func NewListConfigurationsRequest(server string) (*http.Request, error) {
-	var err error
-
-	serverURL, err := url.Parse(server)
+func (c *Client) ListResources(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListResourcesRequest(c.Server)
 	if err != nil {
 		return nil, err
 	}
-
-	operationPath := fmt.Sprintf("/configurations")
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
 		return nil, err
 	}
-
-	req, err := http.NewRequest("GET", queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return req, nil
+	return c.Client.Do(req)
 }
 
-// NewGetNodesRequest generates requests for GetNodes
-func NewGetNodesRequest(server string, configurationName string, params *GetNodesParams) (*http.Request, error) {
-	var err error
-
-	var pathParam0 string
-
-	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "configurationName", runtime.ParamLocationPath, configurationName)
+func (c *Client) ConnectResourceWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewConnectResourceRequestWithBody(c.Server, contentType, body)
 	if err != nil {
 		return nil, err
 	}
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
 		return nil, err
 	}
-
-	operationPath := fmt.Sprintf("/configurations/%s/nodes", pathParam0)
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	if params != nil {
-		queryValues := queryURL.Query()
-
-		if params.NodeId != nil {
-
-			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "nodeId", runtime.ParamLocationQuery, *params.NodeId); err != nil {
-				return nil, err
-			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
-				return nil, err
-			} else {
-				for k, v := range parsed {
-					for _, v2 := range v {
-						queryValues.Add(k, v2)
-					}
-				}
-			}
-
-		}
-
-		queryURL.RawQuery = queryValues.Encode()
-	}
-
-	req, err := http.NewRequest("GET", queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return req, nil
+	return c.Client.Do(req)
 }
 
-// NewStartConnectionRequest calls the generic StartConnection builder with application/json body
-func NewStartConnectionRequest(server string, body StartConnectionJSONRequestBody) (*http.Request, error) {
-	var bodyReader io.Reader
-	buf, err := json.Marshal(body)
+func (c *Client) ConnectResource(ctx context.Context, body ConnectResourceJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewConnectResourceRequest(c.Server, body)
 	if err != nil {
 		return nil, err
 	}
-	bodyReader = bytes.NewReader(buf)
-	return NewStartConnectionRequestWithBody(server, "application/json", bodyReader)
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
 }
 
-// NewStartConnectionRequestWithBody generates requests for StartConnection with any type of body
-func NewStartConnectionRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
-	var err error
-
-	serverURL, err := url.Parse(server)
+func (c *Client) GetNodes(ctx context.Context, resourceName string, params *GetNodesParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetNodesRequest(c.Server, resourceName, params)
 	if err != nil {
 		return nil, err
 	}
-
-	operationPath := fmt.Sprintf("/connections")
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
 		return nil, err
 	}
-
-	req, err := http.NewRequest("POST", queryURL.String(), body)
-	if err != nil {
-		return nil, err
-	}
-
-	req.Header.Add("Content-Type", contentType)
-
-	return req, nil
+	return c.Client.Do(req)
 }
 
 // NewStreamEventsRequest generates requests for StreamEvents
@@ -1304,6 +1181,129 @@ func NewGetQueryResultRequest(server string, jobId string, params *GetQueryResul
 	return req, nil
 }
 
+// NewListResourcesRequest generates requests for ListResources
+func NewListResourcesRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/resources")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewConnectResourceRequest calls the generic ConnectResource builder with application/json body
+func NewConnectResourceRequest(server string, body ConnectResourceJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewConnectResourceRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewConnectResourceRequestWithBody generates requests for ConnectResource with any type of body
+func NewConnectResourceRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/resources/connect")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewGetNodesRequest generates requests for GetNodes
+func NewGetNodesRequest(server string, resourceName string, params *GetNodesParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "resourceName", runtime.ParamLocationPath, resourceName)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/resources/%s/nodes", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if params.NodeId != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "nodeId", runtime.ParamLocationQuery, *params.NodeId); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 func (c *Client) applyEditors(ctx context.Context, req *http.Request, additionalEditors []RequestEditorFn) error {
 	for _, r := range c.RequestEditors {
 		if err := r(ctx, req); err != nil {
@@ -1347,17 +1347,6 @@ func WithBaseURL(baseURL string) ClientOption {
 
 // ClientWithResponsesInterface is the interface specification for the client with responses above.
 type ClientWithResponsesInterface interface {
-	// ListConfigurationsWithResponse request
-	ListConfigurationsWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*ListConfigurationsResponse, error)
-
-	// GetNodesWithResponse request
-	GetNodesWithResponse(ctx context.Context, configurationName string, params *GetNodesParams, reqEditors ...RequestEditorFn) (*GetNodesResponse, error)
-
-	// StartConnectionWithBodyWithResponse request with any body
-	StartConnectionWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*StartConnectionResponse, error)
-
-	StartConnectionWithResponse(ctx context.Context, body StartConnectionJSONRequestBody, reqEditors ...RequestEditorFn) (*StartConnectionResponse, error)
-
 	// StreamEventsWithResponse request
 	StreamEventsWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*StreamEventsResponse, error)
 
@@ -1374,78 +1363,17 @@ type ClientWithResponsesInterface interface {
 
 	// GetQueryResultWithResponse request
 	GetQueryResultWithResponse(ctx context.Context, jobId string, params *GetQueryResultParams, reqEditors ...RequestEditorFn) (*GetQueryResultResponse, error)
-}
 
-type ListConfigurationsResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *ConfigurationsResponse
-	JSONDefault  *ErrorResponse
-}
+	// ListResourcesWithResponse request
+	ListResourcesWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*ListResourcesResponse, error)
 
-// Status returns HTTPResponse.Status
-func (r ListConfigurationsResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
+	// ConnectResourceWithBodyWithResponse request with any body
+	ConnectResourceWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ConnectResourceResponse, error)
 
-// StatusCode returns HTTPResponse.StatusCode
-func (r ListConfigurationsResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
+	ConnectResourceWithResponse(ctx context.Context, body ConnectResourceJSONRequestBody, reqEditors ...RequestEditorFn) (*ConnectResourceResponse, error)
 
-type GetNodesResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *NodesResponse
-	JSON404      *ErrorPayload
-	JSONDefault  *ErrorResponse
-}
-
-// Status returns HTTPResponse.Status
-func (r GetNodesResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r GetNodesResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-type StartConnectionResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON201      *ConnectionResult
-	JSON404      *ErrorPayload
-	JSON409      *ErrorPayload
-	JSONDefault  *ErrorResponse
-}
-
-// Status returns HTTPResponse.Status
-func (r StartConnectionResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r StartConnectionResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
+	// GetNodesWithResponse request
+	GetNodesWithResponse(ctx context.Context, resourceName string, params *GetNodesParams, reqEditors ...RequestEditorFn) (*GetNodesResponse, error)
 }
 
 type StreamEventsResponse struct {
@@ -1566,39 +1494,76 @@ func (r GetQueryResultResponse) StatusCode() int {
 	return 0
 }
 
-// ListConfigurationsWithResponse request returning *ListConfigurationsResponse
-func (c *ClientWithResponses) ListConfigurationsWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*ListConfigurationsResponse, error) {
-	rsp, err := c.ListConfigurations(ctx, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseListConfigurationsResponse(rsp)
+type ListResourcesResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *ResourcesResponse
+	JSONDefault  *ErrorResponse
 }
 
-// GetNodesWithResponse request returning *GetNodesResponse
-func (c *ClientWithResponses) GetNodesWithResponse(ctx context.Context, configurationName string, params *GetNodesParams, reqEditors ...RequestEditorFn) (*GetNodesResponse, error) {
-	rsp, err := c.GetNodes(ctx, configurationName, params, reqEditors...)
-	if err != nil {
-		return nil, err
+// Status returns HTTPResponse.Status
+func (r ListResourcesResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
 	}
-	return ParseGetNodesResponse(rsp)
+	return http.StatusText(0)
 }
 
-// StartConnectionWithBodyWithResponse request with arbitrary body returning *StartConnectionResponse
-func (c *ClientWithResponses) StartConnectionWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*StartConnectionResponse, error) {
-	rsp, err := c.StartConnectionWithBody(ctx, contentType, body, reqEditors...)
-	if err != nil {
-		return nil, err
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListResourcesResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
 	}
-	return ParseStartConnectionResponse(rsp)
+	return 0
 }
 
-func (c *ClientWithResponses) StartConnectionWithResponse(ctx context.Context, body StartConnectionJSONRequestBody, reqEditors ...RequestEditorFn) (*StartConnectionResponse, error) {
-	rsp, err := c.StartConnection(ctx, body, reqEditors...)
-	if err != nil {
-		return nil, err
+type ConnectResourceResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON201      *ResourceConnectResult
+	JSON404      *ErrorPayload
+	JSON409      *ErrorPayload
+	JSONDefault  *ErrorResponse
+}
+
+// Status returns HTTPResponse.Status
+func (r ConnectResourceResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
 	}
-	return ParseStartConnectionResponse(rsp)
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ConnectResourceResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetNodesResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *NodesResponse
+	JSON404      *ErrorPayload
+	JSONDefault  *ErrorResponse
+}
+
+// Status returns HTTPResponse.Status
+func (r GetNodesResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetNodesResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
 }
 
 // StreamEventsWithResponse request returning *StreamEventsResponse
@@ -1654,124 +1619,39 @@ func (c *ClientWithResponses) GetQueryResultWithResponse(ctx context.Context, jo
 	return ParseGetQueryResultResponse(rsp)
 }
 
-// ParseListConfigurationsResponse parses an HTTP response from a ListConfigurationsWithResponse call
-func ParseListConfigurationsResponse(rsp *http.Response) (*ListConfigurationsResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
+// ListResourcesWithResponse request returning *ListResourcesResponse
+func (c *ClientWithResponses) ListResourcesWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*ListResourcesResponse, error) {
+	rsp, err := c.ListResources(ctx, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
-
-	response := &ListConfigurationsResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest ConfigurationsResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
-		var dest ErrorResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSONDefault = &dest
-
-	}
-
-	return response, nil
+	return ParseListResourcesResponse(rsp)
 }
 
-// ParseGetNodesResponse parses an HTTP response from a GetNodesWithResponse call
-func ParseGetNodesResponse(rsp *http.Response) (*GetNodesResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
+// ConnectResourceWithBodyWithResponse request with arbitrary body returning *ConnectResourceResponse
+func (c *ClientWithResponses) ConnectResourceWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ConnectResourceResponse, error) {
+	rsp, err := c.ConnectResourceWithBody(ctx, contentType, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
-
-	response := &GetNodesResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest NodesResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
-		var dest ErrorPayload
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON404 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
-		var dest ErrorResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSONDefault = &dest
-
-	}
-
-	return response, nil
+	return ParseConnectResourceResponse(rsp)
 }
 
-// ParseStartConnectionResponse parses an HTTP response from a StartConnectionWithResponse call
-func ParseStartConnectionResponse(rsp *http.Response) (*StartConnectionResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
+func (c *ClientWithResponses) ConnectResourceWithResponse(ctx context.Context, body ConnectResourceJSONRequestBody, reqEditors ...RequestEditorFn) (*ConnectResourceResponse, error) {
+	rsp, err := c.ConnectResource(ctx, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
+	return ParseConnectResourceResponse(rsp)
+}
 
-	response := &StartConnectionResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
+// GetNodesWithResponse request returning *GetNodesResponse
+func (c *ClientWithResponses) GetNodesWithResponse(ctx context.Context, resourceName string, params *GetNodesParams, reqEditors ...RequestEditorFn) (*GetNodesResponse, error) {
+	rsp, err := c.GetNodes(ctx, resourceName, params, reqEditors...)
+	if err != nil {
+		return nil, err
 	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
-		var dest ConnectionResult
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON201 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
-		var dest ErrorPayload
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON404 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
-		var dest ErrorPayload
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON409 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
-		var dest ErrorResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSONDefault = &dest
-
-	}
-
-	return response, nil
+	return ParseGetNodesResponse(rsp)
 }
 
 // ParseStreamEventsResponse parses an HTTP response from a StreamEventsWithResponse call
@@ -1924,6 +1804,126 @@ func ParseGetQueryResultResponse(rsp *http.Response) (*GetQueryResultResponse, e
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest QueryResultResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest ErrorPayload
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseListResourcesResponse parses an HTTP response from a ListResourcesWithResponse call
+func ParseListResourcesResponse(rsp *http.Response) (*ListResourcesResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListResourcesResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest ResourcesResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseConnectResourceResponse parses an HTTP response from a ConnectResourceWithResponse call
+func ParseConnectResourceResponse(rsp *http.Response) (*ConnectResourceResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ConnectResourceResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest ResourceConnectResult
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest ErrorPayload
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest ErrorPayload
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetNodesResponse parses an HTTP response from a GetNodesWithResponse call
+func ParseGetNodesResponse(rsp *http.Response) (*GetNodesResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetNodesResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest NodesResponse
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}

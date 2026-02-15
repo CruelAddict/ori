@@ -11,11 +11,11 @@ import { render, useRenderer } from "@opentui/solid"
 import { copyTextToClipboard, getSelectionOverrideText } from "@shared/lib/clipboard"
 import type { LogLevel } from "@shared/lib/logger"
 import { KeymapProvider, KeyScope, SYSTEM_LAYER } from "@src/core/services/key-scopes"
-import { ConfigurationEntityProvider } from "@src/entities/configuration/providers/configuration-entity-provider"
 import { ConnectionEntityProvider } from "@src/entities/connection/providers/connection-entity-provider"
+import { ResourceEntityProvider } from "@src/entities/resource/providers/resource-entity-provider"
 import { QueryJobsProvider } from "@src/entities/query-job/providers/query-jobs-provider"
 import { CommandPalette } from "@src/features/commands-list"
-import { ConfigurationPickerOverlay } from "@widgets/overlay/ConfigurationPickerOverlay"
+import { ResourcePickerOverlay } from "@widgets/overlay/ResourcePickerOverlay"
 import { OverlayHost } from "@widgets/overlay/OverlayHost"
 import type { OverlayManager } from "@widgets/overlay/overlay-store"
 import { ThemePickerOverlay } from "@widgets/overlay/ThemePickerOverlay"
@@ -35,8 +35,8 @@ type StartTuiOptions = {
   logger: Logger
 }
 
-function openConfigurationPicker(overlays: OverlayManager) {
-  overlays.show({ id: "configuration-picker", render: ConfigurationPickerOverlay })
+function openResourcePicker(overlays: OverlayManager) {
+  overlays.show({ id: "resource-picker", render: ResourcePickerOverlay })
 }
 
 function App() {
@@ -60,7 +60,7 @@ function App() {
       return
     }
     setWelcomePickerOpened(true)
-    openConfigurationPicker(overlays)
+    openResourcePicker(overlays)
   })
 
   const handleMouseUp = async () => {
@@ -107,7 +107,7 @@ function GlobalHotkeys() {
   }
 
   const openPickerFromHotkey = () => {
-    openConfigurationPicker(overlays)
+    openResourcePicker(overlays)
   }
 
   const openCommandPalette = () => {
@@ -129,10 +129,10 @@ function GlobalHotkeys() {
           {
             pattern: "c",
             mode: "leader",
-            description: "Switch configuration",
+            description: "Switch resource",
             handler: openPickerFromHotkey,
             preventDefault: true,
-            commandPaletteSection: "Connection",
+            commandPaletteSection: "Resource",
           },
         ]}
       />
@@ -182,7 +182,7 @@ export function startTui(options: StartTuiOptions): RendererHandle {
         <ClientProvider options={clientOptions}>
           <EventStreamProvider>
             <NotificationsProvider>
-              <ConfigurationEntityProvider>
+              <ResourceEntityProvider>
                 <ConnectionEntityProvider>
                   <QueryJobsProvider>
                     <NavigationProvider>
@@ -196,7 +196,7 @@ export function startTui(options: StartTuiOptions): RendererHandle {
                     </NavigationProvider>
                   </QueryJobsProvider>
                 </ConnectionEntityProvider>
-              </ConfigurationEntityProvider>
+              </ResourceEntityProvider>
             </NotificationsProvider>
           </EventStreamProvider>
         </ClientProvider>

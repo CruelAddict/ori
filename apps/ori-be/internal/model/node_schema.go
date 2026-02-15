@@ -55,9 +55,9 @@ func (node *SchemaNode) ToDTO() (dto.Node, error) {
 			NodeRelationViews:  relationToDTO(node.Views),
 		},
 		Attributes: dto.SchemaNodeAttributes{
-			Connection: node.Connection,
-			Engine:     node.Engine,
-			IsDefault:  node.IsDefault,
+			Resource:  node.Connection,
+			Engine:    node.Engine,
+			IsDefault: node.IsDefault,
 		},
 	})
 	if err != nil {

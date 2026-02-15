@@ -21,38 +21,38 @@ paths:
                 example: ok
         default:
           $ref: '#/components/responses/ErrorResponse'
-  /configurations:
+  /resources:
     get:
-      summary: List saved connection configurations
-      operationId: listConfigurations
+      summary: List saved resource definitions
+      operationId: listResources
       responses:
         '200':
-          description: Collection of saved configurations
+          description: Collection of saved resources
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ConfigurationsResponse'
+                $ref: '#/components/schemas/ResourcesResponse'
         default:
           $ref: '#/components/responses/ErrorResponse'
-  /connections:
+  /resources/connect:
     post:
-      summary: Start (or refresh) a connection session for a configuration
-      operationId: startConnection
+      summary: Start (or refresh) a resource session for a resource
+      operationId: connectResource
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/ConnectionRequest'
+              $ref: '#/components/schemas/ResourceConnectRequest'
       responses:
         '201':
           description: Connection attempt accepted
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ConnectionResult'
+                $ref: '#/components/schemas/ResourceConnectResult'
         '404':
-          description: Configuration not found
+          description: Resource not found
           content:
             application/json:
               schema:
@@ -65,15 +65,15 @@ paths:
                 $ref: '#/components/schemas/ErrorPayload'
         default:
           $ref: '#/components/responses/ErrorResponse'
-  /configurations/{configurationName}/nodes:
+  /resources/{resourceName}/nodes:
     get:
-      summary: Fetch schema nodes for a configuration
+      summary: Fetch schema nodes for a resource
       operationId: getNodes
       parameters:
-        - name: configurationName
+        - name: resourceName
           in: path
           required: true
-          description: Name of the configuration to inspect
+          description: Name of the resource to inspect
           schema:
             type: string
         - name: nodeId
@@ -94,7 +94,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/NodesResponse'
         '404':
-          description: Configuration not found
+          description: Resource not found
           content:
             application/json:
               schema:
@@ -119,7 +119,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/QueryExecResponse'
         '404':
-          description: Configuration not found or no active connection
+          description: Resource not found or no active resource
           content:
             application/json:
               schema:
@@ -195,7 +195,7 @@ paths:
           $ref: '#/components/responses/ErrorResponse'
   /events:
     get:
-      summary: Subscribe to server-sent events for connection and query notifications
+      summary: Subscribe to server-sent events for resource and query notifications
       operationId: streamEvents
       responses:
         '200':
@@ -247,7 +247,7 @@ components:
           type: string
           nullable: true
           description: Client key path
-    Configuration:
+    Resource:
       type: object
       properties:
         name:
@@ -273,23 +273,23 @@ components:
         - name
         - type
         - database
-    ConfigurationsResponse:
+    ResourcesResponse:
       type: object
       properties:
-        connections:
+        resources:
           type: array
           items:
-            $ref: '#/components/schemas/Configuration'
+            $ref: '#/components/schemas/Resource'
       required:
-        - connections
-    ConnectionRequest:
+        - resources
+    ResourceConnectRequest:
       type: object
       properties:
-        configurationName:
+        resourceName:
           type: string
       required:
-        - configurationName
-    ConnectionResult:
+        - resourceName
+    ResourceConnectResult:
       type: object
       properties:
         result:
@@ -316,7 +316,7 @@ components:
       type: object
       additionalProperties: false
       properties:
-        connection:
+        resource:
           type: string
         engine:
           type: string
@@ -332,28 +332,28 @@ components:
         encoding:
           type: string
       required:
-        - connection
+        - resource
         - engine
         - isDefault
     SchemaNodeAttributes:
       type: object
       additionalProperties: false
       properties:
-        connection:
+        resource:
           type: string
         engine:
           type: string
         isDefault:
           type: boolean
       required:
-        - connection
+        - resource
         - engine
         - isDefault
     TableNodeAttributes:
       type: object
       additionalProperties: false
       properties:
-        connection:
+        resource:
           type: string
         table:
           type: string
@@ -362,14 +362,14 @@ components:
         definition:
           type: string
       required:
-        - connection
+        - resource
         - table
         - tableType
     ViewNodeAttributes:
       type: object
       additionalProperties: false
       properties:
-        connection:
+        resource:
           type: string
         table:
           type: string
@@ -378,14 +378,14 @@ components:
         definition:
           type: string
       required:
-        - connection
+        - resource
         - table
         - tableType
     ColumnNodeAttributes:
       type: object
       additionalProperties: false
       properties:
-        connection:
+        resource:
           type: string
         table:
           type: string
@@ -411,7 +411,7 @@ components:
           type: integer
           format: int64
       required:
-        - connection
+        - resource
         - table
         - column
         - ordinal
@@ -421,7 +421,7 @@ components:
       type: object
       additionalProperties: false
       properties:
-        connection:
+        resource:
           type: string
         table:
           type: string
@@ -454,7 +454,7 @@ components:
         checkClause:
           type: string
       required:
-        - connection
+        - resource
         - table
         - constraintName
         - constraintType
@@ -462,7 +462,7 @@ components:
       type: object
       additionalProperties: false
       properties:
-        connection:
+        resource:
           type: string
         table:
           type: string
@@ -487,7 +487,7 @@ components:
         predicate:
           type: string
       required:
-        - connection
+        - resource
         - table
         - indexName
         - unique
@@ -496,7 +496,7 @@ components:
       type: object
       additionalProperties: false
       properties:
-        connection:
+        resource:
           type: string
         table:
           type: string
@@ -519,7 +519,7 @@ components:
         definition:
           type: string
       required:
-        - connection
+        - resource
         - table
         - triggerName
         - timing
@@ -683,7 +683,7 @@ components:
     QueryExecRequest:
       type: object
       properties:
-        configurationName:
+        resourceName:
           type: string
         jobId:
           type: string
@@ -699,7 +699,7 @@ components:
         options:
           $ref: '#/components/schemas/QueryExecOptions'
       required:
-        - configurationName
+        - resourceName
         - jobId
         - query
     QueryExecResponse:

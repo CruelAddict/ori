@@ -1,4 +1,4 @@
-import { useConfigurationByName } from "@src/entities/configuration/model/configuration-list-store"
+import { useResourceByName } from "@src/entities/resource/model/resource-list-store"
 import { useEditorPane } from "@src/features/editor-pane/use-editor-pane"
 import { useResultsPane } from "@src/features/results-pane/use-results-pane"
 import { useTreePane } from "@src/features/tree-pane/use-tree-pane"
@@ -7,15 +7,15 @@ import { createEffect, createMemo, createSignal } from "solid-js"
 
 export type Pane = "tree" | "editor" | "results"
 
-export type UseConnectionViewOptions = {
-  configurationName: Accessor<string>
+export type UseResourceViewOptions = {
+  resourceName: Accessor<string>
 }
 
 const DEFAULT_PANE: Pane = "tree"
 
-export function useConnectionView(options: UseConnectionViewOptions) {
-  const configuration = useConfigurationByName(options.configurationName)
-  const title = createMemo(() => configuration()?.name ?? options.configurationName())
+export function useResourceView(options: UseResourceViewOptions) {
+  const resource = useResourceByName(options.resourceName)
+  const title = createMemo(() => resource()?.name ?? options.resourceName())
   const [focusedPane, setFocusedPane] = createSignal<Pane | null>(DEFAULT_PANE)
   const [isActive, setIsActive] = createSignal(true)
   const focusHistory: Pane[] = [DEFAULT_PANE]
@@ -89,12 +89,12 @@ export function useConnectionView(options: UseConnectionViewOptions) {
   })
 
   treePane = useTreePane({
-    configurationName: options.configurationName,
+    resourceName: options.resourceName,
     ...paneFocusFuncs("tree"),
   })
 
   const editorPane = useEditorPane({
-    configurationName: options.configurationName,
+    resourceName: options.resourceName,
     ...paneFocusFuncs("editor"),
     unfocus: focusPreviousVisiblePane,
   })

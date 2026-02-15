@@ -10,7 +10,7 @@ import (
 type GraphBuilder struct{}
 
 // NewGraphBuilder creates a graph builder for a connection.
-func NewGraphBuilder(handle *ConnectionHandle) *GraphBuilder {
+func NewGraphBuilder(handle *ResourceHandle) *GraphBuilder {
 	_ = handle
 	return &GraphBuilder{}
 }

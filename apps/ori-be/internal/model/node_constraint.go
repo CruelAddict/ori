@@ -98,7 +98,7 @@ func (node *ConstraintNode) ToDTO() (dto.Node, error) {
 		Attributes: dto.ConstraintNodeAttributes{
 			CheckClause:        node.CheckClause,
 			Columns:            node.Columns,
-			Connection:         node.Connection,
+			Resource:           node.Connection,
 			ConstraintName:     node.ConstraintName,
 			ConstraintType:     node.ConstraintType,
 			IndexName:          node.IndexName,

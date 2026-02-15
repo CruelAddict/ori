@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { type Node, type NodeEdge, NodeType } from "@shared/lib/configurations-client"
+import { type Node, type NodeEdge, NodeType } from "@shared/lib/resources-client"
 import { convertSnapshotNodeEntities } from "./tree-pane-graph"
 import type { TreePaneNode } from "./tree-pane-node"
 
@@ -20,7 +20,7 @@ const makeNode = (overrides: NodeOverrides): Node => {
       id: overrides.id,
       type: kind,
       name,
-      attributes: Object.assign({ connection: "test", engine: "sqlite" }, overrides.attributes ?? {}),
+      attributes: Object.assign({ resource: "test", engine: "sqlite" }, overrides.attributes ?? {}),
       edges: overrides.edges ?? {},
     } as Node
   }
@@ -33,7 +33,7 @@ const makeNode = (overrides: NodeOverrides): Node => {
       attributes: {
         ...Object.assign(
           {
-            connection: "test",
+            resource: "test",
             table: "users",
             column: name,
             ordinal: 1,
@@ -55,7 +55,7 @@ const makeNode = (overrides: NodeOverrides): Node => {
       attributes: {
         ...Object.assign(
           {
-            connection: "test",
+            resource: "test",
             table: "users",
             constraintName: name,
             constraintType: "FOREIGN KEY",
@@ -75,7 +75,7 @@ const makeNode = (overrides: NodeOverrides): Node => {
       attributes: {
         ...Object.assign(
           {
-            connection: "test",
+            resource: "test",
             table: "users",
             indexName: name,
             unique: false,
@@ -96,7 +96,7 @@ const makeNode = (overrides: NodeOverrides): Node => {
       attributes: {
         ...Object.assign(
           {
-            connection: "test",
+            resource: "test",
             table: "users",
             triggerName: name,
             timing: "BEFORE",
@@ -114,7 +114,7 @@ const makeNode = (overrides: NodeOverrides): Node => {
       id: overrides.id,
       type: kind,
       name,
-      attributes: Object.assign({ connection: "test", table: name, tableType: "view" }, overrides.attributes ?? {}),
+      attributes: Object.assign({ resource: "test", table: name, tableType: "view" }, overrides.attributes ?? {}),
       edges: overrides.edges ?? {},
     } as Node
   }
@@ -123,7 +123,7 @@ const makeNode = (overrides: NodeOverrides): Node => {
     id: overrides.id,
     type: kind,
     name,
-    attributes: Object.assign({ connection: "test", table: name, tableType: "table" }, overrides.attributes ?? {}),
+    attributes: Object.assign({ resource: "test", table: name, tableType: "table" }, overrides.attributes ?? {}),
     edges: overrides.edges ?? {},
   } as Node
 }

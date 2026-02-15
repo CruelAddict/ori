@@ -1,6 +1,6 @@
 import { useLogger } from "@app/providers/logger"
 import { useNotifications } from "@app/providers/notifications"
-import type { QueryResultView } from "@shared/lib/configurations-client"
+import type { QueryResultView } from "@shared/lib/resources-client"
 import type { QueryJobCompletedEvent } from "@shared/lib/events"
 import { useQueryJobsApi } from "@src/entities/query-job/api/api"
 import type { Accessor, JSX } from "solid-js"
@@ -9,7 +9,7 @@ import { createStore } from "solid-js/store"
 
 export type QueryJob = {
   jobId: string
-  configurationName: string
+  resourceName: string
   query: string
   status: "running" | "success" | "failed" | "canceled"
   result?: QueryResultView
@@ -19,20 +19,20 @@ export type QueryJob = {
 }
 
 type QueryJobsStoreState = {
-  jobsByConfiguration: Record<string, QueryJob | undefined>
-  queryTextByConfiguration: Record<string, string>
+  jobsByResource: Record<string, QueryJob | undefined>
+  queryTextByResource: Record<string, string>
 }
 
 type QueryJobsActions = {
-  setQueryText(configurationName: string, text: string): void
-  executeQuery(configurationName: string, query: string): Promise<void>
-  cancelQuery(configurationName: string): Promise<void>
-  clearQuery(configurationName: string): void
+  setQueryText(resourceName: string, text: string): void
+  executeQuery(resourceName: string, query: string): Promise<void>
+  cancelQuery(resourceName: string): Promise<void>
+  clearQuery(resourceName: string): void
 }
 
 export interface QueryJobsContextValue extends QueryJobsActions {
-  getJob: (configurationName: string) => QueryJob | undefined
-  getQueryText: (configurationName: string) => string
+  getJob: (resourceName: string) => QueryJob | undefined
+  getQueryText: (resourceName: string) => string
 }
 
 const QueryJobsContext = createContext<QueryJobsContextValue>()
@@ -47,8 +47,8 @@ export function QueryJobsStoreProvider(props: QueryJobsStoreProviderProps) {
   const notifications = useNotifications()
 
   const [state, setState] = createStore<QueryJobsStoreState>({
-    jobsByConfiguration: {},
-    queryTextByConfiguration: {},
+    jobsByResource: {},
+    queryTextByResource: {},
   })
 
   const notifyError = (_?: string) => {
@@ -60,39 +60,39 @@ export function QueryJobsStoreProvider(props: QueryJobsStoreProviderProps) {
     notifications.notify(text, { level: "success", channel: "statusline" })
   }
 
-  const setQueryText = (configurationName: string, text: string) => {
-    setState("queryTextByConfiguration", configurationName, text)
+  const setQueryText = (resourceName: string, text: string) => {
+    setState("queryTextByResource", resourceName, text)
   }
 
-  const clearQuery = (configurationName: string) => {
-    setState("queryTextByConfiguration", configurationName, "")
-    setState("jobsByConfiguration", configurationName, undefined)
+  const clearQuery = (resourceName: string) => {
+    setState("queryTextByResource", resourceName, "")
+    setState("jobsByResource", resourceName, undefined)
   }
 
-  const executeQuery = async (configurationName: string, query: string) => {
-    const currentJob = state.jobsByConfiguration[configurationName]
+  const executeQuery = async (resourceName: string, query: string) => {
+    const currentJob = state.jobsByResource[resourceName]
     if (currentJob && currentJob.status === "running") {
       logger.warn(
-        { configurationName, jobId: currentJob.jobId },
-        "query already running for configuration; ignoring new execute request",
+        { resourceName, jobId: currentJob.jobId },
+        "query already running for resource; ignoring new execute request",
       )
       return
     }
 
     const jobId = generateJobId()
-    setState("jobsByConfiguration", configurationName, {
+    setState("jobsByResource", resourceName, {
       jobId,
-      configurationName,
+      resourceName,
       query,
       status: "running",
     })
 
     try {
-      const execResult = await api.executeQuery(configurationName, query, jobId)
+      const execResult = await api.executeQuery(resourceName, query, jobId)
       if (execResult.status === "failed") {
-        setState("jobsByConfiguration", configurationName, {
+        setState("jobsByResource", resourceName, {
           jobId,
-          configurationName,
+          resourceName,
           query,
           status: "failed",
           error: execResult.message,
@@ -102,20 +102,20 @@ export function QueryJobsStoreProvider(props: QueryJobsStoreProviderProps) {
       }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : String(err)
-      setState("jobsByConfiguration", configurationName, {
+      setState("jobsByResource", resourceName, {
         jobId,
-        configurationName,
+        resourceName,
         query,
         status: "failed",
         error: errorMessage,
       })
       notifyError(errorMessage)
-      logger.error({ jobId, configurationName, err }, "query-jobs-store: query execution threw")
+      logger.error({ jobId, resourceName, err }, "query-jobs-store: query execution threw")
     }
   }
 
-  const cancelQuery = async (configurationName: string) => {
-    const currentJob = state.jobsByConfiguration[configurationName]
+  const cancelQuery = async (resourceName: string) => {
+    const currentJob = state.jobsByResource[resourceName]
     if (!currentJob || currentJob.status !== "running") {
       return
     }
@@ -125,17 +125,17 @@ export function QueryJobsStoreProvider(props: QueryJobsStoreProviderProps) {
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : String(err)
       notifyError(errorMessage)
-      logger.error({ err, configurationName, jobId: currentJob.jobId }, "query-jobs-store: cancel failed")
+      logger.error({ err, resourceName, jobId: currentJob.jobId }, "query-jobs-store: cancel failed")
     }
   }
 
   const handleQueryJobCompleted = async (event: QueryJobCompletedEvent) => {
-    const { jobId, configurationName, status, error, message, stored, durationMs } = event.payload
-    logger.debug({ jobId, configurationName, status, stored }, "query-jobs-store: received job completed event")
-    const currentJob = state.jobsByConfiguration[configurationName]
+    const { jobId, resourceName, status, error, message, stored, durationMs } = event.payload
+    logger.debug({ jobId, resourceName, status, stored }, "query-jobs-store: received job completed event")
+    const currentJob = state.jobsByResource[resourceName]
     if (!currentJob || currentJob.jobId !== jobId) {
       logger.debug(
-        { jobId, configurationName, currentJobId: currentJob?.jobId },
+        { jobId, resourceName, currentJobId: currentJob?.jobId },
         "query-jobs-store: ignoring event - job mismatch or no current job",
       )
       return
@@ -144,7 +144,7 @@ export function QueryJobsStoreProvider(props: QueryJobsStoreProviderProps) {
     if (status === "success" && stored) {
       try {
         const result = await api.fetchQueryResult(jobId)
-        setState("jobsByConfiguration", configurationName, {
+        setState("jobsByResource", resourceName, {
           ...currentJob,
           status: "success",
           result,
@@ -153,20 +153,20 @@ export function QueryJobsStoreProvider(props: QueryJobsStoreProviderProps) {
         notifySuccess(result, durationMs)
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : String(err)
-        setState("jobsByConfiguration", configurationName, {
+        setState("jobsByResource", resourceName, {
           ...currentJob,
           status: "failed",
           error: errorMessage,
           durationMs,
         })
         notifyError(errorMessage)
-        logger.error({ jobId, configurationName, err }, "query-jobs-store: failed to fetch query result")
+        logger.error({ jobId, resourceName, err }, "query-jobs-store: failed to fetch query result")
       }
       return
     }
 
     const nextStatus = resolveCompletedStatus(status)
-    setState("jobsByConfiguration", configurationName, {
+    setState("jobsByResource", resourceName, {
       ...currentJob,
       status: nextStatus,
       error: error || message,
@@ -183,8 +183,8 @@ export function QueryJobsStoreProvider(props: QueryJobsStoreProviderProps) {
   const unsubscribe = api.onJobCompleted(handleQueryJobCompleted)
   onCleanup(() => unsubscribe())
 
-  const getJob = (configurationName: string) => state.jobsByConfiguration[configurationName]
-  const getQueryText = (configurationName: string) => state.queryTextByConfiguration[configurationName] ?? ""
+  const getJob = (resourceName: string) => state.jobsByResource[resourceName]
+  const getQueryText = (resourceName: string) => state.queryTextByResource[resourceName] ?? ""
 
   const value: QueryJobsContextValue = {
     getJob,
@@ -233,10 +233,10 @@ export function useQueryJobs(): QueryJobsContextValue {
   return ctx
 }
 
-export function useQueryJob(configurationName: Accessor<string | null>) {
+export function useQueryJob(resourceName: Accessor<string | null>) {
   const ctx = useQueryJobs()
   return () => {
-    const name = configurationName()
+    const name = resourceName()
     if (!name) return undefined
     return ctx.getJob(name)
   }

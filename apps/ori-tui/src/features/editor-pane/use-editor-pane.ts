@@ -18,7 +18,7 @@ export type EditorPaneViewModel = {
 }
 
 type UseEditorPaneOptions = {
-  configurationName: Accessor<string>
+  resourceName: Accessor<string>
   isFocused: Accessor<boolean>
   focusSelf: () => void
   unfocus: () => void
@@ -27,12 +27,12 @@ type UseEditorPaneOptions = {
 export function useEditorPane(options: UseEditorPaneOptions): EditorPaneViewModel {
   const queryJobs = useQueryJobs()
 
-  const queryText = createMemo(() => queryJobs.getQueryText(options.configurationName()))
-  const currentJob = createMemo(() => queryJobs.getJob(options.configurationName()))
+  const queryText = createMemo(() => queryJobs.getQueryText(options.resourceName()))
+  const currentJob = createMemo(() => queryJobs.getJob(options.resourceName()))
   const isExecuting = createMemo(() => currentJob()?.status === "running")
 
   const onQueryChange = (text: string) => {
-    queryJobs.setQueryText(options.configurationName(), text)
+    queryJobs.setQueryText(options.resourceName(), text)
   }
 
   const executeQuery = async () => {
@@ -40,20 +40,20 @@ export function useEditorPane(options: UseEditorPaneOptions): EditorPaneViewMode
     if (!text.trim()) {
       return
     }
-    await queryJobs.executeQuery(options.configurationName(), text)
+    await queryJobs.executeQuery(options.resourceName(), text)
   }
 
   const cancelQuery = async () => {
-    await queryJobs.cancelQuery(options.configurationName())
+    await queryJobs.cancelQuery(options.resourceName())
   }
 
   const saveQuery = (): boolean => {
     const text = queryText()
-    return writeConsoleQuery(options.configurationName(), text)
+    return writeConsoleQuery(options.resourceName(), text)
   }
 
   onMount(() => {
-    const name = options.configurationName()
+    const name = options.resourceName()
     const existing = queryJobs.getQueryText(name)
     if (existing) {
       return
@@ -64,7 +64,7 @@ export function useEditorPane(options: UseEditorPaneOptions): EditorPaneViewMode
     }
   })
 
-  const filePath = createMemo(() => getConsoleFilePath(options.configurationName()))
+  const filePath = createMemo(() => getConsoleFilePath(options.resourceName()))
 
   return {
     queryText,

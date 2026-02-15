@@ -108,12 +108,12 @@ async function waitForHealthy(socketPath: string, logger: Logger, attempts = 20,
 export async function ensureBackendSocket(options: {
   socketPath: string
   backendPathOverride?: string
-  configPath: string
+  resourcesPath: string
   logLevel?: LogLevel
   logLevelSet: boolean
   logger: Logger
 }): Promise<BackendHandle> {
-  const { socketPath, backendPathOverride, configPath, logLevel, logLevelSet, logger } = options
+  const { socketPath, backendPathOverride, resourcesPath, logLevel, logLevelSet, logger } = options
   const healthy = await healthcheckUnix(socketPath, 400)
   if (healthy) {
     logger.info({ socketPath }, "reusing healthy backend")
@@ -125,7 +125,7 @@ export async function ensureBackendSocket(options: {
   } catch {}
 
   const backendPath = await findBackendBinary(backendPathOverride)
-  const args = ["-config", configPath, "-socket", socketPath]
+  const args = ["-config", resourcesPath, "-socket", socketPath]
   if (logLevelSet && logLevel) {
     args.push("-log-level", logLevel)
   }
@@ -180,7 +180,7 @@ export async function ensureBackend(options: {
   host?: string
   port?: number
   socketPath?: string
-  configPath?: string
+  resourcesPath?: string
   backendPathOverride?: string
   logLevel?: LogLevel
   logLevelSet: boolean
@@ -194,14 +194,14 @@ export async function ensureBackend(options: {
   if (!options.socketPath) {
     throw new Error("socketPath is required for ensureBackend when host/port not provided")
   }
-  if (!options.configPath) {
-    throw new Error("configPath is required for ensureBackend when host/port not provided")
+  if (!options.resourcesPath) {
+    throw new Error("resourcesPath is required for ensureBackend when host/port not provided")
   }
 
   return ensureBackendSocket({
     socketPath: options.socketPath,
     backendPathOverride: options.backendPathOverride,
-    configPath: options.configPath,
+    resourcesPath: options.resourcesPath,
     logLevel: options.logLevel,
     logLevelSet: options.logLevelSet,
     logger: options.logger,

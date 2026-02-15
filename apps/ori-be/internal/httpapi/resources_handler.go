@@ -24,18 +24,18 @@ func (e validationError) Error() string {
 
 const nodeIDLimit = 1000
 
-func (h *Handler) listConfigurations(w http.ResponseWriter, r *http.Request) {
-	configs, err := h.configs.ListConfigurations()
+func (h *Handler) listResources(w http.ResponseWriter, r *http.Request) {
+	configs, err := h.configs.ListResources()
 	if err != nil {
-		respondError(w, http.StatusInternalServerError, "config_unavailable", err.Error(), nil)
+		respondError(w, http.StatusInternalServerError, "resource_unavailable", err.Error(), nil)
 		return
 	}
 
-	respondJSON(w, http.StatusOK, model.ConvertConfigurationsToDTO(configs))
+	respondJSON(w, http.StatusOK, model.ConvertResourcesToDTO(configs))
 }
 
-func (h *Handler) getConfigurationNodes(w http.ResponseWriter, r *http.Request) {
-	configurationName, nodeIDs, err := h.validateGetConfigurationNodes(r)
+func (h *Handler) getResourceNodes(w http.ResponseWriter, r *http.Request) {
+	resourceName, nodeIDs, err := h.validateGetResourceNodes(r)
 	if err != nil {
 		if vErr, ok := err.(validationError); ok {
 			respondError(w, http.StatusBadRequest, vErr.code, vErr.message, nil)
@@ -45,8 +45,8 @@ func (h *Handler) getConfigurationNodes(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	ctx := logctx.WithField(r.Context(), "connection", configurationName)
-	nodes, err := h.nodes.GetNodes(ctx, configurationName, nodeIDs)
+	ctx := logctx.WithField(r.Context(), "resource", resourceName)
+	nodes, err := h.nodes.GetNodes(ctx, resourceName, nodeIDs)
 	if err != nil {
 		switch {
 		case errors.Is(err, service.ErrConnectionUnavailable):
@@ -70,15 +70,15 @@ func (h *Handler) getConfigurationNodes(w http.ResponseWriter, r *http.Request) 
 	respondJSON(w, http.StatusOK, dto.NodesResponse{Nodes: converted})
 }
 
-func (h *Handler) validateGetConfigurationNodes(r *http.Request) (string, []string, error) {
-	configurationName, err := decodePathParam(r, "configurationName")
+func (h *Handler) validateGetResourceNodes(r *http.Request) (string, []string, error) {
+	resourceName, err := decodePathParam(r, "resourceName")
 	if err != nil {
-		return "", nil, validationError{code: "invalid_configuration", message: err.Error()}
+		return "", nil, validationError{code: "invalid_resource", message: err.Error()}
 	}
 
-	configurationName = strings.TrimSpace(configurationName)
-	if configurationName == "" {
-		return "", nil, validationError{code: "missing_configuration", message: "configurationName is required"}
+	resourceName = strings.TrimSpace(resourceName)
+	if resourceName == "" {
+		return "", nil, validationError{code: "missing_resource", message: "resourceName is required"}
 	}
 
 	nodeIDs := r.URL.Query()["nodeId"]
@@ -95,5 +95,5 @@ func (h *Handler) validateGetConfigurationNodes(r *http.Request) (string, []stri
 		trimmedNodeIDs[i] = trimmedID
 	}
 
-	return configurationName, trimmedNodeIDs, nil
+	return resourceName, trimmedNodeIDs, nil
 }

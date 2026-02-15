@@ -7,9 +7,9 @@ import (
 )
 
 func TestGraphBuilderNodesConvertToDTO(t *testing.T) {
-	handle := &ConnectionHandle{
+	handle := &ResourceHandle{
 		Name: "local-sqlite",
-		Configuration: &model.Configuration{
+		Resource: &model.Resource{
 			Name: "local-sqlite",
 			Type: "sqlite",
 		},

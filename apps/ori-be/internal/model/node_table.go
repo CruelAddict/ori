@@ -83,7 +83,7 @@ func (node *TableNode) ToDTO() (dto.Node, error) {
 			NodeRelationTriggers:    relationToDTO(node.Triggers),
 		},
 		Attributes: dto.TableNodeAttributes{
-			Connection: node.Connection,
+			Resource:   node.Connection,
 			Definition: node.Definition,
 			Table:      node.Table,
 			TableType:  node.TableType,

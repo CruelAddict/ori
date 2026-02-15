@@ -1,7 +1,7 @@
 import type { LogLevel } from "@shared/lib/logger"
 
 export type ParsedArgs = {
-  configPath?: string
+  resourcesPath?: string
   backendPath?: string
   logLevel: LogLevel
   logLevelSet: boolean

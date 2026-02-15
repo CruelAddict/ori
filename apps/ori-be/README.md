@@ -1,16 +1,16 @@
 # Ori Backend
 
-A JSON-RPC backend service for managing and interacting with database connections.
+A REST backend service for managing and interacting with database resources.
 
 ## Overview
 
-Ori Backend provides a centralized backend for managing database connection configurations. It exposes a JSON-RPC API that allows clients to retrieve and work with database connection information.
+Ori Backend provides a centralized backend for managing database resources. It exposes a resource-centric HTTP API that allows clients to list resources, connect a resource session, fetch schema graph nodes, and execute queries.
 
 ## Features
 
-- JSON-RPC 2.0 compliant API
+- Resource-centric HTTP API
 - Support for multiple database types (kicking it off with sqlite for now..)
-- Configuration-based connection management
+- Resource session lifecycle management
 
 ## Development
 

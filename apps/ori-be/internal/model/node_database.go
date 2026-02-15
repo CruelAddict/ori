@@ -67,13 +67,13 @@ func (node *DatabaseNode) ToDTO() (dto.Node, error) {
 			NodeRelationViews:  relationToDTO(node.Views),
 		},
 		Attributes: dto.DatabaseNodeAttributes{
-			Connection: node.Connection,
-			Encoding:   node.Encoding,
-			Engine:     node.Engine,
-			IsDefault:  node.IsDefault,
-			File:       node.File,
-			PageSize:   node.PageSize,
-			Sequence:   node.Sequence,
+			Resource:  node.Connection,
+			Encoding:  node.Encoding,
+			Engine:    node.Engine,
+			IsDefault: node.IsDefault,
+			File:      node.File,
+			PageSize:  node.PageSize,
+			Sequence:  node.Sequence,
 		},
 	})
 	if err != nil {
