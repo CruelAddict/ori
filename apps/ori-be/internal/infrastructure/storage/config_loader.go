@@ -1,11 +1,10 @@
 package storage
 
 import (
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"os"
-
-	"gopkg.in/yaml.v3"
 
 	"github.com/crueladdict/ori/apps/ori-server/internal/model"
 )
@@ -23,7 +22,7 @@ func NewConfigLoader(configPath string) *ConfigLoader {
 // Path returns the configuration file path
 func (cl *ConfigLoader) Path() string { return cl.configPath }
 
-// Load reads and parses the YAML configuration file
+// Load reads and parses the JSON configuration file
 func (cl *ConfigLoader) Load() (*model.Config, error) {
 	data, err := os.ReadFile(cl.configPath)
 	if err != nil {
@@ -31,7 +30,7 @@ func (cl *ConfigLoader) Load() (*model.Config, error) {
 	}
 
 	var config model.Config
-	if err := yaml.Unmarshal(data, &config); err != nil {
+	if err := json.Unmarshal(data, &config); err != nil {
 		return nil, fmt.Errorf("failed to parse config file: %w", err)
 	}
 

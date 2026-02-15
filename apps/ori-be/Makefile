@@ -37,7 +37,7 @@ clean: ## Remove build artifacts and clean Go cache
 # Build and run the server
 run: build ## Build and run the server with default config
 	@echo "Starting server..."
-	@./$(BIN_DIR)/$(BINARY_NAME) -config ./config.yaml
+	@./$(BIN_DIR)/$(BINARY_NAME) -config ./resources.json
 
 # Download and tidy dependencies
 deps: ## Download and tidy Go dependencies

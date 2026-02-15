@@ -16,12 +16,12 @@ This will:
 - Create launcher at `~/.ori/bin/ori`
 - Prune old releases automatically if they are no longer in use
 - Add `~/.ori/bin` to your shell PATH (unless `--no-modify-path` is used)
-- Create example config file at `~/.config/ori/config.example.yaml`
+- Create example config file at `~/.config/ori/resources.example.json`
 
 ## Usage
 
 ```bash
-ori --config <path-to-config.yaml>
+ori --config <path-to-resources.json>
 ```
 
 

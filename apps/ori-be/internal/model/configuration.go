@@ -8,30 +8,30 @@ import (
 )
 
 type PasswordConfig struct {
-	Type string `yaml:"type"`          // Password provider type (plain_text, shell, keychain)
-	Key  string `yaml:"key,omitempty"` // Provider-specific value (plain text, shell command, or keychain account)
+	Type string `json:"type"`          // Password provider type (plain_text, shell, keychain)
+	Key  string `json:"key,omitempty"` // Provider-specific value (plain text, shell command, or keychain account)
 }
 
 type TLSConfig struct {
-	Mode       *string `yaml:"mode,omitempty"`
-	CACertPath *string `yaml:"caCertPath,omitempty"`
-	CertPath   *string `yaml:"certPath,omitempty"`
-	KeyPath    *string `yaml:"keyPath,omitempty"`
+	Mode       *string `json:"mode,omitempty"`
+	CACertPath *string `json:"caCertPath,omitempty"`
+	CertPath   *string `json:"certPath,omitempty"`
+	KeyPath    *string `json:"keyPath,omitempty"`
 }
 
 type Configuration struct {
-	Name     string          `yaml:"name"`
-	Type     string          `yaml:"type"`
-	Host     *string         `yaml:"host,omitempty"`
-	Port     *int            `yaml:"port,omitempty"`
-	Database string          `yaml:"database"`
-	Username *string         `yaml:"username,omitempty"`
-	Password *PasswordConfig `yaml:"password,omitempty"`
-	TLS      *TLSConfig      `yaml:"tls,omitempty"`
+	Name     string          `json:"name"`
+	Type     string          `json:"type"`
+	Host     *string         `json:"host,omitempty"`
+	Port     *int            `json:"port,omitempty"`
+	Database string          `json:"database"`
+	Username *string         `json:"username,omitempty"`
+	Password *PasswordConfig `json:"password,omitempty"`
+	TLS      *TLSConfig      `json:"tls,omitempty"`
 }
 
 type Config struct {
-	Configurations []Configuration `yaml:"connections"`
+	Configurations []Configuration `json:"connections"`
 }
 
 func (c *Config) ConvertToDTO() *dto.ConfigurationsResponse {

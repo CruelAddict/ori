@@ -27,5 +27,5 @@ coverage/
 *.test
 
 # Config
-config.yaml
-!testdata/config.yaml
+resources.json
+!testdata/resources.json

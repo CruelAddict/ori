@@ -2,7 +2,7 @@ import fs from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 
-const DEFAULT_CONFIG_CONTENT = "connections: []\n"
+const DEFAULT_CONFIG_CONTENT = '{\n  "connections": []\n}\n'
 
 async function fileExists(target: string): Promise<boolean> {
   try {
@@ -23,7 +23,7 @@ export async function resolveConfigPath(explicit?: string): Promise<string> {
   }
 
   const cwd = process.cwd()
-  const localConfig = path.join(cwd, ".ori-config.yaml")
+  const localConfig = path.join(cwd, ".resources.json")
   if (await fileExists(localConfig)) {
     return localConfig
   }
@@ -36,7 +36,7 @@ export async function resolveConfigPath(explicit?: string): Promise<string> {
   const configDir = path.join(home, ".config", "ori")
   await fs.mkdir(configDir, { recursive: true, mode: 0o755 })
 
-  const userConfig = path.join(configDir, "config.yaml")
+  const userConfig = path.join(configDir, "resources.json")
   if (await fileExists(userConfig)) {
     return userConfig
   }

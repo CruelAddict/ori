@@ -34,7 +34,7 @@ contract-check:
 # Build everything and run the CLI with the test config
 demo: build
 	@echo "Starting demo with test config..."
-	@./apps/ori-tui/bin/ori --config testdata/config.yaml --log-level debug --backend-path ./apps/ori-be/bin/ori-be
+	@./apps/ori-tui/bin/ori --config testdata/resources.json --log-level debug --backend-path ./apps/ori-be/bin/ori-be
 
 # PostgreSQL test database management
 postgres-up:

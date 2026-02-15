@@ -23,14 +23,14 @@ import (
 
 func TestListConfigurationsAndConnectSQLiteOverUDS(t *testing.T) {
 	ctx := context.Background()
-	fixtureConfigPath, err := filepath.Abs("../../../testdata/config.yaml")
+	fixtureConfigPath, err := filepath.Abs("../../../testdata/resources.json")
 	if err != nil {
 		t.Fatalf("Failed to resolve test config path: %v", err)
 	}
 	fixtureRoot := filepath.Dir(fixtureConfigPath)
 	tempRoot := t.TempDir()
 
-	tempConfigPath := filepath.Join(tempRoot, "config.yaml")
+	tempConfigPath := filepath.Join(tempRoot, "resources.json")
 	if err := copyFile(fixtureConfigPath, tempConfigPath); err != nil {
 		t.Fatalf("failed to copy config: %v", err)
 	}
@@ -160,14 +160,14 @@ func TestListConfigurationsAndConnectSQLiteOverUDS(t *testing.T) {
 
 func TestQueryExecAndGetResult(t *testing.T) {
 	ctx := context.Background()
-	fixtureConfigPath, err := filepath.Abs("../../../testdata/config.yaml")
+	fixtureConfigPath, err := filepath.Abs("../../../testdata/resources.json")
 	if err != nil {
 		t.Fatalf("Failed to resolve test config path: %v", err)
 	}
 	fixtureRoot := filepath.Dir(fixtureConfigPath)
 	tempRoot := t.TempDir()
 
-	tempConfigPath := filepath.Join(tempRoot, "config.yaml")
+	tempConfigPath := filepath.Join(tempRoot, "resources.json")
 	if err := copyFile(fixtureConfigPath, tempConfigPath); err != nil {
 		t.Fatalf("failed to copy config: %v", err)
 	}

@@ -20,7 +20,7 @@ import (
 )
 
 const (
-	DefaultConfigPath = "./config.yaml"
+	DefaultConfigPath = "./resources.json"
 	DefaultPort       = 8080
 )
 

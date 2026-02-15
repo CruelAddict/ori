@@ -160,9 +160,9 @@ done < <(ls -1dt "$RELEASES_DIR"/* 2>/dev/null || true)
 
 # Create config directory
 mkdir -p ~/.config/ori
-if [ ! -f ~/.config/ori/config.yaml ]; then
-    cp testdata/config.yaml ~/.config/ori/config.example.yaml
-    echo "Example config copied to ~/.config/ori/config.example.yaml"
+if [ ! -f ~/.config/ori/resources.json ]; then
+    cp testdata/resources.json ~/.config/ori/resources.example.json
+    echo "Example config copied to ~/.config/ori/resources.example.json"
 fi
 
 add_to_path() {
@@ -259,7 +259,7 @@ if [[ "$path_updated" == "true" ]]; then
 fi
 
 echo -e ""
-echo -e "ori can connect to external resources configured in ~/.config/ori/config.example.yaml"
+echo -e "ori can connect to external resources configured in ~/.config/ori/resources.example.json"
 echo -e "To uninstall:"
 echo -e "  ./scripts/uninstall.sh"
 echo -e ""
