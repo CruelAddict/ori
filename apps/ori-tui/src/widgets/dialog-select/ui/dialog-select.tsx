@@ -39,9 +39,18 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
   let inputRef: InputRenderable | undefined
   let scrollRef: ScrollBoxRenderable | undefined
 
+  const syncFilterFromInput = () => {
+    queueMicrotask(() => {
+      const value = inputRef?.value ?? ""
+      if (value === vm.filter()) return
+      vm.actions.setFilter(value)
+      props.onFilterChange?.(value)
+    })
+  }
+
   const grouped = createMemo(() => groupByCategory(vm.filtered()))
 
-  const bindings = useDialogBindings(vm, props)
+  const bindings = useDialogBindings(vm, props, syncFilterFromInput)
 
   onMount(() => {
     queueMicrotask(() => {
@@ -52,7 +61,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
   createEffect(() => {
     vm.filter()
     if (!scrollRef) return
-      ; (scrollRef as ScrollBoxWithScrollTo).scrollTo?.(0)
+    ;(scrollRef as ScrollBoxWithScrollTo).scrollTo?.(0)
   })
 
   createEffect(() => {
@@ -116,6 +125,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
             placeholder={placeholder}
             cursorColor={palette().primary}
             textColor={palette().text}
+            focusedTextColor={palette().text}
             backgroundColor={palette().backgroundPanel}
             focusedBackgroundColor={palette().backgroundPanel}
             onInput={(value) => {
@@ -174,7 +184,11 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
   )
 }
 
-function useDialogBindings<T>(vm: DialogSelectViewModel<T>, props: DialogSelectProps<T>) {
+function useDialogBindings<T>(
+  vm: DialogSelectViewModel<T>,
+  props: DialogSelectProps<T>,
+  syncFilterFromInput: () => void,
+) {
   return createMemo<KeyBinding[]>(() => {
     const base: KeyBinding[] = [
       {
@@ -201,6 +215,10 @@ function useDialogBindings<T>(vm: DialogSelectViewModel<T>, props: DialogSelectP
         pattern: "ctrl+n",
         preventDefault: true,
         handler: () => vm.actions.move(1),
+      },
+      {
+        pattern: ["ctrl+w", "ctrl+backspace", "meta+backspace"],
+        handler: () => syncFilterFromInput(),
       },
       {
         pattern: "pageup",
