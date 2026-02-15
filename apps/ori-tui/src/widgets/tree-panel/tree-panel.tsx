@@ -1,5 +1,4 @@
 import { useTheme } from "@app/providers/theme"
-import { withAlpha } from "@shared/lib/color/with-alpha"
 import { TextAttributes } from "@opentui/core"
 import { type KeyBinding, KeyScope } from "@src/core/services/key-scopes"
 import type { TreePaneViewModel } from "@src/features/tree-pane/use-tree-pane"
@@ -65,7 +64,7 @@ export function TreePanel(props: TreePanelProps) {
         flexGrow={0}
         flexShrink={0}
         border={["right"]}
-        borderColor={theme().border}
+        borderColor={theme().get("border")}
         paddingRight={1}
         marginBottom={1}
       >
@@ -78,7 +77,9 @@ export function TreePanel(props: TreePanelProps) {
           onMouseDown={handleEmptySpaceClick}
         >
           <Show when={pane.error()}>
-            {(message: Accessor<string | null>) => <text fg={theme().error}>Failed to load graph: {message()}</text>}
+            {(message: Accessor<string | null>) => (
+              <text fg={theme().get("error")}>Failed to load graph: {message()}</text>
+            )}
           </Show>
           <TreeScrollbox
             rows={rows}
@@ -91,7 +92,7 @@ export function TreePanel(props: TreePanelProps) {
                 <Show when={!pane.loading() && !pane.error()}>
                   <text
                     attributes={TextAttributes.DIM}
-                    fg={theme().textMuted}
+                    fg={theme().get("text_muted")}
                     selectable={false}
                   >
                     Graph is empty. Try refreshing later.

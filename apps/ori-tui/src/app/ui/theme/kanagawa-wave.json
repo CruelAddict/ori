@@ -1,10 +1,10 @@
 {
   "defs": {
-    "background": "#1F1F28",
-    "panel": "#1A1A22",
-    "element": "#2A2A37",
+    "bg_0": "#1A1A22",
+    "bg_1": "#16161D",
+    "bg_2": "#1E1E27",
+    "bg_3": "#2b2833",
     "border": "#363646",
-    "borderActive": "#54546D",
     "text": "#DCD7BA",
     "textMuted": "#727169",
     "primary": "#7E9CD8",
@@ -14,11 +14,7 @@
     "error": "#E82424",
     "success": "#98BB6C",
     "info": "#658594",
-    "editorBg": "#16161D",
-    "editorBgFocus": "#1A1A22",
-    "editorText": "#DCD7BA",
-    "resultsRowAltBg": "#1E1E27",
-    "resultsHeaderBg": "#1F1F28"
+    "textEmphasis": "#DCD7BA"
   },
   "theme": {
     "primary": "primary",
@@ -26,19 +22,15 @@
     "accent": "accent",
     "text": "text",
     "textMuted": "textMuted",
-    "background": "background",
-    "backgroundPanel": "panel",
-    "backgroundElement": "element",
     "border": "border",
-    "borderActive": "borderActive",
     "warning": "warning",
     "error": "error",
     "success": "success",
     "info": "info",
-    "editorBackground": "editorBg",
-    "editorBackgroundFocused": "editorBgFocus",
-    "editorText": "editorText",
-    "resultsRowAltBackground": "resultsRowAltBg",
-    "resultsHeaderBackground": "resultsHeaderBg"
+    "bg_0": "bg_0",
+    "bg_1": "bg_1",
+    "bg_2": "bg_2",
+    "bg_3": "bg_3",
+    "textEmphasis": "textEmphasis"
   }
 }

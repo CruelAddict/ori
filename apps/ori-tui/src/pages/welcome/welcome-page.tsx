@@ -27,12 +27,12 @@ export function WelcomePage() {
     >
       <text
         attributes={TextAttributes.BOLD}
-        fg={palette().text}
+        fg={palette().get("text")}
         paddingBottom={1}
       >
         welcome to ori
       </text>
-      <text fg={palette().textMuted}>{label()}</text>
+      <text fg={palette().get("text_muted")}>{label()}</text>
       <box height={2} />
       <box
         flexDirection="column"
@@ -59,9 +59,9 @@ function CommandRow(props: CommandRowProps) {
       width="100%"
       paddingBottom={1}
     >
-      <text fg={palette().text}>{props.label}</text>
+      <text fg={palette().get("text")}>{props.label}</text>
       <text
-        fg={palette().primary}
+        fg={palette().get("primary")}
         attributes={TextAttributes.BOLD}
       >
         {props.shortcut}

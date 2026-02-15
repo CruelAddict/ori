@@ -22,6 +22,7 @@ export type TreeRowSegment = {
 export type TreeRowRenderableOptions = RenderableOptions<TreeRowRenderable> & {
   segments: TreeRowSegment[]
   width: number
+  defaultFg: string
   fg?: string
   bg?: string
 }
@@ -33,8 +34,6 @@ type ParsedSegment = {
   attributes?: number
 }
 
-const DEFAULT_FG = parseColor("#ffffff")
-
 const normalizeColor = (value: string | undefined, fallback?: RGBA) => {
   if (!value) return fallback
   return parseColor(value)
@@ -43,11 +42,11 @@ const normalizeColor = (value: string | undefined, fallback?: RGBA) => {
 export class TreeRowRenderable extends Renderable {
   private parsedSegments: ParsedSegment[] = []
   private rawSegments: TreeRowSegment[] = []
-  private fallbackFg: RGBA = DEFAULT_FG
+  private fallbackFg: RGBA
   private fallbackBg: RGBA | undefined
 
   constructor(ctx: RenderContext, options: TreeRowRenderableOptions) {
-    const { segments, fg, bg, width, ...renderableOptions } = options
+    const { segments, fg, bg, width, defaultFg, ...renderableOptions } = options
     super(ctx, {
       height: 1,
       flexShrink: 0,
@@ -55,7 +54,8 @@ export class TreeRowRenderable extends Renderable {
       ...renderableOptions,
       width: Math.max(1, width),
     })
-    this.fallbackFg = normalizeColor(fg, DEFAULT_FG) ?? DEFAULT_FG
+    this.fallbackFg = parseColor(defaultFg)
+    this.fallbackFg = normalizeColor(fg, this.fallbackFg) ?? this.fallbackFg
     this.fallbackBg = normalizeColor(bg)
     this.setSegments(segments, true)
   }
@@ -69,7 +69,7 @@ export class TreeRowRenderable extends Renderable {
   }
 
   set fg(value: string | undefined) {
-    this.fallbackFg = normalizeColor(value, DEFAULT_FG) ?? DEFAULT_FG
+    this.fallbackFg = normalizeColor(value, this.fallbackFg) ?? this.fallbackFg
     this.setSegments(this.rawSegments, true)
   }
 

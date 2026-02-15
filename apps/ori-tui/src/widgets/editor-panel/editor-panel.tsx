@@ -2,7 +2,7 @@ import { useTheme } from "@app/providers/theme"
 import { type KeyBinding, KeyScope } from "@src/core/services/key-scopes"
 import type { EditorPaneViewModel } from "@src/features/editor-pane/use-editor-pane"
 import { useStatusline } from "@src/widgets/statusline/statusline-context"
-import { onMount, Show } from "solid-js"
+import { onMount } from "solid-js"
 import { Buffer } from "./buffer"
 
 export type EditorPanelProps = {
@@ -12,6 +12,7 @@ export type EditorPanelProps = {
 export function EditorPanel(props: EditorPanelProps) {
   const pane = props.viewModel
   const statusline = useStatusline()
+  const { theme } = useTheme()
 
   onMount(() => {
     statusline.fileOpenedInBuffer(pane.filePath())
@@ -50,7 +51,7 @@ export function EditorPanel(props: EditorPanelProps) {
         flexDirection="column"
         minHeight={3}
         marginRight={1}
-        backgroundColor={useTheme().theme().editorBackground}
+        backgroundColor={theme().get("editor_background")}
       >
         <Buffer
           initialText={pane.queryText()}

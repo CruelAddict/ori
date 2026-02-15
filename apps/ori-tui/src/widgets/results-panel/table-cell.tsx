@@ -15,6 +15,7 @@ export type TableCellOptions = BoxOptions & {
   value?: string
   display?: string
   fg?: string
+  defaultFg?: string
   attributes?: number
   align?: "left" | "right"
   selectionBg?: string
@@ -29,6 +30,7 @@ export class TableCellRenderable extends BoxRenderable {
   private valueText = ""
   private displayText = ""
   private textColor: RGBA | undefined
+  private fallbackTextColor: RGBA | undefined
   private textAttributes: number | undefined
   private alignment: "left" | "right" = "left"
   private paddingLeftValue = 0
@@ -41,6 +43,7 @@ export class TableCellRenderable extends BoxRenderable {
       value,
       display,
       fg,
+      defaultFg,
       attributes,
       align,
       selectionBg,
@@ -54,6 +57,7 @@ export class TableCellRenderable extends BoxRenderable {
     super(ctx, { ...renderableOptions, height, minHeight } as BoxOptions)
     this.value = value ?? ""
     this.display = display
+    this.defaultFg = defaultFg
     this.fg = fg
     this.attributes = attributes
     this.align = align
@@ -79,6 +83,13 @@ export class TableCellRenderable extends BoxRenderable {
     const next = value ? parseColor(value) : undefined
     if (this.textColor === next) return
     this.textColor = next
+    this.requestRender()
+  }
+
+  set defaultFg(value: string | undefined) {
+    const next = value ? parseColor(value) : undefined
+    if (this.fallbackTextColor === next) return
+    this.fallbackTextColor = next
     this.requestRender()
   }
 
@@ -208,14 +219,10 @@ export class TableCellRenderable extends BoxRenderable {
     const visibleText = clippedLeft.length > maxVisible ? clippedLeft.slice(0, maxVisible) : clippedLeft
     if (visibleText.length === 0) return
 
-    buffer.drawText(
-      visibleText,
-      drawX,
-      this.y,
-      this.textColor ?? parseColor("#ffffff"),
-      backgroundColor,
-      this.textAttributes,
-    )
+    const textColor = this.textColor ?? this.fallbackTextColor
+    if (!textColor) return
+
+    buffer.drawText(visibleText, drawX, this.y, textColor, backgroundColor, this.textAttributes)
   }
 }
 

@@ -22,7 +22,6 @@ type TreePaneRowProps = {
 export function TreePaneRow(props: TreePaneRowProps) {
   const registerRowNode = useTreeScrollRegistration()
   const { theme } = useTheme()
-  const palette = theme
 
   const entity = createMemo(() => props.pane.controller.getEntity(props.nodeId))
   const childIds = createMemo(() => props.pane.controller.getRenderableChildIds(props.nodeId))
@@ -36,11 +35,11 @@ export function TreePaneRow(props: TreePaneRowProps) {
     if (isExpanded()) setChildrenMounted(true)
   })
 
-  const fg = () => (isSelected() && props.isFocused() ? palette().background : palette().text)
+  const fg = () => (isSelected() && props.isFocused() ? theme().get("selection_foreground") : theme().get("text"))
   const bg = () => {
-    if (isSelected() && props.isFocused()) return palette().primary
-    if (hovered()) return palette().backgroundElement
-    return palette().backgroundPanel
+    if (isSelected() && props.isFocused()) return theme().get("selection_background")
+    if (hovered()) return theme().get("element_background")
+    return theme().get("panel_background")
   }
 
   const handleMouseDown = (event: MouseEvent) => {
@@ -68,19 +67,22 @@ export function TreePaneRow(props: TreePaneRowProps) {
 
   const rowSegments = createMemo(() => {
     const parts = rowParts()
+    const isCursorRow = isSelected() && props.isFocused()
     const colors = {
       baseFg: fg(),
       baseBg: bg(),
-      accent: palette().accent,
+      glyph: isCursorRow ? fg() : theme().get("text"),
+      description: isCursorRow ? fg() : theme().get("text_muted"),
+      badge: isCursorRow ? fg() : theme().get("accent"),
     }
     const segments: TreeRowSegment[] = [
-      { text: `${parts.glyph} `, fg: colors.baseFg, bg: colors.baseBg, attributes: TextAttributes.DIM },
+      { text: `${parts.glyph} `, fg: colors.glyph, bg: colors.baseBg, attributes: TextAttributes.DIM },
       { text: parts.main, fg: colors.baseFg, bg: colors.baseBg },
     ]
     if (parts.description) {
       segments.push({
         text: ` ${parts.description}`,
-        fg: colors.baseFg,
+        fg: colors.description,
         bg: colors.baseBg,
         attributes: TextAttributes.DIM,
       })
@@ -89,7 +91,7 @@ export function TreePaneRow(props: TreePaneRowProps) {
       const badges = parts.badges.join(" • ")
       segments.push({
         text: ` ${badges}`,
-        fg: colors.accent,
+        fg: colors.badge,
         bg: colors.baseBg,
       })
     }
@@ -123,6 +125,7 @@ export function TreePaneRow(props: TreePaneRowProps) {
               width={rowWidth()}
               fg={fg()}
               bg={bg()}
+              defaultFg={fg()}
               selectable={false}
             />
           </box>

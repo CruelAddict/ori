@@ -88,7 +88,7 @@ function App() {
     <box
       flexDirection="column"
       flexGrow={1}
-      backgroundColor={palette().backgroundPanel}
+      backgroundColor={palette().get("app_background")}
       onMouseUp={handleMouseUp}
     >
       <GlobalHotkeys />

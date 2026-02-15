@@ -26,7 +26,6 @@ export type DialogSelectProps<T> = {
 
 export function DialogSelect<T>(props: DialogSelectProps<T>) {
   const { theme } = useTheme()
-  const palette = theme
   const vm = useDialogSelect<T>({
     options: props.options,
     initialFilter: props.initialFilter,
@@ -83,7 +82,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
         paddingRight={1}
         paddingTop={1}
         paddingBottom={1}
-        backgroundColor={palette().backgroundPanel}
+        backgroundColor={theme().get("editor_background")}
       >
         <box
           flexDirection="row"
@@ -92,14 +91,14 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
           paddingRight={2}
         >
           <text
-            fg={palette().text}
+            fg={theme().get("text")}
             attributes={TextAttributes.BOLD}
             wrapMode="none"
           >
             {props.title}
           </text>
           <text
-            fg={palette().textMuted}
+            fg={theme().get("text_muted")}
             paddingTop={1}
           >
             esc
@@ -110,7 +109,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
             paddingLeft={2}
             marginBottom={1}
           >
-            <text fg={palette().textMuted}>{props.description}</text>
+            <text fg={theme().get("text_muted")}>{props.description}</text>
           </box>
         </Show>
         <box
@@ -123,11 +122,11 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
             }}
             value={vm.filter()}
             placeholder={placeholder}
-            cursorColor={palette().primary}
-            textColor={palette().text}
-            focusedTextColor={palette().text}
-            backgroundColor={palette().backgroundPanel}
-            focusedBackgroundColor={palette().backgroundPanel}
+            cursorColor={theme().get("primary")}
+            textColor={theme().get("text")}
+            focusedTextColor={theme().get("text")}
+            backgroundColor={theme().get("editor_background")}
+            focusedBackgroundColor={theme().get("editor_background")}
             onInput={(value) => {
               vm.actions.setFilter(value)
               props.onFilterChange?.(value)
@@ -156,7 +155,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
                         paddingLeft={2}
                       >
                         <text
-                          fg={palette().accent}
+                          fg={theme().get("header")}
                           attributes={TextAttributes.BOLD}
                         >
                           {category}
@@ -167,7 +166,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
                       {(option) => (
                         <OptionRow
                           option={option}
-                          palette={palette}
+                          theme={theme}
                           vm={vm}
                           onSelect={props.onSelect}
                         />
@@ -258,7 +257,7 @@ type ScrollTreeNode = ScrollBoxRenderable & RenderTreeNode
 function OptionRow<T>(props: {
   option: DialogSelectOption<T>
   vm: DialogSelectViewModel<T>
-  palette: ThemeAccessor
+  theme: ThemeAccessor
   onSelect?: (option: DialogSelectOption<T>) => void
 }) {
   const option = props.option
@@ -268,12 +267,12 @@ function OptionRow<T>(props: {
 
   const fgColor = () => {
     if (isCursor()) {
-      return props.palette().background
+      return props.theme().get("selection_foreground")
     }
     if (isActiveOption()) {
-      return props.palette().primary
+      return props.theme().get("primary")
     }
-    return props.palette().text
+    return props.theme().get("text")
   }
 
   return (
@@ -282,7 +281,7 @@ function OptionRow<T>(props: {
       flexDirection="row"
       paddingLeft={2}
       paddingRight={2}
-      backgroundColor={isCursor() ? props.palette().primary : undefined}
+      backgroundColor={isCursor() ? props.theme().get("selection_background") : undefined}
       gap={1}
     >
       <text
@@ -297,7 +296,11 @@ function OptionRow<T>(props: {
           keyed
         >
           {(description: string) => (
-            <span style={{ fg: isCursor() ? props.palette().background : props.palette().textMuted }}>
+            <span
+              style={{
+                fg: isCursor() ? props.theme().get("selection_foreground") : props.theme().get("text_muted"),
+              }}
+            >
               {" "}
               {truncate(description, 60)}
             </span>
@@ -306,7 +309,7 @@ function OptionRow<T>(props: {
       </text>
       <Show when={option.badge}>
         <text
-          fg={isCursor() ? props.palette().background : props.palette().textMuted}
+          fg={isCursor() ? props.theme().get("selection_foreground") : props.theme().get("text_muted")}
           attributes={TextAttributes.BOLD}
         >
           {option.badge}
@@ -320,7 +323,7 @@ function EmptyState(props: { message: string }) {
   const { theme } = useTheme()
   return (
     <box paddingLeft={2}>
-      <text fg={theme().textMuted}>{props.message}</text>
+      <text fg={theme().get("text_muted")}>{props.message}</text>
     </box>
   )
 }

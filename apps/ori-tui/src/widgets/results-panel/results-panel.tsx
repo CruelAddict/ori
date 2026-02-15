@@ -128,7 +128,7 @@ export function ResultsPanel(props: ResultsPanelProps) {
   const hasResultData = () => hasResults() && job()?.result
   const isActive = () => pane.isFocused()
   const hasSelection = () => selectionCount() > 0
-  const cursorCellBackground = createMemo(() => palette().primary)
+  const cursorCellBackground = createMemo(() => palette().get("primary"))
 
   const handleHeaderSelectionChange = (colIndex: number, selected: boolean) => {
     if (selected) {
@@ -194,7 +194,8 @@ export function ResultsPanel(props: ResultsPanelProps) {
     <table_cell
       width={1}
       display="│"
-      fg={props.fg ?? palette().border}
+      fg={props.fg ?? palette().get("border")}
+      defaultFg={palette().get("border")}
       backgroundColor={props.bg}
       attributes={TextAttributes.BOLD}
       selectionBg={props.selectionBg}
@@ -279,7 +280,7 @@ export function ResultsPanel(props: ResultsPanelProps) {
         flexDirection="column"
         flexGrow={1}
         justifyContent="space-between"
-        backgroundColor={palette().backgroundPanel}
+        backgroundColor={palette().get("panel_background")}
         marginTop={1}
         gap={0}
         minHeight={18}
@@ -287,20 +288,20 @@ export function ResultsPanel(props: ResultsPanelProps) {
         <Show when={!job()}>
           <text
             attributes={TextAttributes.DIM}
-            fg={palette().textMuted}
+            fg={palette().get("text_muted")}
           >
             No query executed yet
           </text>
         </Show>
 
         <Show when={job()?.status === "running"}>
-          <text fg={palette().text}>Query is running... (Ctrl+G to cancel)</text>
+          <text fg={palette().get("text")}>Query is running... (Ctrl+G to cancel)</text>
         </Show>
 
         <Show when={job()?.status === "failed"}>
           <box flexDirection="column">
-            <text fg={palette().error}>Query failed:</text>
-            <text fg={palette().error}>{job()?.error || job()?.message || "Unknown error"}</text>
+            <text fg={palette().get("error")}>Query failed:</text>
+            <text fg={palette().get("error")}>{job()?.error || job()?.message || "Unknown error"}</text>
           </box>
         </Show>
 
@@ -316,31 +317,32 @@ export function ResultsPanel(props: ResultsPanelProps) {
               <box
                 flexDirection="row"
                 marginLeft={-scrollLeft()}
-                backgroundColor={palette().resultsHeaderBackground}
+                backgroundColor={palette().get("results_header_background")}
               >
                 <SeparatorCell
-                  fg={palette().border}
-                  bg={palette().resultsHeaderBackground}
-                  selectionBg={palette().backgroundElement}
+                  fg={palette().get("border")}
+                  bg={palette().get("results_header_background")}
+                  selectionBg={palette().get("results_selection_background")}
                 />
                 <For each={resultColumns()}>
                   {(column, index) => (
                     <>
                       {index() > 0 && (
                         <SeparatorCell
-                          fg={palette().border}
-                          bg={palette().resultsHeaderBackground}
-                          selectionBg={palette().backgroundElement}
+                          fg={palette().get("border")}
+                          bg={palette().get("results_header_background")}
+                          selectionBg={palette().get("results_selection_background")}
                         />
                       )}
 
                       <table_cell
                         width={columnWidths()[index()] + 2}
                         display={formatCell(column.name, columnWidths()[index()])}
-                        backgroundColor={palette().resultsHeaderBackground}
-                        fg={palette().accent}
+                        backgroundColor={palette().get("results_header_background")}
+                        fg={palette().get("results_column_title")}
+                        defaultFg={palette().get("results_column_title")}
                         attributes={TextAttributes.BOLD}
-                        selectionBg={palette().backgroundElement}
+                        selectionBg={palette().get("results_selection_background")}
                         value={String(column.name)}
                         onSelectionChange={(selected: boolean) => handleHeaderSelectionChange(index(), selected)}
                       />
@@ -348,9 +350,9 @@ export function ResultsPanel(props: ResultsPanelProps) {
                   )}
                 </For>
                 <SeparatorCell
-                  fg={palette().border}
-                  bg={palette().resultsHeaderBackground}
-                  selectionBg={palette().backgroundElement}
+                  fg={palette().get("border")}
+                  bg={palette().get("results_header_background")}
+                  selectionBg={palette().get("results_selection_background")}
                 />
               </box>
             </box>
@@ -375,14 +377,14 @@ export function ResultsPanel(props: ResultsPanelProps) {
               scrollY={true}
               horizontalScrollbarOptions={{
                 trackOptions: {
-                  foregroundColor: theme().text,
-                  backgroundColor: theme().backgroundPanel,
+                  foregroundColor: theme().get("scrollbar_foreground"),
+                  backgroundColor: theme().get("scrollbar_background"),
                 },
               }}
               verticalScrollbarOptions={{
                 trackOptions: {
-                  foregroundColor: theme().text,
-                  backgroundColor: theme().backgroundPanel,
+                  foregroundColor: theme().get("scrollbar_foreground"),
+                  backgroundColor: theme().get("scrollbar_background"),
                 },
               }}
               marginBottom={1}
@@ -398,7 +400,9 @@ export function ResultsPanel(props: ResultsPanelProps) {
                 <For each={resultRows()}>
                   {(row, rowIndex) => {
                     const rowBackground = () =>
-                      rowIndex() % 2 === 0 ? palette().backgroundPanel : palette().resultsRowAltBackground
+                      rowIndex() % 2 === 0
+                        ? palette().get("panel_background")
+                        : palette().get("results_row_alt_background")
                     return (
                       <box
                         flexDirection="row"
@@ -425,8 +429,8 @@ export function ResultsPanel(props: ResultsPanelProps) {
                               <>
                                 <SeparatorCell
                                   bg={isCursor() || isCursorOnLeftCell() ? cursorBackground() : undefined}
-                                  fg={isCursor() || isCursorOnLeftCell() ? cursorBackground() : palette().border}
-                                  selectionBg={palette().backgroundElement}
+                                  fg={isCursor() || isCursorOnLeftCell() ? cursorBackground() : palette().get("border")}
+                                  selectionBg={palette().get("results_selection_background")}
                                 />
                                 <table_cell
                                   backgroundColor={isCursor() ? cursorBackground() : undefined}
@@ -436,10 +440,15 @@ export function ResultsPanel(props: ResultsPanelProps) {
                                   onMouseDown={(event: MouseEvent) =>
                                     handleCellMouseDown(rowIndex(), colIndex(), event)
                                   }
-                                  selectionBg={palette().backgroundElement}
+                                  selectionBg={palette().get("results_selection_background")}
                                   value={String(cell)}
                                   display={formatCell(cell, columnWidths()[colIndex()])}
-                                  fg={isCursor() && !hasSelection() ? palette().background : palette().text}
+                                  fg={
+                                    isCursor() && !hasSelection()
+                                      ? palette().get("selection_foreground")
+                                      : palette().get("text")
+                                  }
+                                  defaultFg={palette().get("text")}
                                   onSelectionChange={(selected: boolean) =>
                                     handleRowSelectionChange(rowIndex(), colIndex(), selected)
                                   }
@@ -447,8 +456,8 @@ export function ResultsPanel(props: ResultsPanelProps) {
                                 {colIndex() === row.length - 1 && (
                                   <SeparatorCell
                                     bg={isCursor() ? cursorBackground() : undefined}
-                                    fg={isCursor() ? cursorBackground() : palette().border}
-                                    selectionBg={palette().backgroundElement}
+                                    fg={isCursor() ? cursorBackground() : palette().get("border")}
+                                    selectionBg={palette().get("results_selection_background")}
                                   />
                                 )}
                               </>

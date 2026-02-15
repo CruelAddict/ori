@@ -1,5 +1,6 @@
 import { dirname, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
+import type { HighlightGroup, Theme } from "@app/theme"
 import { addDefaultParsers, getTreeSitterClient, RGBA, SyntaxStyle } from "@opentui/core"
 import type { Logger } from "pino"
 import { type Accessor, createEffect, createSignal, onCleanup } from "solid-js"
@@ -18,23 +19,33 @@ export type SyntaxHighlightResult = {
   spans: SyntaxHighlightSpan[]
 }
 
-type SyntaxPalette = {
-  primary: string
-  accent: string
-  info: string
-  textMuted: string
-  text: string
-  secondary: string
-}
+const SYNTAX_HIGHLIGHT_GROUPS = [
+  "syntax_keyword",
+  "syntax_keyword_operator",
+  "syntax_string",
+  "syntax_number",
+  "syntax_float",
+  "syntax_boolean",
+  "syntax_comment",
+  "syntax_identifier",
+  "syntax_function_call",
+  "syntax_variable",
+  "syntax_field",
+  "syntax_parameter",
+  "syntax_attribute",
+  "syntax_storageclass",
+  "syntax_conditional",
+  "syntax_type",
+  "syntax_type_qualifier",
+  "syntax_type_builtin",
+  "syntax_operator",
+  "syntax_punctuation_bracket",
+  "syntax_punctuation_delimiter",
+] as const satisfies readonly HighlightGroup[]
 
-type StyleIds = {
-  keyword: number
-  string: number
-  number: number
-  comment: number
-  identifier: number
-  operator: number
-}
+type SyntaxHighlightGroup = (typeof SYNTAX_HIGHLIGHT_GROUPS)[number]
+
+type StyleIds = Record<SyntaxHighlightGroup, number>
 
 type SyntaxStyleBundle = {
   syntaxStyle: SyntaxStyle
@@ -83,54 +94,64 @@ async function ensureSqlRegistered(logger?: Logger) {
   return registerPromise
 }
 
-function buildSyntaxStyle(palette: SyntaxPalette): SyntaxStyleBundle {
+function buildSyntaxStyle(theme: Theme): SyntaxStyleBundle {
   const syntaxStyle = SyntaxStyle.create()
-  syntaxStyle.registerStyle("syntax.keyword", { fg: RGBA.fromHex(palette.primary) })
-  syntaxStyle.registerStyle("syntax.string", { fg: RGBA.fromHex(palette.accent) })
-  syntaxStyle.registerStyle("syntax.number", { fg: RGBA.fromHex(palette.info) })
-  syntaxStyle.registerStyle("syntax.comment", { fg: RGBA.fromHex(palette.textMuted) })
-  syntaxStyle.registerStyle("syntax.identifier", { fg: RGBA.fromHex(palette.text) })
-  syntaxStyle.registerStyle("syntax.operator", { fg: RGBA.fromHex(palette.secondary) })
+  const styleIds = {} as StyleIds
+
+  for (const group of SYNTAX_HIGHLIGHT_GROUPS) {
+    const styleKey = `syntax.${group}`
+    syntaxStyle.registerStyle(styleKey, { fg: RGBA.fromHex(theme.get(group)) })
+    styleIds[group] = syntaxStyle.getStyleId(styleKey) ?? 0
+  }
 
   return {
     syntaxStyle,
-    styleIds: {
-      keyword: syntaxStyle.getStyleId("syntax.keyword") ?? 0,
-      string: syntaxStyle.getStyleId("syntax.string") ?? 0,
-      number: syntaxStyle.getStyleId("syntax.number") ?? 0,
-      comment: syntaxStyle.getStyleId("syntax.comment") ?? 0,
-      identifier: syntaxStyle.getStyleId("syntax.identifier") ?? 0,
-      operator: syntaxStyle.getStyleId("syntax.operator") ?? 0,
-    },
+    styleIds,
   }
 }
 
 function mapGroupToStyleId(group: string, styleIds: StyleIds): number | null {
   switch (group) {
     case "keyword":
+      return styleIds.syntax_keyword
     case "keyword.operator":
-      return styleIds.keyword
+      return styleIds.syntax_keyword_operator
     case "string":
-      return styleIds.string
+      return styleIds.syntax_string
     case "comment":
-      return styleIds.comment
+      return styleIds.syntax_comment
     case "number":
+      return styleIds.syntax_number
     case "float":
+      return styleIds.syntax_float
     case "boolean":
-      return styleIds.number
+      return styleIds.syntax_boolean
     case "operator":
-      return styleIds.operator
+      return styleIds.syntax_operator
     case "function.call":
+      return styleIds.syntax_function_call
     case "variable":
+      return styleIds.syntax_variable
     case "field":
+      return styleIds.syntax_field
     case "parameter":
+      return styleIds.syntax_parameter
     case "attribute":
+      return styleIds.syntax_attribute
     case "storageclass":
+      return styleIds.syntax_storageclass
     case "conditional":
+      return styleIds.syntax_conditional
     case "type":
+      return styleIds.syntax_type
     case "type.qualifier":
+      return styleIds.syntax_type_qualifier
     case "type.builtin":
-      return styleIds.identifier
+      return styleIds.syntax_type_builtin
+    case "punctuation.bracket":
+      return styleIds.syntax_punctuation_bracket
+    case "punctuation.delimiter":
+      return styleIds.syntax_punctuation_delimiter
     default:
       return null
   }
@@ -180,7 +201,7 @@ async function collectHighlightsByLanguage(
   return []
 }
 
-export function syntaxHighlighter(params: { theme: Accessor<SyntaxPalette>; language: string; logger?: Logger }) {
+export function syntaxHighlighter(params: { theme: Accessor<Theme>; language: string; logger?: Logger }) {
   const { theme, language, logger } = params
   let disposed = false
   let currentStyle = buildSyntaxStyle(theme())

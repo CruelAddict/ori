@@ -9,7 +9,7 @@ export function OverlayHost() {
   const { theme } = useTheme()
   const entries = () => overlays.overlays()
   const hasOverlays = () => entries().length > 0
-  const scrimColor = createMemo(() => withAlpha(theme().background, 0.68))
+  const scrimColor = createMemo(() => withAlpha(theme().get("overlay_scrim_base"), 0.68))
 
   return (
     <Show when={hasOverlays()}>

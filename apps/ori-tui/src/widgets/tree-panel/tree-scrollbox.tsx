@@ -1,10 +1,10 @@
+import { useTheme } from "@app/providers/theme"
 import type { BoxRenderable, MouseEvent, ScrollBoxRenderable } from "@opentui/core"
 import { enforceHorizontalScrollbarMinThumbWidth } from "@shared/lib/opentui-scrollbar-min-width"
 import { createScrollSpeedHandler } from "@shared/lib/scroll-speed"
 import { type Accessor, createContext, createEffect, onCleanup, type ParentProps, useContext } from "solid-js"
 import { createAutoscrollService } from "./tree-scroll/autoscroll-service.ts"
 import type { ScrollDelta } from "./tree-scroll/types.ts"
-import { useTheme } from "@app/providers/theme.tsx"
 
 type TreeScrollboxContextValue = {
   registerRowNode: (rowId: string, node: BoxRenderable | undefined) => void
@@ -51,6 +51,7 @@ interface TreeScrollboxProps extends ParentProps {
 
 export function TreeScrollbox(props: TreeScrollboxProps) {
   let scrollBox: ScrollBoxRenderable | undefined
+  const { theme } = useTheme()
 
   const autoscroll = useTreeAutoscroll(props.rows, props.selectedRowId)
 
@@ -88,18 +89,18 @@ export function TreeScrollbox(props: TreeScrollboxProps) {
         width: "auto",
         minHeight: "100%",
         flexGrow: 1,
-        flexShrink: 0
+        flexShrink: 0,
       }}
       horizontalScrollbarOptions={{
         trackOptions: {
-          foregroundColor: useTheme().theme().text,
-          backgroundColor: useTheme().theme().backgroundPanel,
+          foregroundColor: theme().get("scrollbar_foreground"),
+          backgroundColor: theme().get("scrollbar_background"),
         },
       }}
       verticalScrollbarOptions={{
         trackOptions: {
-          foregroundColor: useTheme().theme().text,
-          backgroundColor: useTheme().theme().backgroundPanel,
+          foregroundColor: theme().get("scrollbar_foreground"),
+          backgroundColor: theme().get("scrollbar_background"),
         },
       }}
     >

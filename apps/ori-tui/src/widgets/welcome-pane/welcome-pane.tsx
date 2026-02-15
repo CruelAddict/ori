@@ -1,5 +1,5 @@
 import { useTheme } from "@app/providers/theme"
-import { RGBA, TextAttributes } from "@opentui/core"
+import { TextAttributes } from "@opentui/core"
 import { For } from "solid-js"
 
 type CommandRowProps = {
@@ -30,12 +30,12 @@ export function WelcomePane() {
         <ascii_font
           text="ORI"
           font="tiny"
-          color={palette().text}
+          color={palette().get("text")}
         />
         <text
           attributes={TextAttributes.DIM}
           marginLeft={2}
-          fg={palette().text}
+          fg={palette().get("text")}
         >
           v0.0.1
         </text>
@@ -66,8 +66,8 @@ function CommandRow(props: CommandRowProps) {
       width="100%"
       paddingBottom={1}
     >
-      <text fg={palette().text}>{props.label}</text>
-      <text fg={palette().accent}>{props.shortcut}</text>
+      <text fg={palette().get("text")}>{props.label}</text>
+      <text fg={palette().get("accent")}>{props.shortcut}</text>
     </box>
   )
 }

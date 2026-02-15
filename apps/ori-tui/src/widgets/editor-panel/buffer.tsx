@@ -1,6 +1,6 @@
 import { useLogger } from "@app/providers/logger"
 import { useTheme } from "@app/providers/theme"
-import { type BoxRenderable, KeyEvent, MouseEvent, ScrollBoxRenderable, TextareaRenderable } from "@opentui/core"
+import type { BoxRenderable, KeyEvent, MouseEvent, ScrollBoxRenderable, TextareaRenderable } from "@opentui/core"
 import { type KeyBinding, KeyScope } from "@src/core/services/key-scopes"
 import { type Accessor, createEffect, For, on, onCleanup, onMount, Show, untrack } from "solid-js"
 import { syntaxHighlighter } from "../../features/syntax-highlighting/syntax-highlighter"
@@ -291,7 +291,9 @@ export function Buffer(props: BufferProps) {
   )
 
   const lineBg = (row: number) => {
-    return props.isFocused() && bufferModel.focusedRow() === row ? palette().editorBackgroundFocused : undefined
+    return props.isFocused() && bufferModel.focusedRow() === row
+      ? palette().get("editor_active_line_background")
+      : undefined
   }
 
   return (
@@ -309,7 +311,7 @@ export function Buffer(props: BufferProps) {
       >
         <box
           flexDirection="column"
-          backgroundColor={palette().editorBackground}
+          backgroundColor={palette().get("editor_background")}
           flexGrow={1}
         >
           <box
@@ -348,7 +350,7 @@ export function Buffer(props: BufferProps) {
                     >
                       <text
                         maxHeight={1}
-                        fg={palette().textMuted}
+                        fg={palette().get("text_muted")}
                         bg={lineBg(indexAccessor())}
                       >
                         {(() => {
@@ -367,7 +369,7 @@ export function Buffer(props: BufferProps) {
                       </text>
                       <text
                         maxHeight={1}
-                        fg={palette().textMuted}
+                        fg={palette().get("text_muted")}
                         bg={lineBg(indexAccessor())}
                       >
                         {indexAccessor() + 1}
@@ -384,9 +386,9 @@ export function Buffer(props: BufferProps) {
                         }
                         bufferModel.setLineRef(lineValue.id, renderable)
                       }}
-                      textColor={palette().editorText}
-                      focusedTextColor={palette().editorText}
-                      cursorColor={palette().primary}
+                      textColor={palette().get("editor_text")}
+                      focusedTextColor={palette().get("editor_text")}
+                      cursorColor={palette().get("editor_cursor")}
                       syntaxStyle={highlighter.highlightResult().syntaxStyle}
                       selectable={true}
                       keyBindings={[]}
@@ -415,7 +417,7 @@ export function Buffer(props: BufferProps) {
               }}
             </For>
             <Show when={bufferModel.lines().length === 0}>
-              <text fg={palette().editorText}> </text>
+              <text fg={palette().get("editor_text")}> </text>
             </Show>
           </box>
         </box>

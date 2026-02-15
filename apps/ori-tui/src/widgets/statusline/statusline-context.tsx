@@ -66,8 +66,8 @@ export function StatuslineProvider(props: StatuslineProviderProps) {
         flexDirection="row"
         maxHeight={1}
       >
-        <text fg={palette.success}>• </text>
-        <text fg={palette.text}>{props.configurationName}</text>
+        <text fg={palette.get("success")}>• </text>
+        <text fg={palette.get("text")}>{props.configurationName}</text>
       </box>,
     ]
 
@@ -76,8 +76,8 @@ export function StatuslineProvider(props: StatuslineProviderProps) {
       const { dirPath, fileName } = formatFilePath(pathValue)
       left[1] = (
         <box flexDirection="row">
-          <text fg={palette.textMuted}>{dirPath}</text>
-          <text fg={palette.text}>{fileName}</text>
+          <text fg={palette.get("text_muted")}>{dirPath}</text>
+          <text fg={palette.get("text")}>{fileName}</text>
         </box>
       )
     }
@@ -87,26 +87,26 @@ export function StatuslineProvider(props: StatuslineProviderProps) {
         flexDirection="row"
         maxHeight={1}
       >
-        <text fg={palette.text}>ctr+x + h/j/k/l </text>
+        <text fg={palette.get("text")}>ctr+x + h/j/k/l </text>
         <text
-          fg={palette.textMuted}
+          fg={palette.get("text_muted")}
           marginRight={2}
         >
           navigate panes
         </text>
-        <text fg={palette.text}>ctr+p </text>
-        <text fg={palette.textMuted}>commands</text>
+        <text fg={palette.get("text")}>ctr+p </text>
+        <text fg={palette.get("text_muted")}>commands</text>
       </box>,
     ]
 
     const colorByLevel = (level: NotificationLevel): string => {
       switch (level) {
         case "error":
-          return palette.error
+          return palette.get("error")
         case "success":
-          return palette.success
+          return palette.get("success")
         default:
-          return palette.textMuted
+          return palette.get("text_muted")
       }
     }
 
@@ -115,7 +115,7 @@ export function StatuslineProvider(props: StatuslineProviderProps) {
       right.push(
         <>
           <text fg={colorByLevel(notification.style.level)}>• </text>
-          <text fg={palette.textMuted}>{notification.message}</text>
+          <text fg={palette.get("text_muted")}>{notification.message}</text>
         </>,
       )
     }
