@@ -21,7 +21,7 @@ export type ResourceIntrospectionStore = {
   getError(resourceName: string): string | null
   start(resourceName: string): void
   setRoots(resourceName: string, rootIds: string[]): void
-  upsertNode(resourceName: string, node: Node): void
+  upsertNodes(resourceName: string, nodes: Node[]): void
   succeed(resourceName: string): void
   fail(resourceName: string, message: string): void
 }
@@ -33,12 +33,12 @@ export function createResourceIntrospectionStore(): ResourceIntrospectionStore {
 
   const getEntry = (resourceName: string) => state.entriesByResource[resourceName]
 
-  const setEntry = (resourceName: string, recipe: (entry: ResourceGraphEntry) => ResourceGraphEntry) => {
-    setState("entriesByResource", resourceName, (current) => recipe(current ?? createEmptyEntry()))
-  }
-
-  const ensureEntry = (resourceName: string) => {
-    setState("entriesByResource", resourceName, (current) => current ?? createEmptyEntry())
+  const requireEntry = (resourceName: string): ResourceGraphEntry => {
+    const entry = getEntry(resourceName)
+    if (entry) {
+      return entry
+    }
+    throw new Error(`resource introspection entry is missing for ${resourceName}`)
   }
 
   const getNodesById = (resourceName: string) => getEntry(resourceName)?.nodesById ?? {}
@@ -48,42 +48,48 @@ export function createResourceIntrospectionStore(): ResourceIntrospectionStore {
   const getError = (resourceName: string) => getEntry(resourceName)?.error ?? null
 
   const start = (resourceName: string) => {
-    setEntry(resourceName, (current) => ({
-      ...current,
+    setState("entriesByResource", resourceName, {
       nodesById: {},
       rootIds: [],
       loading: true,
       loaded: false,
       error: null,
-    }))
+    })
   }
 
   const setRoots = (resourceName: string, rootIds: string[]) => {
-    ensureEntry(resourceName)
+    requireEntry(resourceName)
     setState("entriesByResource", resourceName, "rootIds", [...rootIds])
   }
 
-  const upsertNode = (resourceName: string, node: Node) => {
-    ensureEntry(resourceName)
-    setState("entriesByResource", resourceName, "nodesById", node.id, node)
+  const upsertNodes = (resourceName: string, nodes: Node[]) => {
+    if (nodes.length === 0) return
+    const entry = requireEntry(resourceName)
+    const next = { ...entry.nodesById }
+    for (const node of nodes) {
+      next[node.id] = node
+    }
+    setState("entriesByResource", resourceName, "nodesById", next)
   }
 
   const succeed = (resourceName: string) => {
-    setEntry(resourceName, (current) => ({
-      ...current,
+    const entry = requireEntry(resourceName)
+    setState("entriesByResource", resourceName, {
+      ...entry,
       loading: false,
       loaded: true,
       error: null,
-    }))
+    })
   }
 
   const fail = (resourceName: string, message: string) => {
-    setEntry(resourceName, (current) => ({
-      ...current,
+    const entry = requireEntry(resourceName)
+    setState("entriesByResource", resourceName, {
+      ...entry,
       loading: false,
       loaded: false,
       error: message,
-    }))
+    })
   }
 
   return {
@@ -94,18 +100,8 @@ export function createResourceIntrospectionStore(): ResourceIntrospectionStore {
     getError,
     start,
     setRoots,
-    upsertNode,
+    upsertNodes,
     succeed,
     fail,
-  }
-}
-
-function createEmptyEntry(): ResourceGraphEntry {
-  return {
-    nodesById: {},
-    rootIds: [],
-    loading: false,
-    loaded: false,
-    error: null,
   }
 }

@@ -10,6 +10,7 @@ const BATCH_SIZE = 16
 
 type GraphIncrementalHandlers = {
   onRoots?: (nodes: Node[], rootIds: string[]) => void
+  onNodes?: (nodes: Node[]) => void
   onNode?: (node: Node) => void
 }
 
@@ -26,6 +27,7 @@ export async function loadGraphIncremental(
   const rootNodes = await client.getNodes(resourceName)
   const rootIds = rootNodes.map((node) => node.id)
   handlers.onRoots?.(rootNodes, rootIds)
+  handlers.onNodes?.(rootNodes)
 
   for (const node of rootNodes) {
     nodes.set(node.id, node)
@@ -45,6 +47,7 @@ export async function loadGraphIncremental(
         "resource introspection: fetching node batch",
       )
       const fetched = await client.getNodes(resourceName, batch)
+      handlers.onNodes?.(fetched)
       for (const node of fetched) {
         nodes.set(node.id, node)
         handlers.onNode?.(node)

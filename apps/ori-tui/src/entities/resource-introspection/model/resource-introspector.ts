@@ -101,8 +101,8 @@ function createResourceIntrospector(deps: ResourceIntrospectorDeps): ResourceInt
         onRoots: (_nodes, rootIds) => {
           deps.store.setRoots(deps.resourceName, rootIds)
         },
-        onNode: (node) => {
-          deps.store.upsertNode(deps.resourceName, node)
+        onNodes: (nodes) => {
+          deps.store.upsertNodes(deps.resourceName, nodes)
         },
       },
       deps.logger,
