@@ -1,19 +1,19 @@
 import { useResourceByName } from "@src/entities/resource/model/resource-store"
-import { useEditorPane } from "@src/widgets/editor-panel/model/use-editor-pane"
-import { useResultsPane } from "@src/widgets/results-panel/model/use-results-pane"
-import { useTreePane } from "@src/widgets/tree-panel/model/use-tree-pane"
+import { createEditorPaneModel } from "@src/widgets/editor-panel/model/create-editor-pane-model"
+import { createResultsPaneModel } from "@src/widgets/results-panel/model/create-results-pane-model"
+import { createTreePaneModel } from "@src/widgets/tree-panel/model/create-tree-pane-model"
 import type { Accessor } from "solid-js"
 import { createEffect, createMemo, createSignal } from "solid-js"
 
 export type Pane = "tree" | "editor" | "results"
 
-export type UseResourceWorkspaceOptions = {
+export type CreateResourcePageModelOptions = {
   resourceName: Accessor<string>
 }
 
 const DEFAULT_PANE: Pane = "tree"
 
-export function useResourceWorkspace(options: UseResourceWorkspaceOptions) {
+export function createResourcePageModel(options: CreateResourcePageModelOptions) {
   const resource = useResourceByName(options.resourceName)
   const title = createMemo(() => resource()?.name ?? options.resourceName())
   const [focusedPane, setFocusedPane] = createSignal<Pane | null>(DEFAULT_PANE)
@@ -85,18 +85,18 @@ export function useResourceWorkspace(options: UseResourceWorkspaceOptions) {
     focusSelf: () => tryFocusPane(pane),
   })
 
-  const treePane = useTreePane({
+  const treePane = createTreePaneModel({
     resourceName: options.resourceName,
     ...paneFocusFuncs("tree"),
   })
 
-  const editorPane = useEditorPane({
+  const editorPane = createEditorPaneModel({
     resourceName: options.resourceName,
     ...paneFocusFuncs("editor"),
     unfocus: focusPreviousVisiblePane,
   })
 
-  const resultsPane = useResultsPane({
+  const resultsPane = createResultsPaneModel({
     job: editorPane.currentJob,
     ...paneFocusFuncs("results"),
   })

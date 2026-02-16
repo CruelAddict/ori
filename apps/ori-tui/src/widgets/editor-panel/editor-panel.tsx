@@ -3,7 +3,7 @@ import { type KeyBinding, KeyScope } from "@src/core/services/key-scopes"
 import { useStatusline } from "@src/widgets/statusline/statusline-context"
 import { onMount } from "solid-js"
 import { Buffer } from "./buffer"
-import type { EditorPaneViewModel } from "./model/use-editor-pane"
+import type { EditorPaneViewModel } from "./model/create-editor-pane-model"
 
 export type EditorPanelProps = {
   viewModel: EditorPaneViewModel

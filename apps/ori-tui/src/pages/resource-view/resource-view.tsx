@@ -1,6 +1,6 @@
 import { useTheme } from "@app/providers/theme"
 import { type KeyBinding, KeyScope } from "@src/core/services/key-scopes"
-import { useResourceWorkspace } from "@src/pages/resource-view/model/use-resource-workspace"
+import { createResourcePageModel } from "@src/pages/resource-view/model/create-resource-page-model"
 import { EditorPanel } from "@src/widgets/editor-panel/editor-panel"
 import { ResultsPanel } from "@src/widgets/results-panel/results-panel"
 import { Statusline, StatuslineProvider } from "@src/widgets/statusline/statusline"
@@ -14,7 +14,7 @@ export type ResourceViewPageProps = {
 }
 
 export function ResourceViewPage(props: ResourceViewPageProps) {
-  const vm = useResourceWorkspace({
+  const vm = createResourcePageModel({
     resourceName: () => props.resourceName,
   })
   const { theme } = useTheme()

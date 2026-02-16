@@ -17,14 +17,14 @@ export type EditorPaneViewModel = {
   unfocus: () => void
 }
 
-type UseEditorPaneOptions = {
+type CreateEditorPaneModelOptions = {
   resourceName: Accessor<string>
   isFocused: Accessor<boolean>
   focusSelf: () => void
   unfocus: () => void
 }
 
-export function useEditorPane(options: UseEditorPaneOptions): EditorPaneViewModel {
+export function createEditorPaneModel(options: CreateEditorPaneModelOptions): EditorPaneViewModel {
   const query = useQuery()
 
   const queryText = createMemo(() => query.getQueryText(options.resourceName()))

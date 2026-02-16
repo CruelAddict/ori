@@ -135,7 +135,7 @@ function buildTriggerActionRules(attrs: TriggerNode["attributes"]): string | und
   return rules.join(", ")
 }
 
-export function useTreePaneGraph(nodesById: Accessor<Record<string, Node>>, rootIds: Accessor<string[]>) {
+export function createTreePaneGraph(nodesById: Accessor<Record<string, Node>>, rootIds: Accessor<string[]>) {
   const [entitiesById, setEntitiesById] = createStore<Record<string, TreePaneNode>>({})
   const processedNodeIds = new Set<string>()
   const edgeIdsByChildId = new Map<string, Set<string>>()

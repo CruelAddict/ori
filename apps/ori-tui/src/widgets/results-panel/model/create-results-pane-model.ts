@@ -7,13 +7,13 @@ export type ResultsPaneViewModel = {
   job: Accessor<QueryJob | undefined>
 }
 
-type UseResultsPaneOptions = {
+type CreateResultsPaneModelOptions = {
   job: Accessor<QueryJob | undefined>
   isFocused: Accessor<boolean>
   focusSelf: () => void
 }
 
-export function useResultsPane(options: UseResultsPaneOptions): ResultsPaneViewModel {
+export function createResultsPaneModel(options: CreateResultsPaneModelOptions): ResultsPaneViewModel {
   return {
     isFocused: options.isFocused,
     focusSelf: options.focusSelf,

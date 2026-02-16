@@ -12,7 +12,7 @@ import { enforceHorizontalScrollbarMinThumbWidth } from "@shared/lib/opentui-scr
 import { createScrollSpeedHandler } from "@shared/lib/scroll-speed"
 import { type KeyBinding, KeyScope } from "@src/core/services/key-scopes"
 import { createEffect, createMemo, createSignal, For, onCleanup, Show } from "solid-js"
-import type { ResultsPaneViewModel } from "./model/use-results-pane"
+import type { ResultsPaneViewModel } from "./model/create-results-pane-model"
 
 export type ResultsPanelProps = {
   viewModel: ResultsPaneViewModel

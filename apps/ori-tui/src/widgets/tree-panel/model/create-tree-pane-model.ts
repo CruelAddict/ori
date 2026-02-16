@@ -2,10 +2,10 @@ import { useResourceIntrospection } from "@entities/resource-introspection/model
 import { type Node, NodeType } from "@shared/lib/resources-client"
 import type { Accessor } from "solid-js"
 import { createEffect, createMemo } from "solid-js"
-import { useTreePaneGraph } from "./tree-pane-graph"
+import { createTreePaneGraph } from "./tree-pane-graph"
 
 export type TreePaneViewModel = {
-  controller: ReturnType<typeof useTreePaneGraph>
+  controller: ReturnType<typeof createTreePaneGraph>
   isFocused: Accessor<boolean>
   loading: Accessor<boolean>
   error: Accessor<string | null>
@@ -13,13 +13,13 @@ export type TreePaneViewModel = {
   refreshGraph: () => Promise<void>
 }
 
-type UseTreePaneOptions = {
+type CreateTreePaneModelOptions = {
   resourceName: Accessor<string>
   isFocused: Accessor<boolean>
   focusSelf: () => void
 }
 
-export function useTreePane(options: UseTreePaneOptions): TreePaneViewModel {
+export function createTreePaneModel(options: CreateTreePaneModelOptions): TreePaneViewModel {
   const introspection = useResourceIntrospection()
 
   createEffect(() => {
@@ -36,7 +36,7 @@ export function useTreePane(options: UseTreePaneOptions): TreePaneViewModel {
   const loading = createMemo(() => introspection.isLoading(options.resourceName()))
   const error = createMemo(() => introspection.getError(options.resourceName()))
 
-  const controller = useTreePaneGraph(nodesById, rootIds)
+  const controller = createTreePaneGraph(nodesById, rootIds)
 
   const refreshGraph = async () => {
     await introspection.refresh(options.resourceName())
