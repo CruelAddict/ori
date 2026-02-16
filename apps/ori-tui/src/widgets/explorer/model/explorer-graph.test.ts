@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { type Node, type NodeEdge, NodeType } from "@shared/lib/resources-client"
-import { convertSnapshotNodeEntities } from "./tree-pane-graph"
-import type { TreePaneNode } from "./tree-pane-node"
+import { convertSnapshotNodeEntities } from "./explorer-graph"
+import type { ExplorerNode } from "./explorer-node"
 
 type NodeOverrides = {
   id: string
@@ -137,7 +137,7 @@ const edgeId = (nodeId: string, edgeName: string) => `edge:${nodeId}:${edgeName}
 const syntheticId = (nodeId: string, edgeName: string, index: number) => `synthetic:${nodeId}:${edgeName}:${index}`
 
 const toEntityMap = (node: Node, nodes: Record<string, Node>) => {
-  const map: Record<string, TreePaneNode> = {}
+  const map: Record<string, ExplorerNode> = {}
   for (const entity of convertSnapshotNodeEntities(node, nodes)) {
     map[entity.id] = entity
   }

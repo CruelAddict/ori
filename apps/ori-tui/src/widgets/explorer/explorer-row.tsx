@@ -2,31 +2,31 @@ import { useTheme } from "@app/providers/theme"
 import type { BoxRenderable, MouseEvent } from "@opentui/core"
 import { TextAttributes } from "@opentui/core"
 import { type Accessor, createEffect, createMemo, createSignal, For, Show } from "solid-js"
-import type { TreePaneViewModel } from "./model/create-tree-pane-model"
-import type { TreePaneNode } from "./model/tree-pane-node"
-import type { TreeRowSegment } from "./tree-row-renderable.ts"
-import "./tree-row-renderable.ts"
-import { useTreeScrollRegistration } from "./tree-scrollbox.tsx"
+import type { ExplorerRowSegment } from "./explorer-row-renderable.ts"
+import type { ExplorerViewModel } from "./model/create-explorer-model"
+import type { ExplorerNode } from "./model/explorer-node"
+import "./explorer-row-renderable.ts"
+import { useExplorerScrollRegistration } from "./explorer-scrollbox.tsx"
 
 const ROW_LEFT_PADDING = 2
 const GLYPH_SEPARATOR_WIDTH = 1
 
-type TreePaneRowProps = {
+type ExplorerRowProps = {
   nodeId: string
   depth: number
   isFocused: Accessor<boolean>
-  pane: TreePaneViewModel
+  explorer: ExplorerViewModel
   isRowSelected: (key: string) => boolean
 }
 
-export function TreePaneRow(props: TreePaneRowProps) {
-  const registerRowNode = useTreeScrollRegistration()
+export function ExplorerRow(props: ExplorerRowProps) {
+  const registerRowNode = useExplorerScrollRegistration()
   const { theme } = useTheme()
 
-  const entity = createMemo(() => props.pane.controller.getEntity(props.nodeId))
-  const childIds = createMemo(() => props.pane.controller.getRenderableChildIds(props.nodeId))
+  const entity = createMemo(() => props.explorer.controller.getEntity(props.nodeId))
+  const childIds = createMemo(() => props.explorer.controller.getRenderableChildIds(props.nodeId))
   const rowId = () => props.nodeId
-  const isExpanded = () => props.pane.controller.isExpanded(props.nodeId)
+  const isExpanded = () => props.explorer.controller.isExpanded(props.nodeId)
   const isSelected = () => props.isRowSelected(props.nodeId)
   const [childrenMounted, setChildrenMounted] = createSignal(false)
   const [hovered, setHovered] = createSignal(false)
@@ -45,10 +45,10 @@ export function TreePaneRow(props: TreePaneRowProps) {
   const handleMouseDown = (event: MouseEvent) => {
     event.preventDefault()
     const wasFocused = props.isFocused()
-    props.pane.focusSelf()
+    props.explorer.focusSelf()
 
     if (!isSelected()) {
-      props.pane.controller.selectNode(props.nodeId)
+      props.explorer.controller.selectNode(props.nodeId)
       return
     }
 
@@ -57,9 +57,9 @@ export function TreePaneRow(props: TreePaneRowProps) {
     const details = entity()
     if (!details?.hasChildren) return
     if (isExpanded()) {
-      props.pane.controller.collapseNode(props.nodeId)
+      props.explorer.controller.collapseNode(props.nodeId)
     } else {
-      props.pane.controller.expandNode(props.nodeId)
+      props.explorer.controller.expandNode(props.nodeId)
     }
   }
 
@@ -75,7 +75,7 @@ export function TreePaneRow(props: TreePaneRowProps) {
       description: isCursorRow ? fg() : theme().get("text_muted"),
       badge: isCursorRow ? fg() : theme().get("accent"),
     }
-    const segments: TreeRowSegment[] = [
+    const segments: ExplorerRowSegment[] = [
       { text: `${parts.glyph} `, fg: colors.glyph, bg: colors.baseBg, attributes: TextAttributes.DIM },
       { text: parts.main, fg: colors.baseFg, bg: colors.baseBg },
     ]
@@ -104,10 +104,10 @@ export function TreePaneRow(props: TreePaneRowProps) {
       when={entity()}
       keyed
     >
-      {(_: TreePaneNode) => (
+      {(_: ExplorerNode) => (
         <>
           <box
-            id={`tree-row-${rowId()}`}
+            id={`explorer-row-${rowId()}`}
             flexDirection="row"
             paddingLeft={ROW_LEFT_PADDING + props.depth * 2}
             paddingRight={1}
@@ -120,7 +120,7 @@ export function TreePaneRow(props: TreePaneRowProps) {
             onMouseOut={() => setHovered(false)}
             onMouseDown={handleMouseDown}
           >
-            <tree_row
+            <explorer_row
               segments={rowSegments()}
               width={rowWidth()}
               fg={fg()}
@@ -136,11 +136,11 @@ export function TreePaneRow(props: TreePaneRowProps) {
             >
               <For each={childIds()}>
                 {(childId) => (
-                  <TreePaneRow
+                  <ExplorerRow
                     nodeId={childId}
                     depth={props.depth + 1}
                     isFocused={props.isFocused}
-                    pane={props.pane}
+                    explorer={props.explorer}
                     isRowSelected={props.isRowSelected}
                   />
                 )}
@@ -160,7 +160,7 @@ type RowTextParts = {
   badges: string[]
 }
 
-function buildRowTextParts(details: TreePaneNode | undefined, expanded: boolean): RowTextParts {
+function buildRowTextParts(details: ExplorerNode | undefined, expanded: boolean): RowTextParts {
   const hasChildren = Boolean(details?.hasChildren)
   const glyph = hasChildren ? (expanded ? "▽" : "▷") : "·"
   const label = details?.label ?? ""

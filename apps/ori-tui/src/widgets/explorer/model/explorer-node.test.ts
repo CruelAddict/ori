@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { type Node, type NodeEdge, NodeType } from "@shared/lib/resources-client"
-import { createEdgeTreePaneNode, createSnapshotTreePaneNode } from "./tree-pane-node"
+import { createEdgeExplorerNode, createSnapshotExplorerNode } from "./explorer-node"
 
 type NodeOverrides = {
   id: string
@@ -142,14 +142,14 @@ const makeEdge = (items: string[], truncated = false): NodeEdge => ({
   truncated,
 })
 
-describe("createSnapshotTreePaneNode", () => {
+describe("createSnapshotExplorerNode", () => {
   test("describes database nodes", () => {
-    const entity = createSnapshotTreePaneNode(makeNode({ id: "db", type: NodeType.DATABASE, name: "main" }))
+    const entity = createSnapshotExplorerNode(makeNode({ id: "db", type: NodeType.DATABASE, name: "main" }))
     expect(entity.description).toBe("database")
   })
 
   test("describes schema nodes", () => {
-    const entity = createSnapshotTreePaneNode(makeNode({ id: "schema", type: NodeType.SCHEMA, name: "public" }))
+    const entity = createSnapshotExplorerNode(makeNode({ id: "schema", type: NodeType.SCHEMA, name: "public" }))
     expect(entity.description).toBe("schema")
   })
 
@@ -161,7 +161,7 @@ describe("createSnapshotTreePaneNode", () => {
       attributes: { table: "users" },
       edges: { columns: makeEdge(["col-1"]) },
     })
-    const entity = createSnapshotTreePaneNode(node)
+    const entity = createSnapshotExplorerNode(node)
     expect(entity).toEqual({
       id: "table-1",
       kind: "node",
@@ -175,7 +175,7 @@ describe("createSnapshotTreePaneNode", () => {
   })
 
   test("describes view nodes from attributes", () => {
-    const view = createSnapshotTreePaneNode(
+    const view = createSnapshotExplorerNode(
       makeNode({
         id: "view-1",
         type: NodeType.VIEW,
@@ -187,7 +187,7 @@ describe("createSnapshotTreePaneNode", () => {
   })
 
   test("describes columns and badges primary/!null", () => {
-    const entity = createSnapshotTreePaneNode(
+    const entity = createSnapshotExplorerNode(
       makeNode({
         id: "col-1",
         type: NodeType.COLUMN,
@@ -200,7 +200,7 @@ describe("createSnapshotTreePaneNode", () => {
   })
 
   test("describes CHECK constraints", () => {
-    const entity = createSnapshotTreePaneNode(
+    const entity = createSnapshotExplorerNode(
       makeNode({
         id: "check-1",
         type: NodeType.CONSTRAINT,
@@ -212,7 +212,7 @@ describe("createSnapshotTreePaneNode", () => {
   })
 
   test("describes foreign key constraints and badges", () => {
-    const entity = createSnapshotTreePaneNode(
+    const entity = createSnapshotExplorerNode(
       makeNode({
         id: "fk-1",
         type: NodeType.CONSTRAINT,
@@ -232,7 +232,7 @@ describe("createSnapshotTreePaneNode", () => {
   })
 
   test("describes UNIQUE constraints with index name", () => {
-    const entity = createSnapshotTreePaneNode(
+    const entity = createSnapshotExplorerNode(
       makeNode({
         id: "uniq-1",
         type: NodeType.CONSTRAINT,
@@ -244,7 +244,7 @@ describe("createSnapshotTreePaneNode", () => {
   })
 
   test("describes indexes with predicate and badges", () => {
-    const entity = createSnapshotTreePaneNode(
+    const entity = createSnapshotExplorerNode(
       makeNode({
         id: "idx-1",
         type: NodeType.INDEX,
@@ -257,7 +257,7 @@ describe("createSnapshotTreePaneNode", () => {
   })
 
   test("describes triggers and badges", () => {
-    const entity = createSnapshotTreePaneNode(
+    const entity = createSnapshotExplorerNode(
       makeNode({
         id: "trg-1",
         type: NodeType.TRIGGER,
@@ -270,10 +270,10 @@ describe("createSnapshotTreePaneNode", () => {
   })
 })
 
-describe("createEdgeTreePaneNode", () => {
+describe("createEdgeExplorerNode", () => {
   test("labels edges and counts items", () => {
     const node = makeNode({ id: "table-1", type: NodeType.TABLE, name: "users" })
-    const edge = createEdgeTreePaneNode(node, "columns", makeEdge(["col-1", "col-2"]))
+    const edge = createEdgeExplorerNode(node, "columns", makeEdge(["col-1", "col-2"]))
     expect(edge.id).toBe("edge:table-1:columns")
     expect(edge.label).toBe("columns")
     expect(edge.description).toBe("2")
@@ -281,21 +281,21 @@ describe("createEdgeTreePaneNode", () => {
 
   test("renders action rule edge label with spaces", () => {
     const node = makeNode({ id: "trg-1", type: NodeType.TRIGGER, name: "users_audit" })
-    const edge = createEdgeTreePaneNode(node, "action_rules", makeEdge(["rule-1"]))
+    const edge = createEdgeExplorerNode(node, "action_rules", makeEdge(["rule-1"]))
     expect(edge.label).toBe("action rules")
   })
 
   test("renders truncated edge descriptions", () => {
     const node = makeNode({ id: "table-1", type: NodeType.TABLE, name: "users" })
-    const zeroTruncated = createEdgeTreePaneNode(node, "columns", makeEdge([], true))
-    const manyTruncated = createEdgeTreePaneNode(node, "columns", makeEdge(["c1", "c2"], true))
+    const zeroTruncated = createEdgeExplorerNode(node, "columns", makeEdge([], true))
+    const manyTruncated = createEdgeExplorerNode(node, "columns", makeEdge(["c1", "c2"], true))
     expect(zeroTruncated.description).toBe("+ (truncated)")
     expect(manyTruncated.description).toBe("2+ (truncated)")
   })
 
   test("hides description for empty non-truncated edges", () => {
     const node = makeNode({ id: "table-1", type: NodeType.TABLE, name: "users" })
-    const edge = createEdgeTreePaneNode(node, "columns", makeEdge([], false))
+    const edge = createEdgeExplorerNode(node, "columns", makeEdge([], false))
     expect(edge.description).toBeUndefined()
   })
 })

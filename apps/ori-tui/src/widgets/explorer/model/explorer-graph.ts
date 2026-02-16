@@ -2,7 +2,7 @@ import { type Node, type NodeEdge, NodeType } from "@shared/lib/resources-client
 import type { Accessor } from "solid-js"
 import { batch, createEffect, createMemo, createSignal } from "solid-js"
 import { createStore, produce, type SetStoreFunction } from "solid-js/store"
-import { createEdgeTreePaneNode, createSnapshotTreePaneNode, type TreePaneNode } from "./tree-pane-node"
+import { createEdgeExplorerNode, createSnapshotExplorerNode, type ExplorerNode } from "./explorer-node"
 
 const CHILD_BATCH_SIZE = 10
 
@@ -15,12 +15,12 @@ export type VisibleRow = {
 type ConstraintNode = Extract<Node, { type: typeof NodeType.CONSTRAINT }>
 type TriggerNode = Extract<Node, { type: typeof NodeType.TRIGGER }>
 
-export function convertSnapshotNodeEntities(node: Node, nodes: Record<string, Node>): TreePaneNode[] {
-  const entities: TreePaneNode[] = []
-  const nodeEntity = createSnapshotTreePaneNode(node)
+export function convertSnapshotNodeEntities(node: Node, nodes: Record<string, Node>): ExplorerNode[] {
+  const entities: ExplorerNode[] = []
+  const nodeEntity = createSnapshotExplorerNode(node)
   entities.push(nodeEntity)
 
-  const attachEdgeEntity = (edgeEntity: ReturnType<typeof createEdgeTreePaneNode>, hasChildren: boolean) => {
+  const attachEdgeEntity = (edgeEntity: ReturnType<typeof createEdgeExplorerNode>, hasChildren: boolean) => {
     edgeEntity.hasChildren = hasChildren
     nodeEntity.childIds.push(edgeEntity.id)
     nodeEntity.hasChildren = nodeEntity.childIds.length > 0
@@ -47,12 +47,12 @@ export function convertSnapshotNodeEntities(node: Node, nodes: Record<string, No
         },
         edges: {},
       }
-      const childEntity = createSnapshotTreePaneNode(childNode)
+      const childEntity = createSnapshotExplorerNode(childNode)
       entities.push(childEntity)
       childIds.push(childEntity.id)
     }
     if (childIds.length === 0) return
-    const edgeEntity = createEdgeTreePaneNode(node, edgeName, {
+    const edgeEntity = createEdgeExplorerNode(node, edgeName, {
       items: childIds,
       truncated: false,
     })
@@ -85,7 +85,7 @@ export function convertSnapshotNodeEntities(node: Node, nodes: Record<string, No
     if (!edge.items || edge.items.length === 0) {
       continue
     }
-    const edgeEntity = createEdgeTreePaneNode(node, edgeName, edge)
+    const edgeEntity = createEdgeExplorerNode(node, edgeName, edge)
     const hasChildren = edgeEntity.childIds.some((childId) => Boolean(nodes[childId]))
     attachEdgeEntity(edgeEntity, hasChildren)
   }
@@ -135,8 +135,8 @@ function buildTriggerActionRules(attrs: TriggerNode["attributes"]): string | und
   return rules.join(", ")
 }
 
-export function createTreePaneGraph(nodesById: Accessor<Record<string, Node>>, rootIds: Accessor<string[]>) {
-  const [entitiesById, setEntitiesById] = createStore<Record<string, TreePaneNode>>({})
+export function createExplorerGraph(nodesById: Accessor<Record<string, Node>>, rootIds: Accessor<string[]>) {
+  const [entitiesById, setEntitiesById] = createStore<Record<string, ExplorerNode>>({})
   const processedNodeIds = new Set<string>()
   const edgeIdsByChildId = new Map<string, Set<string>>()
 
@@ -172,7 +172,7 @@ export function createTreePaneGraph(nodesById: Accessor<Record<string, Node>>, r
     return visibleRows()[index] ?? null
   })
 
-  setupTreeEffects({
+  setupExplorerEffects({
     rootIds: rootIdsMemo,
     getEntity,
     setExpandedNodes,
@@ -327,7 +327,7 @@ export function createTreePaneGraph(nodesById: Accessor<Record<string, Node>>, r
 
 function buildVisibleRows(
   rootIds: readonly string[],
-  getEntity: (id: string) => TreePaneNode | undefined,
+  getEntity: (id: string) => ExplorerNode | undefined,
   isExpanded: (id: string) => boolean,
   getVisibleCount: (id: string) => number,
 ): VisibleRow[] {
@@ -347,7 +347,7 @@ function appendVisibleChildren(
   list: VisibleRow[],
   parentId: string,
   depth: number,
-  getEntity: (id: string) => TreePaneNode | undefined,
+  getEntity: (id: string) => ExplorerNode | undefined,
   isExpanded: (id: string) => boolean,
   getVisibleCount: (id: string) => number,
 ): void {
@@ -366,9 +366,9 @@ function appendVisibleChildren(
   }
 }
 
-type TreeEffectsOptions = {
+type ExplorerEffectsOptions = {
   rootIds: Accessor<string[]>
-  getEntity: (id: string) => TreePaneNode | undefined
+  getEntity: (id: string) => ExplorerNode | undefined
   setExpandedNodes: SetStoreFunction<Record<string, true>>
   setVisibleChildCounts: SetStoreFunction<Record<string, number>>
   selectedId: Accessor<string | null>
@@ -377,7 +377,7 @@ type TreeEffectsOptions = {
   rowIndexMap: Accessor<Map<string, number>>
 }
 
-function setupTreeEffects(options: TreeEffectsOptions) {
+function setupExplorerEffects(options: ExplorerEffectsOptions) {
   createEffect(() => {
     options.setExpandedNodes(
       produce<Record<string, true>>((state) => {
@@ -425,7 +425,7 @@ function setupTreeEffects(options: TreeEffectsOptions) {
 }
 
 type ChildVisibilityOptions = {
-  getEntity: (id: string) => TreePaneNode | undefined
+  getEntity: (id: string) => ExplorerNode | undefined
   isNodeExpanded: (nodeId: string | null) => boolean
   getVisibleCount: (nodeId: string) => number
   setVisibleChildCounts: SetStoreFunction<Record<string, number>>
@@ -525,7 +525,7 @@ function createMoveSelectionAction(options: MoveSelectionOptions) {
 
 type FocusFirstChildOptions = {
   selectedRow: Accessor<VisibleRow | null>
-  getEntity: (id: string) => TreePaneNode | undefined
+  getEntity: (id: string) => ExplorerNode | undefined
   expandNode: (nodeId: string | null) => void
   ensureInitialChildren: (nodeId: string) => void
   selectNode: (nodeId: string | null) => void
@@ -555,7 +555,7 @@ function createFocusFirstChildAction(options: FocusFirstChildOptions) {
 
 type CollapseCurrentOrParentOptions = {
   selectedRow: Accessor<VisibleRow | null>
-  getEntity: (id: string) => TreePaneNode | undefined
+  getEntity: (id: string) => ExplorerNode | undefined
   collapseNode: (nodeId: string | null) => void
   selectNode: (nodeId: string | null) => void
   isNodeExpanded: (nodeId: string | null) => boolean
@@ -580,7 +580,7 @@ function createCollapseCurrentOrParentAction(options: CollapseCurrentOrParentOpt
 
 type ActivateSelectionOptions = {
   selectedRow: Accessor<VisibleRow | null>
-  getEntity: (id: string) => TreePaneNode | undefined
+  getEntity: (id: string) => ExplorerNode | undefined
   collapseNode: (nodeId: string | null) => void
   expandNode: (nodeId: string | null) => void
   isNodeExpanded: (nodeId: string | null) => boolean

@@ -12,15 +12,15 @@ import { extend } from "@opentui/solid"
  * native JSX building blocks) forces extremely heavy width computations we can't afford
  * when dealing with 1000s of columns */
 
-export type TreeRowSegment = {
+export type ExplorerRowSegment = {
   text: string
   fg?: string
   bg?: string
   attributes?: number
 }
 
-export type TreeRowRenderableOptions = RenderableOptions<TreeRowRenderable> & {
-  segments: TreeRowSegment[]
+export type ExplorerRowRenderableOptions = RenderableOptions<ExplorerRowRenderable> & {
+  segments: ExplorerRowSegment[]
   width: number
   defaultFg: string
   fg?: string
@@ -39,13 +39,13 @@ const normalizeColor = (value: string | undefined, fallback?: RGBA) => {
   return parseColor(value)
 }
 
-export class TreeRowRenderable extends Renderable {
+export class ExplorerRowRenderable extends Renderable {
   private parsedSegments: ParsedSegment[] = []
-  private rawSegments: TreeRowSegment[] = []
+  private rawSegments: ExplorerRowSegment[] = []
   private fallbackFg: RGBA
   private fallbackBg: RGBA | undefined
 
-  constructor(ctx: RenderContext, options: TreeRowRenderableOptions) {
+  constructor(ctx: RenderContext, options: ExplorerRowRenderableOptions) {
     const { segments, fg, bg, width, defaultFg, ...renderableOptions } = options
     super(ctx, {
       height: 1,
@@ -60,7 +60,7 @@ export class TreeRowRenderable extends Renderable {
     this.setSegments(segments, true)
   }
 
-  set segments(segments: TreeRowSegment[]) {
+  set segments(segments: ExplorerRowSegment[]) {
     this.setSegments(segments)
   }
 
@@ -78,7 +78,7 @@ export class TreeRowRenderable extends Renderable {
     this.setSegments(this.rawSegments, true)
   }
 
-  private setSegments(segments: TreeRowSegment[], requestRender = true) {
+  private setSegments(segments: ExplorerRowSegment[], requestRender = true) {
     this.rawSegments = segments ?? []
     this.parsedSegments = this.rawSegments.map((segment) => ({
       text: segment.text,
@@ -99,12 +99,12 @@ export class TreeRowRenderable extends Renderable {
   }
 }
 
-extend({ tree_row: TreeRowRenderable })
+extend({ explorer_row: ExplorerRowRenderable })
 
 declare global {
   namespace JSX {
     interface IntrinsicElements {
-      tree_row: TreeRowRenderableOptions
+      explorer_row: ExplorerRowRenderableOptions
     }
   }
 }

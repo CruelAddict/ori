@@ -3,16 +3,15 @@ import type { BoxRenderable, MouseEvent, ScrollBoxRenderable } from "@opentui/co
 import { enforceHorizontalScrollbarMinThumbWidth } from "@shared/lib/opentui-scrollbar-min-width"
 import { createScrollSpeedHandler } from "@shared/lib/scroll-speed"
 import { type Accessor, createContext, createEffect, onCleanup, type ParentProps, useContext } from "solid-js"
-import { createAutoscrollService } from "./tree-scroll/autoscroll-service.ts"
-import type { ScrollDelta } from "./tree-scroll/types.ts"
+import { createAutoscrollService, type ScrollDelta } from "./explorer-scroll/autoscroll-service.ts"
 
-type TreeScrollboxContextValue = {
+type ExplorerScrollboxContextValue = {
   registerRowNode: (rowId: string, node: BoxRenderable | undefined) => void
 }
 
-const TreeScrollboxContext = createContext<TreeScrollboxContextValue | null>(null)
+const ExplorerScrollboxContext = createContext<ExplorerScrollboxContextValue | null>(null)
 
-const treeScrollSpeed = {
+const explorerScrollSpeed = {
   horizontal: 3,
   vertical: 1,
 }
@@ -22,7 +21,7 @@ export type RowDescriptor = {
   depth: number
 }
 
-function useTreeAutoscroll(rows: Accessor<readonly RowDescriptor[]>, selectedRowId: Accessor<string | null>) {
+function useExplorerAutoscroll(rows: Accessor<readonly RowDescriptor[]>, selectedRowId: Accessor<string | null>) {
   const autoscroll = createAutoscrollService()
   createEffect(() => {
     rows()
@@ -32,28 +31,28 @@ function useTreeAutoscroll(rows: Accessor<readonly RowDescriptor[]>, selectedRow
   return autoscroll
 }
 
-export function useTreeScrollRegistration() {
-  const ctx = useContext(TreeScrollboxContext)
-  if (!ctx) throw new Error("useTreeScrollRegistration must be used within a TreeScrollbox")
+export function useExplorerScrollRegistration() {
+  const ctx = useContext(ExplorerScrollboxContext)
+  if (!ctx) throw new Error("useExplorerScrollRegistration must be used within an ExplorerScrollbox")
   return ctx.registerRowNode
 }
 
-export type TreeScrollboxApi = {
+export type ExplorerScrollboxApi = {
   scrollBy(delta: ScrollDelta): void
   ensureRowVisible(rowId: string | null): void
 }
 
-interface TreeScrollboxProps extends ParentProps {
+interface ExplorerScrollboxProps extends ParentProps {
   rows: Accessor<readonly RowDescriptor[]>
   selectedRowId: Accessor<string | null>
-  onApiReady?: (api: TreeScrollboxApi | undefined) => void
+  onApiReady?: (api: ExplorerScrollboxApi | undefined) => void
 }
 
-export function TreeScrollbox(props: TreeScrollboxProps) {
+export function ExplorerScrollbox(props: ExplorerScrollboxProps) {
   let scrollBox: ScrollBoxRenderable | undefined
   const { theme } = useTheme()
 
-  const autoscroll = useTreeAutoscroll(props.rows, props.selectedRowId)
+  const autoscroll = useExplorerAutoscroll(props.rows, props.selectedRowId)
 
   props.onApiReady?.({ scrollBy: autoscroll.scrollBy, ensureRowVisible: autoscroll.ensureRowVisible })
   onCleanup(() => {
@@ -67,14 +66,14 @@ export function TreeScrollbox(props: TreeScrollboxProps) {
     enforceHorizontalScrollbarMinThumbWidth(scrollBox, 5)
     // @ts-expect-error onMouseEvent is protected in typings
     const originalOnMouseEvent = scrollBox.onMouseEvent?.bind(scrollBox)
-    const handleMouseEvent = createScrollSpeedHandler(originalOnMouseEvent, treeScrollSpeed)
+    const handleMouseEvent = createScrollSpeedHandler(originalOnMouseEvent, explorerScrollSpeed)
     // @ts-expect-error override protected handler to apply scroll speed
     scrollBox.onMouseEvent = (event: MouseEvent) => {
       handleMouseEvent(event)
     }
   }
 
-  const contextValue: TreeScrollboxContextValue = {
+  const contextValue: ExplorerScrollboxContextValue = {
     registerRowNode: autoscroll.registerRowNode,
   }
 
@@ -104,7 +103,7 @@ export function TreeScrollbox(props: TreeScrollboxProps) {
         },
       }}
     >
-      <TreeScrollboxContext.Provider value={contextValue}>
+      <ExplorerScrollboxContext.Provider value={contextValue}>
         <box
           flexDirection="column"
           alignItems="stretch"
@@ -113,7 +112,7 @@ export function TreeScrollbox(props: TreeScrollboxProps) {
         >
           {props.children}
         </box>
-      </TreeScrollboxContext.Provider>
+      </ExplorerScrollboxContext.Provider>
     </scrollbox>
   )
 }

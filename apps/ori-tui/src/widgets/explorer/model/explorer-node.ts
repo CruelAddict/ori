@@ -1,8 +1,8 @@
 import { type Node, type NodeEdge, NodeType } from "@shared/lib/resources-client"
 
-export type TreePaneNode = SnapshotTreePaneNode | EdgeTreePaneNode
+export type ExplorerNode = SnapshotExplorerNode | EdgeExplorerNode
 
-type BaseTreePaneNode = {
+type BaseExplorerNode = {
   id: string
   kind: "node" | "edge"
   label: string
@@ -13,12 +13,12 @@ type BaseTreePaneNode = {
   hasChildren: boolean
 }
 
-export interface SnapshotTreePaneNode extends BaseTreePaneNode {
+export interface SnapshotExplorerNode extends BaseExplorerNode {
   kind: "node"
   node: Node
 }
 
-export interface EdgeTreePaneNode extends BaseTreePaneNode {
+export interface EdgeExplorerNode extends BaseExplorerNode {
   kind: "edge"
   sourceNodeId: string
   edgeName: string
@@ -29,7 +29,7 @@ type ConstraintNode = Extract<Node, { type: typeof NodeType.CONSTRAINT }>
 type IndexNode = Extract<Node, { type: typeof NodeType.INDEX }>
 type TriggerNode = Extract<Node, { type: typeof NodeType.TRIGGER }>
 
-export function createSnapshotTreePaneNode(node: Node): SnapshotTreePaneNode {
+export function createSnapshotExplorerNode(node: Node): SnapshotExplorerNode {
   return {
     id: node.id,
     kind: "node",
@@ -42,7 +42,7 @@ export function createSnapshotTreePaneNode(node: Node): SnapshotTreePaneNode {
   }
 }
 
-export function createEdgeTreePaneNode(node: Node, edgeName: string, edge: NodeEdge): EdgeTreePaneNode {
+export function createEdgeExplorerNode(node: Node, edgeName: string, edge: NodeEdge): EdgeExplorerNode {
   const childIds = edge.items.slice()
   return {
     id: edgeEntityId(node.id, edgeName),

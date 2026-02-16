@@ -1,5 +1,6 @@
 import type { BoxRenderable, ScrollBoxRenderable } from "@opentui/core"
-import type { ScrollDelta } from "./types.ts"
+
+export type ScrollDelta = { x: number; y: number }
 
 type ScrollBoxWithViewport = ScrollBoxRenderable & { viewport?: BoxRenderable }
 

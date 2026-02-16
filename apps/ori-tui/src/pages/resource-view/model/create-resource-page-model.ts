@@ -1,17 +1,17 @@
 import { useResourceByName } from "@src/entities/resource/model/resource-store"
 import { createEditorPaneModel } from "@src/widgets/editor-panel/model/create-editor-pane-model"
+import { createExplorerModel } from "@src/widgets/explorer/model/create-explorer-model"
 import { createResultsPaneModel } from "@src/widgets/results-panel/model/create-results-pane-model"
-import { createTreePaneModel } from "@src/widgets/tree-panel/model/create-tree-pane-model"
 import type { Accessor } from "solid-js"
 import { createEffect, createMemo, createSignal } from "solid-js"
 
-export type Pane = "tree" | "editor" | "results"
+export type Pane = "explorer" | "editor" | "results"
 
 export type CreateResourcePageModelOptions = {
   resourceName: Accessor<string>
 }
 
-const DEFAULT_PANE: Pane = "tree"
+const DEFAULT_PANE: Pane = "explorer"
 
 export function createResourcePageModel(options: CreateResourcePageModelOptions) {
   const resource = useResourceByName(options.resourceName)
@@ -20,7 +20,7 @@ export function createResourcePageModel(options: CreateResourcePageModelOptions)
   const [isActive, setIsActive] = createSignal(true)
   const focusHistory: Pane[] = [DEFAULT_PANE]
   const [visiblePanes, setVisiblePanes] = createSignal<Record<Pane, boolean>>({
-    tree: true,
+    explorer: true,
     editor: false,
     results: false,
   })
@@ -85,9 +85,9 @@ export function createResourcePageModel(options: CreateResourcePageModelOptions)
     focusSelf: () => tryFocusPane(pane),
   })
 
-  const treePane = createTreePaneModel({
+  const explorer = createExplorerModel({
     resourceName: options.resourceName,
-    ...paneFocusFuncs("tree"),
+    ...paneFocusFuncs("explorer"),
   })
 
   const editorPane = createEditorPaneModel({
@@ -139,12 +139,12 @@ export function createResourcePageModel(options: CreateResourcePageModelOptions)
     }
   }
 
-  const toggleTreeVisible = () => {
-    const wasFocused = focusedPane() === "tree"
-    const next = !isPaneVisible("tree")
-    setPaneVisible("tree", next)
+  const toggleExplorerVisible = () => {
+    const wasFocused = focusedPane() === "explorer"
+    const next = !isPaneVisible("explorer")
+    setPaneVisible("explorer", next)
     if (next) {
-      tryFocusPane("tree")
+      tryFocusPane("explorer")
       return
     }
     if (wasFocused) {
@@ -160,22 +160,22 @@ export function createResourcePageModel(options: CreateResourcePageModelOptions)
 
   return {
     title,
-    treePane,
+    explorer,
     editorPane,
     resultsPane,
     isPaneVisible,
     actions: {
-      toggleTreeVisible,
+      toggleExplorerVisible,
       toggleResultsVisible,
       onQueryChange: editorPane.onQueryChange,
       executeQuery: editorPane.executeQuery,
       cancelQuery: editorPane.cancelQuery,
-      refreshGraph: treePane.refreshGraph,
+      refreshGraph: explorer.refreshGraph,
       moveFocusLeft: () => {
-        tryFocusPane("tree")
+        tryFocusPane("explorer")
       },
       moveFocusRight: () => {
-        if (focusedPane() !== "tree") return
+        if (focusedPane() !== "explorer") return
         if (isPaneVisible("editor")) tryFocusPane("editor")
         else tryFocusPane("results")
       },

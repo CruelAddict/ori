@@ -2,9 +2,9 @@ import { useTheme } from "@app/providers/theme"
 import { type KeyBinding, KeyScope } from "@src/core/services/key-scopes"
 import { createResourcePageModel } from "@src/pages/resource-view/model/create-resource-page-model"
 import { EditorPanel } from "@src/widgets/editor-panel/editor-panel"
+import { Explorer } from "@src/widgets/explorer/explorer"
 import { ResultsPanel } from "@src/widgets/results-panel/results-panel"
 import { Statusline, StatuslineProvider } from "@src/widgets/statusline/statusline"
-import { TreePanel } from "@src/widgets/tree-panel/tree-panel"
 import { WelcomePane } from "@src/widgets/welcome-pane/welcome-pane"
 import { createEffect, on, onCleanup, Show } from "solid-js"
 
@@ -31,18 +31,18 @@ export function ResourceViewPage(props: ResourceViewPageProps) {
       if (!vm.editorPane.isFocused()) {
         return
       }
-      const treeWasOpen = vm.isPaneVisible("tree")
-      if (!treeWasOpen) {
-        vm.actions.toggleTreeVisible()
+      const explorerWasOpen = vm.isPaneVisible("explorer")
+      if (!explorerWasOpen) {
+        vm.actions.toggleExplorerVisible()
       }
-      vm.actions.focusPane("tree")
+      vm.actions.focusPane("explorer")
 
       const timeoutId = setTimeout(() => {
         if (!scopeEnabled()) {
           return
         }
-        if (!treeWasOpen) {
-          vm.actions.toggleTreeVisible()
+        if (!explorerWasOpen) {
+          vm.actions.toggleExplorerVisible()
         }
         vm.actions.focusPane("editor")
       }, 10)
@@ -54,7 +54,7 @@ export function ResourceViewPage(props: ResourceViewPageProps) {
   const screenKeyBindings: KeyBinding[] = [
     {
       pattern: "ctrl+t",
-      handler: vm.actions.toggleTreeVisible,
+      handler: vm.actions.toggleExplorerVisible,
       preventDefault: true,
     },
     {
@@ -137,14 +137,14 @@ export function ResourceViewPage(props: ResourceViewPageProps) {
           marginLeft={2}
           marginBottom={1}
         >
-          <Show when={vm.isPaneVisible("tree")}>
-            <TreePanel viewModel={vm.treePane} />
+          <Show when={vm.isPaneVisible("explorer")}>
+            <Explorer viewModel={vm.explorer} />
           </Show>
 
           <box
             flexDirection="column"
             flexGrow={1}
-            marginLeft={vm.isPaneVisible("tree") ? 1 : 0}
+            marginLeft={vm.isPaneVisible("explorer") ? 1 : 0}
             justifyContent="space-between"
           >
             <Show
