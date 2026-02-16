@@ -1,9 +1,9 @@
 import { useLogger } from "@app/providers/logger"
 import { useTheme } from "@app/providers/theme"
 import type { BoxRenderable, KeyEvent, MouseEvent, ScrollBoxRenderable, TextareaRenderable } from "@opentui/core"
+import { syntaxHighlighter } from "@shared/lib/syntax-highlighting/syntax-highlighter"
 import { type KeyBinding, KeyScope } from "@src/core/services/key-scopes"
 import { type Accessor, createEffect, For, on, onCleanup, onMount, Show, untrack } from "solid-js"
-import { syntaxHighlighter } from "../../features/syntax-highlighting/syntax-highlighter"
 import { type CursorContext, createBufferModel } from "./buffer-model"
 
 const DEBOUNCE_MS = 200

@@ -1,5 +1,5 @@
-import { type QueryJob, useQueryJobs } from "@src/entities/query-job/providers/query-jobs-provider"
-import { getConsoleFilePath, readConsoleQuery, writeConsoleQuery } from "@src/features/query-storage/query-storage"
+import { getConsoleFilePath, readConsoleQuery, writeConsoleQuery } from "@shared/lib/resource-query-storage"
+import { type QueryJob, useQuery } from "@src/entities/query/providers/query-provider"
 import type { Accessor } from "solid-js"
 import { createMemo, onMount } from "solid-js"
 
@@ -25,14 +25,14 @@ type UseEditorPaneOptions = {
 }
 
 export function useEditorPane(options: UseEditorPaneOptions): EditorPaneViewModel {
-  const queryJobs = useQueryJobs()
+  const query = useQuery()
 
-  const queryText = createMemo(() => queryJobs.getQueryText(options.resourceName()))
-  const currentJob = createMemo(() => queryJobs.getJob(options.resourceName()))
+  const queryText = createMemo(() => query.getQueryText(options.resourceName()))
+  const currentJob = createMemo(() => query.getJob(options.resourceName()))
   const isExecuting = createMemo(() => currentJob()?.status === "running")
 
   const onQueryChange = (text: string) => {
-    queryJobs.setQueryText(options.resourceName(), text)
+    query.setQueryText(options.resourceName(), text)
   }
 
   const executeQuery = async () => {
@@ -40,11 +40,11 @@ export function useEditorPane(options: UseEditorPaneOptions): EditorPaneViewMode
     if (!text.trim()) {
       return
     }
-    await queryJobs.executeQuery(options.resourceName(), text)
+    await query.executeQuery(options.resourceName(), text)
   }
 
   const cancelQuery = async () => {
-    await queryJobs.cancelQuery(options.resourceName())
+    await query.cancelQuery(options.resourceName())
   }
 
   const saveQuery = (): boolean => {
@@ -54,13 +54,13 @@ export function useEditorPane(options: UseEditorPaneOptions): EditorPaneViewMode
 
   onMount(() => {
     const name = options.resourceName()
-    const existing = queryJobs.getQueryText(name)
+    const existing = query.getQueryText(name)
     if (existing) {
       return
     }
     const saved = readConsoleQuery(name)
     if (saved) {
-      queryJobs.setQueryText(name, saved)
+      query.setQueryText(name, saved)
     }
   })
 

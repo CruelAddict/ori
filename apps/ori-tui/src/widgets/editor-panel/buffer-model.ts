@@ -1,9 +1,9 @@
 import { resolveRenderLib, type TextareaRenderable, type WidthMethod } from "@opentui/core"
 import { debounce } from "@shared/lib/debounce"
+import type { SyntaxHighlightResult } from "@shared/lib/syntax-highlighting/syntax-highlighter"
 import type { Logger } from "pino"
 import { type Accessor, createEffect, createMemo, createSignal, on } from "solid-js"
 import { createStore } from "solid-js/store"
-import type { SyntaxHighlightResult } from "../../features/syntax-highlighting/syntax-highlighter"
 import { applySyntaxHighlights, forceReapplySyntaxHighlightForLineId } from "./sql-highlighter"
 import { collectSqlStatements } from "./sql-statement-detector"
 

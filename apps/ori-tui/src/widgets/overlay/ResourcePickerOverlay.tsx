@@ -1,13 +1,12 @@
 import { useRouteNavigation } from "@app/routes/router"
 import { resourceRoute } from "@app/routes/types"
-import { type ConnectionRecord, useConnectionState } from "@src/entities/connection/model/connection-state"
 import type { Resource } from "@src/entities/resource/model/resource"
-import { useResourceListStore } from "@src/entities/resource/model/resource-list-store"
+import { type ResourceConnectionState, useResourceEntity } from "@src/entities/resource/model/resource-store"
 import { DialogSelect, type DialogSelectOption } from "@widgets/dialog-select"
 import { createEffect, createMemo, createSignal } from "solid-js"
 import type { OverlayComponentProps } from "./overlay-store"
 
-const getResourcePrefix = (record?: ConnectionRecord) => {
+const getResourcePrefix = (record?: ResourceConnectionState) => {
   if (!record || record.status === "idle") return "–"
   if (record.status === "connected") return "∿"
   if (record.status === "failed") return "×"
@@ -16,16 +15,15 @@ const getResourcePrefix = (record?: ConnectionRecord) => {
 }
 
 export function ResourcePickerOverlay(props: OverlayComponentProps) {
-  const store = useResourceListStore()
-  const connectionState = useConnectionState()
+  const resourceEntity = useResourceEntity()
   const navigation = useRouteNavigation()
   const [pendingName, setPendingName] = createSignal<string | null>(null)
 
   const options = createMemo<DialogSelectOption<Resource>[]>(() => {
-    const list = store.resources()
-    const records = connectionState.records()
+    const list = resourceEntity.resources()
+    const connections = resourceEntity.connections()
     return list.map((resource) => {
-      const record = records[resource.name]
+      const record = connections[resource.name]
       const prefix = getResourcePrefix(record)
       return {
         id: resource.name,
@@ -45,8 +43,8 @@ export function ResourcePickerOverlay(props: OverlayComponentProps) {
   createEffect(() => {
     const intent = pendingName()
     if (!intent) return
-    const records = connectionState.records()
-    const record = records[intent]
+    const connections = resourceEntity.connections()
+    const record = connections[intent]
     if (!record) return
     if (record.status === "connected") {
       navigateToResource(intent)
@@ -56,7 +54,7 @@ export function ResourcePickerOverlay(props: OverlayComponentProps) {
   createEffect(() => {
     const intent = pendingName()
     if (!intent) return
-    const record = connectionState.records()[intent]
+    const record = resourceEntity.connections()[intent]
     if (record?.status === "failed") {
       setPendingName(null)
     }
@@ -65,8 +63,8 @@ export function ResourcePickerOverlay(props: OverlayComponentProps) {
   const handleSelect = (option: DialogSelectOption<Resource>) => {
     const name = option.value.name
     setPendingName(name)
-    const records = connectionState.records()
-    const record = records[name]
+    const connections = resourceEntity.connections()
+    const record = connections[name]
 
     if (record?.status === "connected") {
       navigateToResource(name)
@@ -74,7 +72,7 @@ export function ResourcePickerOverlay(props: OverlayComponentProps) {
     }
 
     if (!record || record.status === "idle" || record.status === "failed") {
-      void connectionState.connect(option.value)
+      void resourceEntity.connect(name)
     }
   }
 

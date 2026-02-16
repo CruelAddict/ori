@@ -11,8 +11,8 @@ import { setSelectionOverride } from "@shared/lib/clipboard"
 import { enforceHorizontalScrollbarMinThumbWidth } from "@shared/lib/opentui-scrollbar-min-width"
 import { createScrollSpeedHandler } from "@shared/lib/scroll-speed"
 import { type KeyBinding, KeyScope } from "@src/core/services/key-scopes"
-import type { ResultsPaneViewModel } from "@src/features/results-pane/use-results-pane"
 import { createEffect, createMemo, createSignal, For, onCleanup, Show } from "solid-js"
+import type { ResultsPaneViewModel } from "./model/use-results-pane"
 
 export type ResultsPanelProps = {
   viewModel: ResultsPaneViewModel

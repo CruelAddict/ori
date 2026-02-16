@@ -1,9 +1,9 @@
 import { type Command, useActiveCommands } from "@src/core/services/key-scopes"
 import { DialogSelect, type DialogSelectOption } from "@widgets/dialog-select"
-import type { OverlayComponentProps } from "@widgets/overlay/overlay-store"
 import { createMemo } from "solid-js"
+import type { OverlayComponentProps } from "./overlay-store"
 
-export function CommandPalette(props: OverlayComponentProps) {
+export function CommandPaletteOverlay(props: OverlayComponentProps) {
   const getCommands = useActiveCommands()
 
   const options = createMemo<DialogSelectOption<Command>[]>(() =>

@@ -1,19 +1,19 @@
-import { useResourceByName } from "@src/entities/resource/model/resource-list-store"
-import { useEditorPane } from "@src/features/editor-pane/use-editor-pane"
-import { useResultsPane } from "@src/features/results-pane/use-results-pane"
-import { useTreePane } from "@src/features/tree-pane/use-tree-pane"
+import { useResourceByName } from "@src/entities/resource/model/resource-store"
+import { useEditorPane } from "@src/widgets/editor-panel/model/use-editor-pane"
+import { useResultsPane } from "@src/widgets/results-panel/model/use-results-pane"
+import { useTreePane } from "@src/widgets/tree-panel/model/use-tree-pane"
 import type { Accessor } from "solid-js"
 import { createEffect, createMemo, createSignal } from "solid-js"
 
 export type Pane = "tree" | "editor" | "results"
 
-export type UseResourceViewOptions = {
+export type UseResourceWorkspaceOptions = {
   resourceName: Accessor<string>
 }
 
 const DEFAULT_PANE: Pane = "tree"
 
-export function useResourceView(options: UseResourceViewOptions) {
+export function useResourceWorkspace(options: UseResourceWorkspaceOptions) {
   const resource = useResourceByName(options.resourceName)
   const title = createMemo(() => resource()?.name ?? options.resourceName())
   const [focusedPane, setFocusedPane] = createSignal<Pane | null>(DEFAULT_PANE)
@@ -24,9 +24,6 @@ export function useResourceView(options: UseResourceViewOptions) {
     editor: false,
     results: false,
   })
-
-  let treePane: ReturnType<typeof useTreePane>
-  let resultsPane: ReturnType<typeof useResultsPane>
 
   const isPaneVisible = (pane: Pane) => visiblePanes()[pane]
   const setPaneVisible = (pane: Pane, next: boolean) => {
@@ -88,7 +85,7 @@ export function useResourceView(options: UseResourceViewOptions) {
     focusSelf: () => tryFocusPane(pane),
   })
 
-  treePane = useTreePane({
+  const treePane = useTreePane({
     resourceName: options.resourceName,
     ...paneFocusFuncs("tree"),
   })
@@ -99,7 +96,7 @@ export function useResourceView(options: UseResourceViewOptions) {
     unfocus: focusPreviousVisiblePane,
   })
 
-  resultsPane = useResultsPane({
+  const resultsPane = useResultsPane({
     job: editorPane.currentJob,
     ...paneFocusFuncs("results"),
   })

@@ -1,4 +1,4 @@
-import type { QueryJob } from "@src/entities/query-job/providers/query-jobs-provider"
+import type { QueryJob } from "@src/entities/query/providers/query-provider"
 import type { Accessor } from "solid-js"
 
 export type ResultsPaneViewModel = {

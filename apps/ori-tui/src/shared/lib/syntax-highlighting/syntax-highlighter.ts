@@ -1,11 +1,14 @@
 import { dirname, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
-import type { HighlightGroup, Theme } from "@app/theme"
 import { addDefaultParsers, getTreeSitterClient, RGBA, SyntaxStyle } from "@opentui/core"
 import type { Logger } from "pino"
 import { type Accessor, createEffect, createSignal, onCleanup } from "solid-js"
-import sqlHighlights from "../../assets/highlights.scm" with { type: "file" }
-import sqlWasm from "../../assets/tree-sitter-sql.wasm" with { type: "file" }
+import sqlHighlights from "../../../assets/highlights.scm" with { type: "file" }
+import sqlWasm from "../../../assets/tree-sitter-sql.wasm" with { type: "file" }
+
+type SyntaxThemePalette = {
+  get(group: string): string
+}
 
 export type SyntaxHighlightSpan = {
   start: number
@@ -41,7 +44,7 @@ const SYNTAX_HIGHLIGHT_GROUPS = [
   "syntax_operator",
   "syntax_punctuation_bracket",
   "syntax_punctuation_delimiter",
-] as const satisfies readonly HighlightGroup[]
+] as const
 
 type SyntaxHighlightGroup = (typeof SYNTAX_HIGHLIGHT_GROUPS)[number]
 
@@ -94,7 +97,7 @@ async function ensureSqlRegistered(logger?: Logger) {
   return registerPromise
 }
 
-function buildSyntaxStyle(theme: Theme): SyntaxStyleBundle {
+function buildSyntaxStyle(theme: SyntaxThemePalette): SyntaxStyleBundle {
   const syntaxStyle = SyntaxStyle.create()
   const styleIds = {} as StyleIds
 
@@ -201,7 +204,7 @@ async function collectHighlightsByLanguage(
   return []
 }
 
-export function syntaxHighlighter(params: { theme: Accessor<Theme>; language: string; logger?: Logger }) {
+export function syntaxHighlighter(params: { theme: Accessor<SyntaxThemePalette>; language: string; logger?: Logger }) {
   const { theme, language, logger } = params
   let disposed = false
   let currentStyle = buildSyntaxStyle(theme())

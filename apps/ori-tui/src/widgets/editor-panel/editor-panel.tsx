@@ -1,9 +1,9 @@
 import { useTheme } from "@app/providers/theme"
 import { type KeyBinding, KeyScope } from "@src/core/services/key-scopes"
-import type { EditorPaneViewModel } from "@src/features/editor-pane/use-editor-pane"
 import { useStatusline } from "@src/widgets/statusline/statusline-context"
 import { onMount } from "solid-js"
 import { Buffer } from "./buffer"
+import type { EditorPaneViewModel } from "./model/use-editor-pane"
 
 export type EditorPanelProps = {
   viewModel: EditorPaneViewModel

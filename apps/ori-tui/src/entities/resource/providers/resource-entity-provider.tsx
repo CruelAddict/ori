@@ -1,5 +1,7 @@
-import { ResourcesServiceProvider } from "@src/entities/resource/api/resources-service"
-import { ResourceListStoreProvider } from "@src/entities/resource/model/resource-list-store"
+import { useOriClient } from "@app/providers/client"
+import { useEventStream } from "@app/providers/events"
+import { useLogger } from "@app/providers/logger"
+import { createResourceEntityContextValue, ResourceEntityContext } from "@src/entities/resource/model/resource-store"
 import type { JSX } from "solid-js"
 
 export type ResourceEntityProviderProps = {
@@ -7,9 +9,15 @@ export type ResourceEntityProviderProps = {
 }
 
 export function ResourceEntityProvider(props: ResourceEntityProviderProps) {
-  return (
-    <ResourcesServiceProvider>
-      <ResourceListStoreProvider>{props.children}</ResourceListStoreProvider>
-    </ResourcesServiceProvider>
-  )
+  const client = useOriClient()
+  const logger = useLogger()
+  const events = useEventStream()
+
+  const value = createResourceEntityContextValue({
+    client,
+    logger,
+    subscribeEvents: events.subscribe,
+  })
+
+  return <ResourceEntityContext.Provider value={value}>{props.children}</ResourceEntityContext.Provider>
 }

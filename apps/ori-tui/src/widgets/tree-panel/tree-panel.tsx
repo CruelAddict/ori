@@ -1,8 +1,8 @@
 import { useTheme } from "@app/providers/theme"
 import { TextAttributes } from "@opentui/core"
 import { type KeyBinding, KeyScope } from "@src/core/services/key-scopes"
-import type { TreePaneViewModel } from "@src/features/tree-pane/use-tree-pane"
 import { type Accessor, createSelector, For, Show } from "solid-js"
+import type { TreePaneViewModel } from "./model/use-tree-pane"
 import { TreePaneRow } from "./tree-pane-row.tsx"
 import { TreeScrollbox, type TreeScrollboxApi } from "./tree-scrollbox.tsx"
 

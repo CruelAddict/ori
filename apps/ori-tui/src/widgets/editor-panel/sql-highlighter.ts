@@ -1,5 +1,5 @@
 import type { SyntaxStyle, TextareaRenderable } from "@opentui/core"
-import type { SyntaxHighlightResult } from "../../features/syntax-highlighting/syntax-highlighter"
+import type { SyntaxHighlightResult } from "@shared/lib/syntax-highlighting/syntax-highlighter"
 
 const SYNTAX_EXTMARK_TYPE = "syntax-highlight"
 

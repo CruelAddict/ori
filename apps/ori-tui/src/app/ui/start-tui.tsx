@@ -11,13 +11,13 @@ import { render, useRenderer } from "@opentui/solid"
 import { copyTextToClipboard, getSelectionOverrideText } from "@shared/lib/clipboard"
 import type { LogLevel } from "@shared/lib/logger"
 import { KeymapProvider, KeyScope, SYSTEM_LAYER } from "@src/core/services/key-scopes"
-import { ConnectionEntityProvider } from "@src/entities/connection/providers/connection-entity-provider"
+import { QueryProvider } from "@src/entities/query/providers/query-provider"
 import { ResourceEntityProvider } from "@src/entities/resource/providers/resource-entity-provider"
-import { QueryJobsProvider } from "@src/entities/query-job/providers/query-jobs-provider"
-import { CommandPalette } from "@src/features/commands-list"
-import { ResourcePickerOverlay } from "@widgets/overlay/ResourcePickerOverlay"
+import { ResourceIntrospectionProvider } from "@src/entities/resource-introspection/providers/resource-introspection-provider"
+import { CommandPaletteOverlay } from "@widgets/overlay/CommandPaletteOverlay"
 import { OverlayHost } from "@widgets/overlay/OverlayHost"
 import type { OverlayManager } from "@widgets/overlay/overlay-store"
+import { ResourcePickerOverlay } from "@widgets/overlay/ResourcePickerOverlay"
 import { ThemePickerOverlay } from "@widgets/overlay/ThemePickerOverlay"
 import type { Logger } from "pino"
 import { createEffect, createSignal } from "solid-js"
@@ -111,7 +111,7 @@ function GlobalHotkeys() {
   }
 
   const openCommandPalette = () => {
-    overlays.show({ id: "command-palette", render: CommandPalette })
+    overlays.show({ id: "command-palette", render: CommandPaletteOverlay })
   }
 
   return (
@@ -183,8 +183,8 @@ export function startTui(options: StartTuiOptions): RendererHandle {
           <EventStreamProvider>
             <NotificationsProvider>
               <ResourceEntityProvider>
-                <ConnectionEntityProvider>
-                  <QueryJobsProvider>
+                <ResourceIntrospectionProvider>
+                  <QueryProvider>
                     <NavigationProvider>
                       <OverlayProvider>
                         <KeymapProvider>
@@ -194,8 +194,8 @@ export function startTui(options: StartTuiOptions): RendererHandle {
                         </KeymapProvider>
                       </OverlayProvider>
                     </NavigationProvider>
-                  </QueryJobsProvider>
-                </ConnectionEntityProvider>
+                  </QueryProvider>
+                </ResourceIntrospectionProvider>
               </ResourceEntityProvider>
             </NotificationsProvider>
           </EventStreamProvider>

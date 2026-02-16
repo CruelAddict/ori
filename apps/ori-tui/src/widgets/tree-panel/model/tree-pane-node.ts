@@ -13,15 +13,11 @@ type BaseTreePaneNode = {
   hasChildren: boolean
 }
 
-// SnapshotTreePaneNode represents a node that represents an actual node
-// from a snapshot that we retrieved from backend
 export interface SnapshotTreePaneNode extends BaseTreePaneNode {
   kind: "node"
   node: Node
 }
 
-// EdgeTreePaneNode represents a node that doesn't exist in the snapshot
-// and that we introduced for display purposes
 export interface EdgeTreePaneNode extends BaseTreePaneNode {
   kind: "edge"
   sourceNodeId: string
@@ -32,33 +28,6 @@ export interface EdgeTreePaneNode extends BaseTreePaneNode {
 type ConstraintNode = Extract<Node, { type: typeof NodeType.CONSTRAINT }>
 type IndexNode = Extract<Node, { type: typeof NodeType.INDEX }>
 type TriggerNode = Extract<Node, { type: typeof NodeType.TRIGGER }>
-
-export function buildTreePaneNodeMap(nodes: Map<string, Node>): Map<string, TreePaneNode> {
-  const map = new Map<string, TreePaneNode>()
-
-  for (const node of nodes.values()) {
-    map.set(node.id, createSnapshotTreePaneNode(node))
-  }
-
-  for (const node of nodes.values()) {
-    const parent = map.get(node.id)
-    if (!parent || parent.kind !== "node") {
-      continue
-    }
-    const entries = Object.entries(node.edges) as Array<[string, NodeEdge]>
-    for (const [edgeName, edge] of entries) {
-      if (!edge.items || edge.items.length === 0) {
-        continue
-      }
-      const edgeEntity = createEdgeTreePaneNode(node, edgeName, edge)
-      map.set(edgeEntity.id, edgeEntity)
-      parent.childIds.push(edgeEntity.id)
-      parent.hasChildren = parent.childIds.length > 0
-    }
-  }
-
-  return map
-}
 
 export function createSnapshotTreePaneNode(node: Node): SnapshotTreePaneNode {
   return {
