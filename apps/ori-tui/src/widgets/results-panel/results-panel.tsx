@@ -438,22 +438,29 @@ export function ResultsPanel(props: ResultsPanelProps) {
               >
                 <box flexDirection="column">
                   <For each={resultRows()}>
-                    {(_, rowIndex) => (
-                      <box
-                        flexDirection="row"
-                        backgroundColor={palette().get("panel_background")}
-                      >
-                        <table_cell
-                          width={rowNumberCellWidth()}
-                          display={String(rowIndex() + 1)}
-                          align="right"
+                    {(_, rowIndex) => {
+                      const rowNumberColor = () =>
+                        isActive() && cursorRow() === rowIndex()
+                          ? palette().get("results_row_number_cursor")
+                          : palette().get("results_row_number")
+
+                      return (
+                        <box
+                          flexDirection="row"
                           backgroundColor={palette().get("panel_background")}
-                          fg={palette().get("results_column_title")}
-                          defaultFg={palette().get("results_column_title")}
-                          selectionBg={palette().get("results_selection_background")}
-                        />
-                      </box>
-                    )}
+                        >
+                          <table_cell
+                            width={rowNumberCellWidth()}
+                            display={String(rowIndex() + 1)}
+                            align="right"
+                            backgroundColor={palette().get("panel_background")}
+                            fg={rowNumberColor()}
+                            defaultFg={rowNumberColor()}
+                            selectionBg={palette().get("results_selection_background")}
+                          />
+                        </box>
+                      )
+                    }}
                   </For>
                 </box>
               </scrollbox>

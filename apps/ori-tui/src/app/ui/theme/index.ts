@@ -58,6 +58,8 @@ export const HIGHLIGHT_GROUPS = [
   "results_row_alt_background",
   "results_selection_background",
   "results_column_title",
+  "results_row_number",
+  "results_row_number_cursor",
   "syntax_keyword",
   "syntax_keyword_operator",
   "syntax_string",
@@ -107,13 +109,13 @@ const PALETTE_TOKENS = [
 
 type HighlightDefault =
   | {
-      type: "palette"
-      token: PaletteToken
-    }
+    type: "palette"
+    token: PaletteToken
+  }
   | {
-      type: "group"
-      group: HighlightGroup
-    }
+    type: "group"
+    group: HighlightGroup
+  }
 
 const p = (token: PaletteToken): HighlightDefault => ({ type: "palette", token })
 const g = (group: HighlightGroup): HighlightDefault => ({ type: "group", group })
@@ -147,6 +149,8 @@ const DEFAULT_HIGHLIGHT_LINKS = {
   results_row_alt_background: p("bg_2"),
   results_selection_background: g("results_header_background"),
   results_column_title: g("header"),
+  results_row_number: g("text_muted"),
+  results_row_number_cursor: g("primary"),
   syntax_keyword: g("primary"),
   syntax_keyword_operator: g("syntax_keyword"),
   syntax_string: g("accent"),
