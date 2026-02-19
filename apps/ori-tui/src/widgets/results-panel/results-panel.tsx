@@ -32,6 +32,7 @@ export function ResultsPanel(props: ResultsPanelProps) {
   const palette = theme
 
   let scrollRef: ScrollBoxRenderable | undefined
+  let rowScrollRef: ScrollBoxRenderable | undefined
   const rowRenderables = new Map<number, BoxRenderable>()
 
   const [scrollLeft, setScrollLeft] = createSignal(0)
@@ -68,6 +69,10 @@ export function ResultsPanel(props: ResultsPanelProps) {
     return widths
   })
 
+  const rowNumberWidth = createMemo(() => String(resultRows().length).length)
+  const rowNumberCellWidth = createMemo(() => rowNumberWidth() + 2)
+  const rowNumberLaneWidth = createMemo(() => rowNumberCellWidth())
+
   const getViewport = () => (scrollRef as { viewport?: BoxRenderable })?.viewport
 
   const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value))
@@ -83,8 +88,10 @@ export function ResultsPanel(props: ResultsPanelProps) {
 
     if (rowBottom > viewportBottom) {
       scrollRef?.scrollBy({ x: 0, y: rowBottom - viewportBottom })
+      syncScrollState()
     } else if (rowTop < viewportTop) {
       scrollRef?.scrollBy({ x: 0, y: rowTop - viewportTop })
+      syncScrollState()
     }
   }
 
@@ -110,11 +117,11 @@ export function ResultsPanel(props: ResultsPanelProps) {
     if (colRight > viewportRight) {
       const delta = colRight - viewportRight
       scrollRef.scrollBy({ x: delta, y: 0 })
-      setScrollLeft(scrollRef.scrollLeft ?? 0)
+      syncScrollState()
     } else if (colLeft < viewportLeft) {
       const delta = colLeft - viewportLeft
       scrollRef.scrollBy({ x: delta, y: 0 })
-      setScrollLeft(scrollRef.scrollLeft ?? 0)
+      syncScrollState()
     }
   }
 
@@ -122,7 +129,7 @@ export function ResultsPanel(props: ResultsPanelProps) {
     if (!hasResults()) return
     const delta = direction === "left" ? -HORIZONTAL_SCROLL_STEP : HORIZONTAL_SCROLL_STEP
     scrollRef?.scrollBy({ x: delta, y: 0 })
-    setScrollLeft(scrollRef?.scrollLeft ?? 0)
+    syncScrollState()
   }
 
   const hasResultData = () => hasResults() && job()?.result
@@ -204,21 +211,38 @@ export function ResultsPanel(props: ResultsPanelProps) {
     />
   )
 
-  const resetSelection = () => {
+  const syncScrollState = () => {
+    const left = scrollRef?.scrollLeft ?? 0
+    const top = scrollRef?.scrollTop ?? 0
+    setScrollLeft(left)
+    if (rowScrollRef) {
+      rowScrollRef.scrollTo({ x: 0, y: top })
+    }
+  }
+
+  const resetScroll = () => {
+    setScrollLeft(0)
+    if (scrollRef) {
+      scrollRef.scrollTo({ x: 0, y: 0 })
+    }
+    if (rowScrollRef) {
+      rowScrollRef.scrollTo({ x: 0, y: 0 })
+    }
+  }
+
+  const resetPaneState = () => {
     setCursorRow(0)
     setCursorCol(0)
     setSelectionCount(0)
-    setScrollLeft(0)
+    resetScroll()
     selectedHeaderCols.clear()
     selectedRowCols.clear()
   }
 
   createEffect(() => {
-    const current = job()
-    if (!current?.result || current.status !== "success" || resultRows().length === 0) {
-      resetSelection()
-      return
-    }
+    job()
+    resultRows().length === 0
+    resetPaneState()
   })
 
   createEffect(() => {
@@ -313,163 +337,260 @@ export function ResultsPanel(props: ResultsPanelProps) {
             paddingRight={1}
           >
             {/* Header */}
-            <box overflow="hidden">
+            <box
+              flexDirection="row"
+              overflow="hidden"
+              backgroundColor={palette().get("results_header_background")}
+            >
               <box
                 flexDirection="row"
-                marginLeft={-scrollLeft()}
+                backgroundColor={palette().get("panel_background")}
+                zIndex={1}
+                width={rowNumberLaneWidth()}
+                minWidth={rowNumberLaneWidth()}
+                maxWidth={rowNumberLaneWidth()}
+                flexShrink={0}
+              >
+                <table_cell
+                  width={rowNumberCellWidth()}
+                  display={""}
+                  backgroundColor={palette().get("panel_background")}
+                  fg={palette().get("panel_background")}
+                  defaultFg={palette().get("panel_background")}
+                  attributes={TextAttributes.DIM}
+                  selectionBg={palette().get("results_selection_background")}
+                />
+              </box>
+              <box
+                flexGrow={1}
+                flexShrink={1}
+                minWidth={0}
+                overflow="hidden"
                 backgroundColor={palette().get("results_header_background")}
               >
-                <SeparatorCell
-                  fg={palette().get("border")}
-                  bg={palette().get("results_header_background")}
-                  selectionBg={palette().get("results_selection_background")}
-                />
-                <For each={resultColumns()}>
-                  {(column, index) => (
-                    <>
-                      {index() > 0 && (
-                        <SeparatorCell
-                          fg={palette().get("border")}
-                          bg={palette().get("results_header_background")}
-                          selectionBg={palette().get("results_selection_background")}
-                        />
-                      )}
+                <box
+                  flexDirection="row"
+                  marginLeft={-scrollLeft()}
+                  backgroundColor={palette().get("results_header_background")}
+                >
+                  <SeparatorCell
+                    fg={palette().get("border")}
+                    bg={palette().get("results_header_background")}
+                    selectionBg={palette().get("results_selection_background")}
+                  />
+                  <For each={resultColumns()}>
+                    {(column, index) => (
+                      <>
+                        {index() > 0 && (
+                          <SeparatorCell
+                            fg={palette().get("border")}
+                            bg={palette().get("results_header_background")}
+                            selectionBg={palette().get("results_selection_background")}
+                          />
+                        )}
 
-                      <table_cell
-                        width={columnWidths()[index()] + 2}
-                        display={formatCell(column.name, columnWidths()[index()])}
-                        backgroundColor={palette().get("results_header_background")}
-                        fg={palette().get("results_column_title")}
-                        defaultFg={palette().get("results_column_title")}
-                        attributes={TextAttributes.BOLD}
-                        selectionBg={palette().get("results_selection_background")}
-                        value={String(column.name)}
-                        onSelectionChange={(selected: boolean) => handleHeaderSelectionChange(index(), selected)}
-                      />
-                    </>
-                  )}
-                </For>
-                <SeparatorCell
-                  fg={palette().get("border")}
-                  bg={palette().get("results_header_background")}
-                  selectionBg={palette().get("results_selection_background")}
-                />
+                        <table_cell
+                          width={columnWidths()[index()] + 2}
+                          display={formatCell(column.name, columnWidths()[index()])}
+                          backgroundColor={palette().get("results_header_background")}
+                          fg={palette().get("results_column_title")}
+                          defaultFg={palette().get("results_column_title")}
+                          attributes={TextAttributes.BOLD}
+                          selectionBg={palette().get("results_selection_background")}
+                          value={String(column.name)}
+                          onSelectionChange={(selected: boolean) => handleHeaderSelectionChange(index(), selected)}
+                        />
+                      </>
+                    )}
+                  </For>
+                  <SeparatorCell
+                    fg={palette().get("border")}
+                    bg={palette().get("results_header_background")}
+                    selectionBg={palette().get("results_selection_background")}
+                  />
+                </box>
               </box>
             </box>
             {/* Rows */}
-            <scrollbox
-              ref={(node: ScrollBoxRenderable | undefined) => {
-                scrollRef = node ?? undefined
-                if (!scrollRef) return
-                // @ts-expect-error onMouseEvent is protected in typings
-                const originalOnMouseEvent = scrollRef.onMouseEvent?.bind(scrollRef)
-                const handleMouseEvent = createScrollSpeedHandler(originalOnMouseEvent, resultsScrollSpeed)
-                // @ts-expect-error override protected handler to track horizontal scroll
-                scrollRef.onMouseEvent = (event: MouseEvent) => {
-                  handleMouseEvent(event)
-                  setScrollLeft(scrollRef?.scrollLeft ?? 0)
-                }
-                enforceHorizontalScrollbarMinThumbWidth(scrollRef, 5)
-              }}
-              maxHeight={18}
-              onMouseDown={pane.focusSelf}
-              scrollX={true}
-              scrollY={true}
-              horizontalScrollbarOptions={{
-                trackOptions: {
-                  foregroundColor: theme().get("scrollbar_foreground"),
-                  backgroundColor: theme().get("scrollbar_background"),
-                },
-              }}
-              verticalScrollbarOptions={{
-                trackOptions: {
-                  foregroundColor: theme().get("scrollbar_foreground"),
-                  backgroundColor: theme().get("scrollbar_background"),
-                },
-              }}
+            <box
+              flexDirection="row"
               marginBottom={1}
-              contentOptions={{
-                maxWidth: undefined,
-                width: "auto",
-              }}
             >
-              <box
+              <scrollbox
+                ref={(node: ScrollBoxRenderable | undefined) => {
+                  rowScrollRef = node ?? undefined
+                  if (!rowScrollRef) return
+                  rowScrollRef.scrollTo({ x: 0, y: scrollRef?.scrollTop ?? 0 })
+                }}
                 flexDirection="column"
-                width={"auto"}
+                width={rowNumberLaneWidth()}
+                maxHeight={18}
+                scrollX={false}
+                scrollY={false}
+                scrollbarOptions={{ visible: false }}
+                backgroundColor={palette().get("panel_background")}
+                contentOptions={{
+                  maxWidth: rowNumberCellWidth(),
+                  width: rowNumberCellWidth(),
+                }}
               >
-                <For each={resultRows()}>
-                  {(row, rowIndex) => {
-                    const rowBackground = () =>
-                      rowIndex() % 2 === 0
-                        ? palette().get("panel_background")
-                        : palette().get("results_row_alt_background")
-                    return (
+                <box flexDirection="column">
+                  <For each={resultRows()}>
+                    {(_, rowIndex) => (
                       <box
                         flexDirection="row"
-                        backgroundColor={rowBackground()}
-                        ref={(ref: BoxRenderable | undefined) => {
-                          if (!ref) {
-                            rowRenderables.delete(rowIndex())
-                            return
-                          }
-                          rowRenderables.set(rowIndex(), ref)
-                        }}
+                        backgroundColor={palette().get("panel_background")}
                       >
-                        <For each={row}>
-                          {(cell, colIndex) => {
-                            const isCursor = () =>
-                              isActive() && cursorRow() === rowIndex() && cursorCol() === colIndex()
-                            const isCursorOnLeftCell = () =>
-                              colIndex() > 0 &&
-                              isActive() &&
-                              cursorRow() === rowIndex() &&
-                              cursorCol() === colIndex() - 1
-                            const cursorBackground = () => cursorCellBackground()
-                            return (
-                              <>
-                                <SeparatorCell
-                                  bg={isCursor() || isCursorOnLeftCell() ? cursorBackground() : undefined}
-                                  fg={isCursor() || isCursorOnLeftCell() ? cursorBackground() : palette().get("border")}
-                                  selectionBg={palette().get("results_selection_background")}
-                                />
-                                <table_cell
-                                  backgroundColor={isCursor() ? cursorBackground() : undefined}
-                                  flexDirection="row"
-                                  width={columnWidths()[colIndex()] + 2}
-                                  align={typeof cell === "number" ? "right" : "left"}
-                                  onMouseDown={(event: MouseEvent) =>
-                                    handleCellMouseDown(rowIndex(), colIndex(), event)
-                                  }
-                                  selectionBg={palette().get("results_selection_background")}
-                                  value={String(cell)}
-                                  display={formatCell(cell, columnWidths()[colIndex()])}
-                                  fg={
-                                    isCursor() && !hasSelection()
-                                      ? palette().get("selection_foreground")
-                                      : palette().get("text")
-                                  }
-                                  defaultFg={palette().get("text")}
-                                  onSelectionChange={(selected: boolean) =>
-                                    handleRowSelectionChange(rowIndex(), colIndex(), selected)
-                                  }
-                                />
-                                {colIndex() === row.length - 1 && (
-                                  <SeparatorCell
-                                    bg={isCursor() ? cursorBackground() : undefined}
-                                    fg={isCursor() ? cursorBackground() : palette().get("border")}
-                                    selectionBg={palette().get("results_selection_background")}
-                                  />
-                                )}
-                              </>
-                            )
-                          }}
-                        </For>
+                        <table_cell
+                          width={rowNumberCellWidth()}
+                          display={String(rowIndex() + 1)}
+                          align="right"
+                          backgroundColor={palette().get("panel_background")}
+                          fg={palette().get("results_column_title")}
+                          defaultFg={palette().get("results_column_title")}
+                          selectionBg={palette().get("results_selection_background")}
+                        />
                       </box>
-                    )
-                  }}
-                </For>
-              </box>
-            </scrollbox>
+                    )}
+                  </For>
+                </box>
+              </scrollbox>
+              <scrollbox
+                ref={(node: ScrollBoxRenderable | undefined) => {
+                  scrollRef = node ?? undefined
+                  if (!scrollRef) return
+                  // @ts-expect-error onMouseEvent is protected in typings
+                  const originalOnMouseEvent = scrollRef.onMouseEvent?.bind(scrollRef)
+                  const handleMouseEvent = createScrollSpeedHandler(originalOnMouseEvent, resultsScrollSpeed)
+                  // @ts-expect-error override protected handler to track horizontal scroll
+                  scrollRef.onMouseEvent = (event: MouseEvent) => {
+                    handleMouseEvent(event)
+                    syncScrollState()
+                  }
+                  enforceHorizontalScrollbarMinThumbWidth(scrollRef, 5)
+                  scrollRef.scrollTo({ x: 0, y: 0 })
+                  setScrollLeft(0)
+                  syncScrollState()
+                }}
+                flexGrow={1}
+                maxHeight={18}
+                onMouseDown={pane.focusSelf}
+                scrollX={true}
+                scrollY={true}
+                horizontalScrollbarOptions={{
+                  trackOptions: {
+                    foregroundColor: theme().get("scrollbar_foreground"),
+                    backgroundColor: theme().get("scrollbar_background"),
+                  },
+                }}
+                verticalScrollbarOptions={{
+                  trackOptions: {
+                    foregroundColor: theme().get("scrollbar_foreground"),
+                    backgroundColor: theme().get("scrollbar_background"),
+                  },
+                }}
+                contentOptions={{
+                  maxWidth: undefined,
+                  width: "auto",
+                }}
+              >
+                <box
+                  flexDirection="column"
+                  width={"auto"}
+                >
+                  <For each={resultRows()}>
+                    {(row, rowIndex) => {
+                      const rowBackground = () =>
+                        rowIndex() % 2 === 0
+                          ? palette().get("panel_background")
+                          : palette().get("results_row_alt_background")
+                      return (
+                        <box
+                          flexDirection="row"
+                          backgroundColor={rowBackground()}
+                          ref={(ref: BoxRenderable | undefined) => {
+                            if (!ref) {
+                              rowRenderables.delete(rowIndex())
+                              return
+                            }
+                            rowRenderables.set(rowIndex(), ref)
+                          }}
+                        >
+                          <SeparatorCell
+                            bg={
+                              isActive() && cursorRow() === rowIndex() && cursorCol() === 0
+                                ? cursorCellBackground()
+                                : rowBackground()
+                            }
+                            fg={
+                              isActive() && cursorRow() === rowIndex() && cursorCol() === 0
+                                ? cursorCellBackground()
+                                : palette().get("border")
+                            }
+                            selectionBg={palette().get("results_selection_background")}
+                          />
+                          <For each={row}>
+                            {(cell, colIndex) => {
+                              const isCursor = () =>
+                                isActive() && cursorRow() === rowIndex() && cursorCol() === colIndex()
+                              const isCursorOnLeftCell = () =>
+                                colIndex() > 0 &&
+                                isActive() &&
+                                cursorRow() === rowIndex() &&
+                                cursorCol() === colIndex() - 1
+                              const cursorBackground = () => cursorCellBackground()
+                              return (
+                                <>
+                                  {colIndex() > 0 && (
+                                    <SeparatorCell
+                                      bg={isCursor() || isCursorOnLeftCell() ? cursorBackground() : undefined}
+                                      fg={
+                                        isCursor() || isCursorOnLeftCell()
+                                          ? cursorBackground()
+                                          : palette().get("border")
+                                      }
+                                      selectionBg={palette().get("results_selection_background")}
+                                    />
+                                  )}
+                                  <table_cell
+                                    backgroundColor={isCursor() ? cursorBackground() : undefined}
+                                    flexDirection="row"
+                                    width={columnWidths()[colIndex()] + 2}
+                                    align={typeof cell === "number" ? "right" : "left"}
+                                    onMouseDown={(event: MouseEvent) =>
+                                      handleCellMouseDown(rowIndex(), colIndex(), event)
+                                    }
+                                    selectionBg={palette().get("results_selection_background")}
+                                    value={String(cell)}
+                                    display={formatCell(cell, columnWidths()[colIndex()])}
+                                    fg={
+                                      isCursor() && !hasSelection()
+                                        ? palette().get("selection_foreground")
+                                        : palette().get("text")
+                                    }
+                                    defaultFg={palette().get("text")}
+                                    onSelectionChange={(selected: boolean) =>
+                                      handleRowSelectionChange(rowIndex(), colIndex(), selected)
+                                    }
+                                  />
+                                  {colIndex() === row.length - 1 && (
+                                    <SeparatorCell
+                                      bg={isCursor() ? cursorBackground() : undefined}
+                                      fg={isCursor() ? cursorBackground() : palette().get("border")}
+                                      selectionBg={palette().get("results_selection_background")}
+                                    />
+                                  )}
+                                </>
+                              )
+                            }}
+                          </For>
+                        </box>
+                      )
+                    }}
+                  </For>
+                </box>
+              </scrollbox>
+            </box>
           </box>
         </Show>
 
