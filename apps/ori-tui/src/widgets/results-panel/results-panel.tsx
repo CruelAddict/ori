@@ -214,8 +214,10 @@ export function ResultsPanel(props: ResultsPanelProps) {
   const syncScrollState = () => {
     const left = scrollRef?.scrollLeft ?? 0
     const top = scrollRef?.scrollTop ?? 0
-    setScrollLeft(left)
-    if (rowScrollRef) {
+    if (scrollLeft() !== left) {
+      setScrollLeft(left)
+    }
+    if (rowScrollRef && rowScrollRef.scrollTop !== top) {
       rowScrollRef.scrollTo({ x: 0, y: top })
     }
   }
@@ -459,9 +461,16 @@ export function ResultsPanel(props: ResultsPanelProps) {
                 ref={(node: ScrollBoxRenderable | undefined) => {
                   scrollRef = node ?? undefined
                   if (!scrollRef) return
+                  // @ts-expect-error onUpdate is protected in typings
+                  const originalOnUpdate = scrollRef.onUpdate?.bind(scrollRef)
                   // @ts-expect-error onMouseEvent is protected in typings
                   const originalOnMouseEvent = scrollRef.onMouseEvent?.bind(scrollRef)
                   const handleMouseEvent = createScrollSpeedHandler(originalOnMouseEvent, resultsScrollSpeed)
+                  // @ts-expect-error override protected updater to track scroll
+                  scrollRef.onUpdate = (deltaTime: number) => {
+                    originalOnUpdate?.(deltaTime)
+                    syncScrollState()
+                  }
                   // @ts-expect-error override protected handler to track horizontal scroll
                   scrollRef.onMouseEvent = (event: MouseEvent) => {
                     handleMouseEvent(event)
