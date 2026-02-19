@@ -10,6 +10,7 @@ type PaletteTheme = {
   accent: string
   text: string
   textMuted: string
+  uiElement: string
   border: string
   warning: string
   error: string
@@ -95,6 +96,7 @@ const PALETTE_TOKENS = [
   "accent",
   "text",
   "textMuted",
+  "uiElement",
   "border",
   "warning",
   "error",
@@ -137,7 +139,7 @@ const DEFAULT_HIGHLIGHT_LINKS = {
   header: g("accent"),
   selection_background: g("primary"),
   selection_foreground: g("background"),
-  scrollbar_foreground: g("text"),
+  scrollbar_foreground: p("uiElement"),
   scrollbar_background: g("panel_background"),
   app_background: g("panel_background"),
   overlay_scrim_base: g("background"),
