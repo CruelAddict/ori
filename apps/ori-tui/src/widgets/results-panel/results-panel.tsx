@@ -8,7 +8,10 @@ import {
 } from "@opentui/core"
 import "./table-cell"
 import { setSelectionOverride } from "@shared/lib/clipboard"
-import { enforceHorizontalScrollbarMinThumbWidth } from "@shared/lib/opentui-scrollbar-min-width"
+import {
+  enforceHorizontalScrollbarMinThumbWidth,
+  enforceStableScrollboxOverflowLayout,
+} from "@shared/lib/opentui-scrollbar-min-width"
 import { createScrollSpeedHandler } from "@shared/lib/scroll-speed"
 import { type KeyBinding, KeyScope } from "@src/core/services/key-scopes"
 import { createEffect, createMemo, createSignal, For, onCleanup, Show } from "solid-js"
@@ -33,6 +36,7 @@ export function ResultsPanel(props: ResultsPanelProps) {
 
   let scrollRef: ScrollBoxRenderable | undefined
   let rowScrollRef: ScrollBoxRenderable | undefined
+  let rowNumberBottomPadding: 0 | 1 = 0
   const rowRenderables = new Map<number, BoxRenderable>()
 
   const [scrollLeft, setScrollLeft] = createSignal(0)
@@ -214,8 +218,14 @@ export function ResultsPanel(props: ResultsPanelProps) {
   const syncScrollState = () => {
     const left = scrollRef?.scrollLeft ?? 0
     const top = scrollRef?.scrollTop ?? 0
+    const nextRowNumberBottomPadding: 0 | 1 = scrollRef?.horizontalScrollBar.visible ? 1 : 0
+
     if (scrollLeft() !== left) {
       setScrollLeft(left)
+    }
+    if (rowScrollRef && rowNumberBottomPadding !== nextRowNumberBottomPadding) {
+      rowNumberBottomPadding = nextRowNumberBottomPadding
+      rowScrollRef.paddingBottom = nextRowNumberBottomPadding
     }
     if (rowScrollRef && rowScrollRef.scrollTop !== top) {
       rowScrollRef.scrollTo({ x: 0, y: top })
@@ -416,12 +426,14 @@ export function ResultsPanel(props: ResultsPanelProps) {
             {/* Rows */}
             <box
               flexDirection="row"
-              marginBottom={1}
             >
               <scrollbox
                 ref={(node: ScrollBoxRenderable | undefined) => {
                   rowScrollRef = node ?? undefined
                   if (!rowScrollRef) return
+                  rowNumberBottomPadding = 0
+                  rowScrollRef.paddingBottom = 0
+                  enforceStableScrollboxOverflowLayout(rowScrollRef)
                   rowScrollRef.scrollTo({ x: 0, y: scrollRef?.scrollTop ?? 0 })
                 }}
                 flexDirection="column"
@@ -430,6 +442,8 @@ export function ResultsPanel(props: ResultsPanelProps) {
                 scrollX={false}
                 scrollY={false}
                 scrollbarOptions={{ visible: false }}
+                horizontalScrollbarOptions={{ flexShrink: 0, minHeight: 1 }}
+                verticalScrollbarOptions={{ flexShrink: 0, minWidth: 1 }}
                 backgroundColor={palette().get("panel_background")}
                 contentOptions={{
                   maxWidth: rowNumberCellWidth(),
@@ -468,6 +482,7 @@ export function ResultsPanel(props: ResultsPanelProps) {
                 ref={(node: ScrollBoxRenderable | undefined) => {
                   scrollRef = node ?? undefined
                   if (!scrollRef) return
+                  enforceStableScrollboxOverflowLayout(scrollRef)
                   // @ts-expect-error onUpdate is protected in typings
                   const originalOnUpdate = scrollRef.onUpdate?.bind(scrollRef)
                   // @ts-expect-error onMouseEvent is protected in typings
@@ -494,12 +509,16 @@ export function ResultsPanel(props: ResultsPanelProps) {
                 scrollX={true}
                 scrollY={true}
                 horizontalScrollbarOptions={{
+                  flexShrink: 0,
+                  minHeight: 1,
                   trackOptions: {
                     foregroundColor: theme().get("scrollbar_foreground"),
                     backgroundColor: theme().get("scrollbar_background"),
                   },
                 }}
                 verticalScrollbarOptions={{
+                  flexShrink: 0,
+                  minWidth: 1,
                   trackOptions: {
                     foregroundColor: theme().get("scrollbar_foreground"),
                     backgroundColor: theme().get("scrollbar_background"),

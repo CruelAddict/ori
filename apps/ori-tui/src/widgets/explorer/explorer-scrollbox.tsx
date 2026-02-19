@@ -1,6 +1,9 @@
 import { useTheme } from "@app/providers/theme"
 import type { BoxRenderable, MouseEvent, ScrollBoxRenderable } from "@opentui/core"
-import { enforceHorizontalScrollbarMinThumbWidth } from "@shared/lib/opentui-scrollbar-min-width"
+import {
+  enforceHorizontalScrollbarMinThumbWidth,
+  enforceStableScrollboxOverflowLayout,
+} from "@shared/lib/opentui-scrollbar-min-width"
 import { createScrollSpeedHandler } from "@shared/lib/scroll-speed"
 import { type Accessor, createContext, createEffect, onCleanup, type ParentProps, useContext } from "solid-js"
 import { createAutoscrollService, type ScrollDelta } from "./explorer-scroll/autoscroll-service.ts"
@@ -63,6 +66,7 @@ export function ExplorerScrollbox(props: ExplorerScrollboxProps) {
     scrollBox = node
     autoscroll.setScrollBox(node)
     if (!scrollBox) return
+    enforceStableScrollboxOverflowLayout(scrollBox)
     enforceHorizontalScrollbarMinThumbWidth(scrollBox, 5)
     // @ts-expect-error onMouseEvent is protected in typings
     const originalOnMouseEvent = scrollBox.onMouseEvent?.bind(scrollBox)
@@ -91,12 +95,16 @@ export function ExplorerScrollbox(props: ExplorerScrollboxProps) {
         flexShrink: 0,
       }}
       horizontalScrollbarOptions={{
+        flexShrink: 0,
+        minHeight: 1,
         trackOptions: {
           foregroundColor: theme().get("scrollbar_foreground"),
           backgroundColor: theme().get("scrollbar_background"),
         },
       }}
       verticalScrollbarOptions={{
+        flexShrink: 0,
+        minWidth: 1,
         trackOptions: {
           foregroundColor: theme().get("scrollbar_foreground"),
           backgroundColor: theme().get("scrollbar_background"),

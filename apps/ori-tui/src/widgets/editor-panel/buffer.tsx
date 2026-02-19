@@ -1,6 +1,7 @@
 import { useLogger } from "@app/providers/logger"
 import { useTheme } from "@app/providers/theme"
 import type { BoxRenderable, KeyEvent, MouseEvent, ScrollBoxRenderable, TextareaRenderable } from "@opentui/core"
+import { enforceStableScrollboxOverflowLayout } from "@shared/lib/opentui-scrollbar-min-width"
 import { syntaxHighlighter } from "@shared/lib/syntax-highlighting/syntax-highlighter"
 import { type KeyBinding, KeyScope } from "@src/core/services/key-scopes"
 import { type Accessor, createEffect, For, on, onCleanup, onMount, Show, untrack } from "solid-js"
@@ -304,10 +305,13 @@ export function Buffer(props: BufferProps) {
       <scrollbox
         ref={(node: ScrollBoxRenderable | undefined) => {
           scrollRef = node ?? undefined
+          enforceStableScrollboxOverflowLayout(scrollRef)
         }}
         height={"100%"}
         stickyScroll={true}
         stickyStart="bottom"
+        horizontalScrollbarOptions={{ flexShrink: 0, minHeight: 1 }}
+        verticalScrollbarOptions={{ flexShrink: 0, minWidth: 1 }}
       >
         <box
           flexDirection="column"

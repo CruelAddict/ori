@@ -1,5 +1,6 @@
 import { useTheme } from "@app/providers/theme"
 import { type InputRenderable, type ScrollBoxRenderable, TextAttributes } from "@opentui/core"
+import { enforceStableScrollboxOverflowLayout } from "@shared/lib/opentui-scrollbar-min-width"
 import { type KeyBinding, KeyScope } from "@src/core/services/key-scopes"
 import { useDialogSelect } from "@widgets/dialog-select"
 import type { DialogSelectHint, DialogSelectOption, DialogSelectViewModel } from "@widgets/dialog-select/types"
@@ -136,9 +137,12 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
         <scrollbox
           ref={(node: ScrollBoxRenderable) => {
             scrollRef = node
+            enforceStableScrollboxOverflowLayout(scrollRef)
           }}
           maxHeight={maxHeight()}
           scrollbarOptions={{ visible: false }}
+          horizontalScrollbarOptions={{ flexShrink: 0, minHeight: 1 }}
+          verticalScrollbarOptions={{ flexShrink: 0, minWidth: 1 }}
         >
           <box flexDirection="column">
             <Show

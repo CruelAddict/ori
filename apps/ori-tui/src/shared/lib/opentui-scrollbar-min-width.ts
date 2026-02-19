@@ -8,10 +8,7 @@ type SliderWithMinThumbPatch = {
   getVirtualThumbSize?: () => number
 }
 
-export function enforceHorizontalScrollbarMinThumbWidth(
-  scrollBox: ScrollBoxRenderable | undefined,
-  minWidth: number,
-) {
+export function enforceHorizontalScrollbarMinThumbWidth(scrollBox: ScrollBoxRenderable | undefined, minWidth: number) {
   if (!scrollBox || !Number.isFinite(minWidth) || minWidth <= 0) return
 
   const slider = scrollBox.horizontalScrollBar?.slider as unknown as SliderWithMinThumbPatch | undefined
@@ -19,8 +16,7 @@ export function enforceHorizontalScrollbarMinThumbWidth(
 
   if (slider.__minThumbSizePatch?.minWidth === minWidth) return
 
-  const original = slider.__minThumbSizePatch?.getVirtualThumbSize
-    ?? slider.getVirtualThumbSize?.bind(slider)
+  const original = slider.__minThumbSizePatch?.getVirtualThumbSize ?? slider.getVirtualThumbSize?.bind(slider)
 
   if (!original) return
 
@@ -35,6 +31,17 @@ export function enforceHorizontalScrollbarMinThumbWidth(
     const boundedMin = trackSize > 0 ? Math.min(minVirtual, trackSize) : minVirtual
     return Math.max(original(), boundedMin)
   }
+
+  scrollBox.requestRender()
+}
+
+export function enforceStableScrollboxOverflowLayout(scrollBox: ScrollBoxRenderable | undefined) {
+  if (!scrollBox) return
+
+  scrollBox.verticalScrollBar.flexShrink = 0
+  scrollBox.verticalScrollBar.minWidth = 1
+  scrollBox.horizontalScrollBar.flexShrink = 0
+  scrollBox.horizontalScrollBar.minHeight = 1
 
   scrollBox.requestRender()
 }
