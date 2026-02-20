@@ -310,6 +310,16 @@ export function Buffer(props: BufferProps) {
         height={"100%"}
         stickyScroll={true}
         stickyStart="bottom"
+        horizontalScrollbarOptions={{
+          trackOptions: {
+            backgroundColor: palette().get("editor_background"),
+          },
+        }}
+        verticalScrollbarOptions={{
+          trackOptions: {
+            backgroundColor: palette().get("editor_background"),
+          },
+        }}
       >
         <box
           flexDirection="column"
