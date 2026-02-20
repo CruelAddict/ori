@@ -1,4 +1,4 @@
-import type { LogLevel } from "@shared/lib/logger"
+import type { LogLevel } from "@utils/logger"
 import type { ParsedArgs } from "./types"
 
 type ArgHandler = {

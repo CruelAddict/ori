@@ -1,10 +1,10 @@
-import { startTui } from "@app/start-tui"
+import { startApp } from "@app/tui/app"
 import { parseArgs } from "@cli/args/parse"
 import type { BackendHandle } from "@cli/runtime/backend"
 import { cleanupStaleSockets, ensureBackend } from "@cli/runtime/backend"
 import { resolveResourcesPath } from "@cli/runtime/config"
 import { ensureRuntimeDir, socketPathForResources } from "@cli/runtime/paths"
-import { createLogger } from "@shared/lib/logger"
+import { createLogger } from "@utils/logger"
 
 function parseServer(address?: string): { host: string; port: number } {
   if (!address) {
@@ -90,7 +90,7 @@ export async function main(argv = process.argv.slice(2)) {
   }
 
   installShutdownHooks(backendHandle)
-  startTui({
+  startApp({
     socketPath,
     host,
     port,

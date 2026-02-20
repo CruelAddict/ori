@@ -1,7 +1,7 @@
 import { type ChildProcess, type StdioOptions, spawn } from "node:child_process"
 import fs from "node:fs/promises"
 import path from "node:path"
-import type { LogLevel } from "@shared/lib/logger"
+import type { LogLevel } from "@utils/logger"
 import type { Logger } from "pino"
 
 type BunRequestInit = RequestInit & { unix?: string }
