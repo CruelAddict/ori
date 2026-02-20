@@ -303,6 +303,7 @@ export function Buffer(props: BufferProps) {
       enabled={props.isFocused}
     >
       <OriScrollbox
+        marginTop={1}
         onReady={(node: ScrollBoxRenderable | undefined) => {
           scrollRef = node ?? undefined
         }}
@@ -316,7 +317,6 @@ export function Buffer(props: BufferProps) {
           flexGrow={1}
         >
           <box
-            marginTop={1}
             flexDirection="column"
             flexGrow={1}
             onMouseDown={handleBufferMouseDown}
