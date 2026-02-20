@@ -5,15 +5,11 @@ import {
   type ScrollBoxRenderable,
   TextAttributes,
 } from "@opentui/core"
+import { OriScrollbox } from "@ui/components/ori-scrollbox"
 import { useTheme } from "@ui/providers/theme"
 import "./table-cell"
 import { type KeyBinding, KeyScope } from "@ui/services/key-scopes"
 import { setSelectionOverride } from "@utils/clipboard"
-import {
-  enforceHorizontalScrollbarMinThumbWidth,
-  enforceStableScrollboxOverflowLayout,
-} from "@utils/opentui-scrollbar-min-width"
-import { createScrollSpeedHandler } from "@utils/scroll-speed"
 import { createEffect, createMemo, createSignal, For, onCleanup, Show } from "solid-js"
 import type { ResultsPaneViewModel } from "./view-model/create-vm"
 
@@ -425,13 +421,12 @@ export function ResultsPanel(props: ResultsPanelProps) {
             </box>
             {/* Rows */}
             <box flexDirection="row">
-              <scrollbox
-                ref={(node: ScrollBoxRenderable | undefined) => {
+              <OriScrollbox
+                onReady={(node: ScrollBoxRenderable | undefined) => {
                   rowScrollRef = node ?? undefined
                   if (!rowScrollRef) return
                   rowNumberBottomPadding = 0
                   rowScrollRef.paddingBottom = 0
-                  enforceStableScrollboxOverflowLayout(rowScrollRef)
                   rowScrollRef.scrollTo({ x: 0, y: scrollRef?.scrollTop ?? 0 })
                 }}
                 flexDirection="column"
@@ -440,8 +435,6 @@ export function ResultsPanel(props: ResultsPanelProps) {
                 scrollX={false}
                 scrollY={false}
                 scrollbarOptions={{ visible: false }}
-                horizontalScrollbarOptions={{ flexShrink: 0, minHeight: 1 }}
-                verticalScrollbarOptions={{ flexShrink: 0, minWidth: 1 }}
                 backgroundColor={palette().get("panel_background")}
                 contentOptions={{
                   maxWidth: rowNumberCellWidth(),
@@ -475,53 +468,21 @@ export function ResultsPanel(props: ResultsPanelProps) {
                     }}
                   </For>
                 </box>
-              </scrollbox>
-              <scrollbox
-                ref={(node: ScrollBoxRenderable | undefined) => {
+              </OriScrollbox>
+              <OriScrollbox
+                onReady={(node: ScrollBoxRenderable | undefined) => {
                   scrollRef = node ?? undefined
                   if (!scrollRef) return
-                  enforceStableScrollboxOverflowLayout(scrollRef)
-                  // @ts-expect-error onUpdate is protected in typings
-                  const originalOnUpdate = scrollRef.onUpdate?.bind(scrollRef)
-                  // @ts-expect-error onMouseEvent is protected in typings
-                  const originalOnMouseEvent = scrollRef.onMouseEvent?.bind(scrollRef)
-                  const handleMouseEvent = createScrollSpeedHandler(originalOnMouseEvent, resultsScrollSpeed)
-                  // @ts-expect-error override protected updater to track scroll
-                  scrollRef.onUpdate = (deltaTime: number) => {
-                    originalOnUpdate?.(deltaTime)
-                    syncScrollState()
-                  }
-                  // @ts-expect-error override protected handler to track horizontal scroll
-                  scrollRef.onMouseEvent = (event: MouseEvent) => {
-                    handleMouseEvent(event)
-                    syncScrollState()
-                  }
-                  enforceHorizontalScrollbarMinThumbWidth(scrollRef, 5)
                   scrollRef.scrollTo({ x: 0, y: 0 })
                   setScrollLeft(0)
                   syncScrollState()
                 }}
+                onSync={syncScrollState}
+                scrollSpeed={resultsScrollSpeed}
+                minHorizontalThumbWidth={5}
                 flexGrow={1}
                 maxHeight={18}
                 onMouseDown={pane.focusSelf}
-                scrollX={true}
-                scrollY={true}
-                horizontalScrollbarOptions={{
-                  flexShrink: 0,
-                  minHeight: 1,
-                  trackOptions: {
-                    foregroundColor: theme().get("scrollbar_foreground"),
-                    backgroundColor: theme().get("scrollbar_background"),
-                  },
-                }}
-                verticalScrollbarOptions={{
-                  flexShrink: 0,
-                  minWidth: 1,
-                  trackOptions: {
-                    foregroundColor: theme().get("scrollbar_foreground"),
-                    backgroundColor: theme().get("scrollbar_background"),
-                  },
-                }}
                 contentOptions={{
                   maxWidth: undefined,
                   width: "auto",
@@ -622,7 +583,7 @@ export function ResultsPanel(props: ResultsPanelProps) {
                     }}
                   </For>
                 </box>
-              </scrollbox>
+              </OriScrollbox>
             </box>
           </box>
         </Show>

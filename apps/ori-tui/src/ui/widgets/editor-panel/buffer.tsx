@@ -1,8 +1,8 @@
 import type { BoxRenderable, KeyEvent, MouseEvent, ScrollBoxRenderable, TextareaRenderable } from "@opentui/core"
+import { OriScrollbox } from "@ui/components/ori-scrollbox"
 import { useLogger } from "@ui/providers/logger"
 import { useTheme } from "@ui/providers/theme"
 import { type KeyBinding, KeyScope } from "@ui/services/key-scopes"
-import { enforceStableScrollboxOverflowLayout } from "@utils/opentui-scrollbar-min-width"
 import { syntaxHighlighter } from "@utils/syntax-highlighter"
 import { type Accessor, createEffect, For, on, onCleanup, onMount, Show, untrack } from "solid-js"
 import { type CursorContext, createBufferModel } from "./buffer-model"
@@ -302,16 +302,13 @@ export function Buffer(props: BufferProps) {
       bindings={bindings}
       enabled={props.isFocused}
     >
-      <scrollbox
-        ref={(node: ScrollBoxRenderable | undefined) => {
+      <OriScrollbox
+        onReady={(node: ScrollBoxRenderable | undefined) => {
           scrollRef = node ?? undefined
-          enforceStableScrollboxOverflowLayout(scrollRef)
         }}
         height={"100%"}
         stickyScroll={true}
         stickyStart="bottom"
-        horizontalScrollbarOptions={{ flexShrink: 0, minHeight: 1 }}
-        verticalScrollbarOptions={{ flexShrink: 0, minWidth: 1 }}
       >
         <box
           flexDirection="column"
@@ -425,7 +422,7 @@ export function Buffer(props: BufferProps) {
             </Show>
           </box>
         </box>
-      </scrollbox>
+      </OriScrollbox>
     </KeyScope>
   )
 }

@@ -1,10 +1,5 @@
-import type { BoxRenderable, MouseEvent, ScrollBoxRenderable } from "@opentui/core"
-import { useTheme } from "@ui/providers/theme"
-import {
-  enforceHorizontalScrollbarMinThumbWidth,
-  enforceStableScrollboxOverflowLayout,
-} from "@utils/opentui-scrollbar-min-width"
-import { createScrollSpeedHandler } from "@utils/scroll-speed"
+import type { BoxRenderable, ScrollBoxRenderable } from "@opentui/core"
+import { OriScrollbox } from "@ui/components/ori-scrollbox"
 import { type Accessor, createContext, createEffect, onCleanup, type ParentProps, useContext } from "solid-js"
 import { createAutoscrollService, type ScrollDelta } from "./explorer-scroll/autoscroll-service.ts"
 
@@ -52,9 +47,6 @@ interface ExplorerScrollboxProps extends ParentProps {
 }
 
 export function ExplorerScrollbox(props: ExplorerScrollboxProps) {
-  let scrollBox: ScrollBoxRenderable | undefined
-  const { theme } = useTheme()
-
   const autoscroll = useExplorerAutoscroll(props.rows, props.selectedRowId)
 
   props.onApiReady?.({ scrollBy: autoscroll.scrollBy, ensureRowVisible: autoscroll.ensureRowVisible })
@@ -63,18 +55,7 @@ export function ExplorerScrollbox(props: ExplorerScrollboxProps) {
   })
 
   const handleScrollboxRef = (node: ScrollBoxRenderable | undefined) => {
-    scrollBox = node
     autoscroll.setScrollBox(node)
-    if (!scrollBox) return
-    enforceStableScrollboxOverflowLayout(scrollBox)
-    enforceHorizontalScrollbarMinThumbWidth(scrollBox, 5)
-    // @ts-expect-error onMouseEvent is protected in typings
-    const originalOnMouseEvent = scrollBox.onMouseEvent?.bind(scrollBox)
-    const handleMouseEvent = createScrollSpeedHandler(originalOnMouseEvent, explorerScrollSpeed)
-    // @ts-expect-error override protected handler to apply scroll speed
-    scrollBox.onMouseEvent = (event: MouseEvent) => {
-      handleMouseEvent(event)
-    }
   }
 
   const contextValue: ExplorerScrollboxContextValue = {
@@ -82,33 +63,17 @@ export function ExplorerScrollbox(props: ExplorerScrollboxProps) {
   }
 
   return (
-    <scrollbox
-      ref={handleScrollboxRef}
+    <OriScrollbox
+      onReady={handleScrollboxRef}
+      scrollSpeed={explorerScrollSpeed}
+      minHorizontalThumbWidth={5}
       height="100%"
-      scrollY={true}
-      scrollX={true}
       contentOptions={{
         maxWidth: undefined,
         width: "auto",
         minHeight: "100%",
         flexGrow: 1,
         flexShrink: 0,
-      }}
-      horizontalScrollbarOptions={{
-        flexShrink: 0,
-        minHeight: 1,
-        trackOptions: {
-          foregroundColor: theme().get("scrollbar_foreground"),
-          backgroundColor: theme().get("scrollbar_background"),
-        },
-      }}
-      verticalScrollbarOptions={{
-        flexShrink: 0,
-        minWidth: 1,
-        trackOptions: {
-          foregroundColor: theme().get("scrollbar_foreground"),
-          backgroundColor: theme().get("scrollbar_background"),
-        },
       }}
     >
       <ExplorerScrollboxContext.Provider value={contextValue}>
@@ -121,7 +86,7 @@ export function ExplorerScrollbox(props: ExplorerScrollboxProps) {
           {props.children}
         </box>
       </ExplorerScrollboxContext.Provider>
-    </scrollbox>
+    </OriScrollbox>
   )
 }
 

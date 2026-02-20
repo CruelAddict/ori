@@ -1,9 +1,9 @@
 import { type InputRenderable, type ScrollBoxRenderable, TextAttributes } from "@opentui/core"
+import { OriScrollbox } from "@ui/components/ori-scrollbox"
 import { useTheme } from "@ui/providers/theme"
 import { type KeyBinding, KeyScope } from "@ui/services/key-scopes"
 import { useDialogSelect } from "@ui/widgets/dialog-select"
 import type { DialogSelectHint, DialogSelectOption, DialogSelectViewModel } from "@ui/widgets/dialog-select/types"
-import { enforceStableScrollboxOverflowLayout } from "@utils/opentui-scrollbar-min-width"
 import type { Accessor } from "solid-js"
 import { createEffect, createMemo, For, onMount, Show } from "solid-js"
 
@@ -134,15 +134,12 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
             }}
           />
         </box>
-        <scrollbox
-          ref={(node: ScrollBoxRenderable) => {
+        <OriScrollbox
+          onReady={(node: ScrollBoxRenderable | undefined) => {
             scrollRef = node
-            enforceStableScrollboxOverflowLayout(scrollRef)
           }}
           maxHeight={maxHeight()}
           scrollbarOptions={{ visible: false }}
-          horizontalScrollbarOptions={{ flexShrink: 0, minHeight: 1 }}
-          verticalScrollbarOptions={{ flexShrink: 0, minWidth: 1 }}
         >
           <box flexDirection="column">
             <Show
@@ -181,7 +178,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
               </For>
             </Show>
           </box>
-        </scrollbox>
+        </OriScrollbox>
       </box>
     </KeyScope>
   )
