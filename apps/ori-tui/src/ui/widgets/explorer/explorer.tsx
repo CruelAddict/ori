@@ -64,13 +64,10 @@ export function Explorer(props: ExplorerProps) {
       <box
         flexDirection="column"
         height="100%"
-        maxWidth={"44%"}
-        flexGrow={0}
-        flexShrink={0}
-        border={["right"]}
-        borderColor={theme().get("border")}
+        width="100%"
+        flexGrow={1}
+        flexShrink={1}
         paddingRight={1}
-        marginBottom={1}
       >
         <box
           paddingLeft={1}

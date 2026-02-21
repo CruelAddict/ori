@@ -1,3 +1,4 @@
+import { SplitScreen } from "@ui/components/split-screen"
 import { createVM as createResourcePageVM } from "@ui/pages/resource-view/view-model/create-vm"
 import { useOriClient } from "@ui/providers/client"
 import { useEventStream } from "@ui/providers/events"
@@ -164,34 +165,49 @@ export function ResourceViewPage(props: ResourceViewPageProps) {
         enabled={scopeEnabled}
       >
         <box
-          flexDirection="row"
-          backgroundColor={palette().get("panel_background")}
-          marginTop={1}
-          marginLeft={2}
-          marginBottom={1}
+          flexDirection="column"
+          justifyContent="flex-end"
+          minHeight={"100%"}
         >
-          <Show when={vm.isPaneVisible("explorer")}>
-            <Explorer viewModel={vm.explorer} />
-          </Show>
-
           <box
-            flexDirection="column"
-            flexGrow={1}
-            marginLeft={vm.isPaneVisible("explorer") ? 1 : 0}
-            justifyContent="space-between"
+            flexDirection="row"
+            backgroundColor={palette().get("panel_background")}
+            marginTop={1}
+            marginLeft={2}
+            marginBottom={1}
+            minHeight={0}
           >
-            <Show
-              when={vm.isPaneVisible("editor")}
-              fallback={<WelcomePane />}
-            >
-              <EditorPanel viewModel={vm.editorPane} />
-            </Show>
-            <Show when={vm.isPaneVisible("results")}>
-              <ResultsPanel viewModel={vm.resultsPane} />
-            </Show>
+            <SplitScreen
+              orientation="vertical"
+              firstVisible={vm.isPaneVisible("explorer")}
+              initialPosition={{ mode: "ratio", ratio: 0.33 }}
+              flexGrow={1}
+              minHeight={"100%"}
+              minSecondSize={38}
+              first={<Explorer viewModel={vm.explorer} />}
+              second={
+                <box
+                  flexDirection="column"
+                  flexGrow={1}
+                  minWidth={0}
+                  minHeight={0}
+                  justifyContent="space-between"
+                >
+                  <Show
+                    when={vm.isPaneVisible("editor")}
+                    fallback={<WelcomePane />}
+                  >
+                    <EditorPanel viewModel={vm.editorPane} />
+                  </Show>
+                  <Show when={vm.isPaneVisible("results")}>
+                    <ResultsPanel viewModel={vm.resultsPane} />
+                  </Show>
+                </box>
+              }
+            />
           </box>
+          <Statusline />
         </box>
-        <Statusline />
       </KeyScope>
     </StatuslineProvider>
   )

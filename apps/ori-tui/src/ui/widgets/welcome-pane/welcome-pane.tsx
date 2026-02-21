@@ -47,7 +47,7 @@ export function WelcomePane() {
         paddingRight={2}
         paddingTop={1}
         paddingBottom={1}
-        width={48}
+        width={"60%"}
       >
         <For each={commands}>{(command) => <CommandRow {...command} />}</For>
       </box>
