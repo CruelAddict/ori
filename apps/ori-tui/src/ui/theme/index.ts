@@ -111,13 +111,13 @@ const PALETTE_TOKENS = [
 
 type HighlightDefault =
   | {
-      type: "palette"
-      token: PaletteToken
-    }
+    type: "palette"
+    token: PaletteToken
+  }
   | {
-      type: "group"
-      group: HighlightGroup
-    }
+    type: "group"
+    group: HighlightGroup
+  }
 
 const p = (token: PaletteToken): HighlightDefault => ({ type: "palette", token })
 const g = (group: HighlightGroup): HighlightDefault => ({ type: "group", group })
@@ -141,7 +141,7 @@ const DEFAULT_HIGHLIGHT_LINKS = {
   selection_foreground: g("background"),
   scrollbar_foreground: p("uiElement"),
   scrollbar_background: g("panel_background"),
-  app_background: g("panel_background"),
+  app_background: g("background"),
   overlay_scrim_base: g("background"),
   editor_background: p("bg_1"),
   editor_active_line_background: p("bg_2"),
