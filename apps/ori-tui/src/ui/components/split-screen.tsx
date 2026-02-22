@@ -79,10 +79,17 @@ export function SplitScreen(props: SplitScreenProps) {
   const isMeasured = createMemo(() => axisSize() > 0)
 
   const separatorPaint = createMemo(() => {
-    if (hovered()) {
+    if (hovered() || drag()) {
+      if (local.showSeparator) {
+        return {
+          fg: local.separatorHoverForegroundColor ?? theme().get("text"),
+          bg: local.separatorHoverBackgroundColor ?? theme().get("results_header_background"),
+        }
+      }
+
       return {
-        fg: local.separatorHoverForegroundColor ?? theme().get("text"),
-        bg: local.separatorHoverBackgroundColor ?? theme().get("results_header_background"),
+        fg: local.separatorForegroundColor ?? theme().get("border"),
+        bg: local.separatorBackgroundColor,
       }
     }
     return {
@@ -102,6 +109,9 @@ export function SplitScreen(props: SplitScreenProps) {
 
   const separatorText = createMemo(() => {
     if (!local.showSeparator) {
+      if (hovered() || drag()) {
+        return local.orientation === "horizontal" ? "↕" : "↔"
+      }
       return ""
     }
 
@@ -263,7 +273,7 @@ export function SplitScreen(props: SplitScreenProps) {
         width="100%"
         flexGrow={0}
         flexShrink={0}
-        alignItems="flex-start"
+        alignItems="center"
         justifyContent="center"
         backgroundColor={separatorPaint().bg}
         onMouseDown={startDrag}

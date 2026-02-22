@@ -313,9 +313,7 @@ export function ResultsPanel(props: ResultsPanelProps) {
         flexGrow={1}
         justifyContent="space-between"
         backgroundColor={palette().get("panel_background")}
-        marginTop={1}
         gap={0}
-        minHeight={18}
       >
         <Show when={!job()}>
           <text
@@ -349,6 +347,7 @@ export function ResultsPanel(props: ResultsPanelProps) {
               flexDirection="row"
               overflow="hidden"
               backgroundColor={palette().get("results_header_background")}
+              minHeight={1}
             >
               <box
                 flexDirection="row"
@@ -431,7 +430,6 @@ export function ResultsPanel(props: ResultsPanelProps) {
                 }}
                 flexDirection="column"
                 width={rowNumberLaneWidth()}
-                maxHeight={18}
                 scrollX={false}
                 scrollY={false}
                 scrollbarOptions={{ visible: false }}
@@ -481,7 +479,6 @@ export function ResultsPanel(props: ResultsPanelProps) {
                 scrollSpeed={resultsScrollSpeed}
                 minHorizontalThumbWidth={5}
                 flexGrow={1}
-                maxHeight={18}
                 onMouseDown={pane.focusSelf}
                 contentOptions={{
                   maxWidth: undefined,

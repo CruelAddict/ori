@@ -51,6 +51,7 @@ export function EditorPanel(props: EditorPanelProps) {
         flexDirection="column"
         minHeight={3}
         marginRight={1}
+        marginLeft={1}
         backgroundColor={theme().get("editor_background")}
       >
         <Buffer

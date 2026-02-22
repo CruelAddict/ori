@@ -186,23 +186,25 @@ export function ResourceViewPage(props: ResourceViewPageProps) {
               minSecondSize={38}
               first={<Explorer viewModel={vm.explorer} />}
               second={
-                <box
-                  flexDirection="column"
+                <SplitScreen
+                  orientation="horizontal"
+                  secondVisible={vm.isPaneVisible("results")}
+                  initialPosition={{ mode: "ratio", ratio: 0.5 }}
                   flexGrow={1}
-                  minWidth={0}
-                  minHeight={0}
                   justifyContent="space-between"
-                >
-                  <Show
-                    when={vm.isPaneVisible("editor")}
-                    fallback={<WelcomePane />}
-                  >
-                    <EditorPanel viewModel={vm.editorPane} />
-                  </Show>
-                  <Show when={vm.isPaneVisible("results")}>
-                    <ResultsPanel viewModel={vm.resultsPane} />
-                  </Show>
-                </box>
+                  showSeparator={false}
+                  minFirstSize={3}
+                  minSecondSize={3}
+                  first={
+                    <Show
+                      when={vm.isPaneVisible("editor")}
+                      fallback={<WelcomePane />}
+                    >
+                      <EditorPanel viewModel={vm.editorPane} />
+                    </Show>
+                  }
+                  second={<ResultsPanel viewModel={vm.resultsPane} />}
+                />
               }
             />
           </box>
