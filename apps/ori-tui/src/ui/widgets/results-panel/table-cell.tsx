@@ -1,6 +1,7 @@
 import {
   type BoxOptions,
   BoxRenderable,
+  type MouseEvent,
   type OptimizedBuffer,
   parseColor,
   type RenderContext,
@@ -139,6 +140,19 @@ export class TableCellRenderable extends BoxRenderable {
 
   shouldStartSelection(x: number, y: number) {
     return x >= this.x && x < this.x + this.width && y >= this.y && y < this.y + this.height
+  }
+
+  protected onMouseEvent(event: MouseEvent): void {
+    if (event.type !== "up") {
+      return
+    }
+
+    const selection = this.ctx.getSelection()
+    if (!selection?.isStart) {
+      return
+    }
+
+    this.ctx.clearSelection()
   }
 
   onSelectionChanged(selection: Selection | null) {
