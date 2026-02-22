@@ -509,12 +509,12 @@ export function ResultsPanel(props: ResultsPanelProps) {
                         >
                           <SeparatorCell
                             bg={
-                              isActive() && cursorRow() === rowIndex() && cursorCol() === 0
+                              isActive() && cursorRow() === rowIndex() && cursorCol() === 0 && !hasSelection()
                                 ? cursorCellBackground()
                                 : rowBackground()
                             }
                             fg={
-                              isActive() && cursorRow() === rowIndex() && cursorCol() === 0
+                              isActive() && cursorRow() === rowIndex() && cursorCol() === 0 && !hasSelection()
                                 ? cursorCellBackground()
                                 : theme().get("border")
                             }
@@ -523,10 +523,11 @@ export function ResultsPanel(props: ResultsPanelProps) {
                           <For each={row}>
                             {(cell, colIndex) => {
                               const isCursor = () =>
-                                isActive() && cursorRow() === rowIndex() && cursorCol() === colIndex()
+                                isActive() && cursorRow() === rowIndex() && cursorCol() === colIndex() && !hasSelection()
                               const isCursorOnLeftCell = () =>
                                 colIndex() > 0 &&
                                 isActive() &&
+                                !hasSelection() &&
                                 cursorRow() === rowIndex() &&
                                 cursorCol() === colIndex() - 1
                               const cursorBackground = () => cursorCellBackground()
