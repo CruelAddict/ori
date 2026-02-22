@@ -32,7 +32,6 @@ export function Explorer(props: ExplorerProps) {
 
   const handleEmptySpaceClick = () => {
     explorer.focusSelf()
-    explorerScrollboxApi?.ensureRowVisible(selectedId())
   }
 
   const bindings: KeyBinding[] = [

@@ -1,14 +1,14 @@
 import type { BoxRenderable, KeyEvent, MouseEvent, ScrollBoxRenderable, TextareaRenderable } from "@opentui/core"
-import { OriScrollbox } from "@ui/components/ori-scrollbox"
+import { type FollowOutOfBandContext, type FollowRect, OriScrollbox } from "@ui/components/ori-scrollbox"
 import { useLogger } from "@ui/providers/logger"
 import { useTheme } from "@ui/providers/theme"
 import { type KeyBinding, KeyScope } from "@ui/services/key-scopes"
+import { cursorScrolloffY } from "@ui/services/scroll-follow-settings"
 import { syntaxHighlighter } from "@utils/syntax-highlighter"
-import { type Accessor, createEffect, For, on, onCleanup, onMount, Show, untrack } from "solid-js"
+import { type Accessor, createEffect, createSignal, For, on, onCleanup, onMount, Show, untrack } from "solid-js"
 import { type CursorContext, createBufferModel } from "./buffer-model"
 
 const DEBOUNCE_MS = 200
-
 export type BufferApi = {
   setText: (text: string) => void
   focus: () => void
@@ -46,33 +46,154 @@ export function Buffer(props: BufferProps) {
 
   let scrollRef: ScrollBoxRenderable | undefined
   const lineRenderables = new Map<string, BoxRenderable>()
+  const [lineVersion, setLineVersion] = createSignal(0)
 
-  const getViewport = () => (scrollRef as ScrollBoxRenderable & { viewport?: BoxRenderable })?.viewport
-
-  const autoScrollIfAtEdge = (ctx: CursorContext, direction: -1 | 1) => {
-    const targetIndex = ctx.index + direction
-    if (!bufferModel.lines()[targetIndex]) {
-      return
+  const getViewport = () => {
+    const viewport = (scrollRef as ScrollBoxRenderable & { viewport?: { y?: number; height?: number } })?.viewport
+    if (!viewport) {
+      return undefined
     }
-    const line = bufferModel.lines()[ctx.index]
+    if (viewport.y === undefined || viewport.height === undefined) {
+      return undefined
+    }
+    if (!Number.isFinite(viewport.y) || !Number.isFinite(viewport.height)) {
+      return undefined
+    }
+    if (viewport.height <= 0) {
+      return undefined
+    }
+    return {
+      y: viewport.y,
+      height: viewport.height,
+    }
+  }
+
+  const getLineRect = (index: number): FollowRect | undefined => {
+    const line = bufferModel.lines()[index]
     if (!line) {
-      return
+      return undefined
     }
     const renderable = lineRenderables.get(line.id)
+    if (!renderable) {
+      return undefined
+    }
+    if (renderable.x === undefined || renderable.y === undefined) {
+      return undefined
+    }
+    if (renderable.width === undefined || renderable.height === undefined) {
+      return undefined
+    }
+    if (!Number.isFinite(renderable.x) || !Number.isFinite(renderable.y)) {
+      return undefined
+    }
+    if (!Number.isFinite(renderable.width) || !Number.isFinite(renderable.height)) {
+      return undefined
+    }
+    if (renderable.width <= 0 || renderable.height <= 0) {
+      return undefined
+    }
+    return {
+      x: renderable.x,
+      y: renderable.y,
+      width: renderable.width,
+      height: renderable.height,
+    }
+  }
+
+  const followTarget = (): FollowRect | null => {
+    if (!props.isFocused()) {
+      return null
+    }
+    lineVersion()
+    return getLineRect(bufferModel.focusedRow()) ?? null
+  }
+
+  const prepareScrollBeforeEnter = (index: number) => {
+    const lineRect = getLineRect(index)
     const viewport = getViewport()
-    if (!renderable || !viewport) {
+    if (!lineRect || !viewport) {
       return
     }
-    const lineTop = renderable.y ?? 0
-    const lineBottom = lineTop + (renderable.height ?? 0)
-    const viewportTop = viewport.y ?? 0
-    const viewportBottom = viewportTop + (viewport.height ?? 0)
-
-    if (direction === 1 && lineBottom >= viewportBottom) {
-      scrollRef?.scrollBy({ x: 0, y: renderable.height ?? 1 })
-    } else if (direction === -1 && lineTop <= viewportTop) {
-      scrollRef?.scrollBy({ x: 0, y: -(renderable.height ?? 1) })
+    const inset = Math.min(cursorScrolloffY, Math.max(0, Math.floor((viewport.height - 1) / 2)))
+    const bandBottom = viewport.y + viewport.height - inset
+    const predictedNextBottom = lineRect.y + lineRect.height + 1
+    if (predictedNextBottom <= bandBottom) {
+      return
     }
+    scrollRef?.scrollBy({ x: 0, y: predictedNextBottom - bandBottom })
+  }
+
+  const setCursorRowAndKeepColumn = (index: number) => {
+    const nav = bufferModel.navColumn()
+    bufferModel.setFocusedRow(index)
+    bufferModel.setNavColumn(nav)
+    bufferModel.focusCurrent()
+  }
+
+  const findFirstLineAtOrBelow = (threshold: number): number | undefined => {
+    const lines = bufferModel.lines()
+    for (let i = 0; i < lines.length; i += 1) {
+      const rect = getLineRect(i)
+      if (!rect) {
+        continue
+      }
+      if (rect.y + rect.height > threshold) {
+        return i
+      }
+    }
+    return undefined
+  }
+
+  const findLastLineAtOrAbove = (threshold: number): number | undefined => {
+    const lines = bufferModel.lines()
+    for (let i = lines.length - 1; i >= 0; i -= 1) {
+      const rect = getLineRect(i)
+      if (!rect) {
+        continue
+      }
+      if (rect.y < threshold) {
+        return i
+      }
+    }
+    return undefined
+  }
+
+  const moveCursorWithinBand = (context: FollowOutOfBandContext) => {
+    if (!props.isFocused()) {
+      return "autoscroll" as const
+    }
+    const cursor = bufferModel.getCursorContext()
+    if (!cursor) {
+      return "autoscroll" as const
+    }
+    const current = context.target
+
+    if (current.y < context.band.top) {
+      const target = findFirstLineAtOrBelow(context.band.top)
+      if (target === undefined) {
+        return "handled" as const
+      }
+      setCursorRowAndKeepColumn(target)
+      return "handled" as const
+    }
+
+    if (current.y + current.height > context.band.bottom) {
+      const target = findLastLineAtOrAbove(context.band.bottom)
+      if (target === undefined) {
+        return "handled" as const
+      }
+      setCursorRowAndKeepColumn(target)
+      return "handled" as const
+    }
+
+    return "handled" as const
+  }
+
+  const handleFollowOutOfBand = (context: FollowOutOfBandContext) => {
+    if (context.source !== "manual-scroll") {
+      return "autoscroll" as const
+    }
+    return moveCursorWithinBand(context)
   }
 
   const focus = () => {
@@ -156,6 +277,7 @@ export function Buffer(props: BufferProps) {
       pattern: "return",
       handler: withCursor((ctx, event) => {
         event.preventDefault()
+        prepareScrollBeforeEnter(ctx.index)
         bufferModel.handleEnter(ctx.index)
       }),
     },
@@ -174,7 +296,6 @@ export function Buffer(props: BufferProps) {
       pattern: "up",
       handler: withCursor((ctx, event) => {
         event.preventDefault()
-        autoScrollIfAtEdge(ctx, -1)
         bufferModel.handleVerticalMove(ctx.index, -1)
       }),
     },
@@ -182,7 +303,6 @@ export function Buffer(props: BufferProps) {
       pattern: "down",
       handler: withCursor((ctx, event) => {
         event.preventDefault()
-        autoScrollIfAtEdge(ctx, 1)
         bufferModel.handleVerticalMove(ctx.index, 1)
       }),
     },
@@ -234,7 +354,6 @@ export function Buffer(props: BufferProps) {
         const atStart = ctx.cursorCol === 0 && ctx.cursorRow === 0
         if (atStart) {
           event.preventDefault()
-          autoScrollIfAtEdge(ctx, -1)
           bufferModel.handleBackwardMerge(ctx.index)
         }
       }),
@@ -256,7 +375,6 @@ export function Buffer(props: BufferProps) {
         const atStart = ctx.cursorCol === 0 && ctx.cursorRow === 0
         if (atStart) {
           event.preventDefault()
-          autoScrollIfAtEdge(ctx, -1)
           bufferModel.handleBackwardMerge(ctx.index)
         }
       }),
@@ -267,7 +385,6 @@ export function Buffer(props: BufferProps) {
         const atStart = ctx.cursorCol === 0 && ctx.cursorRow === 0
         if (atStart) {
           event.preventDefault()
-          autoScrollIfAtEdge(ctx, -1)
           bufferModel.handleBackwardMerge(ctx.index)
         }
       }),
@@ -304,12 +421,20 @@ export function Buffer(props: BufferProps) {
     >
       <OriScrollbox
         marginTop={1}
-        onReady={(node: ScrollBoxRenderable | undefined) => {
-          scrollRef = node ?? undefined
+        onReady={(node) => {
+          scrollRef = node
+        }}
+        follow={{
+          target: followTarget,
+          scrolloff: { x: 0, y: cursorScrolloffY },
+          sources: {
+            targetChange: true,
+            viewportResize: true,
+            manualScroll: true,
+          },
+          onOutOfBand: handleFollowOutOfBand,
         }}
         height={"100%"}
-        stickyScroll={true}
-        stickyStart="bottom"
         horizontalScrollbarOptions={{
           trackOptions: {
             backgroundColor: palette().get("editor_background"),
@@ -341,9 +466,11 @@ export function Buffer(props: BufferProps) {
                     ref={(ref: BoxRenderable | undefined) => {
                       if (!ref) {
                         lineRenderables.delete(lineId)
+                        setLineVersion((value) => value + 1)
                         return
                       }
                       lineRenderables.set(lineId, ref)
+                      setLineVersion((value) => value + 1)
                     }}
                     flexDirection="row"
                     width="100%"

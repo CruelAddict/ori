@@ -5,8 +5,9 @@ import {
   type ScrollBoxRenderable,
   TextAttributes,
 } from "@opentui/core"
-import { OriScrollbox } from "@ui/components/ori-scrollbox"
+import { type FollowRect, OriScrollbox } from "@ui/components/ori-scrollbox"
 import { useTheme } from "@ui/providers/theme"
+import { cursorScrolloffY } from "@ui/services/scroll-follow-settings"
 import "./table-cell"
 import { type KeyBinding, KeyScope } from "@ui/services/key-scopes"
 import { setSelectionOverride } from "@utils/clipboard"
@@ -32,6 +33,7 @@ export function ResultsPanel(props: ResultsPanelProps) {
   let rowScrollRef: ScrollBoxRenderable | undefined
   let rowNumberBottomPadding: 0 | 1 = 0
   const rowRenderables = new Map<number, BoxRenderable>()
+  const [rowVersion, setRowVersion] = createSignal(0)
 
   const [scrollLeft, setScrollLeft] = createSignal(0)
 
@@ -75,21 +77,33 @@ export function ResultsPanel(props: ResultsPanelProps) {
 
   const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value))
 
-  const ensureRowVisible = (rowIndex: number) => {
+  const followTarget = (): FollowRect | null => {
+    rowVersion()
+    const rowIndex = cursorRow()
     const renderable = rowRenderables.get(rowIndex)
-    const viewport = getViewport()
-    if (!renderable || !viewport) return
-    const rowTop = renderable.y ?? 0
-    const rowBottom = rowTop + (renderable.height ?? 1)
-    const viewportTop = viewport.y ?? 0
-    const viewportBottom = viewportTop + (viewport.height ?? 0)
-
-    if (rowBottom > viewportBottom) {
-      scrollRef?.scrollBy({ x: 0, y: rowBottom - viewportBottom })
-      syncScrollState()
-    } else if (rowTop < viewportTop) {
-      scrollRef?.scrollBy({ x: 0, y: rowTop - viewportTop })
-      syncScrollState()
+    if (!renderable) {
+      return null
+    }
+    if (renderable.x === undefined || renderable.y === undefined) {
+      return null
+    }
+    if (renderable.width === undefined || renderable.height === undefined) {
+      return null
+    }
+    if (!Number.isFinite(renderable.x) || !Number.isFinite(renderable.y)) {
+      return null
+    }
+    if (!Number.isFinite(renderable.width) || !Number.isFinite(renderable.height)) {
+      return null
+    }
+    if (renderable.width <= 0 || renderable.height <= 0) {
+      return null
+    }
+    return {
+      x: renderable.x,
+      y: renderable.y,
+      width: renderable.width,
+      height: renderable.height,
     }
   }
 
@@ -251,10 +265,6 @@ export function ResultsPanel(props: ResultsPanelProps) {
     resetPaneState()
   })
 
-  createEffect(() => {
-    ensureRowVisible(cursorRow())
-  })
-
   setSelectionOverride(() => buildSelectedTsv())
   onCleanup(() => {
     setSelectionOverride()
@@ -274,7 +284,6 @@ export function ResultsPanel(props: ResultsPanelProps) {
 
     setCursorRow(nextRow)
     setCursorCol(nextCol)
-    ensureRowVisible(nextRow)
     if (colDelta !== 0) {
       ensureColumnVisible(nextCol, colDelta < 0 ? "left" : "right")
     }
@@ -298,7 +307,6 @@ export function ResultsPanel(props: ResultsPanelProps) {
     event.preventDefault()
     setCursorRow(rowIndex)
     setCursorCol(colIndex)
-    ensureRowVisible(rowIndex)
   }
 
   return (
@@ -329,9 +337,7 @@ export function ResultsPanel(props: ResultsPanelProps) {
         <Show when={pane.job()?.status === "failed"}>
           <box flexDirection="column">
             <text fg={theme().get("error")}>Query failed:</text>
-            <text fg={theme().get("error")}>
-              {pane.job()?.error || pane.job()?.message || "Unknown error"}
-            </text>
+            <text fg={theme().get("error")}>{pane.job()?.error || pane.job()?.message || "Unknown error"}</text>
           </box>
         </Show>
 
@@ -475,6 +481,11 @@ export function ResultsPanel(props: ResultsPanelProps) {
                   setScrollLeft(0)
                   syncScrollState()
                 }}
+                follow={{
+                  target: followTarget,
+                  scrolloff: { x: 0, y: cursorScrolloffY },
+                  axes: { x: false, y: true },
+                }}
                 onSync={syncScrollState}
                 scrollSpeed={resultsScrollSpeed}
                 minHorizontalThumbWidth={5}
@@ -502,9 +513,11 @@ export function ResultsPanel(props: ResultsPanelProps) {
                           ref={(ref: BoxRenderable | undefined) => {
                             if (!ref) {
                               rowRenderables.delete(rowIndex())
+                              setRowVersion((value) => value + 1)
                               return
                             }
                             rowRenderables.set(rowIndex(), ref)
+                            setRowVersion((value) => value + 1)
                           }}
                         >
                           <SeparatorCell
@@ -523,7 +536,10 @@ export function ResultsPanel(props: ResultsPanelProps) {
                           <For each={row}>
                             {(cell, colIndex) => {
                               const isCursor = () =>
-                                isActive() && cursorRow() === rowIndex() && cursorCol() === colIndex() && !hasSelection()
+                                isActive() &&
+                                cursorRow() === rowIndex() &&
+                                cursorCol() === colIndex() &&
+                                !hasSelection()
                               const isCursorOnLeftCell = () =>
                                 colIndex() > 0 &&
                                 isActive() &&
@@ -537,9 +553,7 @@ export function ResultsPanel(props: ResultsPanelProps) {
                                     <SeparatorCell
                                       bg={isCursor() || isCursorOnLeftCell() ? cursorBackground() : undefined}
                                       fg={
-                                        isCursor() || isCursorOnLeftCell()
-                                          ? cursorBackground()
-                                          : theme().get("border")
+                                        isCursor() || isCursorOnLeftCell() ? cursorBackground() : theme().get("border")
                                       }
                                       selectionBg={theme().get("results_selection_background")}
                                     />

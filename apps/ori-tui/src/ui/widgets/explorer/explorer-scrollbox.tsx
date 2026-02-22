@@ -1,7 +1,7 @@
 import type { BoxRenderable, ScrollBoxRenderable } from "@opentui/core"
-import { OriScrollbox } from "@ui/components/ori-scrollbox"
-import { type Accessor, createContext, createEffect, onCleanup, type ParentProps, useContext } from "solid-js"
-import { createAutoscrollService, type ScrollDelta } from "./explorer-scroll/autoscroll-service.ts"
+import { type FollowTarget, OriScrollbox } from "@ui/components/ori-scrollbox"
+import { cursorScrolloffY } from "@ui/services/scroll-follow-settings"
+import { type Accessor, createContext, createSignal, onCleanup, type ParentProps, useContext } from "solid-js"
 
 type ExplorerScrollboxContextValue = {
   registerRowNode: (rowId: string, node: BoxRenderable | undefined) => void
@@ -19,15 +19,8 @@ export type RowDescriptor = {
   depth: number
 }
 
-function useExplorerAutoscroll(rows: Accessor<readonly RowDescriptor[]>, selectedRowId: Accessor<string | null>) {
-  const autoscroll = createAutoscrollService()
-  createEffect(() => {
-    rows()
-    autoscroll.ensureRowVisible(selectedRowId())
-  })
-  onCleanup(() => autoscroll.dispose())
-  return autoscroll
-}
+const EXPLORER_TEXT_LEFT_PADDING = 2
+const EXPLORER_DEPTH_STEP = 2
 
 export function useExplorerScrollRegistration() {
   const ctx = useContext(ExplorerScrollboxContext)
@@ -35,9 +28,10 @@ export function useExplorerScrollRegistration() {
   return ctx.registerRowNode
 }
 
+export type ScrollDelta = { x: number; y: number }
+
 export type ExplorerScrollboxApi = {
   scrollBy(delta: ScrollDelta): void
-  ensureRowVisible(rowId: string | null): void
 }
 
 interface ExplorerScrollboxProps extends ParentProps {
@@ -47,24 +41,75 @@ interface ExplorerScrollboxProps extends ParentProps {
 }
 
 export function ExplorerScrollbox(props: ExplorerScrollboxProps) {
-  const autoscroll = useExplorerAutoscroll(props.rows, props.selectedRowId)
+  const [rowVersion, setRowVersion] = createSignal(0)
+  const rowNodes = new Map<string, BoxRenderable>()
+  let scrollBoxRef: ScrollBoxRenderable | undefined
 
-  props.onApiReady?.({ scrollBy: autoscroll.scrollBy, ensureRowVisible: autoscroll.ensureRowVisible })
+  const registerRowNode = (rowId: string, node: BoxRenderable | undefined) => {
+    if (!node) {
+      rowNodes.delete(rowId)
+      setRowVersion((value) => value + 1)
+      return
+    }
+    rowNodes.set(rowId, node)
+    setRowVersion((value) => value + 1)
+  }
+
+  const target = (): FollowTarget | null => {
+    const rows = props.rows()
+    rowVersion()
+    const rowId = props.selectedRowId()
+    if (!rowId) {
+      return null
+    }
+    const node = rowNodes.get(rowId)
+    if (!node) {
+      return null
+    }
+    const row = rows.find((value) => value.id === rowId)
+    if (!row) {
+      return null
+    }
+    if (node.x === undefined || node.y === undefined) {
+      return null
+    }
+    if (!Number.isFinite(node.x) || !Number.isFinite(node.y)) {
+      return null
+    }
+    if (!Number.isFinite(row.depth)) {
+      return null
+    }
+    const depth = row.depth
+    return {
+      x: node.x + EXPLORER_TEXT_LEFT_PADDING + depth * EXPLORER_DEPTH_STEP,
+      y: node.y,
+    }
+  }
+
+  props.onApiReady?.({
+    scrollBy: (delta) => {
+      scrollBoxRef?.scrollBy(delta)
+    },
+  })
   onCleanup(() => {
     props.onApiReady?.(undefined)
   })
 
   const handleScrollboxRef = (node: ScrollBoxRenderable | undefined) => {
-    autoscroll.setScrollBox(node)
+    scrollBoxRef = node
   }
 
   const contextValue: ExplorerScrollboxContextValue = {
-    registerRowNode: autoscroll.registerRowNode,
+    registerRowNode,
   }
 
   return (
     <OriScrollbox
       onReady={handleScrollboxRef}
+      follow={{
+        target,
+        scrolloff: { x: 0, y: cursorScrolloffY },
+      }}
       scrollSpeed={explorerScrollSpeed}
       minHorizontalThumbWidth={5}
       height="100%"
@@ -89,5 +134,3 @@ export function ExplorerScrollbox(props: ExplorerScrollboxProps) {
     </OriScrollbox>
   )
 }
-
-export type { ScrollDelta }
