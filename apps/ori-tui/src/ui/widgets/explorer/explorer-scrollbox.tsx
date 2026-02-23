@@ -1,5 +1,5 @@
 import type { BoxRenderable, ScrollBoxRenderable } from "@opentui/core"
-import { type FollowTarget, OriScrollbox } from "@ui/components/ori-scrollbox"
+import { type FollowPoint, OriScrollbox } from "@ui/components/ori-scrollbox"
 import { cursorScrolloffY } from "@ui/services/scroll-follow-settings"
 import { type Accessor, createContext, createSignal, onCleanup, type ParentProps, useContext } from "solid-js"
 
@@ -55,7 +55,7 @@ export function ExplorerScrollbox(props: ExplorerScrollboxProps) {
     setRowVersion((value) => value + 1)
   }
 
-  const target = (): FollowTarget | null => {
+  const target = (): FollowPoint | null => {
     const rows = props.rows()
     rowVersion()
     const rowId = props.selectedRowId()
@@ -108,7 +108,7 @@ export function ExplorerScrollbox(props: ExplorerScrollboxProps) {
       onReady={handleScrollboxRef}
       follow={{
         target,
-        scrolloff: { x: 0, y: cursorScrolloffY },
+        scrolloffY: cursorScrolloffY,
       }}
       scrollSpeed={explorerScrollSpeed}
       minHorizontalThumbWidth={5}

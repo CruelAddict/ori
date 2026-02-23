@@ -1,4 +1,5 @@
 import type { MouseEvent, ScrollBoxRenderable } from "@opentui/core"
+import { useLogger } from "@ui/providers/logger"
 import { useTheme } from "@ui/providers/theme"
 import { cursorScrolloffY } from "@ui/services/scroll-follow-settings"
 import { type Accessor, createEffect, type JSX } from "solid-js"
@@ -28,34 +29,7 @@ export type FollowPoint = {
   y: number
 }
 
-export type FollowRect = {
-  x: number
-  y: number
-  width: number
-  height: number
-}
-
-export type FollowTarget = FollowPoint | FollowRect
-
-export type FollowScrolloff =
-  | number
-  | {
-      x?: number
-      y?: number
-    }
-
 export type FollowSource = "target-change" | "viewport-resize" | "manual-scroll"
-
-type FollowAxes = {
-  x?: boolean
-  y?: boolean
-}
-
-type FollowSources = {
-  targetChange?: boolean
-  viewportResize?: boolean
-  manualScroll?: boolean
-}
 
 type FollowBand = {
   left: number
@@ -66,8 +40,7 @@ type FollowBand = {
 
 export type FollowOutOfBandContext = {
   source: FollowSource
-  target: FollowRect
-  viewport: FollowRect
+  target: FollowPoint
   band: FollowBand
   delta: {
     x: number
@@ -78,10 +51,10 @@ export type FollowOutOfBandContext = {
 type FollowDecision = "autoscroll" | "handled"
 
 export type FollowTargetConfig = {
-  target: Accessor<FollowTarget | null>
-  scrolloff?: FollowScrolloff | Accessor<FollowScrolloff>
-  axes?: FollowAxes
-  sources?: FollowSources
+  target: Accessor<FollowPoint | null>
+  scrolloffY?: number | Accessor<number>
+  trackX?: boolean
+  manual?: boolean
   onOutOfBand?: (context: FollowOutOfBandContext) => FollowDecision
 }
 
@@ -113,17 +86,7 @@ export type OriScrollboxProps = ScrollboxBaseProps & {
   follow?: FollowTargetConfig
 }
 
-const DEFAULT_FOLLOW_SCROLLOFF = { x: 0, y: cursorScrolloffY }
-const DEFAULT_FOLLOW_SOURCES: Required<FollowSources> = {
-  targetChange: true,
-  viewportResize: true,
-  manualScroll: false,
-}
-
-const DEFAULT_FOLLOW_AXES: Required<FollowAxes> = {
-  x: true,
-  y: true,
-}
+const DEFAULT_FOLLOW_SCROLLOFF_Y = cursorScrolloffY
 
 type ViewportSnapshot = {
   viewportX: number
@@ -134,6 +97,13 @@ type ViewportSnapshot = {
   viewportHeight: number
 }
 
+type ViewportRect = {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
 type FollowMovement = {
   x: -1 | 0 | 1
   y: -1 | 0 | 1
@@ -141,6 +111,7 @@ type FollowMovement = {
 
 export function OriScrollbox(props: OriScrollboxProps) {
   const { theme } = useTheme()
+  const logger = useLogger()
   const {
     onReady,
     minHorizontalThumbWidth,
@@ -157,9 +128,14 @@ export function OriScrollbox(props: OriScrollboxProps) {
 
   let scrollBoxRef: ScrollBoxRenderable | undefined
   let previousViewportSnapshot: ViewportSnapshot | undefined
-  let previousFollowTargetContent: FollowRect | null = null
+  let previousFollowTargetContent: FollowPoint | null = null
+  let previousFollowTargetViewport: FollowPoint | null = null
   let pendingProgrammaticScrollEvents = 0
   let pendingManualFollowRecheck = false
+
+  const logFollow = (event: string, payload: Record<string, unknown>) => {
+    logger.debug(payload, `scroll-follow:${event}`)
+  }
 
   const getNormalizedFollowTarget = () => {
     if (!follow) {
@@ -176,20 +152,13 @@ export function OriScrollbox(props: OriScrollboxProps) {
     if (!follow) {
       return false
     }
-    const configuredSources = {
-      ...DEFAULT_FOLLOW_SOURCES,
-      ...(follow.sources ?? {}),
+    if (source !== "manual-scroll") {
+      return true
     }
-    if (source === "target-change") {
-      return configuredSources.targetChange
-    }
-    if (source === "viewport-resize") {
-      return configuredSources.viewportResize
-    }
-    return configuredSources.manualScroll
+    return follow.manual ?? false
   }
 
-  const runFollow = (source: FollowSource, targetOverride?: FollowRect | null, movement?: FollowMovement) => {
+  const runFollow = (source: FollowSource, targetOverride?: FollowPoint | null, movement?: FollowMovement) => {
     if (!follow || !scrollBoxRef) {
       return
     }
@@ -207,32 +176,45 @@ export function OriScrollbox(props: OriScrollboxProps) {
     if (!target) {
       return
     }
-    const scrolloff = normalizeFollowScrolloff(resolveFollowScrolloff(follow.scrolloff))
-    const axes = resolveFollowAxes(follow.axes)
-    const band = computeViewportBand(viewport, scrolloff)
+    const scrolloffY = normalizeScrolloffValue(resolveFollowScrolloffY(follow.scrolloffY))
+    const band = computeViewportBand(viewport, scrolloffY)
+    const trackX = follow.trackX ?? true
     const delta = {
-      x: axes.x
+      x: trackX
         ? computeFollowAxisDelta({
             source,
             movement: movement?.x,
-            targetStart: target.x,
-            targetEnd: target.x + target.width,
+            target: target.x,
             bandStart: band.left,
             bandEnd: band.right,
           })
         : 0,
-      y: axes.y
-        ? computeFollowAxisDelta({
-            source,
-            movement: movement?.y,
-            targetStart: target.y,
-            targetEnd: target.y + target.height,
-            bandStart: band.top,
-            bandEnd: band.bottom,
-          })
-        : 0,
+      y: computeFollowAxisDelta({
+        source,
+        movement: movement?.y,
+        target: target.y,
+        bandStart: band.top,
+        bandEnd: band.bottom,
+      }),
     }
+    logFollow("run", {
+      source,
+      movement,
+      target,
+      band,
+      delta,
+      trackX,
+      scrollTop: scrollBoxRef.scrollTop ?? 0,
+      scrollLeft: scrollBoxRef.scrollLeft ?? 0,
+      pendingProgrammaticScrollEvents,
+      pendingManualFollowRecheck,
+    })
     if (delta.x === 0 && delta.y === 0) {
+      logFollow("run-no-delta", {
+        source,
+        target,
+        band,
+      })
       return
     }
 
@@ -240,11 +222,16 @@ export function OriScrollbox(props: OriScrollboxProps) {
       follow.onOutOfBand?.({
         source,
         target,
-        viewport,
         band,
         delta,
       }) ?? "autoscroll"
     if (decision === "handled") {
+      logFollow("run-handled", {
+        source,
+        target,
+        band,
+        delta,
+      })
       return
     }
 
@@ -256,6 +243,17 @@ export function OriScrollbox(props: OriScrollboxProps) {
     if (nextLeft !== prevLeft || nextTop !== prevTop) {
       pendingProgrammaticScrollEvents += 1
     }
+    logFollow("run-autoscroll", {
+      source,
+      target,
+      band,
+      delta,
+      prevLeft,
+      prevTop,
+      nextLeft,
+      nextTop,
+      pendingProgrammaticScrollEvents,
+    })
   }
 
   const syncFollowFromViewport = () => {
@@ -275,38 +273,91 @@ export function OriScrollbox(props: OriScrollboxProps) {
     const scrollMoved =
       prevSnapshot.scrollLeft !== nextSnapshot.scrollLeft || prevSnapshot.scrollTop !== nextSnapshot.scrollTop
     const previousTarget = previousFollowTargetContent
+    const previousViewportTarget = previousFollowTargetViewport
     const target = getNormalizedFollowTarget()
-    const targetContent = toContentTargetRect(target, nextSnapshot)
-    const targetMoved = !isSameFollowRect(previousTarget, targetContent)
+    const targetContent = toContentTargetPoint(target, nextSnapshot)
+    const targetMoved = !isSameFollowPoint(previousTarget, targetContent)
     const targetMovement = computeFollowMovement(previousTarget, targetContent)
     previousFollowTargetContent = targetContent
+    previousFollowTargetViewport = target
+    const viewportTargetMovement = computeFollowMovement(previousViewportTarget, target)
+    const targetContentDelta = {
+      x: (targetContent?.x ?? 0) - (previousTarget?.x ?? 0),
+      y: (targetContent?.y ?? 0) - (previousTarget?.y ?? 0),
+    }
+    const targetViewportDelta = {
+      x: (target?.x ?? 0) - (previousViewportTarget?.x ?? 0),
+      y: (target?.y ?? 0) - (previousViewportTarget?.y ?? 0),
+    }
     const handledProgrammaticScroll = scrollMoved && pendingProgrammaticScrollEvents > 0
+    logFollow("sync", {
+      prevSnapshot,
+      nextSnapshot,
+      viewportResized,
+      scrollMoved,
+      previousTarget,
+      target,
+      targetContent,
+      targetMoved,
+      targetMovement,
+      viewportTargetMovement,
+      targetContentDelta,
+      targetViewportDelta,
+      pendingProgrammaticScrollEvents,
+      pendingManualFollowRecheck,
+      handledProgrammaticScroll,
+    })
     if (scrollMoved && pendingProgrammaticScrollEvents > 0) {
       pendingProgrammaticScrollEvents -= 1
     }
     if (viewportResized) {
+      logFollow("dispatch", {
+        reason: "viewport-resize",
+        target,
+      })
       runFollow("viewport-resize", target)
       return
     }
     if (scrollMoved && handledProgrammaticScroll) {
       pendingManualFollowRecheck = false
+      logFollow("dispatch-skip", {
+        reason: "programmatic-scroll-ack",
+      })
       return
     }
     if (targetMoved) {
       pendingManualFollowRecheck = false
+      logFollow("dispatch", {
+        reason: "target-change",
+        source: scrollMoved ? "target-change-on-scroll" : "target-change",
+        target,
+        targetContent,
+        targetMovement,
+      })
       runFollow("target-change", target, targetMovement)
       return
     }
     if (scrollMoved) {
       if (pendingProgrammaticScrollEvents > 0) {
+        logFollow("dispatch-skip", {
+          reason: "programmatic-scroll-pending",
+        })
         return
       }
       pendingManualFollowRecheck = true
+      logFollow("dispatch", {
+        reason: "manual-scroll",
+        target,
+      })
       runFollow("manual-scroll", target)
       return
     }
     if (pendingManualFollowRecheck) {
       pendingManualFollowRecheck = false
+      logFollow("dispatch", {
+        reason: "manual-recheck",
+        target,
+      })
       runFollow("manual-scroll", target)
       return
     }
@@ -315,14 +366,14 @@ export function OriScrollbox(props: OriScrollboxProps) {
   createEffect(() => {
     if (!follow) {
       previousFollowTargetContent = null
+      previousFollowTargetViewport = null
       pendingManualFollowRecheck = false
       return
     }
-    resolveFollowScrolloff(follow.scrolloff)
-    const snapshot = scrollBoxRef ? captureViewportSnapshot(scrollBoxRef) : undefined
-    const target = getNormalizedFollowTarget()
-    previousFollowTargetContent = toContentTargetRect(target, snapshot)
-    runFollow("target-change", target)
+    resolveFollowScrolloffY(follow.scrolloffY)
+    logFollow("effect", {
+      followEnabled: true,
+    })
   })
 
   const horizontal = mergeScrollbarOptions(
@@ -355,6 +406,7 @@ export function OriScrollbox(props: OriScrollboxProps) {
     if (!node) {
       previousViewportSnapshot = undefined
       previousFollowTargetContent = null
+      previousFollowTargetViewport = null
       pendingProgrammaticScrollEvents = 0
       pendingManualFollowRecheck = false
       return
@@ -368,7 +420,13 @@ export function OriScrollbox(props: OriScrollboxProps) {
 
     previousViewportSnapshot = captureViewportSnapshot(node)
     const target = getNormalizedFollowTarget()
-    previousFollowTargetContent = toContentTargetRect(target, previousViewportSnapshot)
+    previousFollowTargetContent = toContentTargetPoint(target, previousViewportSnapshot)
+    previousFollowTargetViewport = target
+    logFollow("ready", {
+      snapshot: previousViewportSnapshot,
+      target,
+      targetContent: previousFollowTargetContent,
+    })
     runFollow("target-change", target)
 
     if (!scrollSpeed && !onSync && !follow) {
@@ -425,7 +483,7 @@ function captureViewportSnapshot(node: ScrollBoxRenderable): ViewportSnapshot {
   }
 }
 
-function getViewportRect(node: ScrollBoxRenderable): FollowRect | undefined {
+function getViewportRect(node: ScrollBoxRenderable): ViewportRect | undefined {
   const viewport = (
     node as ScrollBoxRenderable & { viewport?: { x?: number; y?: number; width?: number; height?: number } }
   ).viewport
@@ -447,25 +505,7 @@ function getViewportRect(node: ScrollBoxRenderable): FollowRect | undefined {
   }
 }
 
-function normalizeFollowTarget(target: FollowTarget): FollowRect | null {
-  if (isFollowRect(target)) {
-    const x = toFiniteNumber(target.x)
-    const y = toFiniteNumber(target.y)
-    const width = toFiniteNumber(target.width)
-    const height = toFiniteNumber(target.height)
-    if (x === undefined || y === undefined || width === undefined || height === undefined) {
-      return null
-    }
-    if (width <= 0 || height <= 0) {
-      return null
-    }
-    return {
-      x: Math.floor(x),
-      y: Math.floor(y),
-      width: Math.floor(width),
-      height: Math.floor(height),
-    }
-  }
+function normalizeFollowTarget(target: FollowPoint): FollowPoint | null {
   const x = toFiniteNumber(target.x)
   const y = toFiniteNumber(target.y)
   if (x === undefined || y === undefined) {
@@ -474,8 +514,6 @@ function normalizeFollowTarget(target: FollowTarget): FollowRect | null {
   return {
     x: Math.floor(x),
     y: Math.floor(y),
-    width: 1,
-    height: 1,
   }
 }
 
@@ -489,42 +527,14 @@ function toFiniteNumber(value: number | undefined): number | undefined {
   return value
 }
 
-function isFollowRect(target: FollowTarget): target is FollowRect {
-  return "width" in target && "height" in target
-}
-
-function resolveFollowScrolloff(value: FollowScrolloff | Accessor<FollowScrolloff> | undefined): FollowScrolloff {
+function resolveFollowScrolloffY(value: number | Accessor<number> | undefined): number {
   if (typeof value === "function") {
     return value()
   }
   if (value !== undefined) {
     return value
   }
-  return DEFAULT_FOLLOW_SCROLLOFF
-}
-
-function resolveFollowAxes(value: FollowAxes | undefined): Required<FollowAxes> {
-  if (!value) {
-    return DEFAULT_FOLLOW_AXES
-  }
-  return {
-    x: value.x ?? DEFAULT_FOLLOW_AXES.x,
-    y: value.y ?? DEFAULT_FOLLOW_AXES.y,
-  }
-}
-
-function normalizeFollowScrolloff(value: FollowScrolloff | undefined): { x: number; y: number } {
-  if (typeof value === "number") {
-    const bounded = normalizeScrolloffValue(value)
-    return { x: bounded, y: bounded }
-  }
-  if (!value) {
-    return DEFAULT_FOLLOW_SCROLLOFF
-  }
-  return {
-    x: normalizeScrolloffValue(value.x ?? DEFAULT_FOLLOW_SCROLLOFF.x),
-    y: normalizeScrolloffValue(value.y ?? DEFAULT_FOLLOW_SCROLLOFF.y),
-  }
+  return DEFAULT_FOLLOW_SCROLLOFF_Y
 }
 
 function normalizeScrolloffValue(value: number): number {
@@ -534,15 +544,13 @@ function normalizeScrolloffValue(value: number): number {
   return Math.max(0, Math.floor(value))
 }
 
-function computeViewportBand(viewport: FollowRect, scrolloff: { x: number; y: number }): FollowBand {
-  const maxX = Math.floor((viewport.width - 1) / 2)
+function computeViewportBand(viewport: ViewportRect, scrolloffY: number): FollowBand {
   const maxY = Math.floor((viewport.height - 1) / 2)
-  const insetX = Math.min(scrolloff.x, Math.max(0, maxX))
-  const insetY = Math.min(scrolloff.y, Math.max(0, maxY))
+  const insetY = Math.min(scrolloffY, Math.max(0, maxY))
   return {
-    left: viewport.x + insetX,
+    left: viewport.x,
     top: viewport.y + insetY,
-    right: viewport.x + viewport.width - insetX,
+    right: viewport.x + viewport.width,
     bottom: viewport.y + viewport.height - insetY,
   }
 }
@@ -560,79 +568,71 @@ function computeAxisDelta(targetStart: number, targetEnd: number, bandStart: num
 type FollowAxisDeltaOptions = {
   source: FollowSource
   movement?: -1 | 0 | 1
-  targetStart: number
-  targetEnd: number
+  target: number
   bandStart: number
   bandEnd: number
 }
 
 function computeFollowAxisDelta(options: FollowAxisDeltaOptions): number {
+  const targetStart = options.target
+  const targetEnd = options.target + 1
   if (options.source !== "target-change") {
-    return computeAxisDelta(options.targetStart, options.targetEnd, options.bandStart, options.bandEnd)
+    return computeAxisDelta(targetStart, targetEnd, options.bandStart, options.bandEnd)
   }
   if (options.movement === 1) {
-    if (options.targetEnd > options.bandEnd) {
-      return options.targetEnd - options.bandEnd
+    if (targetEnd > options.bandEnd) {
+      return targetEnd - options.bandEnd
     }
     return 0
   }
   if (options.movement === -1) {
-    if (options.targetStart < options.bandStart) {
-      return options.targetStart - options.bandStart
+    if (targetStart < options.bandStart) {
+      return targetStart - options.bandStart
     }
     return 0
   }
 
-  return computeAxisDelta(options.targetStart, options.targetEnd, options.bandStart, options.bandEnd)
+  return computeAxisDelta(targetStart, targetEnd, options.bandStart, options.bandEnd)
 }
 
-function toContentTargetRect(target: FollowRect | null, viewport: ViewportSnapshot | undefined): FollowRect | null {
+function toContentTargetPoint(target: FollowPoint | null, viewport: ViewportSnapshot | undefined): FollowPoint | null {
   if (!target || !viewport) {
     return null
   }
   return {
     x: target.x - viewport.viewportX + viewport.scrollLeft,
     y: target.y - viewport.viewportY + viewport.scrollTop,
-    width: target.width,
-    height: target.height,
   }
 }
 
-function computeFollowMovement(previous: FollowRect | null, next: FollowRect | null): FollowMovement {
+function computeFollowMovement(previous: FollowPoint | null, next: FollowPoint | null): FollowMovement {
   if (!previous || !next) {
     return { x: 0, y: 0 }
   }
   return {
-    x: computeAxisMovement(previous.x, previous.x + previous.width, next.x, next.x + next.width),
-    y: computeAxisMovement(previous.y, previous.y + previous.height, next.y, next.y + next.height),
+    x: computeAxisMovement(previous.x, next.x),
+    y: computeAxisMovement(previous.y, next.y),
   }
 }
 
-function computeAxisMovement(
-  previousStart: number,
-  previousEnd: number,
-  nextStart: number,
-  nextEnd: number,
-): -1 | 0 | 1 {
-  const movedForward = nextStart > previousStart || nextEnd > previousEnd
-  const movedBackward = nextStart < previousStart || nextEnd < previousEnd
-  if (movedForward && !movedBackward) {
+function computeAxisMovement(previous: number, next: number): -1 | 0 | 1 {
+  if (next > previous) {
     return 1
   }
-  if (movedBackward && !movedForward) {
+  if (next < previous) {
     return -1
   }
   return 0
 }
 
-function isSameFollowRect(a: FollowRect | null, b: FollowRect | null): boolean {
+function isSameFollowPoint(a: FollowPoint | null, b: FollowPoint | null): boolean {
   if (!a && !b) {
     return true
   }
   if (!a || !b) {
     return false
   }
-  return a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height
+  return a.x === b.x && a.y === b.y
 }
 
 function mergeScrollbarOptions(base: ScrollbarOptions, custom: ScrollbarOptions | undefined): ScrollbarOptions {

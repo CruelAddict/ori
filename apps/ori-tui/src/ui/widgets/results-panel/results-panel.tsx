@@ -5,7 +5,7 @@ import {
   type ScrollBoxRenderable,
   TextAttributes,
 } from "@opentui/core"
-import { type FollowRect, OriScrollbox } from "@ui/components/ori-scrollbox"
+import { type FollowPoint, OriScrollbox } from "@ui/components/ori-scrollbox"
 import { useTheme } from "@ui/providers/theme"
 import { cursorScrolloffY } from "@ui/services/scroll-follow-settings"
 import "./table-cell"
@@ -54,7 +54,7 @@ export function ResultsPanel(props: ResultsPanelProps) {
 
   const rowsAffected = () => pane.job()?.result?.rowsAffected
 
-  const formatCell = (value: unknown, width?: number): string => {
+  const formatCell = (value: unknown): string => {
     return value === null || value === undefined ? "NULL" : String(value)
   }
 
@@ -77,7 +77,7 @@ export function ResultsPanel(props: ResultsPanelProps) {
 
   const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value))
 
-  const followTarget = (): FollowRect | null => {
+  const followTarget = (): FollowPoint | null => {
     rowVersion()
     const rowIndex = cursorRow()
     const renderable = rowRenderables.get(rowIndex)
@@ -87,27 +87,16 @@ export function ResultsPanel(props: ResultsPanelProps) {
     if (renderable.x === undefined || renderable.y === undefined) {
       return null
     }
-    if (renderable.width === undefined || renderable.height === undefined) {
-      return null
-    }
     if (!Number.isFinite(renderable.x) || !Number.isFinite(renderable.y)) {
-      return null
-    }
-    if (!Number.isFinite(renderable.width) || !Number.isFinite(renderable.height)) {
-      return null
-    }
-    if (renderable.width <= 0 || renderable.height <= 0) {
       return null
     }
     return {
       x: renderable.x,
       y: renderable.y,
-      width: renderable.width,
-      height: renderable.height,
     }
   }
 
-  const ensureColumnVisible = (colIndex: number, direction: "left" | "right") => {
+  const ensureColumnVisible = (colIndex: number) => {
     if (!scrollRef) return
     const viewport = getViewport()
     if (!viewport) return
@@ -285,7 +274,7 @@ export function ResultsPanel(props: ResultsPanelProps) {
     setCursorRow(nextRow)
     setCursorCol(nextCol)
     if (colDelta !== 0) {
-      ensureColumnVisible(nextCol, colDelta < 0 ? "left" : "right")
+      ensureColumnVisible(nextCol)
     }
   }
 
@@ -404,7 +393,7 @@ export function ResultsPanel(props: ResultsPanelProps) {
 
                         <table_cell
                           width={columnWidths()[index()] + 2}
-                          display={formatCell(column.name, columnWidths()[index()])}
+                          display={formatCell(column.name)}
                           backgroundColor={theme().get("results_header_background")}
                           fg={theme().get("results_column_title")}
                           defaultFg={theme().get("results_column_title")}
@@ -483,8 +472,8 @@ export function ResultsPanel(props: ResultsPanelProps) {
                 }}
                 follow={{
                   target: followTarget,
-                  scrolloff: { x: 0, y: cursorScrolloffY },
-                  axes: { x: false, y: true },
+                  scrolloffY: cursorScrolloffY,
+                  trackX: false,
                 }}
                 onSync={syncScrollState}
                 scrollSpeed={resultsScrollSpeed}
@@ -568,7 +557,7 @@ export function ResultsPanel(props: ResultsPanelProps) {
                                     }
                                     selectionBg={theme().get("results_selection_background")}
                                     value={String(cell)}
-                                    display={formatCell(cell, columnWidths()[colIndex()])}
+                                    display={formatCell(cell)}
                                     fg={
                                       isCursor() && !hasSelection()
                                         ? theme().get("selection_foreground")
