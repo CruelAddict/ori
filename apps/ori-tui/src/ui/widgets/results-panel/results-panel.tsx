@@ -5,7 +5,7 @@ import {
   type ScrollBoxRenderable,
   TextAttributes,
 } from "@opentui/core"
-import { getViewportRect, OriScrollbox, type ScrollAxisMovement, scrollIntoView } from "@ui/components/ori-scrollbox"
+import { getViewportRect, OriScrollbox, scrollIntoView } from "@ui/components/ori-scrollbox"
 import { useTheme } from "@ui/providers/theme"
 import { cursorScrolloffY } from "@ui/services/scroll-follow-settings"
 import "./table-cell"
@@ -33,7 +33,6 @@ export function ResultsPanel(props: ResultsPanelProps) {
   let rowScrollRef: ScrollBoxRenderable | undefined
   let rowNumberBottomPadding: 0 | 1 = 0
   let bodyViewportSize: { width: number; height: number } | null = null
-  let previousCursorRow = 0
   const rowRenderables = new Map<number, BoxRenderable>()
   const [rowVersion, setRowVersion] = createSignal(0)
 
@@ -77,17 +76,7 @@ export function ResultsPanel(props: ResultsPanelProps) {
 
   const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value))
 
-  const axisMovement = (previous: number, next: number): ScrollAxisMovement => {
-    if (next > previous) {
-      return 1
-    }
-    if (next < previous) {
-      return -1
-    }
-    return 0
-  }
-
-  const ensureRowVisible = (rowIndex: number, movement?: ScrollAxisMovement) => {
+  const ensureRowVisible = (rowIndex: number) => {
     rowVersion()
     const renderable = rowRenderables.get(rowIndex)
     if (!renderable) {
@@ -108,7 +97,6 @@ export function ResultsPanel(props: ResultsPanelProps) {
       {
         scrolloffY: cursorScrolloffY,
         trackX: false,
-        movement: movement === undefined ? undefined : { y: movement },
       },
     )
   }
@@ -277,7 +265,6 @@ export function ResultsPanel(props: ResultsPanelProps) {
     setCursorRow(0)
     setCursorCol(0)
     setSelectionCount(0)
-    previousCursorRow = 0
     resetScroll()
     selectedHeaderCols.clear()
     selectedRowCols.clear()
@@ -290,15 +277,9 @@ export function ResultsPanel(props: ResultsPanelProps) {
   })
 
   createEffect(() => {
-    if (!hasResultData()) {
-      previousCursorRow = 0
-      return
-    }
+    if (!hasResultData()) return
     rowVersion()
-    const row = cursorRow()
-    const movement = axisMovement(previousCursorRow, row)
-    previousCursorRow = row
-    ensureRowVisible(row, movement)
+    ensureRowVisible(cursorRow())
   })
 
   setSelectionOverride(() => buildSelectedTsv())

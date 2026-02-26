@@ -1,4 +1,4 @@
-import type { BoxRenderable, MouseEvent } from "@opentui/core"
+import type { MouseEvent } from "@opentui/core"
 import { TextAttributes } from "@opentui/core"
 import { useTheme } from "@ui/providers/theme"
 import { type Accessor, createEffect, createMemo, createSignal, For, Show } from "solid-js"
@@ -6,7 +6,6 @@ import type { ExplorerRowSegment } from "./explorer-row-renderable.ts"
 import type { ExplorerNode } from "./model/explorer-node"
 import type { ExplorerViewModel } from "./view-model/create-vm"
 import "./explorer-row-renderable.ts"
-import { useExplorerScrollRegistration } from "./explorer-scrollbox.tsx"
 
 const ROW_LEFT_PADDING = 2
 const GLYPH_SEPARATOR_WIDTH = 1
@@ -20,7 +19,6 @@ type ExplorerRowProps = {
 }
 
 export function ExplorerRow(props: ExplorerRowProps) {
-  const registerRowNode = useExplorerScrollRegistration()
   const { theme } = useTheme()
 
   const entity = createMemo(() => props.explorer.controller.getEntity(props.nodeId))
@@ -114,7 +112,6 @@ export function ExplorerRow(props: ExplorerRowProps) {
             minWidth={30}
             alignSelf="stretch"
             flexShrink={1}
-            ref={(node: BoxRenderable | undefined) => registerRowNode(rowId(), node)}
             backgroundColor={bg()}
             onMouseOver={() => setHovered(true)}
             onMouseOut={() => setHovered(false)}

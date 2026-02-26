@@ -1,7 +1,7 @@
 import type { MouseEvent, ScrollBoxRenderable } from "@opentui/core"
 import { useTheme } from "@ui/providers/theme"
 import { cursorScrolloffY } from "@ui/services/scroll-follow-settings"
-import type { Accessor, JSX } from "solid-js"
+import type { JSX } from "solid-js"
 
 const defaultMultipliers = {
   horizontal: 3,
@@ -23,14 +23,10 @@ type ScrollSpeedMultipliers = {
   vertical?: number
 }
 
-export type FollowPoint = {
+export type ScrollPoint = {
   x: number
   y: number
 }
-
-export type ScrollPoint = FollowPoint
-
-export type ScrollAxisMovement = -1 | 0 | 1
 
 export type ScrollBand = {
   left: number
@@ -44,13 +40,8 @@ export type ScrollDelta = {
   y: number
 }
 
-export type ScrollMovement = {
-  x?: ScrollAxisMovement
-  y?: ScrollAxisMovement
-}
-
 export type ScrollBoundaryConfig = {
-  scrolloffY?: number | Accessor<number>
+  scrolloffY?: number
   insetTop?: number
   insetBottom?: number
   insetLeft?: number
@@ -59,7 +50,6 @@ export type ScrollBoundaryConfig = {
 
 export type ScrollIntoViewOptions = ScrollBoundaryConfig & {
   trackX?: boolean
-  movement?: ScrollMovement
 }
 
 export type ScrollIntoViewComputation = {
@@ -268,16 +258,6 @@ function toFiniteNumber(value: number | undefined): number | undefined {
   return value
 }
 
-function resolveScrollInsetY(value: number | Accessor<number> | undefined): number {
-  if (typeof value === "function") {
-    return value()
-  }
-  if (value !== undefined) {
-    return value
-  }
-  return DEFAULT_SCROLL_INSET_Y
-}
-
 function normalizeInset(value: number | undefined, fallback: number, max: number): number {
   if (value === undefined) {
     return fallback
@@ -291,7 +271,7 @@ function normalizeInset(value: number | undefined, fallback: number, max: number
 export function computeViewportBand(viewport: ViewportRect, options: ScrollBoundaryConfig = {}): ScrollBand {
   const maxX = Math.max(0, viewport.width - 1)
   const maxY = Math.max(0, viewport.height - 1)
-  const fallbackY = normalizeInset(resolveScrollInsetY(options.scrolloffY), 0, Math.floor(maxY / 2))
+  const fallbackY = normalizeInset(options.scrolloffY, DEFAULT_SCROLL_INSET_Y, Math.floor(maxY / 2))
   const leftInset = normalizeInset(options.insetLeft, 0, maxX)
   const rightInset = normalizeInset(options.insetRight, 0, maxX)
   const topInset = normalizeInset(options.insetTop, fallbackY, maxY)
@@ -319,7 +299,6 @@ function computeAxisDelta(targetStart: number, targetEnd: number, bandStart: num
 }
 
 type FollowAxisDeltaOptions = {
-  movement?: ScrollAxisMovement
   target: number
   bandStart: number
   bandEnd: number
@@ -335,7 +314,6 @@ export function computeScrollIntoViewDelta(options: {
   target: ScrollPoint
   band: ScrollBand
   trackX?: boolean
-  movement?: ScrollMovement
 }): ScrollDelta {
   return {
     x:
@@ -345,13 +323,11 @@ export function computeScrollIntoViewDelta(options: {
             target: options.target.x,
             bandStart: options.band.left,
             bandEnd: options.band.right,
-            movement: options.movement?.x,
           }),
     y: computeScrollAxisDelta({
       target: options.target.y,
       bandStart: options.band.top,
       bandEnd: options.band.bottom,
-      movement: options.movement?.y,
     }),
   }
 }
@@ -377,7 +353,6 @@ export function resolveScrollIntoView(
     target: normalizedTarget,
     band,
     trackX: options.trackX,
-    movement: options.movement,
   })
   return {
     target: normalizedTarget,

@@ -1,11 +1,5 @@
 import type { BoxRenderable, KeyEvent, MouseEvent, ScrollBoxRenderable, TextareaRenderable } from "@opentui/core"
-import {
-  OriScrollbox,
-  type OriScrollboxUserScrollContext,
-  resolveScrollIntoView,
-  type ScrollPoint,
-  scrollIntoView,
-} from "@ui/components/ori-scrollbox"
+import { OriScrollbox, resolveScrollIntoView, type ScrollPoint, scrollIntoView } from "@ui/components/ori-scrollbox"
 import { useLogger } from "@ui/providers/logger"
 import { useTheme } from "@ui/providers/theme"
 import { type KeyBinding, KeyScope } from "@ui/services/key-scopes"
@@ -33,10 +27,6 @@ export function Buffer(props: BufferProps) {
   const { theme } = useTheme()
   const palette = theme
   const logger = useLogger()
-
-  const logFollow = (event: string, payload: Record<string, unknown>) => {
-    logger.debug(payload, `editor-follow:${event}`)
-  }
 
   const highlighter = syntaxHighlighter({
     theme: palette,
@@ -106,37 +96,18 @@ export function Buffer(props: BufferProps) {
   const getCursorPoint = (): ScrollPoint | null => {
     const cursor = bufferModel.getCursorContext()
     if (!cursor) {
-      logFollow("cursor-point-null", {
-        reason: "missing-cursor-context",
-        focused: props.isFocused(),
-        focusedRow: bufferModel.focusedRow(),
-      })
       return null
     }
     const line = bufferModel.lines()[cursor.index]
     if (!line) {
-      logFollow("cursor-point-null", {
-        reason: "missing-line",
-        cursor,
-      })
       return null
     }
     const anchor = rowAnchors.get(line.id)
     if (!anchor) {
-      logFollow("cursor-point-null", {
-        reason: "missing-anchor",
-        lineId: line.id,
-        cursor,
-      })
       return null
     }
     const ref = bufferModel.getLineRef(cursor.index)
     if (!ref) {
-      logFollow("cursor-point-null", {
-        reason: "missing-line-ref",
-        lineId: line.id,
-        cursor,
-      })
       return null
     }
     const x = toFinite(ref.x)
@@ -145,90 +116,35 @@ export function Buffer(props: BufferProps) {
     const visualCol = toFinite(visual?.visualCol)
     const visualRow = toFinite(visual?.visualRow)
     if (x === undefined || anchorY === undefined || visualCol === undefined || visualRow === undefined) {
-      logFollow("cursor-point-null", {
-        reason: "invalid-coordinates",
-        lineId: line.id,
-        cursor,
-        refX: ref.x,
-        refY: ref.y,
-        anchorY: anchor.y,
-        visualCol: visual?.visualCol,
-        visualRow: visual?.visualRow,
-      })
       return null
     }
-    const point = {
+    return {
       x: Math.floor(x + visualCol),
       y: Math.floor(anchorY + visualRow),
     }
-    logFollow("cursor-point", {
-      lineId: line.id,
-      focusedRow: bufferModel.focusedRow(),
-      cursor,
-      refX: ref.x,
-      refY: ref.y,
-      anchorY: anchor.y,
-      visualCol,
-      visualRow,
-      point,
-      scrollTop: scrollRef?.scrollTop ?? 0,
-      viewportY: getViewport()?.y,
-      viewportHeight: getViewport()?.height,
-    })
-    return point
   }
 
   const followTarget = (): ScrollPoint | null => {
     if (!props.isFocused()) {
-      logFollow("follow-target", {
-        focused: false,
-        reason: "buffer-unfocused",
-      })
       return null
     }
-    const point = getCursorPoint()
-    logFollow("follow-target", {
-      focused: true,
-      point,
-    })
-    return point
+    return getCursorPoint()
   }
 
   const moveCursorByVisualRows = (delta: number): number => {
     if (delta === 0) {
-      logFollow("cursor-move-skip", {
-        reason: "zero-delta",
-      })
       return 0
     }
     const direction = delta > 0 ? 1 : -1
     const steps = Math.abs(delta)
     let moved = 0
-    logFollow("cursor-move-start", {
-      delta,
-      direction,
-      steps,
-      focusedRow: bufferModel.focusedRow(),
-      navColumn: bufferModel.navColumn(),
-    })
     for (let i = 0; i < steps; i += 1) {
       const before = bufferModel.getCursorContext()
       if (!before) {
-        logFollow("cursor-move-break", {
-          reason: "missing-cursor-context",
-          step: i,
-          moved,
-        })
         break
       }
       const ref = bufferModel.getLineRef(before.index)
       if (!ref) {
-        logFollow("cursor-move-break", {
-          reason: "missing-line-ref",
-          step: i,
-          moved,
-          before,
-        })
         break
       }
       const movedInsideLine = direction > 0 ? ref.moveCursorDown() : ref.moveCursorUp()
@@ -242,33 +158,11 @@ export function Buffer(props: BufferProps) {
       if (movedInsideLineForReal && afterInsideMove) {
         bufferModel.setNavColumn(afterInsideMove.cursorCol)
         moved += 1
-        logFollow("cursor-move-step", {
-          step: i,
-          path: "inside-line",
-          before,
-          after: afterInsideMove,
-          moved,
-        })
         continue
-      }
-      if (movedInsideLine) {
-        logFollow("cursor-move-inside-line-noop", {
-          step: i,
-          before,
-          afterInsideMove,
-          direction,
-        })
       }
       const nextIndex = before.index + direction
       const nextLine = bufferModel.lines()[nextIndex]
       if (!nextLine) {
-        logFollow("cursor-move-break", {
-          reason: "line-boundary",
-          step: i,
-          moved,
-          before,
-          direction,
-        })
         break
       }
       const targetCol = Math.min(bufferModel.navColumn(), bufferModel.getVisualEOLColumn(nextIndex))
@@ -276,52 +170,21 @@ export function Buffer(props: BufferProps) {
       bufferModel.setNavColumn(targetCol)
       bufferModel.focusCurrent()
       moved += 1
-      logFollow("cursor-move-step", {
-        step: i,
-        path: "cross-line",
-        before,
-        nextIndex,
-        targetCol,
-        moved,
-      })
     }
-    logFollow("cursor-move-done", {
-      delta,
-      moved,
-      focusedRow: bufferModel.focusedRow(),
-      navColumn: bufferModel.navColumn(),
-      cursor: bufferModel.getCursorContext(),
-    })
     return moved
   }
 
-  const requestCursorScroll = (reason: string) => {
+  const requestCursorScroll = (_reason: string) => {
     if (!props.isFocused()) {
-      logFollow("scroll-request-skip", {
-        reason,
-        skip: "buffer-unfocused",
-      })
       return
     }
     const point = followTarget()
     if (!point) {
-      logFollow("scroll-request-skip", {
-        reason,
-        skip: "missing-target",
-      })
       return
     }
-    const result = scrollIntoView(scrollRef, point, {
+    scrollIntoView(scrollRef, point, {
       scrolloffY: cursorScrolloffY,
       trackX: false,
-    })
-    logFollow("scroll-request", {
-      reason,
-      point,
-      delta: result?.delta ?? { x: 0, y: 0 },
-      band: result?.band,
-      viewport: result?.viewport,
-      scrollTop: scrollRef?.scrollTop ?? 0,
     })
   }
 
@@ -343,20 +206,12 @@ export function Buffer(props: BufferProps) {
     })
   }
 
-  const handleUserScroll = (context: OriScrollboxUserScrollContext) => {
+  const handleUserScroll = () => {
     if (!props.isFocused()) {
-      logFollow("manual-scroll", {
-        skip: "buffer-unfocused",
-        context,
-      })
       return
     }
     const point = followTarget()
     if (!point) {
-      logFollow("manual-scroll", {
-        skip: "missing-target",
-        context,
-      })
       return
     }
     const plan = resolveScrollIntoView(scrollRef, point, {
@@ -364,30 +219,12 @@ export function Buffer(props: BufferProps) {
       trackX: false,
     })
     if (!plan) {
-      logFollow("manual-scroll", {
-        skip: "missing-plan",
-        context,
-        point,
-      })
       return
     }
     if (plan.delta.y === 0) {
-      logFollow("manual-scroll", {
-        decision: "no-op",
-        context,
-        point,
-        delta: plan.delta,
-      })
       return
     }
     const moved = moveCursorByVisualRows(-plan.delta.y)
-    logFollow("manual-scroll", {
-      decision: moved < Math.abs(plan.delta.y) ? "shortfall" : "cursor-moved",
-      context,
-      point,
-      delta: plan.delta,
-      moved,
-    })
     if (moved >= Math.abs(plan.delta.y)) {
       return
     }
@@ -402,24 +239,15 @@ export function Buffer(props: BufferProps) {
     }
     const point = getCursorPoint()
     if (!point) {
-      logFollow("enter-pre-scroll-skip", {
-        reason: "missing-cursor-point",
-      })
       return
     }
     const target = {
       x: point.x,
       y: point.y + 1,
     }
-    const result = scrollIntoView(scrollRef, target, {
+    scrollIntoView(scrollRef, target, {
       scrolloffY: cursorScrolloffY,
       trackX: false,
-    })
-    logFollow("enter-pre-scroll", {
-      point,
-      target,
-      delta: result?.delta ?? { x: 0, y: 0 },
-      scrollTop: scrollRef?.scrollTop ?? 0,
     })
   }
 
@@ -650,10 +478,6 @@ export function Buffer(props: BufferProps) {
     bufferModel.navColumn()
     if (skipCursorChangeScroll) {
       skipCursorChangeScroll = false
-      logFollow("scroll-request-skip", {
-        reason: "cursor-change",
-        skip: "enter-pre-scrolled",
-      })
       return
     }
     queueMicrotask(() => {

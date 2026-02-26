@@ -1,22 +1,7 @@
-import type { BoxRenderable, ScrollBoxRenderable } from "@opentui/core"
-import { getViewportRect, OriScrollbox, type ScrollAxisMovement, scrollIntoView } from "@ui/components/ori-scrollbox"
+import type { ScrollBoxRenderable } from "@opentui/core"
+import { getViewportRect, OriScrollbox, scrollIntoView } from "@ui/components/ori-scrollbox"
 import { cursorScrolloffY } from "@ui/services/scroll-follow-settings"
-import {
-  type Accessor,
-  createContext,
-  createEffect,
-  createMemo,
-  on,
-  onCleanup,
-  type ParentProps,
-  useContext,
-} from "solid-js"
-
-type ExplorerScrollboxContextValue = {
-  registerRowNode: (rowId: string, node: BoxRenderable | undefined) => void
-}
-
-const ExplorerScrollboxContext = createContext<ExplorerScrollboxContextValue | null>(null)
+import { type Accessor, createEffect, createMemo, on, onCleanup, type ParentProps } from "solid-js"
 
 const explorerScrollSpeed = {
   horizontal: 3,
@@ -30,12 +15,6 @@ export type RowDescriptor = {
 
 const ROW_LEFT_PADDING = 2
 const ROW_DEPTH_STEP = 2
-
-export function useExplorerScrollRegistration() {
-  const ctx = useContext(ExplorerScrollboxContext)
-  if (!ctx) throw new Error("useExplorerScrollRegistration must be used within an ExplorerScrollbox")
-  return ctx.registerRowNode
-}
 
 export type ScrollDelta = { x: number; y: number }
 
@@ -52,7 +31,6 @@ interface ExplorerScrollboxProps extends ParentProps {
 export function ExplorerScrollbox(props: ExplorerScrollboxProps) {
   let scrollBoxRef: ScrollBoxRenderable | undefined
   let viewportSize: { width: number; height: number } | null = null
-  const registerRowNode = (_rowId: string, _node: BoxRenderable | undefined) => {}
 
   const selectedRow = createMemo<{ index: number; depth: number } | null>(() => {
     const rowId = props.selectedRowId()
@@ -74,7 +52,7 @@ export function ExplorerScrollbox(props: ExplorerScrollboxProps) {
     }
   })
 
-  const ensureSelectedVisible = (movement?: ScrollAxisMovement) => {
+  const ensureSelectedVisible = () => {
     const row = selectedRow()
     if (!row) {
       return
@@ -103,36 +81,18 @@ export function ExplorerScrollbox(props: ExplorerScrollboxProps) {
       {
         scrolloffY: cursorScrolloffY,
         trackX: true,
-        movement: movement === undefined ? undefined : { y: movement },
       },
     )
-  }
-
-  const toMovement = (next: number, previous: number): ScrollAxisMovement => {
-    if (next > previous) {
-      return 1
-    }
-    if (next < previous) {
-      return -1
-    }
-    return 0
   }
 
   createEffect(
     on(
       selectedRow,
-      (
-        row: { index: number; depth: number } | null,
-        previousRow: { index: number; depth: number } | null | undefined,
-      ) => {
+      (row: { index: number; depth: number } | null) => {
         if (!row) {
           return
         }
-        if (!previousRow) {
-          ensureSelectedVisible()
-          return
-        }
-        ensureSelectedVisible(toMovement(row.index, previousRow.index))
+        ensureSelectedVisible()
       },
       { defer: true },
     ),
@@ -175,10 +135,6 @@ export function ExplorerScrollbox(props: ExplorerScrollboxProps) {
     ensureSelectedVisible()
   }
 
-  const contextValue: ExplorerScrollboxContextValue = {
-    registerRowNode,
-  }
-
   return (
     <OriScrollbox
       onReady={handleScrollboxRef}
@@ -194,16 +150,14 @@ export function ExplorerScrollbox(props: ExplorerScrollboxProps) {
         flexShrink: 0,
       }}
     >
-      <ExplorerScrollboxContext.Provider value={contextValue}>
-        <box
-          flexDirection="column"
-          alignItems="stretch"
-          width="auto"
-          minHeight={"100%"}
-        >
-          {props.children}
-        </box>
-      </ExplorerScrollboxContext.Provider>
+      <box
+        flexDirection="column"
+        alignItems="stretch"
+        width="auto"
+        minHeight={"100%"}
+      >
+        {props.children}
+      </box>
     </OriScrollbox>
   )
 }
