@@ -5,7 +5,7 @@ import {
   type ScrollBoxRenderable,
   TextAttributes,
 } from "@opentui/core"
-import { type FollowPoint, OriScrollbox } from "@ui/components/ori-scrollbox"
+import { getViewportRect, OriScrollbox, type ScrollAxisMovement, scrollIntoView } from "@ui/components/ori-scrollbox"
 import { useTheme } from "@ui/providers/theme"
 import { cursorScrolloffY } from "@ui/services/scroll-follow-settings"
 import "./table-cell"
@@ -32,6 +32,8 @@ export function ResultsPanel(props: ResultsPanelProps) {
   let scrollRef: ScrollBoxRenderable | undefined
   let rowScrollRef: ScrollBoxRenderable | undefined
   let rowNumberBottomPadding: 0 | 1 = 0
+  let bodyViewportSize: { width: number; height: number } | null = null
+  let previousCursorRow = 0
   const rowRenderables = new Map<number, BoxRenderable>()
   const [rowVersion, setRowVersion] = createSignal(0)
 
@@ -73,32 +75,47 @@ export function ResultsPanel(props: ResultsPanelProps) {
   const rowNumberCellWidth = createMemo(() => rowNumberWidth() + 2)
   const rowNumberLaneWidth = createMemo(() => rowNumberCellWidth())
 
-  const getViewport = () => (scrollRef as { viewport?: BoxRenderable })?.viewport
-
   const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value))
 
-  const followTarget = (): FollowPoint | null => {
+  const axisMovement = (previous: number, next: number): ScrollAxisMovement => {
+    if (next > previous) {
+      return 1
+    }
+    if (next < previous) {
+      return -1
+    }
+    return 0
+  }
+
+  const ensureRowVisible = (rowIndex: number, movement?: ScrollAxisMovement) => {
     rowVersion()
-    const rowIndex = cursorRow()
     const renderable = rowRenderables.get(rowIndex)
     if (!renderable) {
-      return null
+      return
     }
     if (renderable.x === undefined || renderable.y === undefined) {
-      return null
+      return
     }
     if (!Number.isFinite(renderable.x) || !Number.isFinite(renderable.y)) {
-      return null
+      return
     }
-    return {
-      x: renderable.x,
-      y: renderable.y,
-    }
+    scrollIntoView(
+      scrollRef,
+      {
+        x: renderable.x,
+        y: renderable.y,
+      },
+      {
+        scrolloffY: cursorScrolloffY,
+        trackX: false,
+        movement: movement === undefined ? undefined : { y: movement },
+      },
+    )
   }
 
   const ensureColumnVisible = (colIndex: number) => {
     if (!scrollRef) return
-    const viewport = getViewport()
+    const viewport = getViewportRect(scrollRef)
     if (!viewport) return
 
     const widths = columnWidths()
@@ -110,7 +127,7 @@ export function ResultsPanel(props: ResultsPanelProps) {
     const colWidth = widths[colIndex] + 2
     const colRight = colLeft + colWidth
 
-    const viewportWidth = viewport.width ?? 0
+    const viewportWidth = viewport.width
     const currentScrollLeft = scrollRef.scrollLeft ?? 0
     const viewportLeft = currentScrollLeft
     const viewportRight = currentScrollLeft + viewportWidth
@@ -229,6 +246,23 @@ export function ResultsPanel(props: ResultsPanelProps) {
     }
   }
 
+  const handleBodySync = () => {
+    syncScrollState()
+    const viewport = getViewportRect(scrollRef)
+    if (!viewport) {
+      bodyViewportSize = null
+      return
+    }
+    if (bodyViewportSize && bodyViewportSize.width === viewport.width && bodyViewportSize.height === viewport.height) {
+      return
+    }
+    bodyViewportSize = {
+      width: viewport.width,
+      height: viewport.height,
+    }
+    ensureRowVisible(cursorRow())
+  }
+
   const resetScroll = () => {
     setScrollLeft(0)
     if (scrollRef) {
@@ -243,6 +277,7 @@ export function ResultsPanel(props: ResultsPanelProps) {
     setCursorRow(0)
     setCursorCol(0)
     setSelectionCount(0)
+    previousCursorRow = 0
     resetScroll()
     selectedHeaderCols.clear()
     selectedRowCols.clear()
@@ -252,6 +287,18 @@ export function ResultsPanel(props: ResultsPanelProps) {
     pane.job()
     resultRows().length === 0
     resetPaneState()
+  })
+
+  createEffect(() => {
+    if (!hasResultData()) {
+      previousCursorRow = 0
+      return
+    }
+    rowVersion()
+    const row = cursorRow()
+    const movement = axisMovement(previousCursorRow, row)
+    previousCursorRow = row
+    ensureRowVisible(row, movement)
   })
 
   setSelectionOverride(() => buildSelectedTsv())
@@ -468,14 +515,17 @@ export function ResultsPanel(props: ResultsPanelProps) {
                   if (!scrollRef) return
                   scrollRef.scrollTo({ x: 0, y: 0 })
                   setScrollLeft(0)
+                  const viewport = getViewportRect(scrollRef)
+                  bodyViewportSize = viewport
+                    ? {
+                        width: viewport.width,
+                        height: viewport.height,
+                      }
+                    : null
                   syncScrollState()
+                  ensureRowVisible(cursorRow())
                 }}
-                follow={{
-                  target: followTarget,
-                  scrolloffY: cursorScrolloffY,
-                  trackX: false,
-                }}
-                onSync={syncScrollState}
+                onSync={handleBodySync}
                 scrollSpeed={resultsScrollSpeed}
                 minHorizontalThumbWidth={5}
                 flexGrow={1}

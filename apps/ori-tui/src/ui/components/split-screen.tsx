@@ -78,6 +78,8 @@ export function SplitScreen(props: SplitScreenProps) {
 
   const isMeasured = createMemo(() => axisSize() > 0)
 
+  const areBothVisible = createMemo(() => local.firstVisible && local.secondVisible)
+
   const separatorPaint = createMemo(() => {
     if (hovered() || drag()) {
       if (local.showSeparator) {
@@ -204,21 +206,21 @@ export function SplitScreen(props: SplitScreenProps) {
   const renderVerticalSplit = () => (
     <>
       <box
-        width={layout().firstSize}
-        minWidth={layout().firstSize}
-        maxWidth={layout().firstSize}
+        width={areBothVisible() ? layout().firstSize : local.firstVisible ? axisSize() : 0}
+        minWidth={areBothVisible() ? layout().firstSize : local.firstVisible ? axisSize() : 0}
+        maxWidth={areBothVisible() ? layout().firstSize : local.firstVisible ? axisSize() : 0}
         height="100%"
         flexGrow={0}
         flexShrink={0}
         minHeight={0}
-        visible={isMeasured()}
+        visible={isMeasured() && local.firstVisible}
       >
         {local.first}
       </box>
       <box
-        width={1}
-        minWidth={1}
-        maxWidth={1}
+        width={areBothVisible() ? 1 : 0}
+        minWidth={areBothVisible() ? 1 : 0}
+        maxWidth={areBothVisible() ? 1 : 0}
         height="100%"
         flexGrow={0}
         flexShrink={0}
@@ -228,7 +230,7 @@ export function SplitScreen(props: SplitScreenProps) {
         onMouseDown={startDrag}
         onMouseOver={() => setHovered(true)}
         onMouseOut={() => setHovered(false)}
-        visible={isMeasured()}
+        visible={isMeasured() && areBothVisible()}
       >
         <text
           fg={separatorPaint().fg}
@@ -238,14 +240,14 @@ export function SplitScreen(props: SplitScreenProps) {
         </text>
       </box>
       <box
-        width={layout().secondSize}
-        minWidth={layout().secondSize}
-        maxWidth={layout().secondSize}
+        width={areBothVisible() ? layout().secondSize : local.secondVisible ? axisSize() : 0}
+        minWidth={areBothVisible() ? layout().secondSize : local.secondVisible ? axisSize() : 0}
+        maxWidth={areBothVisible() ? layout().secondSize : local.secondVisible ? axisSize() : 0}
         height="100%"
         flexGrow={0}
         flexShrink={0}
         minHeight={0}
-        visible={isMeasured()}
+        visible={isMeasured() && local.secondVisible}
       >
         {local.second}
       </box>
@@ -255,21 +257,21 @@ export function SplitScreen(props: SplitScreenProps) {
   const renderHorizontalSplit = () => (
     <>
       <box
-        height={layout().firstSize}
-        minHeight={layout().firstSize}
-        maxHeight={layout().firstSize}
+        height={areBothVisible() ? layout().firstSize : local.firstVisible ? axisSize() : 0}
+        minHeight={areBothVisible() ? layout().firstSize : local.firstVisible ? axisSize() : 0}
+        maxHeight={areBothVisible() ? layout().firstSize : local.firstVisible ? axisSize() : 0}
         width="100%"
         flexGrow={0}
         flexShrink={0}
         minWidth={0}
-        visible={isMeasured()}
+        visible={isMeasured() && local.firstVisible}
       >
         {local.first}
       </box>
       <box
-        height={1}
-        minHeight={1}
-        maxHeight={1}
+        height={areBothVisible() ? 1 : 0}
+        minHeight={areBothVisible() ? 1 : 0}
+        maxHeight={areBothVisible() ? 1 : 0}
         width="100%"
         flexGrow={0}
         flexShrink={0}
@@ -279,7 +281,7 @@ export function SplitScreen(props: SplitScreenProps) {
         onMouseDown={startDrag}
         onMouseOver={() => setHovered(true)}
         onMouseOut={() => setHovered(false)}
-        visible={isMeasured()}
+        visible={isMeasured() && areBothVisible()}
       >
         <text
           fg={separatorPaint().fg}
@@ -289,14 +291,14 @@ export function SplitScreen(props: SplitScreenProps) {
         </text>
       </box>
       <box
-        height={layout().secondSize}
-        minHeight={layout().secondSize}
-        maxHeight={layout().secondSize}
+        height={areBothVisible() ? layout().secondSize : local.secondVisible ? axisSize() : 0}
+        minHeight={areBothVisible() ? layout().secondSize : local.secondVisible ? axisSize() : 0}
+        maxHeight={areBothVisible() ? layout().secondSize : local.secondVisible ? axisSize() : 0}
         width="100%"
         flexGrow={0}
         flexShrink={0}
         minWidth={0}
-        visible={isMeasured()}
+        visible={isMeasured() && local.secondVisible}
       >
         {local.second}
       </box>
@@ -319,8 +321,6 @@ export function SplitScreen(props: SplitScreenProps) {
       minHeight={0}
     >
       <Switch>
-        <Match when={local.firstVisible && !local.secondVisible}>{(_: unknown) => local.first}</Match>
-        <Match when={!local.firstVisible && local.secondVisible}>{(_: unknown) => local.second}</Match>
         <Match when={local.orientation === "vertical"}>{(_: unknown) => renderVerticalSplit()}</Match>
         <Match when={local.orientation === "horizontal"}>{(_: unknown) => renderHorizontalSplit()}</Match>
       </Switch>

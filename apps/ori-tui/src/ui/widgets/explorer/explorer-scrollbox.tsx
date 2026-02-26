@@ -1,7 +1,16 @@
 import type { BoxRenderable, ScrollBoxRenderable } from "@opentui/core"
-import { type FollowPoint, OriScrollbox } from "@ui/components/ori-scrollbox"
+import { getViewportRect, OriScrollbox, type ScrollAxisMovement, scrollIntoView } from "@ui/components/ori-scrollbox"
 import { cursorScrolloffY } from "@ui/services/scroll-follow-settings"
-import { type Accessor, createContext, createSignal, onCleanup, type ParentProps, useContext } from "solid-js"
+import {
+  type Accessor,
+  createContext,
+  createEffect,
+  createMemo,
+  on,
+  onCleanup,
+  type ParentProps,
+  useContext,
+} from "solid-js"
 
 type ExplorerScrollboxContextValue = {
   registerRowNode: (rowId: string, node: BoxRenderable | undefined) => void
@@ -19,8 +28,8 @@ export type RowDescriptor = {
   depth: number
 }
 
-const EXPLORER_TEXT_LEFT_PADDING = 2
-const EXPLORER_DEPTH_STEP = 2
+const ROW_LEFT_PADDING = 2
+const ROW_DEPTH_STEP = 2
 
 export function useExplorerScrollRegistration() {
   const ctx = useContext(ExplorerScrollboxContext)
@@ -41,50 +50,93 @@ interface ExplorerScrollboxProps extends ParentProps {
 }
 
 export function ExplorerScrollbox(props: ExplorerScrollboxProps) {
-  const [rowVersion, setRowVersion] = createSignal(0)
-  const rowNodes = new Map<string, BoxRenderable>()
   let scrollBoxRef: ScrollBoxRenderable | undefined
+  let viewportSize: { width: number; height: number } | null = null
+  const registerRowNode = (_rowId: string, _node: BoxRenderable | undefined) => {}
 
-  const registerRowNode = (rowId: string, node: BoxRenderable | undefined) => {
-    if (!node) {
-      rowNodes.delete(rowId)
-      setRowVersion((value) => value + 1)
-      return
-    }
-    rowNodes.set(rowId, node)
-    setRowVersion((value) => value + 1)
-  }
-
-  const target = (): FollowPoint | null => {
-    const rows = props.rows()
-    rowVersion()
+  const selectedRow = createMemo<{ index: number; depth: number } | null>(() => {
     const rowId = props.selectedRowId()
     if (!rowId) {
       return null
     }
-    const node = rowNodes.get(rowId)
-    if (!node) {
+    const rows = props.rows()
+    const index = rows.findIndex((row) => row.id === rowId)
+    if (index < 0) {
       return null
     }
-    const row = rows.find((value) => value.id === rowId)
-    if (!row) {
+    const row = rows[index]
+    if (!row || !Number.isFinite(row.depth)) {
       return null
     }
-    if (node.x === undefined || node.y === undefined) {
-      return null
-    }
-    if (!Number.isFinite(node.x) || !Number.isFinite(node.y)) {
-      return null
-    }
-    if (!Number.isFinite(row.depth)) {
-      return null
-    }
-    const depth = row.depth
     return {
-      x: node.x + EXPLORER_TEXT_LEFT_PADDING + depth * EXPLORER_DEPTH_STEP,
-      y: node.y,
+      index,
+      depth: row.depth,
     }
+  })
+
+  const ensureSelectedVisible = (movement?: ScrollAxisMovement) => {
+    const row = selectedRow()
+    if (!row) {
+      return
+    }
+    const viewport = getViewportRect(scrollBoxRef)
+    if (!viewport) {
+      return
+    }
+    const scrollTop = scrollBoxRef?.scrollTop
+    if (scrollTop === undefined || !Number.isFinite(scrollTop)) {
+      return
+    }
+    const scrollLeft = scrollBoxRef?.scrollLeft
+    if (scrollLeft === undefined || !Number.isFinite(scrollLeft)) {
+      return
+    }
+    const targetY = viewport.y + row.index - scrollTop
+    const rowStart = ROW_LEFT_PADDING + row.depth * ROW_DEPTH_STEP
+    const targetX = viewport.x + rowStart - scrollLeft
+    scrollIntoView(
+      scrollBoxRef,
+      {
+        x: targetX,
+        y: targetY,
+      },
+      {
+        scrolloffY: cursorScrolloffY,
+        trackX: true,
+        movement: movement === undefined ? undefined : { y: movement },
+      },
+    )
   }
+
+  const toMovement = (next: number, previous: number): ScrollAxisMovement => {
+    if (next > previous) {
+      return 1
+    }
+    if (next < previous) {
+      return -1
+    }
+    return 0
+  }
+
+  createEffect(
+    on(
+      selectedRow,
+      (
+        row: { index: number; depth: number } | null,
+        previousRow: { index: number; depth: number } | null | undefined,
+      ) => {
+        if (!row) {
+          return
+        }
+        if (!previousRow) {
+          ensureSelectedVisible()
+          return
+        }
+        ensureSelectedVisible(toMovement(row.index, previousRow.index))
+      },
+      { defer: true },
+    ),
+  )
 
   props.onApiReady?.({
     scrollBy: (delta) => {
@@ -97,6 +149,30 @@ export function ExplorerScrollbox(props: ExplorerScrollboxProps) {
 
   const handleScrollboxRef = (node: ScrollBoxRenderable | undefined) => {
     scrollBoxRef = node
+    const viewport = getViewportRect(node)
+    viewportSize = viewport
+      ? {
+          width: viewport.width,
+          height: viewport.height,
+        }
+      : null
+    ensureSelectedVisible()
+  }
+
+  const handleSync = () => {
+    const viewport = getViewportRect(scrollBoxRef)
+    if (!viewport) {
+      viewportSize = null
+      return
+    }
+    if (viewportSize && viewportSize.width === viewport.width && viewportSize.height === viewport.height) {
+      return
+    }
+    viewportSize = {
+      width: viewport.width,
+      height: viewport.height,
+    }
+    ensureSelectedVisible()
   }
 
   const contextValue: ExplorerScrollboxContextValue = {
@@ -106,10 +182,7 @@ export function ExplorerScrollbox(props: ExplorerScrollboxProps) {
   return (
     <OriScrollbox
       onReady={handleScrollboxRef}
-      follow={{
-        target,
-        scrolloffY: cursorScrolloffY,
-      }}
+      onSync={handleSync}
       scrollSpeed={explorerScrollSpeed}
       minHorizontalThumbWidth={5}
       height="100%"

@@ -1,11 +1,17 @@
 import type { BoxRenderable, KeyEvent, MouseEvent, ScrollBoxRenderable, TextareaRenderable } from "@opentui/core"
-import { type FollowOutOfBandContext, type FollowPoint, OriScrollbox } from "@ui/components/ori-scrollbox"
+import {
+  OriScrollbox,
+  type OriScrollboxUserScrollContext,
+  resolveScrollIntoView,
+  type ScrollPoint,
+  scrollIntoView,
+} from "@ui/components/ori-scrollbox"
 import { useLogger } from "@ui/providers/logger"
 import { useTheme } from "@ui/providers/theme"
 import { type KeyBinding, KeyScope } from "@ui/services/key-scopes"
 import { cursorScrolloffY } from "@ui/services/scroll-follow-settings"
 import { syntaxHighlighter } from "@utils/syntax-highlighter"
-import { type Accessor, createEffect, createSignal, For, on, onCleanup, onMount, Show, untrack } from "solid-js"
+import { type Accessor, createEffect, For, on, onCleanup, onMount, Show, untrack } from "solid-js"
 import { type CursorContext, createBufferModel } from "./buffer-model"
 
 const DEBOUNCE_MS = 200
@@ -50,26 +56,39 @@ export function Buffer(props: BufferProps) {
 
   let scrollRef: ScrollBoxRenderable | undefined
   const rowAnchors = new Map<string, BoxRenderable>()
-  const [anchorVersion, setAnchorVersion] = createSignal(0)
-  let pendingEnterFollow = false
-  let lastStableFollowPoint: FollowPoint | null = null
+  let viewportSize: { width: number; height: number } | null = null
+  let skipCursorChangeScroll = false
 
   const getViewport = () => {
-    const viewport = (scrollRef as ScrollBoxRenderable & { viewport?: { y?: number; height?: number } })?.viewport
+    const viewport = (
+      scrollRef as ScrollBoxRenderable & { viewport?: { x?: number; y?: number; width?: number; height?: number } }
+    )?.viewport
     if (!viewport) {
       return undefined
     }
-    if (viewport.y === undefined || viewport.height === undefined) {
+    if (
+      viewport.x === undefined ||
+      viewport.y === undefined ||
+      viewport.width === undefined ||
+      viewport.height === undefined
+    ) {
       return undefined
     }
-    if (!Number.isFinite(viewport.y) || !Number.isFinite(viewport.height)) {
+    if (
+      !Number.isFinite(viewport.x) ||
+      !Number.isFinite(viewport.y) ||
+      !Number.isFinite(viewport.width) ||
+      !Number.isFinite(viewport.height)
+    ) {
       return undefined
     }
-    if (viewport.height <= 0) {
+    if (viewport.width <= 0 || viewport.height <= 0) {
       return undefined
     }
     return {
+      x: viewport.x,
       y: viewport.y,
+      width: viewport.width,
       height: viewport.height,
     }
   }
@@ -84,8 +103,7 @@ export function Buffer(props: BufferProps) {
     return value
   }
 
-  const getCursorPoint = (): FollowPoint | null => {
-    anchorVersion()
+  const getCursorPoint = (): ScrollPoint | null => {
     const cursor = bufferModel.getCursorContext()
     if (!cursor) {
       logFollow("cursor-point-null", {
@@ -160,9 +178,8 @@ export function Buffer(props: BufferProps) {
     return point
   }
 
-  const followTarget = (): FollowPoint | null => {
+  const followTarget = (): ScrollPoint | null => {
     if (!props.isFocused()) {
-      pendingEnterFollow = false
       logFollow("follow-target", {
         focused: false,
         reason: "buffer-unfocused",
@@ -170,81 +187,11 @@ export function Buffer(props: BufferProps) {
       return null
     }
     const point = getCursorPoint()
-    const viewport = getViewport()
-    if (point && (!viewport || point.y >= viewport.y)) {
-      lastStableFollowPoint = point
-      if (pendingEnterFollow) {
-        pendingEnterFollow = false
-        logFollow("enter-follow-stable", {
-          point,
-          viewport,
-        })
-      }
-      logFollow("follow-target", {
-        focused: true,
-        point,
-      })
-      return point
-    }
-    if (pendingEnterFollow) {
-      logFollow("enter-follow-guard", {
-        point,
-        viewport,
-        fallback: lastStableFollowPoint,
-      })
-      logFollow("follow-target", {
-        focused: true,
-        point: lastStableFollowPoint,
-      })
-      return lastStableFollowPoint
-    }
-    if (point) {
-      lastStableFollowPoint = point
-    }
     logFollow("follow-target", {
       focused: true,
       point,
     })
     return point
-  }
-
-  const prepareScrollBeforeEnter = () => {
-    const point = getCursorPoint()
-    const viewport = getViewport()
-    if (!point || !viewport) {
-      logFollow("prepare-enter-skip", {
-        point,
-        viewport,
-      })
-      return
-    }
-    const inset = Math.min(cursorScrolloffY, Math.max(0, Math.floor((viewport.height - 1) / 2)))
-    const bandBottom = viewport.y + viewport.height - inset
-    const predictedNextRow = point.y + 1
-    if (predictedNextRow <= bandBottom) {
-      logFollow("prepare-enter-no-scroll", {
-        point,
-        viewport,
-        inset,
-        bandBottom,
-        predictedNextRow,
-      })
-      return
-    }
-    const delta = predictedNextRow - bandBottom
-    logFollow("prepare-enter-scroll", {
-      point,
-      viewport,
-      inset,
-      bandBottom,
-      predictedNextRow,
-      delta,
-      beforeScrollTop: scrollRef?.scrollTop ?? 0,
-    })
-    scrollRef?.scrollBy({ x: 0, y: delta })
-    logFollow("prepare-enter-scroll-done", {
-      afterScrollTop: scrollRef?.scrollTop ?? 0,
-    })
   }
 
   const moveCursorByVisualRows = (delta: number): number => {
@@ -348,58 +295,132 @@ export function Buffer(props: BufferProps) {
     return moved
   }
 
-  const moveCursorWithinBand = (context: FollowOutOfBandContext) => {
+  const requestCursorScroll = (reason: string) => {
     if (!props.isFocused()) {
-      logFollow("manual-out-of-band", {
-        decision: "autoscroll",
-        reason: "unfocused",
-        context,
+      logFollow("scroll-request-skip", {
+        reason,
+        skip: "buffer-unfocused",
       })
-      return "autoscroll" as const
+      return
     }
-    if (context.delta.y === 0) {
-      logFollow("manual-out-of-band", {
-        decision: "handled",
-        reason: "delta-y-zero",
-        context,
+    const point = followTarget()
+    if (!point) {
+      logFollow("scroll-request-skip", {
+        reason,
+        skip: "missing-target",
       })
-      return "handled" as const
+      return
     }
-    const moved = moveCursorByVisualRows(-context.delta.y)
-    if (moved < Math.abs(context.delta.y)) {
-      logFollow("manual-out-of-band", {
-        decision: "autoscroll",
-        reason: "cursor-move-shortfall",
-        context,
-        moved,
-      })
-      return "autoscroll" as const
-    }
-    logFollow("manual-out-of-band", {
-      decision: "handled",
-      reason: "cursor-moved",
-      context,
-      moved,
+    const result = scrollIntoView(scrollRef, point, {
+      scrolloffY: cursorScrolloffY,
+      trackX: false,
     })
-    return "handled" as const
+    logFollow("scroll-request", {
+      reason,
+      point,
+      delta: result?.delta ?? { x: 0, y: 0 },
+      band: result?.band,
+      viewport: result?.viewport,
+      scrollTop: scrollRef?.scrollTop ?? 0,
+    })
   }
 
-  const handleFollowOutOfBand = (context: FollowOutOfBandContext) => {
-    if (context.source !== "manual-scroll") {
-      logFollow("follow-out-of-band", {
-        source: context.source,
-        decision: "autoscroll",
+  const handleScrollboxSync = () => {
+    const viewport = getViewport()
+    if (!viewport) {
+      viewportSize = null
+      return
+    }
+    if (viewportSize && viewportSize.width === viewport.width && viewportSize.height === viewport.height) {
+      return
+    }
+    viewportSize = {
+      width: viewport.width,
+      height: viewport.height,
+    }
+    queueMicrotask(() => {
+      requestCursorScroll("viewport-resize")
+    })
+  }
+
+  const handleUserScroll = (context: OriScrollboxUserScrollContext) => {
+    if (!props.isFocused()) {
+      logFollow("manual-scroll", {
+        skip: "buffer-unfocused",
         context,
       })
-      return "autoscroll" as const
+      return
     }
-    const decision = moveCursorWithinBand(context)
-    logFollow("follow-out-of-band", {
-      source: context.source,
-      decision,
-      context,
+    const point = followTarget()
+    if (!point) {
+      logFollow("manual-scroll", {
+        skip: "missing-target",
+        context,
+      })
+      return
+    }
+    const plan = resolveScrollIntoView(scrollRef, point, {
+      scrolloffY: cursorScrolloffY,
+      trackX: false,
     })
-    return decision
+    if (!plan) {
+      logFollow("manual-scroll", {
+        skip: "missing-plan",
+        context,
+        point,
+      })
+      return
+    }
+    if (plan.delta.y === 0) {
+      logFollow("manual-scroll", {
+        decision: "no-op",
+        context,
+        point,
+        delta: plan.delta,
+      })
+      return
+    }
+    const moved = moveCursorByVisualRows(-plan.delta.y)
+    logFollow("manual-scroll", {
+      decision: moved < Math.abs(plan.delta.y) ? "shortfall" : "cursor-moved",
+      context,
+      point,
+      delta: plan.delta,
+      moved,
+    })
+    if (moved >= Math.abs(plan.delta.y)) {
+      return
+    }
+    queueMicrotask(() => {
+      requestCursorScroll("manual-scroll-shortfall")
+    })
+  }
+
+  const prepareScrollBeforeEnter = () => {
+    if (!props.isFocused()) {
+      return
+    }
+    const point = getCursorPoint()
+    if (!point) {
+      logFollow("enter-pre-scroll-skip", {
+        reason: "missing-cursor-point",
+      })
+      return
+    }
+    const target = {
+      x: point.x,
+      y: point.y + 1,
+    }
+    const result = scrollIntoView(scrollRef, target, {
+      scrolloffY: cursorScrolloffY,
+      trackX: false,
+    })
+    logFollow("enter-pre-scroll", {
+      point,
+      target,
+      delta: result?.delta ?? { x: 0, y: 0 },
+      scrollTop: scrollRef?.scrollTop ?? 0,
+    })
   }
 
   const focus = () => {
@@ -483,7 +504,7 @@ export function Buffer(props: BufferProps) {
       pattern: "return",
       handler: withCursor((ctx, event) => {
         event.preventDefault()
-        pendingEnterFollow = true
+        skipCursorChangeScroll = true
         prepareScrollBeforeEnter()
         bufferModel.handleEnter(ctx.index)
       }),
@@ -612,8 +633,33 @@ export function Buffer(props: BufferProps) {
   createEffect(
     on(props.isFocused, (isFocused) => {
       bufferModel.handleFocusChange(isFocused)
+      if (!isFocused) {
+        return
+      }
+      queueMicrotask(() => {
+        requestCursorScroll("focus")
+      })
     }),
   )
+
+  createEffect(() => {
+    if (!props.isFocused()) {
+      return
+    }
+    bufferModel.focusedRow()
+    bufferModel.navColumn()
+    if (skipCursorChangeScroll) {
+      skipCursorChangeScroll = false
+      logFollow("scroll-request-skip", {
+        reason: "cursor-change",
+        skip: "enter-pre-scrolled",
+      })
+      return
+    }
+    queueMicrotask(() => {
+      requestCursorScroll("cursor-change")
+    })
+  })
 
   const lineBg = (row: number) => {
     return props.isFocused() && bufferModel.focusedRow() === row
@@ -628,16 +674,25 @@ export function Buffer(props: BufferProps) {
     >
       <OriScrollbox
         marginTop={1}
+        stickyScroll={true}
         onReady={(node) => {
           scrollRef = node
+          const viewport = getViewport()
+          viewportSize = viewport
+            ? {
+                width: viewport.width,
+                height: viewport.height,
+              }
+            : null
+          if (!node || !props.isFocused()) {
+            return
+          }
+          queueMicrotask(() => {
+            requestCursorScroll("ready")
+          })
         }}
-        follow={{
-          target: followTarget,
-          scrolloffY: cursorScrolloffY,
-          trackX: false,
-          manual: true,
-          onOutOfBand: handleFollowOutOfBand,
-        }}
+        onSync={handleScrollboxSync}
+        onUserScroll={handleUserScroll}
         height={"100%"}
         horizontalScrollbarOptions={{
           trackOptions: {
@@ -670,11 +725,9 @@ export function Buffer(props: BufferProps) {
                     ref={(node) => {
                       if (!node) {
                         rowAnchors.delete(lineId)
-                        setAnchorVersion((value) => value + 1)
                         return
                       }
                       rowAnchors.set(lineId, node)
-                      setAnchorVersion((value) => value + 1)
                     }}
                     flexDirection="row"
                     width="100%"
