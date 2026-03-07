@@ -27,27 +27,12 @@ export type ScrollPoint = {
   y: number
 }
 
-export type ScrollBand = {
-  left: number
-  top: number
-  right: number
-  bottom: number
-}
-
 export type ScrollDelta = {
   x: number
   y: number
 }
 
-export type ScrollBoundaryConfig = {
-  scrolloffY?: number
-  insetTop?: number
-  insetBottom?: number
-  insetLeft?: number
-  insetRight?: number
-}
-
-export type ScrollIntoViewOptions = ScrollBoundaryConfig & {
+export type ScrollIntoViewOptions = {
   trackX?: boolean
 }
 
@@ -213,31 +198,9 @@ export function getViewportRect(node: ScrollBoxRenderable): ViewportRect {
   }
 }
 
-function normalizeInset(value: number | undefined, fallback: number, max: number): number {
-  if (value === undefined) {
-    return fallback
-  }
-  return Math.min(max, Math.max(0, value))
-}
-
-export function computeViewportBand(viewport: ViewportRect, options: ScrollBoundaryConfig = {}): ScrollBand {
-  const maxX = Math.max(0, viewport.width - 1)
+function computeVerticalInset(viewport: ViewportRect): number {
   const maxY = Math.max(0, viewport.height - 1)
-  const fallbackY = normalizeInset(options.scrolloffY, DEFAULT_SCROLL_INSET_Y, Math.floor(maxY / 2))
-  const leftInset = normalizeInset(options.insetLeft, 0, maxX)
-  const rightInset = normalizeInset(options.insetRight, 0, maxX)
-  const topInset = normalizeInset(options.insetTop, fallbackY, maxY)
-  const bottomInset = normalizeInset(options.insetBottom, fallbackY, maxY)
-  const left = Math.min(leftInset, Math.max(0, maxX - rightInset))
-  const right = Math.min(rightInset, Math.max(0, maxX - left))
-  const top = Math.min(topInset, Math.max(0, maxY - bottomInset))
-  const bottom = Math.min(bottomInset, Math.max(0, maxY - top))
-  return {
-    left: viewport.x + left,
-    top: viewport.y + top,
-    right: viewport.x + viewport.width - right,
-    bottom: viewport.y + viewport.height - bottom,
-  }
+  return Math.min(DEFAULT_SCROLL_INSET_Y, Math.floor(maxY / 2))
 }
 
 export function resolveScrollIntoView(
@@ -252,20 +215,24 @@ export function resolveScrollIntoView(
   if (viewport.width <= 0 || viewport.height <= 0) {
     return null
   }
-  const band = computeViewportBand(viewport, options)
-  const computeDelta = (point: number, bandStart: number, bandEnd: number) => {
-    if (point < bandStart) {
-      return point - bandStart
+  const insetY = computeVerticalInset(viewport)
+  const startX = viewport.x
+  const endXExclusive = viewport.x + viewport.width
+  const startY = viewport.y + insetY
+  const endYExclusive = viewport.y + viewport.height - insetY
+  const computeDelta = (point: number, start: number, endExclusive: number) => {
+    if (point < start) {
+      return point - start
     }
     const pointEnd = point + 1
-    if (pointEnd > bandEnd) {
-      return pointEnd - bandEnd
+    if (pointEnd > endExclusive) {
+      return pointEnd - endExclusive
     }
     return 0
   }
   return {
-    x: options.trackX === false ? 0 : computeDelta(target.x, band.left, band.right),
-    y: computeDelta(target.y, band.top, band.bottom),
+    x: options.trackX === false ? 0 : computeDelta(target.x, startX, endXExclusive),
+    y: computeDelta(target.y, startY, endYExclusive),
   }
 }
 
