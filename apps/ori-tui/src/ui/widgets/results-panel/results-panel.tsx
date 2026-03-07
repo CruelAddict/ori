@@ -7,7 +7,6 @@ import {
 } from "@opentui/core"
 import { getViewportRect, OriScrollbox, scrollIntoView } from "@ui/components/ori-scrollbox"
 import { useTheme } from "@ui/providers/theme"
-import { cursorScrolloffY } from "@ui/services/scroll-follow-settings"
 import "./table-cell"
 import { type KeyBinding, KeyScope } from "@ui/services/key-scopes"
 import { setSelectionOverride } from "@utils/clipboard"
@@ -95,7 +94,6 @@ export function ResultsPanel(props: ResultsPanelProps) {
         y: renderable.y,
       },
       {
-        scrolloffY: cursorScrolloffY,
         trackX: false,
       },
     )

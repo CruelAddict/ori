@@ -1,6 +1,5 @@
 import type { MouseEvent, ScrollBoxRenderable } from "@opentui/core"
 import { useTheme } from "@ui/providers/theme"
-import { cursorScrolloffY } from "@ui/services/scroll-follow-settings"
 import type { JSX } from "solid-js"
 
 const defaultMultipliers = {
@@ -94,7 +93,7 @@ export type OriScrollboxProps = ScrollboxBaseProps & {
   onUserScroll?: (context: OriScrollboxUserScrollContext) => void
 }
 
-const DEFAULT_SCROLL_INSET_Y = cursorScrolloffY
+const DEFAULT_SCROLL_INSET_Y = 2
 
 export type ViewportRect = {
   x: number
@@ -178,18 +177,18 @@ export function OriScrollbox(props: OriScrollboxProps) {
       const prevTop = node.scrollTop ?? 0
       handleMouseEvent?.(event)
       if (event.type === "scroll") {
-        const nextLeft = node.scrollLeft ?? 0
-        const nextTop = node.scrollTop ?? 0
+        const newLeft = node.scrollLeft ?? 0
+        const newTop = node.scrollTop ?? 0
         const delta = {
-          x: nextLeft - prevLeft,
-          y: nextTop - prevTop,
+          x: newLeft - prevLeft,
+          y: newTop - prevTop,
         }
         if (delta.x !== 0 || delta.y !== 0) {
           onUserScroll?.({
             event,
             delta,
-            scrollLeft: nextLeft,
-            scrollTop: nextTop,
+            scrollLeft: newLeft,
+            scrollTop: newTop,
           })
         }
       }
@@ -320,10 +319,10 @@ export function computeScrollIntoViewDelta(options: {
       options.trackX === false
         ? 0
         : computeScrollAxisDelta({
-            target: options.target.x,
-            bandStart: options.band.left,
-            bandEnd: options.band.right,
-          }),
+          target: options.target.x,
+          bandStart: options.band.left,
+          bandEnd: options.band.right,
+        }),
     y: computeScrollAxisDelta({
       target: options.target.y,
       bandStart: options.band.top,

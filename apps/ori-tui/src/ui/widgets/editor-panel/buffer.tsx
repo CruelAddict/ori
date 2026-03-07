@@ -3,7 +3,6 @@ import { OriScrollbox, resolveScrollIntoView, type ScrollPoint, scrollIntoView }
 import { useLogger } from "@ui/providers/logger"
 import { useTheme } from "@ui/providers/theme"
 import { type KeyBinding, KeyScope } from "@ui/services/key-scopes"
-import { cursorScrolloffY } from "@ui/services/scroll-follow-settings"
 import { syntaxHighlighter } from "@utils/syntax-highlighter"
 import { type Accessor, createEffect, For, on, onCleanup, onMount, Show, untrack } from "solid-js"
 import { type CursorContext, createBufferModel } from "./buffer-model"
@@ -183,7 +182,6 @@ export function Buffer(props: BufferProps) {
       return
     }
     scrollIntoView(scrollRef, point, {
-      scrolloffY: cursorScrolloffY,
       trackX: false,
     })
   }
@@ -215,7 +213,6 @@ export function Buffer(props: BufferProps) {
       return
     }
     const plan = resolveScrollIntoView(scrollRef, point, {
-      scrolloffY: cursorScrolloffY,
       trackX: false,
     })
     if (!plan) {
@@ -246,7 +243,6 @@ export function Buffer(props: BufferProps) {
       y: point.y + 1,
     }
     scrollIntoView(scrollRef, target, {
-      scrolloffY: cursorScrolloffY,
       trackX: false,
     })
   }

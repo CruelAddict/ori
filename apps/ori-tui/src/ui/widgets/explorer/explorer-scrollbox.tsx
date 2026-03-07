@@ -1,6 +1,5 @@
 import type { ScrollBoxRenderable } from "@opentui/core"
 import { getViewportRect, OriScrollbox, scrollIntoView } from "@ui/components/ori-scrollbox"
-import { cursorScrolloffY } from "@ui/services/scroll-follow-settings"
 import { type Accessor, createEffect, createMemo, on, onCleanup, type ParentProps } from "solid-js"
 
 const explorerScrollSpeed = {
@@ -79,7 +78,6 @@ export function ExplorerScrollbox(props: ExplorerScrollboxProps) {
         y: targetY,
       },
       {
-        scrolloffY: cursorScrolloffY,
         trackX: true,
       },
     )
@@ -112,9 +110,9 @@ export function ExplorerScrollbox(props: ExplorerScrollboxProps) {
     const viewport = getViewportRect(node)
     viewportSize = viewport
       ? {
-          width: viewport.width,
-          height: viewport.height,
-        }
+        width: viewport.width,
+        height: viewport.height,
+      }
       : null
     ensureSelectedVisible()
   }
