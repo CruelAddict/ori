@@ -51,13 +51,6 @@ export type ScrollIntoViewOptions = ScrollBoundaryConfig & {
   trackX?: boolean
 }
 
-export type ScrollIntoViewComputation = {
-  target: ScrollPoint
-  viewport: ViewportRect
-  band: ScrollBand
-  delta: ScrollDelta
-}
-
 export type OriScrollboxUserScrollContext = {
   event: MouseEvent
   delta: ScrollDelta
@@ -210,61 +203,21 @@ export function OriScrollbox(props: OriScrollboxProps) {
   )
 }
 
-export function getViewportRect(node: ScrollBoxRenderable | undefined): ViewportRect | undefined {
-  if (!node) {
-    return undefined
-  }
-  const viewport = (
-    node as ScrollBoxRenderable & { viewport?: { x?: number; y?: number; width?: number; height?: number } }
-  ).viewport
-  if (!viewport) {
-    return undefined
-  }
-  const x = toFiniteNumber(viewport.x)
-  const y = toFiniteNumber(viewport.y)
-  const width = toFiniteNumber(viewport.width)
-  const height = toFiniteNumber(viewport.height)
-  if (x === undefined || y === undefined || width === undefined || height === undefined) {
-    return undefined
-  }
+export function getViewportRect(node: ScrollBoxRenderable): ViewportRect {
+  const viewport = node.viewport
   return {
-    x,
-    y,
-    width,
-    height,
+    x: viewport.x,
+    y: viewport.y,
+    width: viewport.width,
+    height: viewport.height,
   }
-}
-
-function normalizeScrollPoint(target: ScrollPoint): ScrollPoint | null {
-  const x = toFiniteNumber(target.x)
-  const y = toFiniteNumber(target.y)
-  if (x === undefined || y === undefined) {
-    return null
-  }
-  return {
-    x: Math.floor(x),
-    y: Math.floor(y),
-  }
-}
-
-function toFiniteNumber(value: number | undefined): number | undefined {
-  if (value === undefined) {
-    return undefined
-  }
-  if (!Number.isFinite(value)) {
-    return undefined
-  }
-  return value
 }
 
 function normalizeInset(value: number | undefined, fallback: number, max: number): number {
   if (value === undefined) {
     return fallback
   }
-  if (!Number.isFinite(value)) {
-    return fallback
-  }
-  return Math.min(max, Math.max(0, Math.floor(value)))
+  return Math.min(max, Math.max(0, value))
 }
 
 export function computeViewportBand(viewport: ViewportRect, options: ScrollBoundaryConfig = {}): ScrollBand {
@@ -287,77 +240,32 @@ export function computeViewportBand(viewport: ViewportRect, options: ScrollBound
   }
 }
 
-function computeAxisDelta(targetStart: number, targetEnd: number, bandStart: number, bandEnd: number): number {
-  if (targetStart < bandStart) {
-    return targetStart - bandStart
-  }
-  if (targetEnd > bandEnd) {
-    return targetEnd - bandEnd
-  }
-  return 0
-}
-
-type FollowAxisDeltaOptions = {
-  target: number
-  bandStart: number
-  bandEnd: number
-}
-
-function computeScrollAxisDelta(options: FollowAxisDeltaOptions): number {
-  const targetStart = options.target
-  const targetEnd = options.target + 1
-  return computeAxisDelta(targetStart, targetEnd, options.bandStart, options.bandEnd)
-}
-
-export function computeScrollIntoViewDelta(options: {
-  target: ScrollPoint
-  band: ScrollBand
-  trackX?: boolean
-}): ScrollDelta {
-  return {
-    x:
-      options.trackX === false
-        ? 0
-        : computeScrollAxisDelta({
-          target: options.target.x,
-          bandStart: options.band.left,
-          bandEnd: options.band.right,
-        }),
-    y: computeScrollAxisDelta({
-      target: options.target.y,
-      bandStart: options.band.top,
-      bandEnd: options.band.bottom,
-    }),
-  }
-}
-
 export function resolveScrollIntoView(
   node: ScrollBoxRenderable | undefined,
   target: ScrollPoint,
   options: ScrollIntoViewOptions = {},
-): ScrollIntoViewComputation | null {
-  const viewport = getViewportRect(node)
-  if (!viewport) {
+): ScrollDelta | null {
+  if (!node) {
     return null
   }
+  const viewport = getViewportRect(node)
   if (viewport.width <= 0 || viewport.height <= 0) {
     return null
   }
-  const normalizedTarget = normalizeScrollPoint(target)
-  if (!normalizedTarget) {
-    return null
-  }
   const band = computeViewportBand(viewport, options)
-  const delta = computeScrollIntoViewDelta({
-    target: normalizedTarget,
-    band,
-    trackX: options.trackX,
-  })
+  const computeDelta = (point: number, bandStart: number, bandEnd: number) => {
+    if (point < bandStart) {
+      return point - bandStart
+    }
+    const pointEnd = point + 1
+    if (pointEnd > bandEnd) {
+      return pointEnd - bandEnd
+    }
+    return 0
+  }
   return {
-    target: normalizedTarget,
-    viewport,
-    band,
-    delta,
+    x: options.trackX === false ? 0 : computeDelta(target.x, band.left, band.right),
+    y: computeDelta(target.y, band.top, band.bottom),
   }
 }
 
@@ -365,15 +273,15 @@ export function scrollIntoView(
   node: ScrollBoxRenderable | undefined,
   target: ScrollPoint,
   options: ScrollIntoViewOptions = {},
-): ScrollIntoViewComputation | null {
-  const plan = resolveScrollIntoView(node, target, options)
-  if (!plan) {
+): ScrollDelta | null {
+  const delta = resolveScrollIntoView(node, target, options)
+  if (!delta) {
     return null
   }
-  if (plan.delta.x !== 0 || plan.delta.y !== 0) {
-    node?.scrollBy(plan.delta)
+  if (delta.x !== 0 || delta.y !== 0) {
+    node?.scrollBy(delta)
   }
-  return plan
+  return delta
 }
 
 function mergeScrollbarOptions(base: ScrollbarOptions, custom: ScrollbarOptions | undefined): ScrollbarOptions {

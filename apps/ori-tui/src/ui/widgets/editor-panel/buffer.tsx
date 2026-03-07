@@ -1,5 +1,11 @@
 import type { BoxRenderable, KeyEvent, MouseEvent, ScrollBoxRenderable, TextareaRenderable } from "@opentui/core"
-import { OriScrollbox, resolveScrollIntoView, type ScrollPoint, scrollIntoView } from "@ui/components/ori-scrollbox"
+import {
+  getViewportRect,
+  OriScrollbox,
+  resolveScrollIntoView,
+  type ScrollPoint,
+  scrollIntoView,
+} from "@ui/components/ori-scrollbox"
 import { useLogger } from "@ui/providers/logger"
 import { useTheme } from "@ui/providers/theme"
 import { type KeyBinding, KeyScope } from "@ui/services/key-scopes"
@@ -48,50 +54,6 @@ export function Buffer(props: BufferProps) {
   let viewportSize: { width: number; height: number } | null = null
   let skipCursorChangeScroll = false
 
-  const getViewport = () => {
-    const viewport = (
-      scrollRef as ScrollBoxRenderable & { viewport?: { x?: number; y?: number; width?: number; height?: number } }
-    )?.viewport
-    if (!viewport) {
-      return undefined
-    }
-    if (
-      viewport.x === undefined ||
-      viewport.y === undefined ||
-      viewport.width === undefined ||
-      viewport.height === undefined
-    ) {
-      return undefined
-    }
-    if (
-      !Number.isFinite(viewport.x) ||
-      !Number.isFinite(viewport.y) ||
-      !Number.isFinite(viewport.width) ||
-      !Number.isFinite(viewport.height)
-    ) {
-      return undefined
-    }
-    if (viewport.width <= 0 || viewport.height <= 0) {
-      return undefined
-    }
-    return {
-      x: viewport.x,
-      y: viewport.y,
-      width: viewport.width,
-      height: viewport.height,
-    }
-  }
-
-  const toFinite = (value: number | undefined): number | undefined => {
-    if (value === undefined) {
-      return undefined
-    }
-    if (!Number.isFinite(value)) {
-      return undefined
-    }
-    return value
-  }
-
   const getCursorPoint = (): ScrollPoint | null => {
     const cursor = bufferModel.getCursorContext()
     if (!cursor) {
@@ -109,17 +71,10 @@ export function Buffer(props: BufferProps) {
     if (!ref) {
       return null
     }
-    const x = toFinite(ref.x)
-    const anchorY = toFinite(anchor.y)
     const visual = ref.visualCursor
-    const visualCol = toFinite(visual?.visualCol)
-    const visualRow = toFinite(visual?.visualRow)
-    if (x === undefined || anchorY === undefined || visualCol === undefined || visualRow === undefined) {
-      return null
-    }
     return {
-      x: Math.floor(x + visualCol),
-      y: Math.floor(anchorY + visualRow),
+      x: ref.x + visual.visualCol,
+      y: anchor.y + visual.visualRow,
     }
   }
 
@@ -187,11 +142,11 @@ export function Buffer(props: BufferProps) {
   }
 
   const handleScrollboxSync = () => {
-    const viewport = getViewport()
-    if (!viewport) {
+    if (!scrollRef) {
       viewportSize = null
       return
     }
+    const viewport = getViewportRect(scrollRef)
     if (viewportSize && viewportSize.width === viewport.width && viewportSize.height === viewport.height) {
       return
     }
@@ -212,17 +167,17 @@ export function Buffer(props: BufferProps) {
     if (!point) {
       return
     }
-    const plan = resolveScrollIntoView(scrollRef, point, {
+    const delta = resolveScrollIntoView(scrollRef, point, {
       trackX: false,
     })
-    if (!plan) {
+    if (!delta) {
       return
     }
-    if (plan.delta.y === 0) {
+    if (delta.y === 0) {
       return
     }
-    const moved = moveCursorByVisualRows(-plan.delta.y)
-    if (moved >= Math.abs(plan.delta.y)) {
+    const moved = moveCursorByVisualRows(-delta.y)
+    if (moved >= Math.abs(delta.y)) {
       return
     }
     queueMicrotask(() => {
@@ -497,7 +452,7 @@ export function Buffer(props: BufferProps) {
         stickyScroll={true}
         onReady={(node) => {
           scrollRef = node
-          const viewport = getViewport()
+          const viewport = node ? getViewportRect(node) : undefined
           viewportSize = viewport
             ? {
                 width: viewport.width,

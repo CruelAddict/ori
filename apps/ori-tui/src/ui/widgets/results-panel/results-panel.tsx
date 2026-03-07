@@ -81,12 +81,6 @@ export function ResultsPanel(props: ResultsPanelProps) {
     if (!renderable) {
       return
     }
-    if (renderable.x === undefined || renderable.y === undefined) {
-      return
-    }
-    if (!Number.isFinite(renderable.x) || !Number.isFinite(renderable.y)) {
-      return
-    }
     scrollIntoView(
       scrollRef,
       {
@@ -234,11 +228,11 @@ export function ResultsPanel(props: ResultsPanelProps) {
 
   const handleBodySync = () => {
     syncScrollState()
-    const viewport = getViewportRect(scrollRef)
-    if (!viewport) {
+    if (!scrollRef) {
       bodyViewportSize = null
       return
     }
+    const viewport = getViewportRect(scrollRef)
     if (bodyViewportSize && bodyViewportSize.width === viewport.width && bodyViewportSize.height === viewport.height) {
       return
     }

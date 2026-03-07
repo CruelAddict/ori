@@ -42,7 +42,7 @@ export function ExplorerScrollbox(props: ExplorerScrollboxProps) {
       return null
     }
     const row = rows[index]
-    if (!row || !Number.isFinite(row.depth)) {
+    if (!row) {
       return null
     }
     return {
@@ -53,24 +53,16 @@ export function ExplorerScrollbox(props: ExplorerScrollboxProps) {
 
   const ensureSelectedVisible = () => {
     const row = selectedRow()
-    if (!row) {
+    if (!row || !scrollBoxRef) {
       return
     }
     const viewport = getViewportRect(scrollBoxRef)
     if (!viewport) {
       return
     }
-    const scrollTop = scrollBoxRef?.scrollTop
-    if (scrollTop === undefined || !Number.isFinite(scrollTop)) {
-      return
-    }
-    const scrollLeft = scrollBoxRef?.scrollLeft
-    if (scrollLeft === undefined || !Number.isFinite(scrollLeft)) {
-      return
-    }
-    const targetY = viewport.y + row.index - scrollTop
+    const targetY = viewport.y + row.index - scrollBoxRef.scrollTop
     const rowStart = ROW_LEFT_PADDING + row.depth * ROW_DEPTH_STEP
-    const targetX = viewport.x + rowStart - scrollLeft
+    const targetX = viewport.x + rowStart - scrollBoxRef.scrollLeft
     scrollIntoView(
       scrollBoxRef,
       {
@@ -107,22 +99,22 @@ export function ExplorerScrollbox(props: ExplorerScrollboxProps) {
 
   const handleScrollboxRef = (node: ScrollBoxRenderable | undefined) => {
     scrollBoxRef = node
-    const viewport = getViewportRect(node)
+    const viewport = node ? getViewportRect(node) : undefined
     viewportSize = viewport
       ? {
-        width: viewport.width,
-        height: viewport.height,
-      }
+          width: viewport.width,
+          height: viewport.height,
+        }
       : null
     ensureSelectedVisible()
   }
 
   const handleSync = () => {
-    const viewport = getViewportRect(scrollBoxRef)
-    if (!viewport) {
+    if (!scrollBoxRef) {
       viewportSize = null
       return
     }
+    const viewport = getViewportRect(scrollBoxRef)
     if (viewportSize && viewportSize.width === viewport.width && viewportSize.height === viewport.height) {
       return
     }
