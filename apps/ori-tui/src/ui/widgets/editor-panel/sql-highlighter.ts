@@ -1,4 +1,5 @@
 import type { SyntaxStyle, TextareaRenderable } from "@opentui/core"
+import { offsetToLineCol } from "@utils/line-offsets"
 import type { SyntaxHighlightResult } from "@utils/syntax-highlighter"
 
 const SYNTAX_EXTMARK_TYPE = "syntax-highlight"
@@ -28,26 +29,6 @@ function spansEqual(a: LineSpan[], b: LineSpan[]) {
     }
   }
   return true
-}
-
-function offsetToLineCol(offset: number, lineStarts: number[]): { line: number; col: number } {
-  let low = 0
-  let high = lineStarts.length - 1
-  while (low <= high) {
-    const mid = (low + high) >> 1
-    const start = lineStarts[mid]
-    const nextStart = mid + 1 < lineStarts.length ? lineStarts[mid + 1] : Number.POSITIVE_INFINITY
-    if (offset < start) {
-      high = mid - 1
-      continue
-    }
-    if (offset >= nextStart) {
-      low = mid + 1
-      continue
-    }
-    return { line: mid, col: offset - start }
-  }
-  return { line: lineStarts.length - 1, col: 0 }
 }
 
 function applyLineHighlights(params: {

@@ -1,3 +1,5 @@
+import { offsetToLine } from "@utils/line-offsets"
+
 /* This will hopfully be replaced once we get proper access to treesitter */
 
 export type SqlStatement = {
@@ -40,24 +42,6 @@ const SQL_START_KEYWORDS = new Set(
     "describe",
   ].map((word) => word.toLowerCase()),
 )
-
-function offsetToLine(offset: number, lineStarts: number[]): number {
-  let low = 0
-  let high = lineStarts.length - 1
-  while (low <= high) {
-    const mid = (low + high) >> 1
-    const start = lineStarts[mid]
-    const nextStart = mid + 1 < lineStarts.length ? lineStarts[mid + 1] : Number.POSITIVE_INFINITY
-    if (offset < start) {
-      high = mid - 1
-    } else if (offset >= nextStart) {
-      low = mid + 1
-    } else {
-      return mid
-    }
-  }
-  return lineStarts.length - 1
-}
 
 function startsDollarTag(text: string, index: number): string | undefined {
   if (text[index] !== "$") {

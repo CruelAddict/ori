@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { buildLineStarts } from "./buffer-model"
+import { buildLineStarts } from "@utils/line-offsets"
 import { collectSqlStatements, type SqlStatement } from "./sql-statement-detector"
 
 type SpanSummary = Pick<SqlStatement, "startLine" | "endLine">

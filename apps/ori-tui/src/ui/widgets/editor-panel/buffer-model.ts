@@ -1,5 +1,6 @@
 import { resolveRenderLib, type TextareaRenderable, type WidthMethod } from "@opentui/core"
 import { debounce } from "@utils/debounce"
+import { buildLineStarts, offsetToLineCol } from "@utils/line-offsets"
 import type { SyntaxHighlightResult } from "@utils/syntax-highlighter"
 import type { Logger } from "pino"
 import { type Accessor, createEffect, createMemo, createSignal, on } from "solid-js"
@@ -134,34 +135,6 @@ function makeLinesFromText(text: string, rendered: boolean): Line[] {
   const parts = text.split("\n")
   const safeParts = parts.length > 0 ? parts : [""]
   return safeParts.map((part) => makeLine(part, rendered))
-}
-
-export function buildLineStarts(text: string): number[] {
-  const starts = [0]
-  for (let i = 0; i < text.length; i++) {
-    if (text[i] === "\n") {
-      starts.push(i + 1)
-    }
-  }
-  return starts
-}
-
-function offsetToLineCol(offset: number, lineStarts: number[]): { line: number; col: number } {
-  let low = 0
-  let high = lineStarts.length - 1
-  while (low <= high) {
-    const mid = (low + high) >> 1
-    const start = lineStarts[mid]
-    const nextStart = mid + 1 < lineStarts.length ? lineStarts[mid + 1] : Number.POSITIVE_INFINITY
-    if (offset < start) {
-      high = mid - 1
-    } else if (offset >= nextStart) {
-      low = mid + 1
-    } else {
-      return { line: mid, col: offset - start }
-    }
-  }
-  return { line: lineStarts.length - 1, col: 0 }
 }
 
 export function createBufferModel(options: BufferModelOptions) {
@@ -571,10 +544,7 @@ export function createBufferModel(options: BufferModelOptions) {
     }
     const after = getCursorContext()
 
-    if (
-      after &&
-      (after.cursorRow !== before.cursorRow || after.cursorCol !== before.cursorCol)
-    ) {
+    if (after && (after.cursorRow !== before.cursorRow || after.cursorCol !== before.cursorCol)) {
       setNavColumn(after.cursorCol)
       return true
     }
