@@ -100,7 +100,6 @@ export type CursorContext = {
   index: number
   cursorCol: number
   cursorRow: number
-  text: string
 }
 
 export type Line = {
@@ -359,8 +358,7 @@ export function createBufferModel(options: BufferModelOptions) {
       return undefined
     }
     const cursor = node.logicalCursor
-    const text = getLineText(index)
-    return { index, cursorCol: cursor.col, cursorRow: cursor.row, text }
+    return { index, cursorCol: cursor.col, cursorRow: cursor.row }
   }
 
   const setRenderedLine = (index: number, text: string, line: Line) => {

@@ -2,7 +2,7 @@ import type { BoxRenderable, KeyEvent, MouseEvent, ScrollBoxRenderable, Textarea
 import {
   getViewportRect,
   OriScrollbox,
-  resolveScrollIntoView,
+  resolveScrollIntoView as computeScrollIntoViewDelta,
   type ScrollPoint,
   scrollIntoView,
 } from "@ui/components/ori-scrollbox"
@@ -52,7 +52,7 @@ export function Buffer(props: BufferProps) {
   let scrollRef: ScrollBoxRenderable | undefined
   const rowAnchors = new Map<string, BoxRenderable>()
   let viewportSize: { width: number; height: number } | null = null
-  let skipCursorChangeScroll = false
+  let previousCursorForFollow: CursorContext | null = null
 
   const getCursorPoint = (): ScrollPoint | null => {
     const cursor = bufferModel.getCursorContext()
@@ -83,6 +83,10 @@ export function Buffer(props: BufferProps) {
       return null
     }
     return getCursorPoint()
+  }
+
+  const isSameCursor = (a: CursorContext, b: CursorContext) => {
+    return a.index === b.index && a.cursorRow === b.cursorRow && a.cursorCol === b.cursorCol
   }
 
   const moveCursorByVisualRows = (delta: number): number => {
@@ -128,7 +132,7 @@ export function Buffer(props: BufferProps) {
     return moved
   }
 
-  const requestCursorScroll = (_reason: string) => {
+  const ensureCursorVisible = (options: { allowUpward?: boolean } = {}) => {
     if (!props.isFocused()) {
       return
     }
@@ -136,9 +140,18 @@ export function Buffer(props: BufferProps) {
     if (!point) {
       return
     }
-    scrollIntoView(scrollRef, point, {
+    const delta = computeScrollIntoViewDelta(scrollRef, point, {
       trackX: false,
     })
+    if (!delta) {
+      return
+    }
+    if (options.allowUpward === false && delta.y < 0) {
+      return
+    }
+    if (delta.x !== 0 || delta.y !== 0) {
+      scrollRef?.scrollBy(delta)
+    }
   }
 
   const handleScrollboxSync = () => {
@@ -155,7 +168,7 @@ export function Buffer(props: BufferProps) {
       height: viewport.height,
     }
     queueMicrotask(() => {
-      requestCursorScroll("viewport-resize")
+      ensureCursorVisible()
     })
   }
 
@@ -167,7 +180,7 @@ export function Buffer(props: BufferProps) {
     if (!point) {
       return
     }
-    const delta = resolveScrollIntoView(scrollRef, point, {
+    const delta = computeScrollIntoViewDelta(scrollRef, point, {
       trackX: false,
     })
     if (!delta) {
@@ -181,7 +194,7 @@ export function Buffer(props: BufferProps) {
       return
     }
     queueMicrotask(() => {
-      requestCursorScroll("manual-scroll-shortfall")
+      ensureCursorVisible()
     })
   }
 
@@ -283,7 +296,6 @@ export function Buffer(props: BufferProps) {
       pattern: "return",
       handler: withCursor((ctx, event) => {
         event.preventDefault()
-        skipCursorChangeScroll = true
         prepareScrollBeforeEnter()
         bufferModel.handleEnter(ctx.index)
       }),
@@ -413,10 +425,11 @@ export function Buffer(props: BufferProps) {
     on(props.isFocused, (isFocused) => {
       bufferModel.handleFocusChange(isFocused)
       if (!isFocused) {
+        previousCursorForFollow = null
         return
       }
       queueMicrotask(() => {
-        requestCursorScroll("focus")
+        ensureCursorVisible()
       })
     }),
   )
@@ -425,14 +438,28 @@ export function Buffer(props: BufferProps) {
     if (!props.isFocused()) {
       return
     }
+    // Re-run follow logic when the focused cursor target changes
     bufferModel.focusedRow()
     bufferModel.navColumn()
-    if (skipCursorChangeScroll) {
-      skipCursorChangeScroll = false
+    const next = bufferModel.getCursorContext()
+    const prev = previousCursorForFollow
+    previousCursorForFollow = next ?? null
+    // Ignore no-op cursor updates emitted during Enter split/focus churn
+    if (prev && next && isSameCursor(prev, next)) {
       return
     }
+    const movedDown =
+      !!next && !!prev && (next.index > prev.index || (next.index === prev.index && next.cursorRow > prev.cursorRow))
+    const expectedCursor = next
     queueMicrotask(() => {
-      requestCursorScroll("cursor-change")
+      const currentCursor = bufferModel.getCursorContext()
+      // Drop stale queued follow if cursor changed again before this microtask ran
+      if (!expectedCursor || !currentCursor || !isSameCursor(expectedCursor, currentCursor)) {
+        return
+      }
+      ensureCursorVisible({
+        allowUpward: !movedDown,
+      })
     })
   })
 
@@ -455,15 +482,15 @@ export function Buffer(props: BufferProps) {
           const viewport = node ? getViewportRect(node) : undefined
           viewportSize = viewport
             ? {
-                width: viewport.width,
-                height: viewport.height,
-              }
+              width: viewport.width,
+              height: viewport.height,
+            }
             : null
           if (!node || !props.isFocused()) {
             return
           }
           queueMicrotask(() => {
-            requestCursorScroll("ready")
+            ensureCursorVisible()
           })
         }}
         onSync={handleScrollboxSync}
