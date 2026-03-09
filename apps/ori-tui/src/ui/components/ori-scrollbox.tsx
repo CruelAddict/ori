@@ -203,7 +203,7 @@ function computeVerticalInset(viewport: ViewportRect): number {
   return Math.min(DEFAULT_SCROLL_INSET_Y, Math.floor(maxY / 2))
 }
 
-export function resolveScrollIntoView(
+export function computeScrollIntoViewDelta(
   node: ScrollBoxRenderable | undefined,
   target: ScrollPoint,
   options: ScrollIntoViewOptions = {},
@@ -241,7 +241,7 @@ export function scrollIntoView(
   target: ScrollPoint,
   options: ScrollIntoViewOptions = {},
 ): ScrollDelta | null {
-  const delta = resolveScrollIntoView(node, target, options)
+  const delta = computeScrollIntoViewDelta(node, target, options)
   if (!delta) {
     return null
   }

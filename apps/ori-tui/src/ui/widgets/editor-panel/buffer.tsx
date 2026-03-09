@@ -1,7 +1,7 @@
 import type { BoxRenderable, KeyEvent, MouseEvent, ScrollBoxRenderable, TextareaRenderable } from "@opentui/core"
 import {
   OriScrollbox,
-  resolveScrollIntoView as computeScrollIntoViewDelta,
+  computeScrollIntoViewDelta,
   type ScrollPoint,
   scrollIntoView,
 } from "@ui/components/ori-scrollbox"
@@ -80,49 +80,6 @@ export function Buffer(props: BufferProps) {
     return a.index === b.index && a.cursorRow === b.cursorRow && a.cursorCol === b.cursorCol
   }
 
-  const moveCursorByVisualRows = (delta: number): number => {
-    if (delta === 0) {
-      return 0
-    }
-    const direction = delta > 0 ? 1 : -1
-    const steps = Math.abs(delta)
-    let moved = 0
-    for (let i = 0; i < steps; i += 1) {
-      const before = bufferModel.getCursorContext()
-      if (!before) {
-        break
-      }
-      const ref = bufferModel.getLineRef(before.index)
-      if (!ref) {
-        break
-      }
-      const movedInsideLine = direction > 0 ? ref.moveCursorDown() : ref.moveCursorUp()
-      const afterInsideMove = bufferModel.getCursorContext()
-      const movedInsideLineForReal =
-        movedInsideLine &&
-        !!afterInsideMove &&
-        (afterInsideMove.index !== before.index ||
-          afterInsideMove.cursorRow !== before.cursorRow ||
-          afterInsideMove.cursorCol !== before.cursorCol)
-      if (movedInsideLineForReal && afterInsideMove) {
-        bufferModel.setNavColumn(afterInsideMove.cursorCol)
-        moved += 1
-        continue
-      }
-      const nextIndex = before.index + direction
-      const nextLine = bufferModel.lines()[nextIndex]
-      if (!nextLine) {
-        break
-      }
-      const targetCol = Math.min(bufferModel.navColumn(), bufferModel.getVisualEOLColumn(nextIndex))
-      bufferModel.setFocusedRow(nextIndex)
-      bufferModel.setNavColumn(targetCol)
-      bufferModel.focusCurrent()
-      moved += 1
-    }
-    return moved
-  }
-
   const ensureCursorVisible = (options: { allowUpward?: boolean } = {}) => {
     if (!props.isFocused()) {
       return
@@ -145,7 +102,7 @@ export function Buffer(props: BufferProps) {
     }
   }
 
-  const handleUserScroll = () => {
+  const moveCursorIntoView = () => {
     if (!props.isFocused()) {
       return
     }
@@ -162,7 +119,7 @@ export function Buffer(props: BufferProps) {
     if (delta.y === 0) {
       return
     }
-    const moved = moveCursorByVisualRows(-delta.y)
+    const moved = bufferModel.moveCursorByVisualRows(-delta.y)
     if (moved >= Math.abs(delta.y)) {
       return
     }
@@ -460,7 +417,7 @@ export function Buffer(props: BufferProps) {
           })
         }}
         onSync={() => queueMicrotask(() => ensureCursorVisible())}
-        onUserScroll={handleUserScroll}
+        onUserScroll={moveCursorIntoView}
         height={"100%"}
         horizontalScrollbarOptions={{
           trackOptions: {

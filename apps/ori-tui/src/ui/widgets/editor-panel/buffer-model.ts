@@ -551,6 +551,49 @@ export function createBufferModel(options: BufferModelOptions) {
     queueMicrotask(() => focusLine(targetIndex, targetCol))
   }
 
+  const moveCursorByVisualRows = (delta: number): number => {
+    if (delta === 0) {
+      return 0
+    }
+    const direction = delta > 0 ? 1 : -1
+    const steps = Math.abs(delta)
+    let moved = 0
+    for (let i = 0; i < steps; i += 1) {
+      const before = getCursorContext()
+      if (!before) {
+        break
+      }
+      const ref = getLineRef(before.index)
+      if (!ref) {
+        break
+      }
+      const movedInsideLine = direction > 0 ? ref.moveCursorDown() : ref.moveCursorUp()
+      const afterInsideMove = getCursorContext()
+      const movedInsideLineForReal =
+        movedInsideLine &&
+        !!afterInsideMove &&
+        (afterInsideMove.index !== before.index ||
+          afterInsideMove.cursorRow !== before.cursorRow ||
+          afterInsideMove.cursorCol !== before.cursorCol)
+      if (movedInsideLineForReal && afterInsideMove) {
+        setNavColumn(afterInsideMove.cursorCol)
+        moved += 1
+        continue
+      }
+      const nextIndex = before.index + direction
+      const nextLine = state.lines[nextIndex]
+      if (!nextLine) {
+        break
+      }
+      const targetCol = Math.min(navColumn(), getVisualEOLColumn(nextIndex))
+      setFocusedRow(nextIndex)
+      setNavColumn(targetCol)
+      focusCurrent()
+      moved += 1
+    }
+    return moved
+  }
+
   const handleHorizontalJump = (index: number, toPrevious: boolean) => {
     if (toPrevious) {
       const targetIndex = index - 1
@@ -599,6 +642,7 @@ export function createBufferModel(options: BufferModelOptions) {
     handleBackwardMerge,
     handleForwardMerge,
     handleVerticalMove,
+    moveCursorByVisualRows,
     handleHorizontalJump,
     clampFocus,
     flush,
