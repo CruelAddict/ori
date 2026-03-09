@@ -80,7 +80,7 @@ export function Buffer(props: BufferProps) {
     return a.index === b.index && a.cursorRow === b.cursorRow && a.cursorCol === b.cursorCol
   }
 
-  const ensureCursorVisible = (options: { allowUpward?: boolean } = {}) => {
+  const scrollToCursor = (options: { allowUpward?: boolean } = {}) => {
     if (!props.isFocused()) {
       return
     }
@@ -124,24 +124,7 @@ export function Buffer(props: BufferProps) {
       return
     }
     queueMicrotask(() => {
-      ensureCursorVisible()
-    })
-  }
-
-  const prepareScrollBeforeEnter = () => {
-    if (!props.isFocused()) {
-      return
-    }
-    const point = getCursorPoint()
-    if (!point) {
-      return
-    }
-    const target = {
-      x: point.x,
-      y: point.y + 1,
-    }
-    scrollIntoView(scrollRef, target, {
-      trackX: false,
+      scrollToCursor()
     })
   }
 
@@ -226,7 +209,17 @@ export function Buffer(props: BufferProps) {
       pattern: "return",
       handler: withCursor((ctx, event) => {
         event.preventDefault()
-        prepareScrollBeforeEnter()
+        const point = getCursorPoint()
+        if (!point) {
+          return
+        }
+        const target = {
+          x: point.x,
+          y: point.y + 1,
+        }
+        scrollIntoView(scrollRef, target, {
+          trackX: false,
+        })
         bufferModel.handleEnter(ctx.index)
       }),
     },
@@ -359,7 +352,7 @@ export function Buffer(props: BufferProps) {
         return
       }
       queueMicrotask(() => {
-        ensureCursorVisible()
+        scrollToCursor()
       })
     }),
   )
@@ -387,7 +380,7 @@ export function Buffer(props: BufferProps) {
       if (!expectedCursor || !currentCursor || !isSameCursor(expectedCursor, currentCursor)) {
         return
       }
-      ensureCursorVisible({
+      scrollToCursor({
         allowUpward: !movedDown,
       })
     })
@@ -413,10 +406,10 @@ export function Buffer(props: BufferProps) {
             return
           }
           queueMicrotask(() => {
-            ensureCursorVisible()
+            scrollToCursor()
           })
         }}
-        onSync={() => queueMicrotask(() => ensureCursorVisible())}
+        onSync={() => queueMicrotask(() => scrollToCursor())}
         onUserScroll={moveCursorIntoView}
         height={"100%"}
         horizontalScrollbarOptions={{
