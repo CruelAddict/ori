@@ -113,19 +113,10 @@ export function Buffer(props: BufferProps) {
     const delta = computeScrollIntoViewDelta(scrollRef, point, {
       trackX: false,
     })
-    if (!delta) {
+    if (!delta || delta.y === 0) {
       return
     }
-    if (delta.y === 0) {
-      return
-    }
-    const moved = bufferModel.moveCursorByVisualRows(-delta.y)
-    if (moved >= Math.abs(delta.y)) {
-      return
-    }
-    queueMicrotask(() => {
-      scrollToCursor()
-    })
+    bufferModel.moveCursorByVisualRows(-delta.y)
   }
 
   const focus = () => {
