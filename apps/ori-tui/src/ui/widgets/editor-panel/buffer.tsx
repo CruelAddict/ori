@@ -50,7 +50,7 @@ export function Buffer(props: BufferProps) {
   })
 
   let scrollRef: ScrollBoxRenderable | undefined
-  const rowAnchors = new Map<string, BoxRenderable>()
+  const lineRenderables = new Map<string, BoxRenderable>()
   let viewportSize: { width: number; height: number } | null = null
   let previousCursorForFollow: CursorContext | null = null
 
@@ -63,8 +63,8 @@ export function Buffer(props: BufferProps) {
     if (!line) {
       return null
     }
-    const anchor = rowAnchors.get(line.id)
-    if (!anchor) {
+    const lineRenderable = lineRenderables.get(line.id)
+    if (!lineRenderable) {
       return null
     }
     const ref = bufferModel.getLineRef(cursor.index)
@@ -74,7 +74,7 @@ export function Buffer(props: BufferProps) {
     const visual = ref.visualCursor
     return {
       x: ref.x + visual.visualCol,
-      y: anchor.y + visual.visualRow,
+      y: lineRenderable.y + visual.visualRow,
     }
   }
 
@@ -526,10 +526,10 @@ export function Buffer(props: BufferProps) {
                   <box
                     ref={(node) => {
                       if (!node) {
-                        rowAnchors.delete(lineId)
+                        lineRenderables.delete(lineId)
                         return
                       }
-                      rowAnchors.set(lineId, node)
+                      lineRenderables.set(lineId, node)
                     }}
                     flexDirection="row"
                     width="100%"
