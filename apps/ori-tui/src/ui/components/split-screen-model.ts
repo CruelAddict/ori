@@ -2,17 +2,17 @@ export type SplitOrientation = "vertical" | "horizontal"
 
 export type SplitPosition =
   | {
-    mode: "ratio"
-    ratio: number
-  }
+      mode: "ratio"
+      ratio: number
+    }
   | {
-    mode: "start"
-    offset: number
-  }
+      mode: "start"
+      offset: number
+    }
   | {
-    mode: "end"
-    offset: number
-  }
+      mode: "end"
+      offset: number
+    }
 
 export type SplitLayoutInput = {
   axisSize: number

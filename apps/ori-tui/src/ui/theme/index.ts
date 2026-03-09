@@ -111,13 +111,13 @@ const PALETTE_TOKENS = [
 
 type HighlightDefault =
   | {
-    type: "palette"
-    token: PaletteToken
-  }
+      type: "palette"
+      token: PaletteToken
+    }
   | {
-    type: "group"
-    group: HighlightGroup
-  }
+      type: "group"
+      group: HighlightGroup
+    }
 
 const p = (token: PaletteToken): HighlightDefault => ({ type: "palette", token })
 const g = (group: HighlightGroup): HighlightDefault => ({ type: "group", group })

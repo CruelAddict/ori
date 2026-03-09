@@ -1,7 +1,7 @@
 import type { BoxRenderable, KeyEvent, MouseEvent, ScrollBoxRenderable, TextareaRenderable } from "@opentui/core"
 import {
-  OriScrollbox,
   computeScrollIntoViewDelta,
+  OriScrollbox,
   type ScrollPoint,
   scrollIntoView,
 } from "@ui/components/ori-scrollbox"

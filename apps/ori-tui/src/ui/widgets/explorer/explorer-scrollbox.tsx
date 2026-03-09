@@ -29,122 +29,53 @@ interface ExplorerScrollboxProps extends ParentProps {
 
 export function ExplorerScrollbox(props: ExplorerScrollboxProps) {
   let scrollBoxRef: ScrollBoxRenderable | undefined
-  let viewportSize: { width: number; height: number } | null = null
 
-  const selectedRow = createMemo<{ index: number; depth: number } | null>(() => {
+  const selectedRow = createMemo(() => {
     const rowId = props.selectedRowId()
-    if (!rowId) {
-      return null
-    }
+    if (!rowId) return null
     const rows = props.rows()
     const index = rows.findIndex((row) => row.id === rowId)
-    if (index < 0) {
-      return null
-    }
-    const row = rows[index]
-    if (!row) {
-      return null
-    }
-    return {
-      index,
-      depth: row.depth,
-    }
+    if (index < 0) return null
+    return { index, depth: rows[index].depth }
   })
 
   const ensureSelectedVisible = () => {
     const row = selectedRow()
-    if (!row || !scrollBoxRef) {
-      return
-    }
+    if (!row || !scrollBoxRef) return
     const viewport = getViewportRect(scrollBoxRef)
-    if (!viewport) {
-      return
-    }
-    const targetY = viewport.y + row.index - scrollBoxRef.scrollTop
-    const rowStart = ROW_LEFT_PADDING + row.depth * ROW_DEPTH_STEP
-    const targetX = viewport.x + rowStart - scrollBoxRef.scrollLeft
+    if (!viewport) return
     scrollIntoView(
       scrollBoxRef,
       {
-        x: targetX,
-        y: targetY,
+        x: viewport.x + ROW_LEFT_PADDING + row.depth * ROW_DEPTH_STEP - scrollBoxRef.scrollLeft,
+        y: viewport.y + row.index - scrollBoxRef.scrollTop,
       },
-      {
-        trackX: true,
-      },
+      { trackX: true },
     )
   }
 
-  createEffect(
-    on(
-      selectedRow,
-      (row: { index: number; depth: number } | null) => {
-        if (!row) {
-          return
-        }
-        ensureSelectedVisible()
-      },
-      { defer: true },
-    ),
-  )
+  createEffect(on(selectedRow, ensureSelectedVisible, { defer: true }))
 
-  props.onApiReady?.({
-    scrollBy: (delta) => {
-      scrollBoxRef?.scrollBy(delta)
-    },
-  })
-  onCleanup(() => {
-    props.onApiReady?.(undefined)
-  })
-
-  const handleScrollboxRef = (node: ScrollBoxRenderable | undefined) => {
-    scrollBoxRef = node
-    const viewport = node ? getViewportRect(node) : undefined
-    viewportSize = viewport
-      ? {
-          width: viewport.width,
-          height: viewport.height,
-        }
-      : null
-    ensureSelectedVisible()
-  }
-
-  const handleSync = () => {
-    if (!scrollBoxRef) {
-      viewportSize = null
-      return
-    }
-    const viewport = getViewportRect(scrollBoxRef)
-    if (viewportSize && viewportSize.width === viewport.width && viewportSize.height === viewport.height) {
-      return
-    }
-    viewportSize = {
-      width: viewport.width,
-      height: viewport.height,
-    }
-    ensureSelectedVisible()
-  }
+  props.onApiReady?.({ scrollBy: (delta) => scrollBoxRef?.scrollBy(delta) })
+  onCleanup(() => props.onApiReady?.(undefined))
 
   return (
     <OriScrollbox
-      onReady={handleScrollboxRef}
-      onSync={handleSync}
+      onReady={(node) => {
+        scrollBoxRef = node
+        ensureSelectedVisible()
+      }}
+      onSync={ensureSelectedVisible}
       scrollSpeed={explorerScrollSpeed}
       minHorizontalThumbWidth={5}
       height="100%"
-      contentOptions={{
-        maxWidth: undefined,
-        width: "auto",
-        minHeight: "100%",
-        flexGrow: 1,
-        flexShrink: 0,
-      }}
+      contentOptions={{ maxWidth: undefined, width: "auto", minHeight: "100%", flexGrow: 1, flexShrink: 0 }}
     >
       <box
         flexDirection="column"
         alignItems="stretch"
         width="auto"
-        minHeight={"100%"}
+        minHeight="100%"
       >
         {props.children}
       </box>
