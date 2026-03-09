@@ -1,6 +1,5 @@
 import type { BoxRenderable, KeyEvent, MouseEvent, ScrollBoxRenderable, TextareaRenderable } from "@opentui/core"
 import {
-  getViewportRect,
   OriScrollbox,
   resolveScrollIntoView as computeScrollIntoViewDelta,
   type ScrollPoint,
@@ -51,7 +50,6 @@ export function Buffer(props: BufferProps) {
 
   let scrollRef: ScrollBoxRenderable | undefined
   const lineRenderables = new Map<string, BoxRenderable>()
-  let viewportSize: { width: number; height: number } | null = null
   let previousCursorForFollow: CursorContext | null = null
 
   const getCursorPoint = (): ScrollPoint | null => {
@@ -152,24 +150,6 @@ export function Buffer(props: BufferProps) {
     if (delta.x !== 0 || delta.y !== 0) {
       scrollRef?.scrollBy(delta)
     }
-  }
-
-  const handleScrollboxSync = () => {
-    if (!scrollRef) {
-      viewportSize = null
-      return
-    }
-    const viewport = getViewportRect(scrollRef)
-    if (viewportSize && viewportSize.width === viewport.width && viewportSize.height === viewport.height) {
-      return
-    }
-    viewportSize = {
-      width: viewport.width,
-      height: viewport.height,
-    }
-    queueMicrotask(() => {
-      ensureCursorVisible()
-    })
   }
 
   const handleUserScroll = () => {
@@ -479,13 +459,6 @@ export function Buffer(props: BufferProps) {
         stickyScroll={true}
         onReady={(node) => {
           scrollRef = node
-          const viewport = node ? getViewportRect(node) : undefined
-          viewportSize = viewport
-            ? {
-              width: viewport.width,
-              height: viewport.height,
-            }
-            : null
           if (!node || !props.isFocused()) {
             return
           }
@@ -493,7 +466,7 @@ export function Buffer(props: BufferProps) {
             ensureCursorVisible()
           })
         }}
-        onSync={handleScrollboxSync}
+        onSync={() => queueMicrotask(() => ensureCursorVisible())}
         onUserScroll={handleUserScroll}
         height={"100%"}
         horizontalScrollbarOptions={{
