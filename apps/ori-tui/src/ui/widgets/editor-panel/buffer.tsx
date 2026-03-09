@@ -76,13 +76,6 @@ export function Buffer(props: BufferProps) {
     }
   }
 
-  const followTarget = (): ScrollPoint | null => {
-    if (!props.isFocused()) {
-      return null
-    }
-    return getCursorPoint()
-  }
-
   const isSameCursor = (a: CursorContext, b: CursorContext) => {
     return a.index === b.index && a.cursorRow === b.cursorRow && a.cursorCol === b.cursorCol
   }
@@ -134,7 +127,7 @@ export function Buffer(props: BufferProps) {
     if (!props.isFocused()) {
       return
     }
-    const point = followTarget()
+    const point = getCursorPoint()
     if (!point) {
       return
     }
@@ -156,7 +149,7 @@ export function Buffer(props: BufferProps) {
     if (!props.isFocused()) {
       return
     }
-    const point = followTarget()
+    const point = getCursorPoint()
     if (!point) {
       return
     }
