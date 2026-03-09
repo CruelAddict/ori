@@ -551,46 +551,63 @@ export function createBufferModel(options: BufferModelOptions) {
     queueMicrotask(() => focusLine(targetIndex, targetCol))
   }
 
+  const tryMoveOneVisualRow = (dir: -1 | 1): boolean => {
+    const before = getCursorContext()
+    if (!before) {
+      return false
+    }
+
+    const ref = getLineRef(before.index)
+    if (!ref) {
+      return false
+    }
+
+    // Trying to move inside line
+    if (dir > 0) {
+      ref.moveCursorDown()
+    }
+    if (dir < 0) {
+      ref.moveCursorUp()
+    }
+    const after = getCursorContext()
+
+    if (
+      after &&
+      (after.cursorRow !== before.cursorRow || after.cursorCol !== before.cursorCol)
+    ) {
+      setNavColumn(after.cursorCol)
+      return true
+    }
+
+    // Trying to move to the next line
+    const next = before.index + dir
+    if (!state.lines[next]) {
+      return false
+    }
+
+    const col = Math.min(navColumn(), getVisualEOLColumn(next))
+    setFocusedRow(next)
+    setNavColumn(col)
+    focusCurrent()
+    return true
+  }
+
   const moveCursorByVisualRows = (delta: number): number => {
     if (delta === 0) {
       return 0
     }
-    const direction = delta > 0 ? 1 : -1
+
+    const direction: -1 | 1 = delta > 0 ? 1 : -1
     const steps = Math.abs(delta)
     let moved = 0
+
     for (let i = 0; i < steps; i += 1) {
-      const before = getCursorContext()
-      if (!before) {
+      if (!tryMoveOneVisualRow(direction)) {
         break
       }
-      const ref = getLineRef(before.index)
-      if (!ref) {
-        break
-      }
-      const movedInsideLine = direction > 0 ? ref.moveCursorDown() : ref.moveCursorUp()
-      const afterInsideMove = getCursorContext()
-      const movedInsideLineForReal =
-        movedInsideLine &&
-        !!afterInsideMove &&
-        (afterInsideMove.index !== before.index ||
-          afterInsideMove.cursorRow !== before.cursorRow ||
-          afterInsideMove.cursorCol !== before.cursorCol)
-      if (movedInsideLineForReal && afterInsideMove) {
-        setNavColumn(afterInsideMove.cursorCol)
-        moved += 1
-        continue
-      }
-      const nextIndex = before.index + direction
-      const nextLine = state.lines[nextIndex]
-      if (!nextLine) {
-        break
-      }
-      const targetCol = Math.min(navColumn(), getVisualEOLColumn(nextIndex))
-      setFocusedRow(nextIndex)
-      setNavColumn(targetCol)
-      focusCurrent()
       moved += 1
     }
+
     return moved
   }
 
