@@ -11,10 +11,7 @@ export type CursorContext = {
 
 export function getLineRef(buffer: BufferContext, index: number) {
   const line = buffer.lines()[index]
-  if (!line) {
-    return undefined
-  }
-  return buffer.state.resources.lineRefs.get(line.id)
+  return line && buffer.state.resources.lineRefs.get(line.id)
 }
 
 export function setLineRef(

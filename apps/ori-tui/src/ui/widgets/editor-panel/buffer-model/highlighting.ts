@@ -14,18 +14,85 @@ type LineSpan = {
   styleId: number
 }
 
-function spansEqual(a: LineSpan[], b: LineSpan[]) {
-  if (a.length !== b.length) {
-    return false
+// Recalculates highlights for the whole text
+export function requestHighlights(buffer: BufferContext) {
+  const nextVersion = ++buffer.state.resources.highlightRequestVersion
+  buffer.scheduleHighlight(buffer.fullText(), nextVersion)
+}
+
+// Watch highlight results and apply them to mounted lines.
+export function mountHighlighting(buffer: BufferContext) {
+  createEffect(
+    on(buffer.highlightResult, (highlight) => {
+      if (highlight.version !== buffer.state.resources.highlightRequestVersion) {
+        return
+      }
+
+      const spansByLine = buildHighlightSpansByLine(buffer, highlight)
+      for (let index = 0; index < buffer.lines().length; index++) {
+        const ref = getLineRef(buffer, index)
+        if (!ref) {
+          continue
+        }
+        applyLineHighlights({
+          ref,
+          nextSpans: spansByLine.get(index) ?? [],
+          syntaxStyle: highlight.syntaxStyle,
+          force: false,
+        })
+      }
+    }),
+  )
+}
+
+// Force one line to refresh from the current highlight result.
+export function reapplyLineHighlight(buffer: BufferContext, lineId: string) {
+  const highlight = buffer.highlightResult()
+  const line = buffer.lines().findIndex((entry) => entry.id === lineId)
+  const ref = getLineRef(buffer, line)
+  if (!ref) {
+    return
   }
-  for (let i = 0; i < a.length; i++) {
-    const left = a[i]
-    const right = b[i]
-    if (left.start !== right.start || left.end !== right.end || left.styleId !== right.styleId) {
-      return false
+
+  const spans = buildHighlightSpansByLine(buffer, highlight, new Set([line])).get(line) ?? []
+  applyLineHighlights({ ref, nextSpans: spans, syntaxStyle: highlight.syntaxStyle, force: true })
+}
+
+// Convert highlight result into per-line spans.
+function buildHighlightSpansByLine(
+  buffer: BufferContext,
+  highlight: SyntaxHighlightResult,
+  targetLines?: ReadonlySet<number>,
+) {
+  const spansByLine = new Map<number, LineSpan[]>()
+  const lines = buffer.lines()
+  const starts = buffer.lineStarts()
+
+  for (const span of highlight.spans) {
+    const start = offsetToLineCol(span.start, starts)
+    const end = offsetToLineCol(span.end, starts)
+    if (start.line !== end.line) {
+      continue
     }
+    if (targetLines && !targetLines.has(start.line)) {
+      continue
+    }
+
+    const lineText = lines[start.line]?.text ?? ""
+    const spans = spansByLine.get(start.line) ?? []
+    spans.push({
+      start: toDisplayColumn(lineText, start.col),
+      end: toDisplayColumn(lineText, end.col),
+      styleId: span.styleId,
+    })
+    spansByLine.set(start.line, spans)
   }
-  return true
+
+  for (const spans of spansByLine.values()) {
+    spans.sort((a, b) => a.start - b.start || a.end - b.end)
+  }
+
+  return spansByLine
 }
 
 // Apply one line's highlight spans to its textarea ref.
@@ -70,107 +137,16 @@ function applyLineHighlights(params: {
   params.ref.requestRender()
 }
 
-// Convert global highlight offsets into per-line spans.
-function buildHighlightSpansByLine(buffer: BufferContext, highlight: SyntaxHighlightResult) {
-  const spansByLine = new Map<number, LineSpan[]>()
-  const lines = buffer.lines()
-  const starts = buffer.lineStarts()
-
-  for (const span of highlight.spans) {
-    const start = offsetToLineCol(span.start, starts)
-    const end = offsetToLineCol(span.end, starts)
-    if (start.line !== end.line) {
-      continue
+function spansEqual(a: LineSpan[], b: LineSpan[]) {
+  if (a.length !== b.length) {
+    return false
+  }
+  for (let i = 0; i < a.length; i++) {
+    const left = a[i]
+    const right = b[i]
+    if (left.start !== right.start || left.end !== right.end || left.styleId !== right.styleId) {
+      return false
     }
-
-    const lineText = lines[start.line]?.text ?? ""
-    const spans = spansByLine.get(start.line) ?? []
-    spans.push({
-      start: toDisplayColumn(lineText, start.col),
-      end: toDisplayColumn(lineText, end.col),
-      styleId: span.styleId,
-    })
-    spansByLine.set(start.line, spans)
   }
-
-  for (const spans of spansByLine.values()) {
-    spans.sort((a, b) => a.start - b.start || a.end - b.end)
-  }
-
-  return spansByLine
-}
-
-// Rebuild highlight spans for one buffer line id.
-function buildHighlightSpansForLine(buffer: BufferContext, lineId: string, highlight: SyntaxHighlightResult) {
-  const lines = buffer.lines()
-  const starts = buffer.lineStarts()
-  const line = lines.findIndex((entry) => entry.id === lineId)
-  if (line < 0) {
-    return
-  }
-
-  const text = lines[line]?.text ?? ""
-  const spans: LineSpan[] = []
-  for (const span of highlight.spans) {
-    const start = offsetToLineCol(span.start, starts)
-    const end = offsetToLineCol(span.end, starts)
-    if (start.line !== line || end.line !== line) {
-      continue
-    }
-    spans.push({
-      start: toDisplayColumn(text, start.col),
-      end: toDisplayColumn(text, end.col),
-      styleId: span.styleId,
-    })
-  }
-
-  spans.sort((a, b) => a.start - b.start || a.end - b.end)
-  return { line, spans }
-}
-
-// Recalculates highlights for the whole text
-export function requestHighlights(buffer: BufferContext) {
-  const nextVersion = ++buffer.state.resources.highlightRequestVersion
-  buffer.scheduleHighlight(buffer.fullText(), nextVersion)
-}
-
-// Watch highlight results and apply them to mounted lines.
-export function mountHighlighting(buffer: BufferContext) {
-  createEffect(
-    on(buffer.highlightResult, (highlight) => {
-      if (highlight.version !== buffer.state.resources.highlightRequestVersion) {
-        return
-      }
-
-      const spansByLine = buildHighlightSpansByLine(buffer, highlight)
-      for (let index = 0; index < buffer.lines().length; index++) {
-        const ref = getLineRef(buffer, index)
-        if (!ref) {
-          continue
-        }
-        applyLineHighlights({
-          ref,
-          nextSpans: spansByLine.get(index) ?? [],
-          syntaxStyle: highlight.syntaxStyle,
-          force: false,
-        })
-      }
-    }),
-  )
-}
-
-// Force one line to refresh from the current highlight result.
-export function reapplyLineHighlight(buffer: BufferContext, lineId: string) {
-  const highlight = buffer.highlightResult()
-  const next = buildHighlightSpansForLine(buffer, lineId, highlight)
-  if (!next) {
-    return
-  }
-
-  const ref = getLineRef(buffer, next.line)
-  if (!ref) {
-    return
-  }
-
-  applyLineHighlights({ ref, nextSpans: next.spans, syntaxStyle: highlight.syntaxStyle, force: true })
+  return true
 }
