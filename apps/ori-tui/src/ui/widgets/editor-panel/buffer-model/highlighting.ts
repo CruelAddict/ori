@@ -2,8 +2,8 @@ import type { SyntaxStyle, TextareaRenderable } from "@opentui/core"
 import { offsetToLineCol } from "@utils/line-offsets"
 import type { SyntaxHighlightResult } from "@utils/syntax-highlighter"
 import { createEffect, on } from "solid-js"
-import type { BufferContext } from "./context"
 import { toDisplayColumn } from "./lines"
+import type { BufferModel } from "./model"
 import { getLineRef } from "./navigation"
 
 const SYNTAX_EXTMARK_TYPE = "syntax-highlight"
@@ -15,16 +15,16 @@ type LineSpan = {
 }
 
 // Recalculates highlights for the whole text
-export function requestHighlights(buffer: BufferContext) {
-  const nextVersion = ++buffer.state.resources.highlightRequestVersion
+export function requestHighlights(buffer: BufferModel) {
+  const nextVersion = ++buffer.highlightRequestVersion
   buffer.scheduleHighlight(buffer.fullText(), nextVersion)
 }
 
 // Watch highlight results and apply them to mounted lines.
-export function mountHighlighting(buffer: BufferContext) {
+export function mountHighlighting(buffer: BufferModel) {
   createEffect(
     on(buffer.highlightResult, (highlight) => {
-      if (highlight.version !== buffer.state.resources.highlightRequestVersion) {
+      if (highlight.version !== buffer.highlightRequestVersion) {
         return
       }
 
@@ -46,7 +46,7 @@ export function mountHighlighting(buffer: BufferContext) {
 }
 
 // Force one line to refresh from the current highlight result.
-export function reapplyLineHighlight(buffer: BufferContext, lineId: string) {
+export function reapplyLineHighlight(buffer: BufferModel, lineId: string) {
   const highlight = buffer.highlightResult()
   const line = buffer.lines().findIndex((entry) => entry.id === lineId)
   const ref = getLineRef(buffer, line)
@@ -60,7 +60,7 @@ export function reapplyLineHighlight(buffer: BufferContext, lineId: string) {
 
 // Convert highlight result into per-line spans.
 function buildHighlightSpansByLine(
-  buffer: BufferContext,
+  buffer: BufferModel,
   highlight: SyntaxHighlightResult,
   targetLines?: ReadonlySet<number>,
 ) {

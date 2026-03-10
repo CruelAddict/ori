@@ -1,46 +1,35 @@
 import type { TextareaRenderable } from "@opentui/core"
-import type { BufferContext } from "./context"
 import type { Line } from "./lines"
 import { extractWidthMethod } from "./lines"
+import type { BufferModel, CursorContext } from "./model"
 
-export type CursorContext = {
-  index: number
-  cursorCol: number
-  cursorRow: number
-}
-
-export function getLineRef(buffer: BufferContext, index: number) {
+export function getLineRef(buffer: BufferModel, index: number) {
   const line = buffer.lines()[index]
-  return line && buffer.state.resources.lineRefs.get(line.id)
+  return line && buffer.lineRefs.get(line.id)
 }
 
-export function setLineRef(
-  buffer: BufferContext,
-  lineId: string,
-  ref: TextareaRenderable | undefined,
-  onWidthMethodExtracted: () => void,
-) {
+export function setLineRef(buffer: BufferModel, lineId: string, ref: TextareaRenderable | undefined) {
   if (!ref) {
-    buffer.state.resources.lineRefs.delete(lineId)
+    buffer.lineRefs.delete(lineId)
     return
   }
 
-  buffer.state.resources.lineRefs.set(lineId, ref)
+  buffer.lineRefs.set(lineId, ref)
   if (extractWidthMethod(ref)) {
-    onWidthMethodExtracted()
+    buffer.requestHighlights()
   }
 }
 
-export function deleteStaleRefs(buffer: BufferContext, lines: Line[]) {
+export function deleteStaleRefs(buffer: BufferModel, lines: Line[]) {
   const ids = new Set(lines.map((line) => line.id))
-  for (const id of buffer.state.resources.lineRefs.keys()) {
+  for (const id of buffer.lineRefs.keys()) {
     if (!ids.has(id)) {
-      buffer.state.resources.lineRefs.delete(id)
+      buffer.lineRefs.delete(id)
     }
   }
 }
 
-export function getVisualEOLColumn(buffer: BufferContext, index: number): number {
+export function getVisualEOLColumn(buffer: BufferModel, index: number): number {
   const ref = getLineRef(buffer, index)
   if (!ref) {
     return 0
@@ -48,7 +37,7 @@ export function getVisualEOLColumn(buffer: BufferContext, index: number): number
   return ref.editorView.getVisualEOL().logicalCol
 }
 
-export function focusLine(buffer: BufferContext, index: number, column: number) {
+export function focusLine(buffer: BufferModel, index: number, column: number) {
   const node = getLineRef(buffer, index)
   if (!node) {
     return
@@ -60,27 +49,27 @@ export function focusLine(buffer: BufferContext, index: number, column: number) 
   node.focus()
   const targetCol = Math.min(column, buffer.getLineDisplayWidth(index))
   node.editBuffer.setCursorToLineCol(0, targetCol)
-  buffer.state.session.setFocusedRow(index)
+  buffer.setFocusedRow(index)
 }
 
-export function moveFocus(buffer: BufferContext, index: number, column: number) {
-  buffer.state.session.setFocusedRow(index)
-  buffer.state.session.setNavColumn(column)
+export function moveFocus(buffer: BufferModel, index: number, column: number) {
+  buffer.setFocusedRow(index)
+  buffer.setNavColumn(column)
   queueMicrotask(() => focusLine(buffer, index, column))
 }
 
-export function focusCurrent(buffer: BufferContext) {
-  focusLine(buffer, buffer.state.session.focusedRow(), buffer.state.session.navColumn())
+export function focusCurrent(buffer: BufferModel) {
+  focusLine(buffer, buffer.focusedRow(), buffer.navColumn())
 }
 
-export function clampFocus(buffer: BufferContext, lines: Line[] = buffer.lines()) {
-  const targetRow = Math.min(buffer.state.session.focusedRow(), Math.max(0, lines.length - 1))
-  const targetCol = Math.min(buffer.state.session.navColumn(), buffer.getLineDisplayWidth(targetRow))
+export function clampFocus(buffer: BufferModel, lines: Line[] = buffer.lines()) {
+  const targetRow = Math.min(buffer.focusedRow(), Math.max(0, lines.length - 1))
+  const targetCol = Math.min(buffer.navColumn(), buffer.getLineDisplayWidth(targetRow))
   moveFocus(buffer, targetRow, targetCol)
 }
 
-export function handleFocusChange(buffer: BufferContext, isFocused: boolean) {
-  const target = getLineRef(buffer, buffer.state.session.focusedRow())
+export function handleFocusChange(buffer: BufferModel, isFocused: boolean) {
+  const target = getLineRef(buffer, buffer.focusedRow())
   if (!target) {
     return
   }
@@ -91,8 +80,8 @@ export function handleFocusChange(buffer: BufferContext, isFocused: boolean) {
   focusCurrent(buffer)
 }
 
-export function getCursorContext(buffer: BufferContext): CursorContext | undefined {
-  const index = buffer.state.session.focusedRow()
+export function getCursorContext(buffer: BufferModel): CursorContext | undefined {
+  const index = buffer.focusedRow()
   const node = getLineRef(buffer, index)
   if (!node) {
     return undefined
@@ -101,16 +90,16 @@ export function getCursorContext(buffer: BufferContext): CursorContext | undefin
   return { index, cursorCol: cursor.col, cursorRow: cursor.row }
 }
 
-export function handleVerticalMove(buffer: BufferContext, index: number, delta: -1 | 1) {
+export function handleVerticalMove(buffer: BufferModel, index: number, delta: -1 | 1) {
   const targetIndex = index + delta
   if (buffer.lines()[targetIndex] === undefined) {
     return
   }
-  const targetCol = Math.min(buffer.state.session.navColumn(), buffer.getLineDisplayWidth(targetIndex))
+  const targetCol = Math.min(buffer.navColumn(), buffer.getLineDisplayWidth(targetIndex))
   moveFocus(buffer, targetIndex, targetCol)
 }
 
-export function moveCursorByVisualRows(buffer: BufferContext, delta: number): number {
+export function moveCursorByVisualRows(buffer: BufferModel, delta: number): number {
   if (delta === 0) {
     return 0
   }
@@ -127,7 +116,7 @@ export function moveCursorByVisualRows(buffer: BufferContext, delta: number): nu
   return moved
 }
 
-function tryMoveOneVisualRow(buffer: BufferContext, dir: -1 | 1): boolean {
+function tryMoveOneVisualRow(buffer: BufferModel, dir: -1 | 1): boolean {
   const before = getCursorContext(buffer)
   if (!before) {
     return false
@@ -147,7 +136,7 @@ function tryMoveOneVisualRow(buffer: BufferContext, dir: -1 | 1): boolean {
 
   const after = getCursorContext(buffer)
   if (after && (after.cursorRow !== before.cursorRow || after.cursorCol !== before.cursorCol)) {
-    buffer.state.session.setNavColumn(after.cursorCol)
+    buffer.setNavColumn(after.cursorCol)
     return true
   }
 
@@ -156,14 +145,14 @@ function tryMoveOneVisualRow(buffer: BufferContext, dir: -1 | 1): boolean {
     return false
   }
 
-  const col = Math.min(buffer.state.session.navColumn(), getVisualEOLColumn(buffer, next))
-  buffer.state.session.setFocusedRow(next)
-  buffer.state.session.setNavColumn(col)
+  const col = Math.min(buffer.navColumn(), getVisualEOLColumn(buffer, next))
+  buffer.setFocusedRow(next)
+  buffer.setNavColumn(col)
   focusCurrent(buffer)
   return true
 }
 
-export function handleHorizontalJump(buffer: BufferContext, index: number, toPrevious: boolean) {
+export function handleHorizontalJump(buffer: BufferModel, index: number, toPrevious: boolean) {
   if (toPrevious) {
     const targetIndex = index - 1
     if (targetIndex < 0) {

@@ -1,6 +1,6 @@
-import type { BufferContext } from "./context"
-import { reapplyLineHighlight, requestHighlights } from "./highlighting"
+import { reapplyLineHighlight } from "./highlighting"
 import { displayColumnToCharIndex, getTabWidth, type Line, makeLine, makeLinesFromText, toDisplayColumn } from "./lines"
+import type { BufferModel } from "./model"
 import { clampFocus, deleteStaleRefs, getLineRef, moveFocus } from "./navigation"
 
 type LineEdit = {
@@ -10,12 +10,12 @@ type LineEdit = {
   focusCol: number
 }
 
-function schedulePush(buffer: BufferContext) {
-  requestHighlights(buffer)
-  buffer.state.resources.debouncedPush()
+function schedulePush(buffer: BufferModel) {
+  buffer.requestHighlights()
+  buffer.debouncedPush()
 }
 
-function syncRefTextWithDocumentState(buffer: BufferContext, lines: Line[], lineIdsToSync: string[]) {
+function syncRefTextWithDocumentState(buffer: BufferModel, lines: Line[], lineIdsToSync: string[]) {
   if (lineIdsToSync.length === 0) {
     return
   }
@@ -27,7 +27,7 @@ function syncRefTextWithDocumentState(buffer: BufferContext, lines: Line[], line
         continue
       }
 
-      const ref = buffer.state.resources.lineRefs.get(id)
+      const ref = buffer.lineRefs.get(id)
       if (!ref) {
         continue
       }
@@ -37,35 +37,35 @@ function syncRefTextWithDocumentState(buffer: BufferContext, lines: Line[], line
         reapplyLineHighlight(buffer, id)
       }
 
-      buffer.state.session.setContentModified(true)
+      buffer.setContentModified(true)
       schedulePush(buffer)
     }
   })
 }
 
-function commitLineEdit(buffer: BufferContext, edit: LineEdit | undefined) {
+function commitLineEdit(buffer: BufferModel, edit: LineEdit | undefined) {
   if (!edit) {
     return
   }
 
   buffer.setLines(edit.nextLines)
   deleteStaleRefs(buffer, edit.nextLines)
-  buffer.state.session.setContentModified(true)
+  buffer.setContentModified(true)
   schedulePush(buffer)
   syncRefTextWithDocumentState(buffer, edit.nextLines, edit.lineIdsToSync)
   moveFocus(buffer, edit.focusRow, edit.focusCol)
 }
 
-export function setText(buffer: BufferContext, text: string) {
+export function setText(buffer: BufferModel, text: string) {
   const nextLines = makeLinesFromText(text, false)
   buffer.setLines(nextLines)
-  buffer.state.session.setContentModified(false)
+  buffer.setContentModified(false)
   deleteStaleRefs(buffer, nextLines)
   clampFocus(buffer, nextLines)
   schedulePush(buffer)
 }
 
-export function handleTextAreaChange(buffer: BufferContext, index: number) {
+export function handleTextAreaChange(buffer: BufferModel, index: number) {
   const node = getLineRef(buffer, index)
   const line = buffer.lines()[index]
   if (!node || !line) {
@@ -86,7 +86,7 @@ export function handleTextAreaChange(buffer: BufferContext, index: number) {
   }
 
   buffer.setLine(index, { ...line, text, rendered: true })
-  buffer.state.session.setContentModified(true)
+  buffer.setContentModified(true)
   schedulePush(buffer)
 }
 
@@ -113,7 +113,7 @@ function buildLineSplitEdit(lines: Line[], index: number, text: string): LineEdi
   }
 }
 
-export function handleEnter(buffer: BufferContext, index: number) {
+export function handleEnter(buffer: BufferModel, index: number) {
   const node = getLineRef(buffer, index)
   if (!node) {
     return
@@ -141,7 +141,7 @@ export function handleEnter(buffer: BufferContext, index: number) {
   })
 }
 
-export function handleBackwardMerge(buffer: BufferContext, index: number) {
+export function handleBackwardMerge(buffer: BufferModel, index: number) {
   const prevIndex = index - 1
   if (prevIndex < 0) {
     return
@@ -164,7 +164,7 @@ export function handleBackwardMerge(buffer: BufferContext, index: number) {
   })
 }
 
-export function handleForwardMerge(buffer: BufferContext, index: number) {
+export function handleForwardMerge(buffer: BufferModel, index: number) {
   const current = buffer.lines()[index]
   const nextLine = buffer.lines()[index + 1]
   if (!current || !nextLine) {
@@ -182,11 +182,11 @@ export function handleForwardMerge(buffer: BufferContext, index: number) {
   })
 }
 
-export function flush(buffer: BufferContext) {
-  buffer.state.resources.debouncedPush.clear()
-  buffer.onTextChange(buffer.fullText(), { modified: buffer.state.session.contentModified() })
+export function flush(buffer: BufferModel) {
+  buffer.debouncedPush.clear()
+  buffer.onTextChange(buffer.fullText(), { modified: buffer.contentModified() })
 }
 
-export function dispose(buffer: BufferContext) {
-  buffer.state.resources.debouncedPush.clear()
+export function dispose(buffer: BufferModel) {
+  buffer.debouncedPush.clear()
 }
