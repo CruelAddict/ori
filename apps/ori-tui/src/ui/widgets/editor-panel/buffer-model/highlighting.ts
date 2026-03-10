@@ -131,13 +131,13 @@ function buildHighlightSpansForLine(buffer: BufferContext, lineId: string, highl
 // Recalculates highlights for the whole text
 export function requestHighlights(buffer: BufferContext) {
   const nextVersion = ++buffer.state.resources.highlightRequestVersion
-  buffer.state.ports.scheduleHighlight(buffer.fullText(), nextVersion)
+  buffer.scheduleHighlight(buffer.fullText(), nextVersion)
 }
 
 // Watch highlight results and apply them to mounted lines.
 export function mountHighlighting(buffer: BufferContext) {
   createEffect(
-    on(buffer.state.ports.highlightResult, (highlight) => {
+    on(buffer.highlightResult, (highlight) => {
       if (highlight.version !== buffer.state.resources.highlightRequestVersion) {
         return
       }
@@ -161,7 +161,7 @@ export function mountHighlighting(buffer: BufferContext) {
 
 // Force one line to refresh from the current highlight result.
 export function reapplyLineHighlight(buffer: BufferContext, lineId: string) {
-  const highlight = buffer.state.ports.highlightResult()
+  const highlight = buffer.highlightResult()
   const next = buildHighlightSpansForLine(buffer, lineId, highlight)
   if (!next) {
     return

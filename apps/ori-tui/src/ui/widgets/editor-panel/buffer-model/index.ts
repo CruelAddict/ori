@@ -38,8 +38,7 @@ export function createBufferModel(options: BufferModelOptions) {
     handleForwardMerge: (index: number) => edit.handleForwardMerge(buffer, index),
     handleVerticalMove: (index: number, delta: -1 | 1) => nav.handleVerticalMove(buffer, index, delta),
     moveCursorByVisualRows: (delta: number) => nav.moveCursorByVisualRows(buffer, delta),
-    handleHorizontalJump: (index: number, toPrevious: boolean) =>
-      nav.handleHorizontalJump(buffer, index, toPrevious),
+    handleHorizontalJump: (index: number, toPrevious: boolean) => nav.handleHorizontalJump(buffer, index, toPrevious),
     clampFocus: (lines = buffer.lines()) => nav.clampFocus(buffer, lines),
     flush: () => edit.flush(buffer),
     dispose: () => edit.dispose(buffer),

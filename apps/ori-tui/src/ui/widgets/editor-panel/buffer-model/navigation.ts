@@ -56,7 +56,7 @@ export function focusLine(buffer: BufferContext, index: number, column: number) 
   if (!node) {
     return
   }
-  if (!buffer.state.ports.isFocused()) {
+  if (!buffer.isFocused()) {
     return
   }
 

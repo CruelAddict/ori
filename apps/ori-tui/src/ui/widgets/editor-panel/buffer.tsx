@@ -45,7 +45,6 @@ export function Buffer(props: BufferProps) {
     debounceMs: DEBOUNCE_MS,
     scheduleHighlight: highlighter.scheduleHighlight,
     highlightResult: highlighter.highlightResult,
-    logger,
   })
 
   let scrollRef: ScrollBoxRenderable | undefined

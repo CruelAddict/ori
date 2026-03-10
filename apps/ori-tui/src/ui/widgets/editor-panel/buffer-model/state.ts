@@ -1,7 +1,6 @@
 import type { TextareaRenderable } from "@opentui/core"
 import { debounce } from "@utils/debounce"
 import type { SyntaxHighlightResult } from "@utils/syntax-highlighter"
-import type { Logger } from "pino"
 import { type Accessor, createSignal, type Setter } from "solid-js"
 import { createStore, type SetStoreFunction } from "solid-js/store"
 import { type Line, makeLinesFromText } from "./lines"
@@ -15,7 +14,6 @@ export type BufferModelOptions = {
   debounceMs?: number
   scheduleHighlight: (text: string, version: number | string) => void
   highlightResult: Accessor<SyntaxHighlightResult>
-  logger: Logger
 }
 
 export type BufferDocument = {
@@ -37,27 +35,17 @@ export type BufferResources = {
   debouncedPush: ReturnType<typeof debounce>
 }
 
-export type BufferPorts = {
-  isFocused: Accessor<boolean>
-  onTextChange: (text: string, info: { modified: boolean }) => void
-  scheduleHighlight: (text: string, version: number | string) => void
-  highlightResult: Accessor<SyntaxHighlightResult>
-  logger: Logger
-}
-
 export type BufferState = {
   document: BufferDocument
   setDocument: SetStoreFunction<BufferDocument>
   session: BufferSession
   resources: BufferResources
-  ports: BufferPorts
 }
 
 // BufferState holds the mutable source state for one editor instance.
 // - document: canonical line content
 // - session: reactive editing/navigation state
 // - resources: imperative widget refs and async handles
-// - ports: callbacks and reactive inputs owned by the caller
 export function createBufferState(options: BufferModelOptions): BufferState {
   const [document, setDocument] = createStore<BufferDocument>({
     lines: makeLinesFromText(options.initialText, true),
@@ -73,19 +61,12 @@ export function createBufferState(options: BufferModelOptions): BufferState {
     navColumn,
     setNavColumn,
   }
-  const ports: BufferPorts = {
-    isFocused: options.isFocused,
-    onTextChange: options.onTextChange,
-    scheduleHighlight: options.scheduleHighlight,
-    highlightResult: options.highlightResult,
-    logger: options.logger,
-  }
   const resources: BufferResources = {
     lineRefs: new Map<string, TextareaRenderable | undefined>(),
     highlightRequestVersion: 0,
     debouncedPush: debounce(() => {
       const text = document.lines.map((line) => line.text).join("\n")
-      ports.onTextChange(text, { modified: session.contentModified() })
+      options.onTextChange(text, { modified: session.contentModified() })
     }, options.debounceMs ?? DEBOUNCE_DEFAULT_MS),
   }
 
@@ -94,6 +75,5 @@ export function createBufferState(options: BufferModelOptions): BufferState {
     setDocument,
     session,
     resources,
-    ports,
   }
 }

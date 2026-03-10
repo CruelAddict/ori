@@ -184,7 +184,7 @@ export function handleForwardMerge(buffer: BufferContext, index: number) {
 
 export function flush(buffer: BufferContext) {
   buffer.state.resources.debouncedPush.clear()
-  buffer.state.ports.onTextChange(buffer.fullText(), { modified: buffer.state.session.contentModified() })
+  buffer.onTextChange(buffer.fullText(), { modified: buffer.state.session.contentModified() })
 }
 
 export function dispose(buffer: BufferContext) {

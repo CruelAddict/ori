@@ -4,7 +4,10 @@ import { collectSqlStatements } from "../sql-statement-detector"
 import { type Line, toDisplayColumn } from "./lines"
 import { type BufferModelOptions, createBufferState } from "./state"
 
-// BufferContext holds current buffer state and memoed state inferred from it
+// BufferContext holds 
+// - current buffer state 
+// - memoed state inferred from it
+// - hooks/accessors passed via options
 export function createBufferContext(options: BufferModelOptions) {
   const state = createBufferState(options)
   const lines = () => state.document.lines
@@ -38,6 +41,10 @@ export function createBufferContext(options: BufferModelOptions) {
 
   return {
     state,
+    isFocused: options.isFocused,
+    onTextChange: options.onTextChange,
+    scheduleHighlight: options.scheduleHighlight,
+    highlightResult: options.highlightResult,
     lines,
     lineIds,
     linesById,
