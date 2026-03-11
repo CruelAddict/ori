@@ -1,4 +1,4 @@
-import type { TextareaRenderable } from "@opentui/core"
+import type { TextareaRenderable, WidthMethod } from "@opentui/core"
 import { debounce } from "@utils/debounce"
 import { buildLineStarts } from "@utils/line-offsets"
 import type { SyntaxHighlightResult } from "@utils/syntax-highlighter"
@@ -7,8 +7,8 @@ import { createStore } from "solid-js/store"
 import { collectSqlStatements, type SqlStatement } from "../sql-statement-detector"
 import * as edit from "./editing"
 import * as hl from "./highlighting"
-import { type Line, makeLinesFromText, toDisplayColumn } from "./lines"
 import * as nav from "./navigation"
+import { toDisplayColumn } from "./text-metrics"
 
 const DEBOUNCE_DEFAULT_MS = 20
 
@@ -27,6 +27,22 @@ export type CursorContext = {
   cursorRow: number
 }
 
+export type Line = {
+  id: string
+  text: string
+  rendered: boolean
+}
+
+function makeLine(id: string, text: string, rendered: boolean): Line {
+  return { id, text, rendered }
+}
+
+function makeLinesFromText(text: string, rendered: boolean, nextId: () => string): Line[] {
+  const parts = text.split("\n")
+  const safeParts = parts.length > 0 ? parts : [""]
+  return safeParts.map((part) => makeLine(nextId(), part, rendered))
+}
+
 export type BufferModel = {
   isFocused: Accessor<boolean>
   onTextChange: (text: string, info: { modified: boolean }) => void
@@ -43,9 +59,13 @@ export type BufferModel = {
   statementAtCursor: Accessor<SqlStatement | undefined>
   lineRefs: Map<string, TextareaRenderable | undefined>
   highlightRequestVersion: number
+  widthMethod: WidthMethod | undefined
+  nextLineId: number
   debouncedPush: ReturnType<typeof debounce>
   focusedRow: Accessor<number>
   navColumn: Accessor<number>
+  makeLine: (text: string, rendered: boolean) => Line
+  makeLinesFromText: (text: string, rendered: boolean) => Line[]
   getLineDisplayWidth: (index: number) => number
   setLines: (lines: Line[]) => void
   setLine: (index: number, line: Line) => void
@@ -73,7 +93,7 @@ export type BufferModel = {
 
 export function createBufferModel(options: BufferModelOptions): BufferModel {
   const [document, setDocument] = createStore({
-    lines: makeLinesFromText(options.initialText, true),
+    lines: [] as Line[],
   })
   const [contentModified, setContentModified] = createSignal(false)
   const [focusedRow, setFocusedRow] = createSignal(0)
@@ -94,7 +114,13 @@ export function createBufferModel(options: BufferModelOptions): BufferModel {
 
   const getLineDisplayWidth = (index: number) => {
     const text = lines()[index]?.text ?? ""
-    return toDisplayColumn(text, text.length)
+    return toDisplayColumn(text, text.length, buffer.widthMethod)
+  }
+
+  const nextLineId = () => {
+    const id = `line-${buffer.nextLineId}`
+    buffer.nextLineId += 1
+    return id
   }
 
   const buffer: BufferModel = {
@@ -113,12 +139,16 @@ export function createBufferModel(options: BufferModelOptions): BufferModel {
     statementAtCursor,
     lineRefs: new Map<string, TextareaRenderable | undefined>(),
     highlightRequestVersion: 0,
+    widthMethod: undefined,
+    nextLineId: 0,
     debouncedPush: debounce(() => {
       const text = document.lines.map((line) => line.text).join("\n")
       options.onTextChange(text, { modified: contentModified() })
     }, options.debounceMs ?? DEBOUNCE_DEFAULT_MS),
     focusedRow,
     navColumn,
+    makeLine: (text, rendered) => makeLine(nextLineId(), text, rendered),
+    makeLinesFromText: (text, rendered) => makeLinesFromText(text, rendered, nextLineId),
     getLineDisplayWidth,
     setLines: (nextLines) => {
       setDocument("lines", nextLines)
@@ -148,6 +178,7 @@ export function createBufferModel(options: BufferModelOptions): BufferModel {
     dispose: () => edit.dispose(buffer),
   }
 
+  buffer.setLines(buffer.makeLinesFromText(options.initialText, true))
   hl.mountHighlighting(buffer)
   buffer.requestHighlights()
 

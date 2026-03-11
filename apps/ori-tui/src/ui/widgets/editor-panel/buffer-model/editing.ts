@@ -1,13 +1,25 @@
+import { resolveRenderLib, type TextareaRenderable } from "@opentui/core"
 import { reapplyLineHighlight } from "./highlighting"
-import { displayColumnToCharIndex, getTabWidth, type Line, makeLine, makeLinesFromText, toDisplayColumn } from "./lines"
-import type { BufferModel } from "./model"
+import type { BufferModel, Line } from "./model"
 import { clampFocus, deleteStaleRefs, getLineRef, moveFocus } from "./navigation"
+import { displayColumnToCharIndex, toDisplayColumn } from "./text-metrics"
 
 type LineEdit = {
   nextLines: Line[]
   lineIdsToSync: string[]
   focusRow: number
   focusCol: number
+}
+
+function getTabWidth(node: TextareaRenderable): number {
+  const renderLib = resolveRenderLib() as unknown as { textBufferGetTabWidth?: (ptr: unknown) => number }
+  const textBufferPtr = (node.editBuffer as unknown as { textBufferPtr?: unknown }).textBufferPtr
+  if (!textBufferPtr || typeof renderLib.textBufferGetTabWidth !== "function") {
+    return 4
+  }
+
+  const width = renderLib.textBufferGetTabWidth(textBufferPtr)
+  return width > 0 ? width : 4
 }
 
 function schedulePush(buffer: BufferModel) {
@@ -57,7 +69,7 @@ function commitLineEdit(buffer: BufferModel, edit: LineEdit | undefined) {
 }
 
 export function setText(buffer: BufferModel, text: string) {
-  const nextLines = makeLinesFromText(text, false)
+  const nextLines = buffer.makeLinesFromText(text, false)
   buffer.setLines(nextLines)
   buffer.setContentModified(false)
   deleteStaleRefs(buffer, nextLines)
@@ -81,7 +93,7 @@ export function handleTextAreaChange(buffer: BufferModel, index: number) {
     return
   }
   if (text.includes("\n")) {
-    commitLineEdit(buffer, buildLineSplitEdit(buffer.lines(), index, text))
+    commitLineEdit(buffer, buildLineSplitEdit(buffer, buffer.lines(), index, text))
     return
   }
 
@@ -90,7 +102,7 @@ export function handleTextAreaChange(buffer: BufferModel, index: number) {
   schedulePush(buffer)
 }
 
-function buildLineSplitEdit(lines: Line[], index: number, text: string): LineEdit | undefined {
+function buildLineSplitEdit(buffer: BufferModel, lines: Line[], index: number, text: string): LineEdit | undefined {
   const pieces = text.split("\n")
   const head = pieces[0] ?? ""
   const tail = pieces.slice(1)
@@ -99,7 +111,7 @@ function buildLineSplitEdit(lines: Line[], index: number, text: string): LineEdi
     return undefined
   }
 
-  const tailLines = tail.map((textSegment) => makeLine(textSegment, false))
+  const tailLines = tail.map((textSegment) => buffer.makeLine(textSegment, false))
   // reusing current line
   const headLine: Line = { ...current, text: head, rendered: false }
   const nextLines = [...lines]
@@ -109,7 +121,11 @@ function buildLineSplitEdit(lines: Line[], index: number, text: string): LineEdi
     nextLines,
     lineIdsToSync: [headLine.id],
     focusRow,
-    focusCol: toDisplayColumn(nextLines[focusRow]?.text ?? "", (nextLines[focusRow]?.text ?? "").length),
+    focusCol: toDisplayColumn(
+      nextLines[focusRow]?.text ?? "",
+      (nextLines[focusRow]?.text ?? "").length,
+      buffer.widthMethod,
+    ),
   }
 }
 
@@ -121,7 +137,7 @@ export function handleEnter(buffer: BufferModel, index: number) {
 
   const cursor = node.logicalCursor
   const value = node.plainText
-  const splitIndex = displayColumnToCharIndex(value, cursor.col, getTabWidth(node))
+  const splitIndex = displayColumnToCharIndex(value, cursor.col, getTabWidth(node), buffer.widthMethod)
   const before = value.slice(0, splitIndex)
   const after = value.slice(splitIndex)
   const current = buffer.lines()[index]
@@ -130,7 +146,7 @@ export function handleEnter(buffer: BufferModel, index: number) {
   }
 
   const headLine: Line = { ...current, text: before, rendered: false }
-  const tailLine: Line = makeLine(after, false)
+  const tailLine: Line = buffer.makeLine(after, false)
   const nextLines = [...buffer.lines()]
   nextLines.splice(index, 1, headLine, tailLine)
   commitLineEdit(buffer, {
@@ -160,7 +176,7 @@ export function handleBackwardMerge(buffer: BufferModel, index: number) {
     nextLines,
     lineIdsToSync: [mergedLine.id],
     focusRow: prevIndex,
-    focusCol: toDisplayColumn(prevLine.text, prevLine.text.length),
+    focusCol: toDisplayColumn(prevLine.text, prevLine.text.length, buffer.widthMethod),
   })
 }
 
@@ -178,7 +194,7 @@ export function handleForwardMerge(buffer: BufferModel, index: number) {
     nextLines,
     lineIdsToSync: [mergedLine.id],
     focusRow: index,
-    focusCol: toDisplayColumn(current.text, current.text.length),
+    focusCol: toDisplayColumn(current.text, current.text.length, buffer.widthMethod),
   })
 }
 

@@ -2,9 +2,9 @@ import type { SyntaxStyle, TextareaRenderable } from "@opentui/core"
 import { offsetToLineCol } from "@utils/line-offsets"
 import type { SyntaxHighlightResult } from "@utils/syntax-highlighter"
 import { createEffect, on } from "solid-js"
-import { toDisplayColumn } from "./lines"
 import type { BufferModel } from "./model"
 import { getLineRef } from "./navigation"
+import { toDisplayColumn } from "./text-metrics"
 
 const SYNTAX_EXTMARK_TYPE = "syntax-highlight"
 
@@ -81,8 +81,8 @@ function buildHighlightSpansByLine(
     const lineText = lines[start.line]?.text ?? ""
     const spans = spansByLine.get(start.line) ?? []
     spans.push({
-      start: toDisplayColumn(lineText, start.col),
-      end: toDisplayColumn(lineText, end.col),
+      start: toDisplayColumn(lineText, start.col, buffer.widthMethod),
+      end: toDisplayColumn(lineText, end.col, buffer.widthMethod),
       styleId: span.styleId,
     })
     spansByLine.set(start.line, spans)

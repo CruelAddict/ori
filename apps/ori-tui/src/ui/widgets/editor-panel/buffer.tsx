@@ -10,7 +10,7 @@ import { useTheme } from "@ui/providers/theme"
 import { type KeyBinding, KeyScope } from "@ui/services/key-scopes"
 import { syntaxHighlighter } from "@utils/syntax-highlighter"
 import { type Accessor, createEffect, For, on, onCleanup, onMount, Show, untrack } from "solid-js"
-import { type CursorContext, createBufferModel } from "./buffer-model/model"
+import { type CursorContext, createBufferModel } from "./buffer-model"
 
 const DEBOUNCE_MS = 200
 export type BufferApi = {

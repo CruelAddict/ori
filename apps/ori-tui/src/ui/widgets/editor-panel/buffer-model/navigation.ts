@@ -1,7 +1,5 @@
 import type { TextareaRenderable } from "@opentui/core"
-import type { Line } from "./lines"
-import { extractWidthMethod } from "./lines"
-import type { BufferModel, CursorContext } from "./model"
+import type { BufferModel, CursorContext, Line } from "./model"
 
 export function getLineRef(buffer: BufferModel, index: number) {
   const line = buffer.lines()[index]
@@ -15,9 +13,16 @@ export function setLineRef(buffer: BufferModel, lineId: string, ref: TextareaRen
   }
 
   buffer.lineRefs.set(lineId, ref)
-  if (extractWidthMethod(ref)) {
-    buffer.requestHighlights()
+  const widthMethod = ref.ctx?.widthMethod
+  if (!widthMethod) {
+    return
   }
+  if (buffer.widthMethod === widthMethod) {
+    return
+  }
+
+  buffer.widthMethod = widthMethod
+  buffer.requestHighlights()
 }
 
 export function deleteStaleRefs(buffer: BufferModel, lines: Line[]) {
