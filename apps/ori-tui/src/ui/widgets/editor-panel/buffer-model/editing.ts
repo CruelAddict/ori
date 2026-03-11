@@ -23,8 +23,8 @@ function getTabWidth(node: TextareaRenderable): number {
 }
 
 function schedulePush(buffer: BufferModel) {
-  buffer.requestHighlights()
-  buffer.debouncedPush()
+  buffer._requestHighlights()
+  buffer._debouncedPush()
 }
 
 function syncRefTextWithDocumentState(buffer: BufferModel, lines: Line[], lineIdsToSync: string[]) {
@@ -39,7 +39,7 @@ function syncRefTextWithDocumentState(buffer: BufferModel, lines: Line[], lineId
         continue
       }
 
-      const ref = buffer.lineRefs.get(id)
+      const ref = buffer._lineRefs.get(id)
       if (!ref) {
         continue
       }
@@ -60,7 +60,7 @@ function commitLineEdit(buffer: BufferModel, edit: LineEdit | undefined) {
     return
   }
 
-  buffer.setLines(edit.nextLines)
+  buffer._setLines(edit.nextLines)
   deleteStaleRefs(buffer, edit.nextLines)
   buffer.setContentModified(true)
   schedulePush(buffer)
@@ -69,8 +69,8 @@ function commitLineEdit(buffer: BufferModel, edit: LineEdit | undefined) {
 }
 
 export function setText(buffer: BufferModel, text: string) {
-  const nextLines = buffer.makeLinesFromText(text, false)
-  buffer.setLines(nextLines)
+  const nextLines = buffer._makeLinesFromText(text, false)
+  buffer._setLines(nextLines)
   buffer.setContentModified(false)
   deleteStaleRefs(buffer, nextLines)
   clampFocus(buffer, nextLines)
@@ -86,7 +86,7 @@ export function handleTextAreaChange(buffer: BufferModel, index: number) {
 
   const text = node.plainText
   if (!line.rendered) {
-    buffer.setLine(index, { ...line, text, rendered: true })
+    buffer._setLine(index, { ...line, text, rendered: true })
     return
   }
   if (text === line.text) {
@@ -97,7 +97,7 @@ export function handleTextAreaChange(buffer: BufferModel, index: number) {
     return
   }
 
-  buffer.setLine(index, { ...line, text, rendered: true })
+  buffer._setLine(index, { ...line, text, rendered: true })
   buffer.setContentModified(true)
   schedulePush(buffer)
 }
@@ -111,7 +111,7 @@ function buildLineSplitEdit(buffer: BufferModel, lines: Line[], index: number, t
     return undefined
   }
 
-  const tailLines = tail.map((textSegment) => buffer.makeLine(textSegment, false))
+  const tailLines = tail.map((textSegment) => buffer._makeLine(textSegment, false))
   // reusing current line
   const headLine: Line = { ...current, text: head, rendered: false }
   const nextLines = [...lines]
@@ -124,7 +124,7 @@ function buildLineSplitEdit(buffer: BufferModel, lines: Line[], index: number, t
     focusCol: toDisplayColumn(
       nextLines[focusRow]?.text ?? "",
       (nextLines[focusRow]?.text ?? "").length,
-      buffer.widthMethod,
+      buffer._widthMethod,
     ),
   }
 }
@@ -137,7 +137,7 @@ export function handleEnter(buffer: BufferModel, index: number) {
 
   const cursor = node.logicalCursor
   const value = node.plainText
-  const splitIndex = displayColumnToCharIndex(value, cursor.col, getTabWidth(node), buffer.widthMethod)
+  const splitIndex = displayColumnToCharIndex(value, cursor.col, getTabWidth(node), buffer._widthMethod)
   const before = value.slice(0, splitIndex)
   const after = value.slice(splitIndex)
   const current = buffer.lines()[index]
@@ -146,7 +146,7 @@ export function handleEnter(buffer: BufferModel, index: number) {
   }
 
   const headLine: Line = { ...current, text: before, rendered: false }
-  const tailLine: Line = buffer.makeLine(after, false)
+  const tailLine: Line = buffer._makeLine(after, false)
   const nextLines = [...buffer.lines()]
   nextLines.splice(index, 1, headLine, tailLine)
   commitLineEdit(buffer, {
@@ -176,7 +176,7 @@ export function handleBackwardMerge(buffer: BufferModel, index: number) {
     nextLines,
     lineIdsToSync: [mergedLine.id],
     focusRow: prevIndex,
-    focusCol: toDisplayColumn(prevLine.text, prevLine.text.length, buffer.widthMethod),
+    focusCol: toDisplayColumn(prevLine.text, prevLine.text.length, buffer._widthMethod),
   })
 }
 
@@ -194,15 +194,15 @@ export function handleForwardMerge(buffer: BufferModel, index: number) {
     nextLines,
     lineIdsToSync: [mergedLine.id],
     focusRow: index,
-    focusCol: toDisplayColumn(current.text, current.text.length, buffer.widthMethod),
+    focusCol: toDisplayColumn(current.text, current.text.length, buffer._widthMethod),
   })
 }
 
 export function flush(buffer: BufferModel) {
-  buffer.debouncedPush.clear()
+  buffer._debouncedPush.clear()
   buffer.onTextChange(buffer.fullText(), { modified: buffer.contentModified() })
 }
 
 export function dispose(buffer: BufferModel) {
-  buffer.debouncedPush.clear()
+  buffer._debouncedPush.clear()
 }

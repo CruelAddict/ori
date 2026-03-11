@@ -3,33 +3,33 @@ import type { BufferModel, CursorContext, Line } from "./model"
 
 export function getLineRef(buffer: BufferModel, index: number) {
   const line = buffer.lines()[index]
-  return line && buffer.lineRefs.get(line.id)
+  return line && buffer._lineRefs.get(line.id)
 }
 
 export function setLineRef(buffer: BufferModel, lineId: string, ref: TextareaRenderable | undefined) {
   if (!ref) {
-    buffer.lineRefs.delete(lineId)
+    buffer._lineRefs.delete(lineId)
     return
   }
 
-  buffer.lineRefs.set(lineId, ref)
+  buffer._lineRefs.set(lineId, ref)
   const widthMethod = ref.ctx?.widthMethod
   if (!widthMethod) {
     return
   }
-  if (buffer.widthMethod === widthMethod) {
+  if (buffer._widthMethod === widthMethod) {
     return
   }
 
-  buffer.widthMethod = widthMethod
-  buffer.requestHighlights()
+  buffer._widthMethod = widthMethod
+  buffer._requestHighlights()
 }
 
 export function deleteStaleRefs(buffer: BufferModel, lines: Line[]) {
   const ids = new Set(lines.map((line) => line.id))
-  for (const id of buffer.lineRefs.keys()) {
+  for (const id of buffer._lineRefs.keys()) {
     if (!ids.has(id)) {
-      buffer.lineRefs.delete(id)
+      buffer._lineRefs.delete(id)
     }
   }
 }
@@ -52,7 +52,7 @@ export function focusLine(buffer: BufferModel, index: number, column: number) {
   }
 
   node.focus()
-  const targetCol = Math.min(column, buffer.getLineDisplayWidth(index))
+  const targetCol = Math.min(column, buffer._getLineDisplayWidth(index))
   node.editBuffer.setCursorToLineCol(0, targetCol)
   buffer.setFocusedRow(index)
 }
@@ -69,7 +69,7 @@ export function focusCurrent(buffer: BufferModel) {
 
 export function clampFocus(buffer: BufferModel, lines: Line[] = buffer.lines()) {
   const targetRow = Math.min(buffer.focusedRow(), Math.max(0, lines.length - 1))
-  const targetCol = Math.min(buffer.navColumn(), buffer.getLineDisplayWidth(targetRow))
+  const targetCol = Math.min(buffer.navColumn(), buffer._getLineDisplayWidth(targetRow))
   moveFocus(buffer, targetRow, targetCol)
 }
 
@@ -100,7 +100,7 @@ export function handleVerticalMove(buffer: BufferModel, index: number, delta: -1
   if (buffer.lines()[targetIndex] === undefined) {
     return
   }
-  const targetCol = Math.min(buffer.navColumn(), buffer.getLineDisplayWidth(targetIndex))
+  const targetCol = Math.min(buffer.navColumn(), buffer._getLineDisplayWidth(targetIndex))
   moveFocus(buffer, targetIndex, targetCol)
 }
 
@@ -163,7 +163,7 @@ export function handleHorizontalJump(buffer: BufferModel, index: number, toPrevi
     if (targetIndex < 0) {
       return
     }
-    moveFocus(buffer, targetIndex, buffer.getLineDisplayWidth(targetIndex))
+    moveFocus(buffer, targetIndex, buffer._getLineDisplayWidth(targetIndex))
     return
   }
 

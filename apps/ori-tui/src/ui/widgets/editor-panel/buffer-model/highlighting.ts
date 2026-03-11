@@ -16,7 +16,7 @@ type LineSpan = {
 
 // Recalculates highlights for the whole text
 export function requestHighlights(buffer: BufferModel) {
-  const nextVersion = ++buffer.highlightRequestVersion
+  const nextVersion = ++buffer._highlightRequestVersion
   buffer.scheduleHighlight(buffer.fullText(), nextVersion)
 }
 
@@ -24,7 +24,7 @@ export function requestHighlights(buffer: BufferModel) {
 export function mountHighlighting(buffer: BufferModel) {
   createEffect(
     on(buffer.highlightResult, (highlight) => {
-      if (highlight.version !== buffer.highlightRequestVersion) {
+      if (highlight.version !== buffer._highlightRequestVersion) {
         return
       }
 
@@ -81,8 +81,8 @@ function buildHighlightSpansByLine(
     const lineText = lines[start.line]?.text ?? ""
     const spans = spansByLine.get(start.line) ?? []
     spans.push({
-      start: toDisplayColumn(lineText, start.col, buffer.widthMethod),
-      end: toDisplayColumn(lineText, end.col, buffer.widthMethod),
+      start: toDisplayColumn(lineText, start.col, buffer._widthMethod),
+      end: toDisplayColumn(lineText, end.col, buffer._widthMethod),
       styleId: span.styleId,
     })
     spansByLine.set(start.line, spans)
