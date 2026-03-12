@@ -28,20 +28,6 @@ export function setLineRef(buffer: BufferModel, lineId: string, ref: TextareaRen
   buffer._reapplyLineHighlight(lineId)
 }
 
-export function deleteStaleRefs(buffer: BufferModel, lines: Line[]) {
-  const ids = new Set(lines.map((line) => line.id))
-  for (const id of buffer._lineRefs.keys()) {
-    if (!ids.has(id)) {
-      buffer._lineRefs.delete(id)
-    }
-  }
-  for (const id of buffer._lineHighlightSpans.keys()) {
-    if (!ids.has(id)) {
-      buffer._lineHighlightSpans.delete(id)
-    }
-  }
-}
-
 export function getVisualEOLColumn(buffer: BufferModel, index: number): number {
   const ref = getLineRef(buffer, index)
   if (!ref) {

@@ -1,7 +1,7 @@
 import { resolveRenderLib, type TextareaRenderable } from "@opentui/core"
 import { reapplyLineHighlight } from "./highlighting"
 import type { BufferModel, Line } from "./model"
-import { clampFocus, deleteStaleRefs, getLineRef, moveFocus } from "./navigation"
+import { clampFocus, getLineRef, moveFocus } from "./navigation"
 import { displayColumnToCharIndex, toDisplayColumn } from "./text-metrics"
 
 type LineEdit = {
@@ -52,6 +52,20 @@ function syncRefTextWithDocumentState(buffer: BufferModel, lines: Line[], lineId
       buffer.setContentModified(true)
     }
   })
+}
+
+function deleteStaleRefs(buffer: BufferModel, lines: Line[]) {
+  const ids = new Set(lines.map((line) => line.id))
+  for (const id of buffer._lineRefs.keys()) {
+    if (!ids.has(id)) {
+      buffer._lineRefs.delete(id)
+    }
+  }
+  for (const id of buffer._lineHighlightSpans.keys()) {
+    if (!ids.has(id)) {
+      buffer._lineHighlightSpans.delete(id)
+    }
+  }
 }
 
 function commitLineEdit(buffer: BufferModel, edit: LineEdit | undefined) {
