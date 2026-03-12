@@ -50,7 +50,6 @@ function syncRefTextWithDocumentState(buffer: BufferModel, lines: Line[], lineId
       }
 
       buffer.setContentModified(true)
-      schedulePush(buffer)
     }
   })
 }

@@ -1,4 +1,4 @@
-import type { SyntaxStyle, TextareaRenderable } from "@opentui/core"
+import type { Extmark } from "@opentui/core"
 import { offsetToLineCol } from "@utils/line-offsets"
 import type { SyntaxHighlightResult } from "@utils/syntax-highlighter"
 import { createEffect, on } from "solid-js"
@@ -8,7 +8,8 @@ import { toDisplayColumn } from "./text-metrics"
 
 const SYNTAX_EXTMARK_TYPE = "syntax-highlight"
 
-type LineSpan = {
+// Highlighted part of texts. Currently implemented with opentui extmarks
+export type LineSpan = {
   start: number
   end: number
   styleId: number
@@ -28,18 +29,20 @@ export function mountHighlighting(buffer: BufferModel) {
         return
       }
 
+      const styleChanged = buffer._syntaxStyle !== highlight.syntaxStyle
+      buffer._syntaxStyle = highlight.syntaxStyle
       const spansByLine = buildHighlightSpansByLine(buffer, highlight)
       for (let index = 0; index < buffer.lines().length; index++) {
-        const ref = getLineRef(buffer, index)
-        if (!ref) {
+        const line = buffer.lines()[index]
+        if (!line) {
           continue
         }
-        applyLineHighlights({
-          ref,
-          nextSpans: spansByLine.get(index) ?? [],
-          syntaxStyle: highlight.syntaxStyle,
-          force: false,
-        })
+        const ref = getLineRef(buffer, index)
+        if (styleChanged && ref) {
+          ref.syntaxStyle = highlight.syntaxStyle
+        }
+        const spans = spansByLine.get(index) ?? []
+        applyLineHighlights(buffer, line.id, spans, false)
       }
     }),
   )
@@ -48,14 +51,18 @@ export function mountHighlighting(buffer: BufferModel) {
 // Force one line to refresh from the current highlight result.
 export function reapplyLineHighlight(buffer: BufferModel, lineId: string) {
   const highlight = buffer.highlightResult()
+  if (highlight.version !== buffer._highlightRequestVersion) {
+    return
+  }
+
+  buffer._syntaxStyle = highlight.syntaxStyle
   const line = buffer.lines().findIndex((entry) => entry.id === lineId)
-  const ref = getLineRef(buffer, line)
-  if (!ref) {
+  if (line < 0) {
     return
   }
 
   const spans = buildHighlightSpansByLine(buffer, highlight, new Set([line])).get(line) ?? []
-  applyLineHighlights({ ref, nextSpans: spans, syntaxStyle: highlight.syntaxStyle, force: true })
+  applyLineHighlights(buffer, lineId, spans, true)
 }
 
 // Convert highlight result into per-line spans.
@@ -96,30 +103,35 @@ function buildHighlightSpansByLine(
 }
 
 // Apply one line's highlight spans to its textarea ref.
-function applyLineHighlights(params: {
-  ref: TextareaRenderable
-  nextSpans: LineSpan[]
-  syntaxStyle: SyntaxStyle
-  force: boolean
-}) {
-  const refState = params.ref as TextareaRenderable & { syntaxStyle?: SyntaxStyle; __syntaxSpans?: LineSpan[] }
-  const prevSpans = refState.__syntaxSpans ?? []
-  const styleChanged = refState.syntaxStyle !== params.syntaxStyle
-  const spansChanged = !spansEqual(prevSpans, params.nextSpans)
-
-  if (!params.force && !styleChanged && !spansChanged) {
+function applyLineHighlights(buffer: BufferModel, lineId: string, nextSpans: LineSpan[], force: boolean) {
+  const ref = buffer._lineRefs.get(lineId)
+  if (!ref) {
     return
   }
 
-  if (params.force || spansChanged) {
-    const typeId =
-      params.ref.extmarks.getTypeId(SYNTAX_EXTMARK_TYPE) ?? params.ref.extmarks.registerType(SYNTAX_EXTMARK_TYPE)
-    const marks = params.ref.extmarks.getAllForTypeId(typeId)
-    for (const mark of marks) {
-      params.ref.extmarks.delete(mark.id)
+  const cachedSpans = buffer._lineHighlightSpans.get(lineId) ?? []
+  if (!force && spansEqual(cachedSpans, nextSpans)) {
+    return
+  }
+
+  const typeId = ref.extmarks.getTypeId(SYNTAX_EXTMARK_TYPE) ?? ref.extmarks.registerType(SYNTAX_EXTMARK_TYPE)
+  const currentSpans: Extmark[] = ref.extmarks
+    .getAllForTypeId(typeId)
+    .sort((a, b) => a.start - b.start || a.end - b.end || a.styleId! - b.styleId! || a.id - b.id)
+  const diff = getSpanDiff(currentSpans, nextSpans)
+
+  if (!force && !diff.changed) {
+    buffer._lineHighlightSpans.set(lineId, nextSpans)
+    return
+  }
+
+  if (diff.changed) {
+    for (let i = diff.deleteFrom; i < diff.deleteTo; i++) {
+      ref.extmarks.delete(currentSpans[i].id)
     }
-    for (const span of params.nextSpans) {
-      params.ref.extmarks.create({
+
+    for (const span of diff.spansToAdd) {
+      ref.extmarks.create({
         start: span.start,
         end: span.end,
         styleId: span.styleId,
@@ -127,14 +139,44 @@ function applyLineHighlights(params: {
         virtual: false,
       })
     }
-    refState.__syntaxSpans = params.nextSpans.map((span) => ({ ...span }))
   }
 
-  if (params.force || styleChanged) {
-    refState.syntaxStyle = params.syntaxStyle
+  buffer._lineHighlightSpans.set(lineId, nextSpans)
+  ref.requestRender()
+}
+
+function getSpanDiff(currentSpans: Extmark[], nextSpans: LineSpan[]) {
+  const prefixMax = Math.min(currentSpans.length, nextSpans.length)
+  let prefix = 0
+  while (prefix < prefixMax) {
+    if (!spanEqual(currentSpans[prefix], nextSpans[prefix])) {
+      break
+    }
+    prefix += 1
   }
 
-  params.ref.requestRender()
+  const suffixMax = Math.min(currentSpans.length - prefix, nextSpans.length - prefix)
+  let suffix = 0
+  while (suffix < suffixMax) {
+    const left = currentSpans[currentSpans.length - 1 - suffix]
+    const right = nextSpans[nextSpans.length - 1 - suffix]
+    if (!spanEqual(left, right)) {
+      break
+    }
+    suffix += 1
+  }
+
+  const retained = prefix + suffix
+  return {
+    changed: retained !== currentSpans.length || retained !== nextSpans.length,
+    deleteFrom: prefix,
+    deleteTo: currentSpans.length - suffix,
+    spansToAdd: nextSpans.slice(prefix, nextSpans.length - suffix),
+  }
+}
+
+function spanEqual(a: LineSpan | Extmark, b: LineSpan | Extmark) {
+  return a.start === b.start && a.end === b.end && a.styleId === b.styleId
 }
 
 function spansEqual(a: LineSpan[], b: LineSpan[]) {
@@ -142,9 +184,7 @@ function spansEqual(a: LineSpan[], b: LineSpan[]) {
     return false
   }
   for (let i = 0; i < a.length; i++) {
-    const left = a[i]
-    const right = b[i]
-    if (left.start !== right.start || left.end !== right.end || left.styleId !== right.styleId) {
+    if (!spanEqual(a[i], b[i])) {
       return false
     }
   }

@@ -1,4 +1,4 @@
-import type { TextareaRenderable, WidthMethod } from "@opentui/core"
+import type { SyntaxStyle, TextareaRenderable, WidthMethod } from "@opentui/core"
 import { debounce } from "@utils/debounce"
 import { buildLineStarts } from "@utils/line-offsets"
 import type { SyntaxHighlightResult } from "@utils/syntax-highlighter"
@@ -53,7 +53,11 @@ export function createBufferModel(options: BufferModelOptions) {
   const lines = () => document.lines
   const lineIds = createMemo(() => lines().map((entry) => entry.id))
   const linesById = createMemo(() => new Map(lines().map((entry) => [entry.id, entry])))
-  const fullText = createMemo(() => lines().map((entry) => entry.text).join("\n"))
+  const fullText = createMemo(() =>
+    lines()
+      .map((entry) => entry.text)
+      .join("\n"),
+  )
   const lineStarts = createMemo(() => buildLineStarts(fullText()))
   const statements = createMemo(() => collectSqlStatements(fullText(), lineStarts()))
   const statementAtCursor = createMemo(() =>
@@ -112,7 +116,9 @@ export function createBufferModel(options: BufferModelOptions) {
     clampFocus: (nextLines: Line[] = buffer.lines()) => nav.clampFocus(buffer, nextLines),
 
     _lineRefs: new Map<string, TextareaRenderable | undefined>(),
+    _lineHighlightSpans: new Map<string, hl.LineSpan[]>(),
     _highlightRequestVersion: 0,
+    _syntaxStyle: undefined as SyntaxStyle | undefined,
     _widthMethod: undefined as WidthMethod | undefined,
     _nextLineId: 0,
 
@@ -129,6 +135,7 @@ export function createBufferModel(options: BufferModelOptions) {
     _setLines: (nextLines: Line[]) => setDocument("lines", nextLines),
     _setLine: (index: number, line: Line) => setDocument("lines", index, line),
     _requestHighlights: () => hl.requestHighlights(buffer),
+    _reapplyLineHighlight: (lineId: string) => hl.reapplyLineHighlight(buffer, lineId),
   }
 
   buffer._setLines(buffer._makeLinesFromText(options.initialText, true))

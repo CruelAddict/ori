@@ -12,17 +12,20 @@ export function setLineRef(buffer: BufferModel, lineId: string, ref: TextareaRen
     return
   }
 
-  buffer._lineRefs.set(lineId, ref)
-  const widthMethod = ref.ctx?.widthMethod
-  if (!widthMethod) {
-    return
-  }
-  if (buffer._widthMethod === widthMethod) {
+  const prev = buffer._lineRefs.get(lineId)
+  if (prev === ref) {
     return
   }
 
-  buffer._widthMethod = widthMethod
-  buffer._requestHighlights()
+  buffer._lineRefs.set(lineId, ref)
+  if (buffer._syntaxStyle) {
+    ref.syntaxStyle = buffer._syntaxStyle
+  }
+  if (!buffer._widthMethod && ref.ctx?.widthMethod) {
+    buffer._widthMethod = ref.ctx.widthMethod
+  }
+
+  buffer._reapplyLineHighlight(lineId)
 }
 
 export function deleteStaleRefs(buffer: BufferModel, lines: Line[]) {
@@ -30,6 +33,11 @@ export function deleteStaleRefs(buffer: BufferModel, lines: Line[]) {
   for (const id of buffer._lineRefs.keys()) {
     if (!ids.has(id)) {
       buffer._lineRefs.delete(id)
+    }
+  }
+  for (const id of buffer._lineHighlightSpans.keys()) {
+    if (!ids.has(id)) {
+      buffer._lineHighlightSpans.delete(id)
     }
   }
 }

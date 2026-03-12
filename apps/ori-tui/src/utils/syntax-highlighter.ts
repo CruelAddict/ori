@@ -1,6 +1,7 @@
 import { dirname, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 import { addDefaultParsers, getTreeSitterClient, RGBA, SyntaxStyle } from "@opentui/core"
+import { debounce } from "@utils/debounce"
 import type { Logger } from "pino"
 import { type Accessor, createEffect, createSignal, onCleanup } from "solid-js"
 import sqlHighlights from "../assets/highlights.scm" with { type: "file" }
@@ -61,6 +62,7 @@ type HighlightRequest = {
 }
 
 const FILETYPE_SQL = "sql"
+const HIGHLIGHT_DEBOUNCE_MS = 75
 const ASSET_BASE = dirname(fileURLToPath(import.meta.url))
 const SQL_WASM_PATH = resolve(ASSET_BASE, sqlWasm)
 const SQL_HIGHLIGHTS_URL = resolve(ASSET_BASE, sqlHighlights)
@@ -242,10 +244,16 @@ export function syntaxHighlighter(params: { theme: Accessor<SyntaxThemePalette>;
     }
   }
 
+  const flushHighlight = debounce(() => {
+    if (!lastRequest) {
+      return
+    }
+    void runHighlight(lastRequest, currentStyle)
+  }, HIGHLIGHT_DEBOUNCE_MS)
+
   const scheduleHighlight = (text: string, version: number | string) => {
-    const request = { text, version } as HighlightRequest
-    lastRequest = request
-    void runHighlight(request, currentStyle)
+    lastRequest = { text, version }
+    flushHighlight()
   }
 
   createEffect(() => {
@@ -256,6 +264,7 @@ export function syntaxHighlighter(params: { theme: Accessor<SyntaxThemePalette>;
     prevStyle.syntaxStyle.destroy()
 
     if (lastRequest) {
+      flushHighlight.clear()
       void runHighlight(lastRequest, currentStyle)
     } else {
       setHighlightResult((prev) => ({
@@ -271,6 +280,7 @@ export function syntaxHighlighter(params: { theme: Accessor<SyntaxThemePalette>;
       return
     }
     disposed = true
+    flushHighlight.clear()
     currentStyle.syntaxStyle.destroy()
   }
 
