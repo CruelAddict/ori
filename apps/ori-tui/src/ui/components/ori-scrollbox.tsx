@@ -1,4 +1,4 @@
-import type { MouseEvent, ScrollBoxRenderable } from "@opentui/core"
+import type { MouseEvent, Renderable, ScrollBoxRenderable } from "@opentui/core"
 import { useTheme } from "@ui/providers/theme"
 import type { JSX } from "solid-js"
 
@@ -143,6 +143,8 @@ export function OriScrollbox(props: OriScrollboxProps) {
         ? createScrollSpeedHandler(originalOnMouseEvent, scrollSpeed)
         : originalOnMouseEvent
 
+    patchScrollbarUserScroll(node, onUserScroll, onSync)
+
     // @ts-expect-error onUpdate is protected in typings
     node.onUpdate = (deltaTime: number) => {
       originalOnUpdate?.(deltaTime)
@@ -261,6 +263,96 @@ function mergeScrollbarOptions(base: ScrollbarOptions, custom: ScrollbarOptions 
       ...(custom.trackOptions ?? {}),
     },
   }
+}
+
+function patchScrollbarUserScroll(
+  node: ScrollBoxRenderable,
+  onUserScroll: ((context: OriScrollboxUserScrollContext) => void) | undefined,
+  onSync: (() => void) | undefined,
+) {
+  type State = {
+    active: boolean
+    event?: MouseEvent
+    scrollLeft: number
+    scrollTop: number
+  }
+
+  const emitUserScroll = (state: State) => {
+    const scrollLeft = node.scrollLeft ?? 0
+    const scrollTop = node.scrollTop ?? 0
+    const delta = {
+      x: scrollLeft - state.scrollLeft,
+      y: scrollTop - state.scrollTop,
+    }
+
+    state.scrollLeft = scrollLeft
+    state.scrollTop = scrollTop
+
+    if (!state.active) return
+    if (delta.x === 0 && delta.y === 0) return
+
+    const event = state.event
+    if (event) {
+      onUserScroll?.({
+        event,
+        delta,
+        scrollLeft,
+        scrollTop,
+      })
+    }
+
+    onSync?.()
+  }
+
+  const verticalState: State = {
+    active: false,
+    event: undefined,
+    scrollLeft: node.scrollLeft ?? 0,
+    scrollTop: node.scrollTop ?? 0,
+  }
+  const horizontalState: State = {
+    active: false,
+    event: undefined,
+    scrollLeft: node.scrollLeft ?? 0,
+    scrollTop: node.scrollTop ?? 0,
+  }
+
+  const patchScrollbarMouse = (item: { renderable: Renderable; state: State }) => {
+    const original = item.renderable.processMouseEvent.bind(item.renderable)
+
+    item.renderable.processMouseEvent = (event: MouseEvent) => {
+      const startsInteraction = event.type === "down" || event.type === "drag"
+      const endsInteraction = event.type === "up" || event.type === "drag-end" || event.type === "drop"
+
+      if (startsInteraction || endsInteraction) {
+        item.state.active = true
+        item.state.event = event
+      }
+
+      if (endsInteraction) {
+        queueMicrotask(() => {
+          if (item.state.event !== event) return
+          item.state.active = false
+        })
+      }
+
+      original(event)
+    }
+  }
+
+  patchScrollbarMouse({ renderable: node.verticalScrollBar.slider, state: verticalState })
+  patchScrollbarMouse({ renderable: node.verticalScrollBar.startArrow, state: verticalState })
+  patchScrollbarMouse({ renderable: node.verticalScrollBar.endArrow, state: verticalState })
+  patchScrollbarMouse({ renderable: node.horizontalScrollBar.slider, state: horizontalState })
+  patchScrollbarMouse({ renderable: node.horizontalScrollBar.startArrow, state: horizontalState })
+  patchScrollbarMouse({ renderable: node.horizontalScrollBar.endArrow, state: horizontalState })
+
+  node.verticalScrollBar.on("change", () => {
+    emitUserScroll(verticalState)
+  })
+  node.horizontalScrollBar.on("change", () => {
+    emitUserScroll(horizontalState)
+  })
 }
 
 // there's a bug that makes horizontal scrollbox tiny for no reason in opentui
