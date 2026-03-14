@@ -17,9 +17,9 @@ export type ExplorerProps = {
 
 export function Explorer(props: ExplorerProps) {
   const explorer = props.viewModel
-  const rootIds = explorer.controller.rootIds
-  const rows = explorer.controller.visibleRows
-  const selectedId = explorer.controller.selectedId
+  const rootIds = explorer.rootIds
+  const rows = explorer.visibleRows
+  const selectedId = explorer.selectedId
   const isRowSelected = createSelector(selectedId)
   const { theme } = useTheme()
 
@@ -66,12 +66,12 @@ export function Explorer(props: ExplorerProps) {
 
   const bindings = createMemo<KeyBinding[]>(() => {
     const bindings: KeyBinding[] = [
-      { pattern: "down", handler: () => explorer.controller.moveSelection(1), preventDefault: true },
-      { pattern: "up", handler: () => explorer.controller.moveSelection(-1), preventDefault: true },
-      { pattern: "right", handler: () => explorer.controller.focusFirstChild(), preventDefault: true },
-      { pattern: "left", handler: () => explorer.controller.collapseCurrentOrParent(), preventDefault: true },
+      { pattern: "down", handler: () => explorer.moveSelection(1), preventDefault: true },
+      { pattern: "up", handler: () => explorer.moveSelection(-1), preventDefault: true },
+      { pattern: "right", handler: () => explorer.focusFirstChild(), preventDefault: true },
+      { pattern: "left", handler: () => explorer.collapseCurrentOrParent(), preventDefault: true },
       { pattern: "ctrl+l", handler: () => handleManualHorizontalScroll("right"), preventDefault: true },
-      { pattern: "enter", handler: () => explorer.controller.activateSelection(), preventDefault: true },
+      { pattern: "enter", handler: () => explorer.activateSelection(), preventDefault: true },
       {
         pattern: ["ctrl+w", "ctrl+backspace", "meta+backspace"],
         handler: () => syncFilterFromInput(),
@@ -85,16 +85,16 @@ export function Explorer(props: ExplorerProps) {
     ]
     if (explorer.mode() === "default") {
       bindings.push(
-        { pattern: "j", handler: () => explorer.controller.moveSelection(1), preventDefault: true },
-        { pattern: "k", handler: () => explorer.controller.moveSelection(-1), preventDefault: true },
-        { pattern: "l", handler: () => explorer.controller.focusFirstChild(), preventDefault: true },
-        { pattern: "h", handler: () => explorer.controller.collapseCurrentOrParent(), preventDefault: true },
+        { pattern: "j", handler: () => explorer.moveSelection(1), preventDefault: true },
+        { pattern: "k", handler: () => explorer.moveSelection(-1), preventDefault: true },
+        { pattern: "l", handler: () => explorer.focusFirstChild(), preventDefault: true },
+        { pattern: "h", handler: () => explorer.collapseCurrentOrParent(), preventDefault: true },
         {
           pattern: ["ctrl+h", "backspace"],
           handler: () => handleManualHorizontalScroll("left"),
           preventDefault: true,
         },
-        { pattern: "space", handler: () => explorer.controller.activateSelection(), preventDefault: true },
+        { pattern: "space", handler: () => explorer.activateSelection(), preventDefault: true },
         {
           pattern: "s", handler: () => {
             explorer.setMode("search")

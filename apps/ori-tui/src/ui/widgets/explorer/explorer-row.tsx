@@ -21,10 +21,10 @@ type ExplorerRowProps = {
 export function ExplorerRow(props: ExplorerRowProps) {
   const { theme } = useTheme()
 
-  const entity = createMemo(() => props.explorer.controller.getEntity(props.nodeId))
-  const childIds = createMemo(() => props.explorer.controller.getRenderableChildIds(props.nodeId))
+  const entity = createMemo(() => props.explorer.getEntity(props.nodeId))
+  const childIds = createMemo(() => props.explorer.getRenderableChildIds(props.nodeId))
   const rowId = () => props.nodeId
-  const isExpanded = () => props.explorer.controller.isExpanded(props.nodeId)
+  const isExpanded = () => props.explorer.isExpanded(props.nodeId)
   const isSelected = () => props.isRowSelected(props.nodeId)
   const [childrenMounted, setChildrenMounted] = createSignal(false)
   const [hovered, setHovered] = createSignal(false)
@@ -46,7 +46,7 @@ export function ExplorerRow(props: ExplorerRowProps) {
     props.explorer.focusSelf()
 
     if (!isSelected()) {
-      props.explorer.controller.selectNode(props.nodeId)
+      props.explorer.selectNode(props.nodeId)
       return
     }
 
@@ -55,10 +55,11 @@ export function ExplorerRow(props: ExplorerRowProps) {
     const details = entity()
     if (!details?.hasChildren) return
     if (isExpanded()) {
-      props.explorer.controller.collapseNode(props.nodeId)
-    } else {
-      props.explorer.controller.expandNode(props.nodeId)
+      props.explorer.collapseNode(props.nodeId)
+      return
     }
+
+    props.explorer.expandNode(props.nodeId)
   }
 
   const rowParts = createMemo(() => buildRowTextParts(entity(), isExpanded()))

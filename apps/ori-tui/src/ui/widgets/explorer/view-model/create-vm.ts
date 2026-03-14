@@ -47,14 +47,13 @@ export function createVM(options: CreateVMOptions) {
   const loading = createMemo(() => loadingState())
   const error = createMemo(() => errorState())
 
-  const controller = createExplorerGraph(nodesById, rootIds)
+  const graph = createExplorerGraph(nodesById, rootIds)
 
   const refreshGraph = async () => {
     await options.introspection.refresh()
   }
 
   return {
-    controller,
     isFocused: options.isFocused,
     focusSelf: options.focusSelf,
     loading,
@@ -64,6 +63,19 @@ export function createVM(options: CreateVMOptions) {
     setMode,
     filter,
     setFilter,
+    rootIds: graph.rootIds,
+    visibleRows: graph.visibleRows,
+    selectedId: graph.selectedId,
+    moveSelection: graph.moveSelection,
+    focusFirstChild: graph.focusFirstChild,
+    collapseCurrentOrParent: graph.collapseCurrentOrParent,
+    activateSelection: graph.activateSelection,
+    getEntity: graph.getEntity,
+    getRenderableChildIds: graph.getRenderableChildIds,
+    isExpanded: graph.isExpanded,
+    selectNode: graph.selectNode,
+    collapseNode: graph.collapseNode,
+    expandNode: graph.expandNode,
   }
 }
 
