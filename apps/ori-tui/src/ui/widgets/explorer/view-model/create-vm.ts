@@ -65,7 +65,7 @@ export function createVM(options: CreateVMOptions) {
     )
   })
 
-  const treeRootIds = createMemo(() => sortRootIds(rootIds(), getNode))
+  const treeRootNodes = createMemo(() => sortRootNodes(rootIds(), nodesById()))
 
   const getChildIds = (nodeId: string | null) => {
     const node = getNode(nodeId)
@@ -78,7 +78,7 @@ export function createVM(options: CreateVMOptions) {
     return getChildIds(nodeId)
   }
 
-  const treeRows = createMemo(() => buildTreeRows(treeRootIds(), getNode, isExpanded, getTreeChildIds))
+  const treeRows = createMemo(() => buildTreeRows(treeRootNodes(), nodesById(), expandedNodes))
   const visibleRows = createMemo(() => {
     if (mode() === "search") {
       return treeRows()
@@ -193,7 +193,7 @@ export function createVM(options: CreateVMOptions) {
     setMode,
     filter,
     setFilter,
-    treeRootIds,
+    treeRootNodes,
     treeRows,
     visibleRows,
     selectedId,
@@ -213,11 +213,11 @@ export function createVM(options: CreateVMOptions) {
 
 export type ExplorerViewModel = ReturnType<typeof createVM>
 
-function sortRootIds(rootIds: string[], getNode: (nodeId: string | null) => ExplorerNode | undefined) {
-  const ids = [...rootIds]
-  ids.sort((leftId, rightId) => {
-    const leftNode = getSnapshotNode(getNode(leftId))
-    const rightNode = getSnapshotNode(getNode(rightId))
+function sortRootNodes(rootIds: string[], nodesById: Record<string, ExplorerNode>) {
+  const nodes = rootIds.map((id) => nodesById[id]).filter((node): node is ExplorerNode => Boolean(node))
+  nodes.sort((left, right) => {
+    const leftNode = getSnapshotNode(left)
+    const rightNode = getSnapshotNode(right)
     const leftDefault = isDefaultRoot(leftNode)
     const rightDefault = isDefaultRoot(rightNode)
 
@@ -230,9 +230,9 @@ function sortRootIds(rootIds: string[], getNode: (nodeId: string | null) => Expl
       return byName
     }
 
-    return leftId.localeCompare(rightId)
+    return left.id.localeCompare(right.id)
   })
-  return ids
+  return nodes
 }
 
 function getSnapshotNode(node: ExplorerNode | undefined) {
@@ -248,36 +248,32 @@ function isDefaultRoot(node?: Node): boolean {
 }
 
 export function buildTreeRows(
-  rootIds: readonly string[],
-  getNode: (nodeId: string | null) => { id: string; hasChildren: boolean } | undefined,
-  isExpanded: (nodeId: string | null) => boolean,
-  getTreeChildIds: (nodeId: string) => string[],
+  rootNodes: readonly ExplorerNode[],
+  nodesById: Record<string, ExplorerNode>,
+  expandedNodes: Record<string, true>,
 ) {
   const rows: VisibleRow[] = []
-  for (const rootId of rootIds) {
-    const node = getNode(rootId)
-    if (!node) continue
+  for (const node of rootNodes) {
     rows.push({ id: node.id, depth: 0 })
-    if (!node.hasChildren || !isExpanded(node.id)) continue
-    appendTreeRows(rows, node.id, 1, getNode, isExpanded, getTreeChildIds)
+    if (!node.hasChildren || !expandedNodes[node.id]) continue
+    appendTreeRows(rows, node, 1, nodesById, expandedNodes)
   }
   return rows
 }
 
 function appendTreeRows(
   rows: VisibleRow[],
-  parentId: string,
+  parent: ExplorerNode,
   depth: number,
-  getNode: (nodeId: string | null) => { id: string; hasChildren: boolean } | undefined,
-  isExpanded: (nodeId: string | null) => boolean,
-  getTreeChildIds: (nodeId: string) => string[],
+  nodesById: Record<string, ExplorerNode>,
+  expandedNodes: Record<string, true>,
 ) {
-  for (const childId of getTreeChildIds(parentId)) {
-    const node = getNode(childId)
+  for (const childId of parent.childIds) {
+    const node = nodesById[childId]
     if (!node) continue
-    rows.push({ id: node.id, depth, parentId })
-    if (!node.hasChildren || !isExpanded(node.id)) continue
-    appendTreeRows(rows, node.id, depth + 1, getNode, isExpanded, getTreeChildIds)
+    rows.push({ id: node.id, depth, parentId: parent.id })
+    if (!node.hasChildren || !expandedNodes[node.id]) continue
+    appendTreeRows(rows, node, depth + 1, nodesById, expandedNodes)
   }
 }
 

@@ -17,7 +17,7 @@ export type ExplorerProps = {
 
 export function Explorer(props: ExplorerProps) {
   const explorer = props.viewModel
-  const treeRootIds = explorer.treeRootIds
+  const treeRootNodes = explorer.treeRootNodes
   const rows = explorer.visibleRows
   const selectedId = explorer.selectedId
   const isRowSelected = createSelector(selectedId)
@@ -77,10 +77,12 @@ export function Explorer(props: ExplorerProps) {
         handler: () => syncFilterFromInput(),
       },
       {
-        pattern: "escape", handler: () => {
+        pattern: "escape",
+        handler: () => {
           explorer.setMode("default")
           explorer.setFilter("")
-        }, preventDefault: true
+        },
+        preventDefault: true,
       },
     ]
     if (explorer.mode() === "default") {
@@ -96,19 +98,20 @@ export function Explorer(props: ExplorerProps) {
         },
         { pattern: "space", handler: () => explorer.activateSelection(), preventDefault: true },
         {
-          pattern: "s", handler: () => {
+          pattern: "s",
+          handler: () => {
             explorer.setMode("search")
             queueMicrotask(() => {
               inputRef?.focus()
             })
-          }, preventDefault: true
+          },
+          preventDefault: true,
         },
       )
     }
 
     return bindings
   })
-
 
   const enabled = () => explorer.isFocused()
 
@@ -155,7 +158,7 @@ export function Explorer(props: ExplorerProps) {
               minHeight="100%"
             >
               <Show
-                 when={treeRootIds().length > 0}
+                when={treeRootNodes().length > 0}
                 fallback={
                   <Show when={!explorer.loading() && !explorer.error()}>
                     <text
@@ -187,10 +190,10 @@ export function Explorer(props: ExplorerProps) {
                   />
                 </Show>
 
-                <For each={treeRootIds()}>
-                  {(id) => (
+                <For each={treeRootNodes()}>
+                  {(node) => (
                     <ExplorerRow
-                      nodeId={id}
+                      nodeId={node.id}
                       depth={0}
                       isFocused={explorer.isFocused}
                       explorer={explorer}
