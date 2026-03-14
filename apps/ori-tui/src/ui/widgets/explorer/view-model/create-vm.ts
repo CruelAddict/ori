@@ -6,26 +6,21 @@ import { createExplorerGraph } from "../model/explorer-graph"
 
 type Introspection = Pick<ResourceIntrospectionUsecase, "subscribe" | "getState" | "load" | "refresh">
 
-export type ExplorerViewModel = {
-  controller: ReturnType<typeof createExplorerGraph>
-  isFocused: Accessor<boolean>
-  loading: Accessor<boolean>
-  error: Accessor<string | null>
-  focusSelf: () => void
-  refreshGraph: () => Promise<void>
-}
-
 type CreateVMOptions = {
   introspection: Introspection
   isFocused: Accessor<boolean>
   focusSelf: () => void
 }
 
-export function createVM(options: CreateVMOptions): ExplorerViewModel {
+export type UIMode = "default" | "search"
+
+export function createVM(options: CreateVMOptions) {
   const [nodesByIdState, setNodesByIdState] = createSignal(options.introspection.getState().nodesById)
   const [rootIdsState, setRootIdsState] = createSignal(options.introspection.getState().rootIds)
   const [loadingState, setLoadingState] = createSignal(options.introspection.getState().loading)
   const [errorState, setErrorState] = createSignal(options.introspection.getState().error)
+  const [mode, setMode] = createSignal("default" as UIMode)
+  const [filter, setFilter] = createSignal("")
 
   const unsubscribe = options.introspection.subscribe(() => {
     setNodesByIdState(options.introspection.getState().nodesById)
@@ -65,8 +60,14 @@ export function createVM(options: CreateVMOptions): ExplorerViewModel {
     loading,
     error,
     refreshGraph,
+    mode,
+    setMode,
+    filter,
+    setFilter,
   }
 }
+
+export type ExplorerViewModel = ReturnType<typeof createVM>
 
 function compareRootIds(leftId: string, rightId: string, leftNode?: Node, rightNode?: Node): number {
   const leftDefault = isDefaultRoot(leftNode)

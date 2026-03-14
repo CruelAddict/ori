@@ -1,9 +1,9 @@
-import type { ScrollBoxRenderable } from "@opentui/core"
+import type { InputRenderable, ScrollBoxRenderable } from "@opentui/core"
 import { TextAttributes } from "@opentui/core"
 import { getViewportRect, OriScrollbox, scrollIntoView } from "@ui/components/ori-scrollbox"
 import { useTheme } from "@ui/providers/theme"
 import { type KeyBinding, KeyScope } from "@ui/services/key-scopes"
-import { type Accessor, createEffect, createSelector, For, on, Show } from "solid-js"
+import { type Accessor, createEffect, createMemo, createSelector, For, on, Show } from "solid-js"
 import { ExplorerRow } from "./explorer-row.tsx"
 import type { ExplorerViewModel } from "./view-model/create-vm"
 
@@ -24,6 +24,15 @@ export function Explorer(props: ExplorerProps) {
   const { theme } = useTheme()
 
   let scrollBoxRef: ScrollBoxRenderable | undefined
+  let inputRef: InputRenderable | undefined
+
+  const syncFilterFromInput = () => {
+    queueMicrotask(() => {
+      const value = inputRef?.value ?? ""
+      if (value === explorer.filter()) return
+      explorer.setFilter(value)
+    })
+  }
 
   const ensureSelectedVisible = () => {
     const selected = selectedId()
@@ -55,24 +64,51 @@ export function Explorer(props: ExplorerProps) {
     explorer.focusSelf()
   }
 
-  const bindings: KeyBinding[] = [
-    { pattern: "down", handler: () => explorer.controller.moveSelection(1), preventDefault: true },
-    { pattern: "j", handler: () => explorer.controller.moveSelection(1), preventDefault: true },
-    { pattern: "up", handler: () => explorer.controller.moveSelection(-1), preventDefault: true },
-    { pattern: "k", handler: () => explorer.controller.moveSelection(-1), preventDefault: true },
-    { pattern: "right", handler: () => explorer.controller.focusFirstChild(), preventDefault: true },
-    { pattern: "l", handler: () => explorer.controller.focusFirstChild(), preventDefault: true },
-    { pattern: "left", handler: () => explorer.controller.collapseCurrentOrParent(), preventDefault: true },
-    { pattern: "h", handler: () => explorer.controller.collapseCurrentOrParent(), preventDefault: true },
-    {
-      pattern: ["ctrl+h", "backspace"],
-      handler: () => handleManualHorizontalScroll("left"),
-      preventDefault: true,
-    },
-    { pattern: "ctrl+l", handler: () => handleManualHorizontalScroll("right"), preventDefault: true },
-    { pattern: "enter", handler: () => explorer.controller.activateSelection(), preventDefault: true },
-    { pattern: "space", handler: () => explorer.controller.activateSelection(), preventDefault: true },
-  ]
+  const bindings = createMemo<KeyBinding[]>(() => {
+    const bindings: KeyBinding[] = [
+      { pattern: "down", handler: () => explorer.controller.moveSelection(1), preventDefault: true },
+      { pattern: "up", handler: () => explorer.controller.moveSelection(-1), preventDefault: true },
+      { pattern: "right", handler: () => explorer.controller.focusFirstChild(), preventDefault: true },
+      { pattern: "left", handler: () => explorer.controller.collapseCurrentOrParent(), preventDefault: true },
+      { pattern: "ctrl+l", handler: () => handleManualHorizontalScroll("right"), preventDefault: true },
+      { pattern: "enter", handler: () => explorer.controller.activateSelection(), preventDefault: true },
+      {
+        pattern: ["ctrl+w", "ctrl+backspace", "meta+backspace"],
+        handler: () => syncFilterFromInput(),
+      },
+      {
+        pattern: "escape", handler: () => {
+          explorer.setMode("default")
+          explorer.setFilter("")
+        }, preventDefault: true
+      },
+    ]
+    if (explorer.mode() === "default") {
+      bindings.push(
+        { pattern: "j", handler: () => explorer.controller.moveSelection(1), preventDefault: true },
+        { pattern: "k", handler: () => explorer.controller.moveSelection(-1), preventDefault: true },
+        { pattern: "l", handler: () => explorer.controller.focusFirstChild(), preventDefault: true },
+        { pattern: "h", handler: () => explorer.controller.collapseCurrentOrParent(), preventDefault: true },
+        {
+          pattern: ["ctrl+h", "backspace"],
+          handler: () => handleManualHorizontalScroll("left"),
+          preventDefault: true,
+        },
+        { pattern: "space", handler: () => explorer.controller.activateSelection(), preventDefault: true },
+        {
+          pattern: "s", handler: () => {
+            explorer.setMode("search")
+            queueMicrotask(() => {
+              inputRef?.focus()
+            })
+          }, preventDefault: true
+        },
+      )
+    }
+
+    return bindings
+  })
+
 
   const enabled = () => explorer.isFocused()
 
@@ -132,6 +168,25 @@ export function Explorer(props: ExplorerProps) {
                   </Show>
                 }
               >
+                <Show when={explorer.mode() === "search"}>
+                  <input
+                    ref={(el) => {
+                      inputRef = el
+                    }}
+                    value={explorer.filter()}
+                    placeholder={"Type to search"}
+                    cursorColor={theme().get("primary")}
+                    textColor={theme().get("text")}
+                    focusedTextColor={theme().get("text")}
+                    backgroundColor={theme().get("editor_background")}
+                    focusedBackgroundColor={theme().get("editor_background")}
+                    onInput={(value) => {
+                      explorer.setFilter(value)
+                    }}
+                    marginBottom={1}
+                  />
+                </Show>
+
                 <For each={rootIds()}>
                   {(id) => (
                     <ExplorerRow
