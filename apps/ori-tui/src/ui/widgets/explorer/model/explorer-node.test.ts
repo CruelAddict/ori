@@ -144,13 +144,13 @@ const makeEdge = (items: string[], truncated = false): NodeEdge => ({
 
 describe("createSnapshotExplorerNode", () => {
   test("describes database nodes", () => {
-    const entity = createSnapshotExplorerNode(makeNode({ id: "db", type: NodeType.DATABASE, name: "main" }))
-    expect(entity.description).toBe("database")
+    const node = createSnapshotExplorerNode(makeNode({ id: "db", type: NodeType.DATABASE, name: "main" }))
+    expect(node.description).toBe("database")
   })
 
   test("describes schema nodes", () => {
-    const entity = createSnapshotExplorerNode(makeNode({ id: "schema", type: NodeType.SCHEMA, name: "public" }))
-    expect(entity.description).toBe("schema")
+    const node = createSnapshotExplorerNode(makeNode({ id: "schema", type: NodeType.SCHEMA, name: "public" }))
+    expect(node.description).toBe("schema")
   })
 
   test("builds table snapshot node", () => {
@@ -161,8 +161,8 @@ describe("createSnapshotExplorerNode", () => {
       attributes: { table: "users" },
       edges: { columns: makeEdge(["col-1"]) },
     })
-    const entity = createSnapshotExplorerNode(node)
-    expect(entity).toEqual({
+    const snapshotNode = createSnapshotExplorerNode(node)
+    expect(snapshotNode).toEqual({
       id: "table-1",
       kind: "node",
       node,
@@ -187,7 +187,7 @@ describe("createSnapshotExplorerNode", () => {
   })
 
   test("describes columns and badges primary/!null", () => {
-    const entity = createSnapshotExplorerNode(
+    const node = createSnapshotExplorerNode(
       makeNode({
         id: "col-1",
         type: NodeType.COLUMN,
@@ -195,12 +195,12 @@ describe("createSnapshotExplorerNode", () => {
         attributes: { dataType: "uuid", primaryKeyPosition: 1, notNull: true },
       }),
     )
-    expect(entity.description).toBe("uuid")
-    expect(entity.badges).toEqual(["pk", "!null"])
+    expect(node.description).toBe("uuid")
+    expect(node.badges).toEqual(["pk", "!null"])
   })
 
   test("describes CHECK constraints", () => {
-    const entity = createSnapshotExplorerNode(
+    const node = createSnapshotExplorerNode(
       makeNode({
         id: "check-1",
         type: NodeType.CONSTRAINT,
@@ -208,11 +208,11 @@ describe("createSnapshotExplorerNode", () => {
         attributes: { constraintType: "CHECK", checkClause: "amount > 0" },
       }),
     )
-    expect(entity.description).toBe("amount > 0")
+    expect(node.description).toBe("amount > 0")
   })
 
   test("describes foreign key constraints and badges", () => {
-    const entity = createSnapshotExplorerNode(
+    const node = createSnapshotExplorerNode(
       makeNode({
         id: "fk-1",
         type: NodeType.CONSTRAINT,
@@ -227,12 +227,12 @@ describe("createSnapshotExplorerNode", () => {
         },
       }),
     )
-    expect(entity.description).toBe("references public.users")
-    expect(entity.badges).toEqual([])
+    expect(node.description).toBe("references public.users")
+    expect(node.badges).toEqual([])
   })
 
   test("describes UNIQUE constraints with index name", () => {
-    const entity = createSnapshotExplorerNode(
+    const node = createSnapshotExplorerNode(
       makeNode({
         id: "uniq-1",
         type: NodeType.CONSTRAINT,
@@ -240,11 +240,11 @@ describe("createSnapshotExplorerNode", () => {
         attributes: { constraintType: "UNIQUE", indexName: "users_email_idx" },
       }),
     )
-    expect(entity.description).toBe("index users_email_idx")
+    expect(node.description).toBe("index users_email_idx")
   })
 
   test("describes indexes with predicate and badges", () => {
-    const entity = createSnapshotExplorerNode(
+    const node = createSnapshotExplorerNode(
       makeNode({
         id: "idx-1",
         type: NodeType.INDEX,
@@ -252,12 +252,12 @@ describe("createSnapshotExplorerNode", () => {
         attributes: { predicate: "active = true", primary: true, unique: true },
       }),
     )
-    expect(entity.description).toBe("where active = true")
-    expect(entity.badges).toEqual(["primary", "unique"])
+    expect(node.description).toBe("where active = true")
+    expect(node.badges).toEqual(["primary", "unique"])
   })
 
   test("describes triggers and badges", () => {
-    const entity = createSnapshotExplorerNode(
+    const node = createSnapshotExplorerNode(
       makeNode({
         id: "trg-1",
         type: NodeType.TRIGGER,
@@ -265,8 +265,8 @@ describe("createSnapshotExplorerNode", () => {
         attributes: { timing: "BEFORE", events: ["INSERT", "UPDATE"], enabledState: "enabled" },
       }),
     )
-    expect(entity.description).toBeUndefined()
-    expect(entity.badges).toEqual(["enabled"])
+    expect(node.description).toBeUndefined()
+    expect(node.badges).toEqual(["enabled"])
   })
 })
 

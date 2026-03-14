@@ -1,5 +1,5 @@
 import type { Node, OriClient } from "@adapters/ori/client"
-import { type GraphSnapshot, loadGraphIncremental } from "@usecase/introspection/load"
+import { type GraphSnapshot, hydrateGraphIncremental, loadGraphIncremental } from "@usecase/introspection/load"
 import type { Logger } from "pino"
 
 type Listener = () => void
@@ -23,6 +23,7 @@ export type ResourceIntrospectionUsecase = {
   subscribe(listener: Listener): () => void
   refresh(): Promise<GraphSnapshot | null>
   load(): Promise<GraphSnapshot | null>
+  ensureNodes(nodeIds: string[]): Promise<void>
   dispose(): void
 }
 
@@ -36,6 +37,8 @@ export function createResourceIntrospectionUC(deps: ResourceIntrospectionUsecase
   }
   const listeners = new Set<Listener>()
   let pending: Promise<GraphSnapshot | null> | null = null
+  let hydratePending: Promise<void> | null = null
+  const hydrateQueue = new Set<string>()
 
   const emit = () => {
     for (const listener of listeners) {
@@ -48,11 +51,54 @@ export function createResourceIntrospectionUC(deps: ResourceIntrospectionUsecase
     emit()
   }
 
+  const mergeNodes = (nodes: Node[]) => {
+    if (nodes.length === 0) return
+    setState((current) => {
+      const nodesById = { ...current.nodesById }
+      for (const node of nodes) {
+        nodesById[node.id] = node
+      }
+      return {
+        ...current,
+        nodesById,
+      }
+    })
+  }
+
+  const runHydrateQueue = () => {
+    if (hydratePending) {
+      return hydratePending
+    }
+
+    const request = (async () => {
+      while (hydrateQueue.size > 0) {
+        const ids = Array.from(hydrateQueue)
+        hydrateQueue.clear()
+        const knownNodes = new Map(Object.entries(state.nodesById))
+        await hydrateGraphIncremental(
+          deps.client,
+          deps.resourceName,
+          ids,
+          knownNodes,
+          { onNodes: mergeNodes },
+          deps.logger,
+        )
+      }
+    })().finally(() => {
+      if (hydratePending !== request) return
+      hydratePending = null
+    })
+
+    hydratePending = request
+    return request
+  }
+
   const refresh = () => {
     if (pending) {
       return pending
     }
 
+    hydrateQueue.clear()
     setState(() => ({
       nodesById: {},
       rootIds: [],
@@ -79,22 +125,7 @@ export function createResourceIntrospectionUC(deps: ResourceIntrospectionUsecase
             }
           })
         },
-        onNodes: (nodes) => {
-          if (nodes.length === 0) {
-            return
-          }
-
-          setState((current) => {
-            const nodesById = { ...current.nodesById }
-            for (const node of nodes) {
-              nodesById[node.id] = node
-            }
-            return {
-              ...current,
-              nodesById,
-            }
-          })
-        },
+        onNodes: mergeNodes,
       },
       deps.logger,
     )
@@ -123,9 +154,7 @@ export function createResourceIntrospectionUC(deps: ResourceIntrospectionUsecase
         return null
       })
       .finally(() => {
-        if (pending !== request) {
-          return
-        }
+        if (pending !== request) return
         pending = null
       })
 
@@ -143,6 +172,19 @@ export function createResourceIntrospectionUC(deps: ResourceIntrospectionUsecase
     return refresh()
   }
 
+  const ensureNodes = async (nodeIds: string[]) => {
+    for (const nodeId of nodeIds) {
+      if (!nodeId) continue
+      if (state.nodesById[nodeId]) continue
+      hydrateQueue.add(nodeId)
+    }
+    if (hydrateQueue.size === 0) return
+    if (pending) {
+      await pending
+    }
+    await runHydrateQueue()
+  }
+
   return {
     getState: () => state,
     subscribe: (listener) => {
@@ -153,8 +195,10 @@ export function createResourceIntrospectionUC(deps: ResourceIntrospectionUsecase
     },
     refresh,
     load,
+    ensureNodes,
     dispose: () => {
       listeners.clear()
+      hydrateQueue.clear()
     },
   }
 }

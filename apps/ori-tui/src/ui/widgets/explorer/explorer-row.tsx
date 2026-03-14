@@ -21,8 +21,8 @@ type ExplorerRowProps = {
 export function ExplorerRow(props: ExplorerRowProps) {
   const { theme } = useTheme()
 
-  const entity = createMemo(() => props.explorer.getEntity(props.nodeId))
-  const childIds = createMemo(() => props.explorer.getRenderableChildIds(props.nodeId))
+  const node = createMemo(() => props.explorer.getNode(props.nodeId))
+  const childIds = createMemo(() => props.explorer.getTreeChildIds(props.nodeId))
   const rowId = () => props.nodeId
   const isExpanded = () => props.explorer.isExpanded(props.nodeId)
   const isSelected = () => props.isRowSelected(props.nodeId)
@@ -52,8 +52,8 @@ export function ExplorerRow(props: ExplorerRowProps) {
 
     if (!wasFocused) return
 
-    const details = entity()
-    if (!details?.hasChildren) return
+    const current = node()
+    if (!current?.hasChildren) return
     if (isExpanded()) {
       props.explorer.collapseNode(props.nodeId)
       return
@@ -62,7 +62,7 @@ export function ExplorerRow(props: ExplorerRowProps) {
     props.explorer.expandNode(props.nodeId)
   }
 
-  const rowParts = createMemo(() => buildRowTextParts(entity(), isExpanded()))
+  const rowParts = createMemo(() => buildRowTextParts(node(), isExpanded()))
 
   const rowSegments = createMemo(() => {
     const parts = rowParts()
@@ -100,7 +100,7 @@ export function ExplorerRow(props: ExplorerRowProps) {
 
   return (
     <Show
-      when={entity()}
+      when={node()}
       keyed
     >
       {(_: ExplorerNode) => (

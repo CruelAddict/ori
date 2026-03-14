@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { type Node, type NodeEdge, NodeType } from "@adapters/ori/client"
-import { convertSnapshotNodeEntities } from "./explorer-graph"
+import { convertSnapshotNodeEntities } from "../view-model/explorer-graph"
 import type { ExplorerNode } from "./explorer-node"
 
 type NodeOverrides = {
@@ -136,16 +136,16 @@ const makeEdge = (items: string[], truncated = false): NodeEdge => ({
 const edgeId = (nodeId: string, edgeName: string) => `edge:${nodeId}:${edgeName}`
 const syntheticId = (nodeId: string, edgeName: string, index: number) => `synthetic:${nodeId}:${edgeName}:${index}`
 
-const toEntityMap = (node: Node, nodes: Record<string, Node>) => {
+const toExplorerNodeMap = (node: Node) => {
   const map: Record<string, ExplorerNode> = {}
-  for (const entity of convertSnapshotNodeEntities(node, nodes)) {
-    map[entity.id] = entity
+  for (const child of convertSnapshotNodeEntities(node)) {
+    map[child.id] = child
   }
   return map
 }
 
 describe("convertSnapshotNodeEntities", () => {
-  test("creates edge entities for non-empty edges", () => {
+  test("creates edge explorer nodes for non-empty edges", () => {
     const db = makeNode({
       id: "db-1",
       type: NodeType.DATABASE,
@@ -154,16 +154,13 @@ describe("convertSnapshotNodeEntities", () => {
     })
     const table = makeNode({ id: "table-1", type: NodeType.TABLE, name: "public.users" })
 
-    const entities = toEntityMap(db, {
-      [db.id]: db,
-      [table.id]: table,
-    })
+    const explorerNodes = toExplorerNodeMap(db)
 
-    const dbEntity = entities[db.id]
-    expect(dbEntity?.kind).toBe("node")
-    expect(dbEntity?.childIds).toEqual([edgeId(db.id, "tables")])
+    const dbExplorerNode = explorerNodes[db.id]
+    expect(dbExplorerNode?.kind).toBe("node")
+    expect(dbExplorerNode?.childIds).toEqual([edgeId(db.id, "tables")])
 
-    const tablesEdge = entities[edgeId(db.id, "tables")]
+    const tablesEdge = explorerNodes[edgeId(db.id, "tables")]
     expect(tablesEdge?.kind).toBe("edge")
     expect(tablesEdge?.childIds).toEqual([table.id])
     expect(tablesEdge?.hasChildren).toBe(true)
@@ -177,12 +174,12 @@ describe("convertSnapshotNodeEntities", () => {
       edges: { tables: makeEdge([]), views: makeEdge([], true) },
     })
 
-    const entities = toEntityMap(db, { [db.id]: db })
+    const explorerNodes = toExplorerNodeMap(db)
 
-    const dbEntity = entities[db.id]
-    expect(dbEntity?.childIds).toEqual([])
-    expect(entities[edgeId(db.id, "tables")]).toBeUndefined()
-    expect(entities[edgeId(db.id, "views")]).toBeUndefined()
+    const dbExplorerNode = explorerNodes[db.id]
+    expect(dbExplorerNode?.childIds).toEqual([])
+    expect(explorerNodes[edgeId(db.id, "tables")]).toBeUndefined()
+    expect(explorerNodes[edgeId(db.id, "views")]).toBeUndefined()
   })
 
   test("creates synthetic edges for index columns and includeColumns", () => {
@@ -193,19 +190,19 @@ describe("convertSnapshotNodeEntities", () => {
       attributes: { columns: ["id", "email"], includeColumns: ["created_at"] },
     })
 
-    const entities = toEntityMap(index, { [index.id]: index })
+    const explorerNodes = toExplorerNodeMap(index)
 
-    const indexEntity = entities[index.id]
-    expect(indexEntity?.childIds).toEqual([edgeId(index.id, "columns"), edgeId(index.id, "include")])
+    const indexExplorerNode = explorerNodes[index.id]
+    expect(indexExplorerNode?.childIds).toEqual([edgeId(index.id, "columns"), edgeId(index.id, "include")])
 
-    const columnsEdge = entities[edgeId(index.id, "columns")]
-    const includeEdge = entities[edgeId(index.id, "include")]
+    const columnsEdge = explorerNodes[edgeId(index.id, "columns")]
+    const includeEdge = explorerNodes[edgeId(index.id, "include")]
     expect(columnsEdge?.childIds).toEqual([syntheticId(index.id, "columns", 0), syntheticId(index.id, "columns", 1)])
     expect(includeEdge?.childIds).toEqual([syntheticId(index.id, "include", 0)])
 
-    const firstColumn = entities[syntheticId(index.id, "columns", 0)]
-    const secondColumn = entities[syntheticId(index.id, "columns", 1)]
-    const includeColumn = entities[syntheticId(index.id, "include", 0)]
+    const firstColumn = explorerNodes[syntheticId(index.id, "columns", 0)]
+    const secondColumn = explorerNodes[syntheticId(index.id, "columns", 1)]
+    const includeColumn = explorerNodes[syntheticId(index.id, "include", 0)]
     expect(firstColumn?.label).toBe("id")
     expect(secondColumn?.label).toBe("email")
     expect(includeColumn?.label).toBe("created_at")
@@ -225,22 +222,22 @@ describe("convertSnapshotNodeEntities", () => {
       },
     })
 
-    const entities = toEntityMap(constraint, { [constraint.id]: constraint })
+    const explorerNodes = toExplorerNodeMap(constraint)
 
-    const constraintEntity = entities[constraint.id]
-    expect(constraintEntity?.childIds).toEqual([
+    const constraintExplorerNode = explorerNodes[constraint.id]
+    expect(constraintExplorerNode?.childIds).toEqual([
       edgeId(constraint.id, "columns"),
       edgeId(constraint.id, "references"),
       edgeId(constraint.id, "action_rules"),
     ])
 
-    const columnsEdge = entities[edgeId(constraint.id, "columns")]
-    const referencesEdge = entities[edgeId(constraint.id, "references")]
-    const rulesEdge = entities[edgeId(constraint.id, "action_rules")]
+    const columnsEdge = explorerNodes[edgeId(constraint.id, "columns")]
+    const referencesEdge = explorerNodes[edgeId(constraint.id, "references")]
+    const rulesEdge = explorerNodes[edgeId(constraint.id, "action_rules")]
     expect(columnsEdge?.childIds).toEqual([syntheticId(constraint.id, "columns", 0)])
     expect(referencesEdge?.childIds).toEqual([syntheticId(constraint.id, "references", 0)])
     expect(rulesEdge?.childIds).toEqual([syntheticId(constraint.id, "action_rules", 0)])
-    const actionRule = entities[syntheticId(constraint.id, "action_rules", 0)]
+    const actionRule = explorerNodes[syntheticId(constraint.id, "action_rules", 0)]
     expect(actionRule?.label).toBe("match full, on update cascade, on delete restrict")
   })
 
@@ -257,14 +254,14 @@ describe("convertSnapshotNodeEntities", () => {
       },
     })
 
-    const entities = toEntityMap(trigger, { [trigger.id]: trigger })
+    const explorerNodes = toExplorerNodeMap(trigger)
 
-    const triggerEntity = entities[trigger.id]
-    expect(triggerEntity?.childIds).toEqual([edgeId(trigger.id, "action_rules")])
+    const triggerExplorerNode = explorerNodes[trigger.id]
+    expect(triggerExplorerNode?.childIds).toEqual([edgeId(trigger.id, "action_rules")])
 
-    const rulesEdge = entities[edgeId(trigger.id, "action_rules")]
+    const rulesEdge = explorerNodes[edgeId(trigger.id, "action_rules")]
     expect(rulesEdge?.childIds).toEqual([syntheticId(trigger.id, "action_rules", 0)])
-    const actionRule = entities[syntheticId(trigger.id, "action_rules", 0)]
+    const actionRule = explorerNodes[syntheticId(trigger.id, "action_rules", 0)]
     expect(actionRule?.label).toBe("before insert or update, for each row, when new.active = true")
   })
 
@@ -276,10 +273,10 @@ describe("convertSnapshotNodeEntities", () => {
       attributes: { columns: [] },
     })
 
-    const entities = toEntityMap(index, { [index.id]: index })
+    const explorerNodes = toExplorerNodeMap(index)
 
-    const indexEntity = entities[index.id]
-    expect(indexEntity?.childIds).toEqual([])
-    expect(entities[edgeId(index.id, "columns")]).toBeUndefined()
+    const indexExplorerNode = explorerNodes[index.id]
+    expect(indexExplorerNode?.childIds).toEqual([])
+    expect(explorerNodes[edgeId(index.id, "columns")]).toBeUndefined()
   })
 })
