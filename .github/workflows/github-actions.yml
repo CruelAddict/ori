@@ -1,16 +1,18 @@
 ---
 name: Github pipeline
 on: [push]
-runs-on: macos-latest
 jobs:
   init:
+    runs-on: macos-latest
     uses: ./.github/actions/init
   build:
+    runs-on: macos-latest
     needs: init
     uses: ./.github/actions/make
     with:
       action: build
   test:
+    runs-on: macos-latest
     needs: init
     uses: ./.github/actions/make
     with:
