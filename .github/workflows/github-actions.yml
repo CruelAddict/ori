@@ -8,9 +8,9 @@ jobs:
       - name: Download Registry
         uses: actions/checkout@v4
       - uses: ./.github/actions/init
-      - name: Make Build
+      - name: Build
         run: make build
-      - name: Make Backend Test
+      - name: Backend Test
         run: make test -C apps/ori-be
-      - name: Make UI Test
+      - name: TUI Test
         run: bun test apps/ori-tui
