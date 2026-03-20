@@ -10,6 +10,8 @@ runs:
       uses: actions/setup-go@v5
       with:
         go-version: "1.24"
-    - name: Add Go 1.24 to PATH
-      run: echo "/Users/runner/hostedtoolcache/go/1.24.13/arm64/bin" >> $PATH
+    - name: Check Go
+      run: |
+        which go
+        go version
       shell: bash
