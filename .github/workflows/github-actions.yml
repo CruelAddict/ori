@@ -12,6 +12,7 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
+      - run: pwd && ls -laF
       - uses: ./.github/actions/make
         with:
           action: build
@@ -20,6 +21,7 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
+      - run: pwd && ls -laF
       - uses: ./.github/actions/make
         with:
           action: test
