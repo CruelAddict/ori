@@ -6,10 +6,5 @@ inputs:
 runs:
   using: "composite"
   steps:
-    - name: Check Go
-      run: |
-        which go
-        go version
-      shell: bash
     - run: make ${{ inputs.action }}
       shell: bash

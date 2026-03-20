@@ -12,14 +12,16 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: ./.github/actions/init
       - uses: ./.github/actions/make
         with:
           action: build
   test:
-    needs: init
+    needs: build
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: ./.github/actions/init
       - uses: ./.github/actions/make
         with:
           action: test
