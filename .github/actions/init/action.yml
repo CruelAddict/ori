@@ -6,7 +6,6 @@ inputs:
 runs:
   using: "composite"
   steps:
-    - uses: actions/checkout@v4
     - name: Show info
       run: echo "Triggered by ${{ github.event_name }} by ${{ github.actor }}"
       shell: bash

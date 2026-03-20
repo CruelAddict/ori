@@ -6,6 +6,5 @@ inputs:
 runs:
   using: "composite"
   steps:
-    - uses: actions/checkout@v4
     - run: make ${{ inputs.action }}
       shell: bash
