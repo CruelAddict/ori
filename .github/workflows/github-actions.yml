@@ -9,14 +9,8 @@ jobs:
         uses: actions/checkout@v4
       - uses: ./.github/actions/init
       - name: Make Build
-        uses: ./.github/actions/make
-        with:
-          action: build
+        run: make build
       - name: Make Backend Test
-        uses: ./.github/actions/make
-        with:
-          action: test
+        run: make test -C apps/ori-be
       - name: Make UI Test
-        uses: ./.github/actions/make
-        with:
-          action: ui_test
+        run: bun test apps/ori-tui

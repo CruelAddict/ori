@@ -1,9 +1,0 @@
----
-inputs:
-  action:
-    required: true
-runs:
-  using: "composite"
-  steps:
-    - run: make ${{ inputs.action }}
-      shell: bash
