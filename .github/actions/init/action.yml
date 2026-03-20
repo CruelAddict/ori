@@ -1,8 +1,5 @@
 ---
-name: "Init info"
-inputs:
-  runner:
-    default: "macos-latest"
+name: "Init"
 runs:
   using: "composite"
   steps:
