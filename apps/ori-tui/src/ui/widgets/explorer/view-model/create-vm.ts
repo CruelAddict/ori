@@ -1,10 +1,12 @@
 import { type Node, NodeType } from "@adapters/ori/client"
 import type { ResourceIntrospectionUsecase } from "@usecase/introspection/usecase"
 import type { Accessor } from "solid-js"
-import { batch, createComputed, createMemo, createSignal, onCleanup } from "solid-js"
+import { batch, createComputed, createMemo, createSignal, on, onCleanup } from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import type { ExplorerNode } from "../model/explorer-node"
 import { createExplorerNodesById } from "./explorer-graph"
+
+const CHILD_BATCH_SIZE = 10
 
 type CreateVMOptions = {
   introspection: Introspection
@@ -67,23 +69,28 @@ export function createVM(options: CreateVMOptions) {
 
   const treeRootNodes = createMemo(() => sortRootNodes(rootIds(), nodesById()))
 
-  const getChildIds = (nodeId: string | null) => {
+  const getLoadedChildIds = (nodeId: string | null) => {
     const node = getNode(nodeId)
     if (!node) return []
     return node.childIds.filter((childId) => Boolean(getNode(childId)))
   }
 
-  const getTreeChildIds = (nodeId: string) => {
-    if (!isExpanded(nodeId)) return []
-    return getChildIds(nodeId)
-  }
+  const treeRowsState = createIterativeRows({
+    getTopLevelIds: () => treeRootNodes().map((node) => node.id),
+    getChildIds: (nodeId) => {
+      if (!isExpanded(nodeId)) return []
+      return getNode(nodeId)?.childIds ?? []
+    },
+    getHasChildren: (nodeId) => Boolean(getNode(nodeId)?.hasChildren),
+    isReady: (nodeId) => Boolean(getNode(nodeId)),
+    resetKey: () => rootIds().join("\0"),
+  })
 
-  const treeRows = createMemo(() => buildTreeRows(treeRootNodes(), nodesById(), expandedNodes))
   const visibleRows = createMemo(() => {
     if (mode() === "search") {
-      return treeRows()
+      return treeRowsState.rows()
     }
-    return treeRows()
+    return treeRowsState.rows()
   })
 
   const indexByID = createMemo(() => {
@@ -119,6 +126,7 @@ export function createVM(options: CreateVMOptions) {
     if (!node?.hasChildren) return
     if (isExpanded(nodeId)) return
     setExpandedNodes(nodeId, true)
+    treeRowsState.beginChildReveal(nodeId)
     const missingIds = node.childIds.filter((childId) => !getNode(childId))
     if (missingIds.length === 0) return
     void options.introspection.ensureNodes(missingIds)
@@ -143,7 +151,7 @@ export function createVM(options: CreateVMOptions) {
     if (!row) return
     const node = getNode(row.id)
     if (!node?.hasChildren) return
-    const firstChildId = getChildIds(row.id)[0]
+    const firstChildId = getLoadedChildIds(row.id)[0]
     if (!firstChildId) return
     batch(() => {
       expandNode(row.id)
@@ -193,8 +201,7 @@ export function createVM(options: CreateVMOptions) {
     setMode,
     filter,
     setFilter,
-    treeRootNodes,
-    treeRows,
+    treeRootIds: treeRowsState.getTopLevelIds,
     visibleRows,
     selectedId,
     selectedRow,
@@ -203,7 +210,7 @@ export function createVM(options: CreateVMOptions) {
     collapseCurrentOrParent,
     activateSelection,
     getNode,
-    getTreeChildIds,
+    getTreeChildIds: treeRowsState.getChildIds,
     isExpanded,
     selectNode,
     collapseNode,
@@ -212,6 +219,132 @@ export function createVM(options: CreateVMOptions) {
 }
 
 export type ExplorerViewModel = ReturnType<typeof createVM>
+
+type CreateIterativeRowsOptions = {
+  getTopLevelIds: Accessor<string[]>
+  getChildIds: (nodeId: string) => string[]
+  getHasChildren: (nodeId: string) => boolean
+  isReady: (nodeId: string) => boolean
+  resetKey: Accessor<string>
+}
+
+/**
+ * Introspection already hydrates nodes incrementally, but expanding a node with
+ * thousands of children still freezes the TUI if we mount every row in one turn.
+ * Keep display incremental too, so large branches become interactive immediately.
+ */
+function createIterativeRows(options: CreateIterativeRowsOptions) {
+  const [topLevelCount, setTopLevelCount] = createSignal(0)
+  const [childCounts, setChildCounts] = createStore<Record<string, number>>({})
+  const nodesWithPendingChildren = new Set<string>()
+  let revealTimeoutHandle: ReturnType<typeof setTimeout> | null = null
+
+  const clearSchedule = () => {
+    if (revealTimeoutHandle === null) return
+    clearTimeout(revealTimeoutHandle)
+    revealTimeoutHandle = null
+  }
+
+  const reset = () => {
+    clearSchedule()
+    nodesWithPendingChildren.clear()
+    setTopLevelCount(0)
+    setChildCounts({})
+  }
+
+  const revealNextTopLevelBatch = () => {
+    const ids = options.getTopLevelIds()
+    const current = topLevelCount()
+    if (current >= ids.length) return false
+    setTopLevelCount(Math.min(ids.length, current + CHILD_BATCH_SIZE))
+    return topLevelCount() < ids.length
+  }
+
+  const revealNextChildBatch = (nodeId: string) => {
+    const ids = options.getChildIds(nodeId)
+    const current = childCounts[nodeId] ?? 0
+    if (current >= ids.length) return false
+    setChildCounts(nodeId, Math.min(ids.length, current + CHILD_BATCH_SIZE))
+    return (childCounts[nodeId] ?? 0) < ids.length
+  }
+
+  const processRevealQueue = () => {
+    revealTimeoutHandle = null
+
+    const hasMoreTopLevel = revealNextTopLevelBatch()
+
+    const completed = new Set<string>()
+    for (const nodeId of nodesWithPendingChildren) {
+      if (!options.getHasChildren(nodeId)) {
+        completed.add(nodeId)
+        continue
+      }
+      if (!revealNextChildBatch(nodeId)) {
+        completed.add(nodeId)
+      }
+    }
+    for (const nodeId of completed) {
+      nodesWithPendingChildren.delete(nodeId)
+    }
+
+    if (hasMoreTopLevel || nodesWithPendingChildren.size > 0) {
+      revealTimeoutHandle = setTimeout(processRevealQueue, 0)
+    }
+  }
+
+  const scheduleNextReveal = () => {
+    if (revealTimeoutHandle !== null) return
+    revealTimeoutHandle = setTimeout(processRevealQueue, 0)
+  }
+
+  const beginRootReveal = () => {
+    revealNextTopLevelBatch()
+    if (topLevelCount() < options.getTopLevelIds().length) {
+      scheduleNextReveal()
+    }
+  }
+
+  const beginChildReveal = (nodeId: string) => {
+    if (!options.getHasChildren(nodeId)) return
+    revealNextChildBatch(nodeId)
+    if ((childCounts[nodeId] ?? 0) < options.getChildIds(nodeId).length) {
+      nodesWithPendingChildren.add(nodeId)
+    }
+    if (nodesWithPendingChildren.size > 0) {
+      scheduleNextReveal()
+    }
+  }
+
+  const getTopLevelVisibleIds = createMemo(
+    () => options
+      .getTopLevelIds()
+      .slice(0, topLevelCount())
+      .filter(options.isReady)
+  )
+
+  const getVisibleChildIds = (nodeId: string) => {
+    const count = childCounts[nodeId] ?? 0
+    return options.getChildIds(nodeId).slice(0, count).filter(options.isReady)
+  }
+
+  const rows = createMemo(() => buildRows(getTopLevelVisibleIds(), options.getHasChildren, getVisibleChildIds))
+
+  createComputed(on(options.resetKey, () => {
+    reset()
+    beginRootReveal()
+  }))
+  onCleanup(() => {
+    clearSchedule()
+  })
+
+  return {
+    rows,
+    getTopLevelIds: getTopLevelVisibleIds,
+    getChildIds: getVisibleChildIds,
+    beginRootReveal,
+    beginChildReveal,
+  }
+}
 
 function sortRootNodes(rootIds: string[], nodesById: Record<string, ExplorerNode>) {
   const nodes = rootIds.map((id) => nodesById[id]).filter((node): node is ExplorerNode => Boolean(node))
@@ -247,33 +380,31 @@ function isDefaultRoot(node?: Node): boolean {
   return node.attributes.isDefault
 }
 
-export function buildTreeRows(
-  rootNodes: readonly ExplorerNode[],
-  nodesById: Record<string, ExplorerNode>,
-  expandedNodes: Record<string, true>,
+export function buildRows(
+  rootIds: readonly string[],
+  getHasChildren: (nodeId: string) => boolean,
+  getChildIds: (nodeId: string) => string[],
 ) {
   const rows: VisibleRow[] = []
-  for (const node of rootNodes) {
-    rows.push({ id: node.id, depth: 0 })
-    if (!node.hasChildren || !expandedNodes[node.id]) continue
-    appendTreeRows(rows, node, 1, nodesById, expandedNodes)
+  for (const rootId of rootIds) {
+    rows.push({ id: rootId, depth: 0 })
+    if (!getHasChildren(rootId)) continue
+    appendRows(rows, rootId, 1, getHasChildren, getChildIds)
   }
   return rows
 }
 
-function appendTreeRows(
+function appendRows(
   rows: VisibleRow[],
-  parent: ExplorerNode,
+  parentId: string,
   depth: number,
-  nodesById: Record<string, ExplorerNode>,
-  expandedNodes: Record<string, true>,
+  getHasChildren: (nodeId: string) => boolean,
+  getChildIds: (nodeId: string) => string[],
 ) {
-  for (const childId of parent.childIds) {
-    const node = nodesById[childId]
-    if (!node) continue
-    rows.push({ id: node.id, depth, parentId: parent.id })
-    if (!node.hasChildren || !expandedNodes[node.id]) continue
-    appendTreeRows(rows, node, depth + 1, nodesById, expandedNodes)
+  for (const childId of getChildIds(parentId)) {
+    rows.push({ id: childId, depth, parentId })
+    if (!getHasChildren(childId)) continue
+    appendRows(rows, childId, depth + 1, getHasChildren, getChildIds)
   }
 }
 

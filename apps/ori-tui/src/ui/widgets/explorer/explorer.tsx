@@ -17,7 +17,7 @@ export type ExplorerProps = {
 
 export function Explorer(props: ExplorerProps) {
   const explorer = props.viewModel
-  const treeRootNodes = explorer.treeRootNodes
+  const treeRootIds = explorer.treeRootIds
   const rows = explorer.visibleRows
   const selectedId = explorer.selectedId
   const isRowSelected = createSelector(selectedId)
@@ -158,7 +158,7 @@ export function Explorer(props: ExplorerProps) {
               minHeight="100%"
             >
               <Show
-                when={treeRootNodes().length > 0}
+                when={treeRootIds().length > 0}
                 fallback={
                   <Show when={!explorer.loading() && !explorer.error()}>
                     <text
@@ -190,10 +190,10 @@ export function Explorer(props: ExplorerProps) {
                   />
                 </Show>
 
-                <For each={treeRootNodes()}>
-                  {(node) => (
+                <For each={treeRootIds()}>
+                  {(nodeId) => (
                     <ExplorerRow
-                      nodeId={node.id}
+                      nodeId={nodeId}
                       depth={0}
                       isFocused={explorer.isFocused}
                       explorer={explorer}
