@@ -141,6 +141,24 @@ export function Explorer(props: ExplorerProps) {
               <text fg={theme().get("error")}>Failed to load graph: {message()}</text>
             )}
           </Show>
+          <Show when={explorer.mode() === "search"}>
+            <input
+              ref={(el) => {
+                inputRef = el
+              }}
+              value={explorer.filter()}
+              placeholder={"Type to search"}
+              cursorColor={theme().get("primary")}
+              textColor={theme().get("text")}
+              focusedTextColor={theme().get("text")}
+              backgroundColor={theme().get("editor_background")}
+              focusedBackgroundColor={theme().get("editor_background")}
+              onInput={(value) => {
+                explorer.setFilter(value)
+              }}
+              marginBottom={1}
+            />
+          </Show>
           <OriScrollbox
             onReady={(node) => {
               scrollBoxRef = node
@@ -171,25 +189,6 @@ export function Explorer(props: ExplorerProps) {
                   </Show>
                 }
               >
-                <Show when={explorer.mode() === "search"}>
-                  <input
-                    ref={(el) => {
-                      inputRef = el
-                    }}
-                    value={explorer.filter()}
-                    placeholder={"Type to search"}
-                    cursorColor={theme().get("primary")}
-                    textColor={theme().get("text")}
-                    focusedTextColor={theme().get("text")}
-                    backgroundColor={theme().get("editor_background")}
-                    focusedBackgroundColor={theme().get("editor_background")}
-                    onInput={(value) => {
-                      explorer.setFilter(value)
-                    }}
-                    marginBottom={1}
-                  />
-                </Show>
-
                 <For each={treeRootIds()}>
                   {(nodeId) => (
                     <ExplorerRow
