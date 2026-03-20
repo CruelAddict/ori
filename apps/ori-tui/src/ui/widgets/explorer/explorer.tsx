@@ -81,6 +81,7 @@ export function Explorer(props: ExplorerProps) {
         handler: () => {
           explorer.setMode("default")
           explorer.setFilter("")
+          setTimeout(() => ensureSelectedVisible(), 0)
         },
         preventDefault: true,
       },

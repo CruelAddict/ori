@@ -34,6 +34,17 @@ export function createVM(options: CreateVMOptions) {
   const [selectedId, setSelectedId] = createSignal<string | null>(null)
   const [expandedNodes, setExpandedNodes] = createStore<Record<string, true>>({})
 
+  const setUIMode = (mode: UIMode) => {
+    switch (mode) {
+      case "default":
+        setRootIdsState(options.introspection.getState().rootIds)
+        break
+      case "search":
+        setRootIdsState([])
+    }
+    setMode(mode)
+  }
+
   const unsubscribe = options.introspection.subscribe(() => {
     const state = options.introspection.getState()
     setNodesByIdState(state.nodesById)
@@ -86,12 +97,7 @@ export function createVM(options: CreateVMOptions) {
     resetKey: () => rootIds().join("\0"),
   })
 
-  const visibleRows = createMemo(() => {
-    if (mode() === "search") {
-      return treeRowsState.rows()
-    }
-    return treeRowsState.rows()
-  })
+  const visibleRows = createMemo(treeRowsState.rows)
 
   const indexByID = createMemo(() => {
     const map = new Map<string, number>()
@@ -198,7 +204,7 @@ export function createVM(options: CreateVMOptions) {
     error,
     refreshGraph,
     mode,
-    setMode,
+    setMode: setUIMode,
     filter,
     setFilter,
     treeRootIds: treeRowsState.getTopLevelIds,
@@ -315,11 +321,8 @@ function createIterativeRows(options: CreateIterativeRowsOptions) {
     }
   }
 
-  const getTopLevelVisibleIds = createMemo(
-    () => options
-      .getTopLevelIds()
-      .slice(0, topLevelCount())
-      .filter(options.isReady)
+  const getTopLevelVisibleIds = createMemo(() =>
+    options.getTopLevelIds().slice(0, topLevelCount()).filter(options.isReady),
   )
 
   const getVisibleChildIds = (nodeId: string) => {
@@ -329,10 +332,12 @@ function createIterativeRows(options: CreateIterativeRowsOptions) {
 
   const rows = createMemo(() => buildRows(getTopLevelVisibleIds(), options.getHasChildren, getVisibleChildIds))
 
-  createComputed(on(options.resetKey, () => {
-    reset()
-    beginRootReveal()
-  }))
+  createComputed(
+    on(options.resetKey, () => {
+      reset()
+      beginRootReveal()
+    }),
+  )
   onCleanup(() => {
     clearSchedule()
   })
@@ -409,10 +414,10 @@ function appendRows(
 }
 
 export function normalizeSelectedId(current: string | null, rows: VisibleRow[], rowIndexMap: Map<string, number>) {
-  if (!rows.length) return null
+  if (!rows.length) return current
   if (!current) return rows[0]?.id ?? null
   if (rowIndexMap.has(current)) return current
-  return rows[0]?.id ?? null
+  return current
 }
 
 export function moveSelectedId(
