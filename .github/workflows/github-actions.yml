@@ -5,23 +5,12 @@ jobs:
   init:
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: ./.github/actions/init
-  build:
-    needs: init
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v4
+      - name: Download Registry
+        uses: actions/checkout@v4
       - uses: ./.github/actions/init
       - uses: ./.github/actions/make
         with:
           action: build
-  test:
-    needs: build
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: ./.github/actions/init
       - uses: ./.github/actions/make
         with:
           action: test

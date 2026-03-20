@@ -3,7 +3,7 @@ name: "Init"
 runs:
   using: "composite"
   steps:
-    - name: Show info
+    - name: Show Info
       run: echo "Triggered by ${{ github.event_name }} by ${{ github.actor }}"
       shell: bash
     - name: Setup Go
