@@ -12,7 +12,11 @@ jobs:
         uses: ./.github/actions/make
         with:
           action: build
-      - name: Make Test
+      - name: Make Backend Test
         uses: ./.github/actions/make
         with:
           action: test
+      - name: Make UI Test
+        uses: ./.github/actions/make
+        with:
+          action: ui_test

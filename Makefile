@@ -28,6 +28,11 @@ test:
 	@$(MAKE) -C apps/ori-be test
 	@echo "Tests complete!"
 
+ui_test:
+	@echo "Running tests..."
+	@$(MAKE) -C apps/ori-tui test
+	@echo "UI Tests complete!"
+
 contract-check:
 	@./scripts/contract_check_strict.sh
 
