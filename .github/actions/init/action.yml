@@ -9,3 +9,7 @@ runs:
     - name: Show info
       run: echo "Triggered by ${{ github.event_name }} by ${{ github.actor }}"
       shell: bash
+    - name: Setup Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: "1.24"
