@@ -1,0 +1,11 @@
+---
+name: "Init info"
+inputs:
+  runner:
+    default: "macos-latest"
+runs:
+  using: "composite"
+  steps:
+    - name: Show info
+      run: echo "Triggered by ${{ github.event_name }} by ${{ github.actor }}"
+      shell: bash

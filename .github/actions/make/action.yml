@@ -1,0 +1,11 @@
+---
+name: "Make action"
+inputs:
+  action:
+    required: true
+runs:
+  using: "composite"
+  steps:
+    - uses: actions/checkout@v4
+    - run: make ${{ inputs.action }}
+      shell: bash
