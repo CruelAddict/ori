@@ -7,6 +7,8 @@ runs:
   using: "composite"
   steps:
     - run: echo $PATH
+      shell: bash
     - run: ls -laF /Users/runner/hostedtoolcache/go/
+      shell: bash
     - run: make ${{ inputs.action }}
       shell: bash
