@@ -2,15 +2,17 @@
 name: Github pipeline
 on: [push]
 jobs:
-  init:
+  unit-test:
     runs-on: macos-latest
     steps:
       - name: Download Registry
         uses: actions/checkout@v4
       - uses: ./.github/actions/init
-      - uses: ./.github/actions/make
+      - name: Make Build
+        uses: ./.github/actions/make
         with:
           action: build
-      - uses: ./.github/actions/make
+      - name: Make Test
+        uses: ./.github/actions/make
         with:
           action: test

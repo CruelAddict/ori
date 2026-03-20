@@ -1,5 +1,4 @@
 ---
-name: "Make ${{ inputs.action }}"
 inputs:
   action:
     required: true
