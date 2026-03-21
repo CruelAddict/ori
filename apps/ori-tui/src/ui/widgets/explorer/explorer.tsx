@@ -17,7 +17,6 @@ export type ExplorerProps = {
 
 export function Explorer(props: ExplorerProps) {
   const explorer = props.viewModel
-  const treeRootIds = explorer.treeRootIds
   const rows = explorer.visibleRows
   const selectedId = explorer.selectedId
   const isRowSelected = createSelector(selectedId)
@@ -177,7 +176,7 @@ export function Explorer(props: ExplorerProps) {
               minHeight="100%"
             >
               <Show
-                when={treeRootIds().length > 0}
+                when={rows().length > 0}
                 fallback={
                   <Show when={!explorer.loading() && !explorer.error()}>
                     <text
@@ -185,16 +184,15 @@ export function Explorer(props: ExplorerProps) {
                       fg={theme().get("text_muted")}
                       selectable={false}
                     >
-                      Graph is empty. Try refreshing later.
+                      {explorer.mode() === "search" ? "No matching nodes." : "Graph is empty. Try refreshing later."}
                     </text>
                   </Show>
                 }
               >
-                <For each={treeRootIds()}>
-                  {(nodeId) => (
+                <For each={rows()}>
+                  {(row) => (
                     <ExplorerRow
-                      nodeId={nodeId}
-                      depth={0}
+                      row={() => row}
                       isFocused={explorer.isFocused}
                       explorer={explorer}
                       isRowSelected={isRowSelected}

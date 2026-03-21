@@ -6,8 +6,6 @@ import type { ResourceIntrospectionUsecase } from "@usecase/introspection/usecas
 import type { Accessor } from "solid-js"
 import { createEffect, createMemo, createSignal } from "solid-js"
 
-export type Pane = "explorer" | "editor" | "results"
-
 type EditorDeps = Parameters<typeof createEditorVM>[0]
 
 type CreateVMOptions = {
@@ -16,6 +14,8 @@ type CreateVMOptions = {
   query: EditorDeps["query"]
   introspection: Pick<ResourceIntrospectionUsecase, "subscribe" | "getState" | "load" | "refresh" | "ensureNodes">
 }
+
+export type Pane = "explorer" | "editor" | "results"
 
 const DEFAULT_PANE: Pane = "explorer"
 

@@ -1,18 +1,17 @@
 import type { MouseEvent } from "@opentui/core"
 import { TextAttributes } from "@opentui/core"
 import { useTheme } from "@ui/providers/theme"
-import { type Accessor, createEffect, createMemo, createSignal, For, Show } from "solid-js"
+import { type Accessor, createMemo, createSignal, Show } from "solid-js"
 import type { ExplorerRowSegment } from "./explorer-row-renderable.ts"
 import type { ExplorerNode } from "./model/explorer-node"
-import type { ExplorerViewModel } from "./view-model/create-vm"
+import type { ExplorerViewModel, VisibleRow } from "./view-model/create-vm"
 import "./explorer-row-renderable.ts"
 
 const ROW_LEFT_PADDING = 2
 const GLYPH_SEPARATOR_WIDTH = 1
 
 type ExplorerRowProps = {
-  nodeId: string
-  depth: number
+  row: Accessor<VisibleRow>
   isFocused: Accessor<boolean>
   explorer: ExplorerViewModel
   isRowSelected: (key: string) => boolean
@@ -20,18 +19,15 @@ type ExplorerRowProps = {
 
 export function ExplorerRow(props: ExplorerRowProps) {
   const { theme } = useTheme()
-
-  const node = createMemo(() => props.explorer.getNode(props.nodeId))
-  const childIds = createMemo(() => props.explorer.getTreeChildIds(props.nodeId))
-  const rowId = () => props.nodeId
-  const isExpanded = () => props.explorer.isExpanded(props.nodeId)
-  const isSelected = () => props.isRowSelected(props.nodeId)
-  const [childrenMounted, setChildrenMounted] = createSignal(false)
   const [hovered, setHovered] = createSignal(false)
 
-  createEffect(() => {
-    if (isExpanded()) setChildrenMounted(true)
-  })
+  const isSearchMode = () => props.explorer.mode() === "search"
+  const row = () => props.row()
+  const rowId = () => row().id
+  const depth = () => row().depth
+  const node = createMemo(() => props.explorer.getNode(rowId()))
+  const isExpanded = () => props.explorer.isExpanded(rowId())
+  const isSelected = () => props.isRowSelected(rowId())
 
   const fg = () => (isSelected() && props.isFocused() ? theme().get("selection_foreground") : theme().get("text"))
   const bg = () => {
@@ -43,26 +39,27 @@ export function ExplorerRow(props: ExplorerRowProps) {
   const handleMouseDown = (event: MouseEvent) => {
     event.preventDefault()
     const wasFocused = props.isFocused()
+    const id = rowId()
     props.explorer.focusSelf()
 
     if (!isSelected()) {
-      props.explorer.selectNode(props.nodeId)
+      props.explorer.selectNode(id)
       return
     }
 
-    if (!wasFocused) return
+    if (!wasFocused || isSearchMode()) return
 
     const current = node()
     if (!current?.hasChildren) return
     if (isExpanded()) {
-      props.explorer.collapseNode(props.nodeId)
+      props.explorer.collapseNode(id)
       return
     }
 
-    props.explorer.expandNode(props.nodeId)
+    props.explorer.expandNode(id)
   }
 
-  const rowParts = createMemo(() => buildRowTextParts(node(), isExpanded()))
+  const rowParts = createMemo(() => buildRowTextParts(node(), isExpanded(), isSearchMode()))
 
   const rowSegments = createMemo(() => {
     const parts = rowParts()
@@ -96,6 +93,7 @@ export function ExplorerRow(props: ExplorerRowProps) {
     }
     return segments
   })
+
   const rowWidth = createMemo(() => calculateRowTextWidth(rowParts()))
 
   return (
@@ -104,48 +102,28 @@ export function ExplorerRow(props: ExplorerRowProps) {
       keyed
     >
       {(_: ExplorerNode) => (
-        <>
-          <box
-            id={`explorer-row-${rowId()}`}
-            flexDirection="row"
-            paddingLeft={ROW_LEFT_PADDING + props.depth * 2}
-            paddingRight={1}
-            minWidth={30}
-            alignSelf="stretch"
-            flexShrink={1}
-            backgroundColor={bg()}
-            onMouseOver={() => setHovered(true)}
-            onMouseOut={() => setHovered(false)}
-            onMouseDown={handleMouseDown}
-          >
-            <explorer_row
-              segments={rowSegments()}
-              width={rowWidth()}
-              fg={fg()}
-              bg={bg()}
-              defaultFg={fg()}
-              selectable={false}
-            />
-          </box>
-          <Show when={childrenMounted()}>
-            <box
-              flexDirection="column"
-              visible={isExpanded()}
-            >
-              <For each={childIds()}>
-                {(childId) => (
-                  <ExplorerRow
-                    nodeId={childId}
-                    depth={props.depth + 1}
-                    isFocused={props.isFocused}
-                    explorer={props.explorer}
-                    isRowSelected={props.isRowSelected}
-                  />
-                )}
-              </For>
-            </box>
-          </Show>
-        </>
+        <box
+          id={`explorer-row-${rowId()}`}
+          flexDirection="row"
+          paddingLeft={ROW_LEFT_PADDING + depth() * 2}
+          paddingRight={1}
+          minWidth={30}
+          alignSelf="stretch"
+          flexShrink={1}
+          backgroundColor={bg()}
+          onMouseOver={() => setHovered(true)}
+          onMouseOut={() => setHovered(false)}
+          onMouseDown={handleMouseDown}
+        >
+          <explorer_row
+            segments={rowSegments()}
+            width={rowWidth()}
+            fg={fg()}
+            bg={bg()}
+            defaultFg={fg()}
+            selectable={false}
+          />
+        </box>
       )}
     </Show>
   )
@@ -158,9 +136,9 @@ type RowTextParts = {
   badges: string[]
 }
 
-function buildRowTextParts(details: ExplorerNode | undefined, expanded: boolean): RowTextParts {
+function buildRowTextParts(details: ExplorerNode | undefined, expanded: boolean, isSearchMode: boolean): RowTextParts {
   const hasChildren = Boolean(details?.hasChildren)
-  const glyph = hasChildren ? (expanded ? "▽" : "▷") : "·"
+  const glyph = isSearchMode ? "·" : hasChildren ? (expanded ? "▽" : "▷") : "·"
   const label = details?.label ?? ""
   return {
     glyph,
