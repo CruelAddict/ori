@@ -4,6 +4,12 @@ import { createEdgeExplorerNode, createSnapshotExplorerNode, type ExplorerNode }
 type ConstraintNode = Extract<Node, { type: typeof NodeType.CONSTRAINT }>
 type TriggerNode = Extract<Node, { type: typeof NodeType.TRIGGER }>
 
+export type ExplorerGraph = {
+  nodesById: Record<string, ExplorerNode>
+  rootIds: string[]
+  searchable: Array<{ id: string; name: string }>
+}
+
 // Converts backend introspection graph to a format for representation in explorer
 // For example, certain edges (e.g. "columns") become nodes that you can select and expand
 export function createExplorerNodesById(nodes: Record<string, Node>) {
@@ -16,6 +22,15 @@ export function createExplorerNodesById(nodes: Record<string, Node>) {
     }
   }
   return explorerNodesById
+}
+
+export function createExplorerGraph(snapshot: { nodesById: Record<string, Node>; rootIds: string[] }): ExplorerGraph {
+  const nodesById = createExplorerNodesById(snapshot.nodesById)
+  return {
+    nodesById,
+    rootIds: sortRootIds(snapshot.rootIds, nodesById),
+    searchable: Object.values(nodesById).map((node) => ({ id: node.id, name: node.label })),
+  }
 }
 
 export function convertSnapshotNodeEntities(node: Node): ExplorerNode[] {
@@ -119,4 +134,38 @@ function formatTriggerActionLabel(attrs: TriggerNode["attributes"]): string | un
   if (statement) labels.push(statement.toLowerCase())
   if (labels.length === 0) return undefined
   return labels.join(", ")
+}
+
+function sortRootIds(rootIds: string[], nodesById: Record<string, ExplorerNode>) {
+  const nodes = rootIds.map((id) => nodesById[id]).filter((node): node is ExplorerNode => Boolean(node))
+  nodes.sort((left, right) => {
+    const leftNode = getSnapshotNode(left)
+    const rightNode = getSnapshotNode(right)
+    const leftDefault = isDefaultRoot(leftNode)
+    const rightDefault = isDefaultRoot(rightNode)
+
+    if (leftDefault !== rightDefault) {
+      return leftDefault ? -1 : 1
+    }
+
+    const byName = (leftNode?.name ?? "").toLocaleLowerCase().localeCompare((rightNode?.name ?? "").toLocaleLowerCase())
+    if (byName !== 0) {
+      return byName
+    }
+
+    return left.id.localeCompare(right.id)
+  })
+  return nodes.map((node) => node.id)
+}
+
+function getSnapshotNode(node: ExplorerNode | undefined) {
+  if (!node) return undefined
+  if (node.kind !== "node") return undefined
+  return node.node
+}
+
+function isDefaultRoot(node?: Node): boolean {
+  if (!node) return false
+  if (node.type !== NodeType.DATABASE && node.type !== NodeType.SCHEMA) return false
+  return node.attributes.isDefault
 }
