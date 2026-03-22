@@ -2,7 +2,7 @@ import type { ResourceIntrospectionUsecase } from "@usecase/introspection/usecas
 import type { Accessor } from "solid-js"
 import { batch, createComputed, createMemo, createSignal, onCleanup } from "solid-js"
 import { createExplorerGraph } from "./explorer-graph"
-import { createExplorerRenderedRows, type ExplorerRenderedRow } from "./explorer-rendered-rows"
+import { createExplorerRenderedRows } from "./explorer-rendered-rows"
 import { createExplorerRows } from "./explorer-rows"
 import type { UIMode } from "./explorer-types"
 
@@ -127,12 +127,7 @@ export function createVM(options: CreateVMOptions) {
     await options.introspection.refresh()
   }
 
-  const visibleRows = createMemo(() =>
-    renderedRowsState
-      .rows()
-      .map((row) => renderedRowsState.getRow(row.id))
-      .filter((row): row is ExplorerRenderedRow => Boolean(row)),
-  )
+  const visibleRows = renderedRowsState.visibleRows
 
   return {
     isFocused: options.isFocused,

@@ -96,6 +96,12 @@ export function createExplorerRenderedRows(options: CreateExplorerRenderedRowsOp
     return renderedRow
   }
 
+  const visibleRows = createMemo(() =>
+    rows()
+      .map((row) => getRow(row.id))
+      .filter((row): row is ExplorerRenderedRow => Boolean(row)),
+  )
+
   const clearSchedule = () => {
     if (timeoutHandle === null) return
     clearTimeout(timeoutHandle)
@@ -143,6 +149,7 @@ export function createExplorerRenderedRows(options: CreateExplorerRenderedRowsOp
     rows,
     rowById,
     getRow,
+    visibleRows,
   }
 
   function applyChange(change: NonBatchExplorerRowsPatch) {
