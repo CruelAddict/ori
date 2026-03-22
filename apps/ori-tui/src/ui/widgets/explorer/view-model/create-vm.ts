@@ -3,7 +3,7 @@ import type { Accessor } from "solid-js"
 import { batch, createComputed, createMemo, createSignal, onCleanup } from "solid-js"
 import { createExplorerGraph } from "./explorer-graph"
 import { createExplorerRenderedRows, type ExplorerRenderedRow } from "./explorer-rendered-rows"
-import { createExplorerRows, findExplorerRow } from "./explorer-rows"
+import { createExplorerRows } from "./explorer-rows"
 import type { UIMode } from "./explorer-types"
 
 type CreateVMOptions = {
@@ -38,12 +38,11 @@ export function createVM(options: CreateVMOptions) {
     }),
   )
 
-  const activeSelectedId = createMemo(() => (mode() === "search" ? searchSelectedId() : defaultSelectedId()))
   const rowsState = createExplorerRows({
     graph,
     mode,
     filter,
-    isSelected: (id) => activeSelectedId() === id,
+    isSelected: (id) => selectedId() === id,
     select: (id) => setSelectedId(id),
     ensureNodes: (ids) => options.introspection.ensureNodes(ids),
   })
@@ -51,7 +50,6 @@ export function createVM(options: CreateVMOptions) {
     change: rowsState.change,
     getRow: rowsState.getRow,
   })
-  const selectedId = createMemo(() => activeSelectedId() ?? rowsState.rows()[0]?.id ?? null)
 
   const setFilter = (value: string) => {
     setFilterState(value)
@@ -82,6 +80,11 @@ export function createVM(options: CreateVMOptions) {
       return
     }
     setDefaultSelectedId(nodeId)
+  }
+
+  function selectedId() {
+    const id = mode() === "search" ? searchSelectedId() : defaultSelectedId()
+    return id ?? rowsState.rows()[0]?.id ?? null
   }
 
   const moveSelection = (delta: number) => {
