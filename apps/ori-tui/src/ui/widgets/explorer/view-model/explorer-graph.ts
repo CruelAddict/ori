@@ -16,7 +16,6 @@ export type ExplorerGraphNode = {
   readonly badges: readonly string[]
   readonly hasChildren: boolean
   readonly childIds: readonly string[]
-  parent: () => ExplorerGraphNode | null
   children: () => ExplorerGraphNode[]
   firstChild: () => ExplorerGraphNode | null
 }
@@ -30,7 +29,7 @@ export type ExplorerGraph = {
 
 // Converts backend introspection graph to a format for representation in explorer
 // For example, certain edges (e.g. "columns") become nodes that you can select and expand
-export function createExplorerNodesById(nodes: Record<string, Node>) {
+function createExplorerNodesById(nodes: Record<string, Node>) {
   const explorerNodesById: Record<string, ExplorerNodeState> = {}
   for (const id of Object.keys(nodes)) {
     const node = nodes[id]
@@ -44,7 +43,6 @@ export function createExplorerNodesById(nodes: Record<string, Node>) {
 
 export function createExplorerGraph(snapshot: { nodesById: Record<string, Node>; rootIds: string[] }): ExplorerGraph {
   const nodesById = createExplorerNodesById(snapshot.nodesById)
-  const parentIdsById = createParentIdsById(nodesById)
   const nodes = new Map<string, ExplorerGraphNode>()
 
   const getNode = (id: string | null): ExplorerGraphNode | null => {
@@ -75,7 +73,6 @@ export function createExplorerGraph(snapshot: { nodesById: Record<string, Node>;
       get childIds() {
         return nodesById[id]?.childIds ?? []
       },
-      parent: () => getNode(parentIdsById[id] ?? null),
       children: () => {
         const childIds = nodesById[id]?.childIds ?? []
         return childIds.map((childId) => getNode(childId)).filter((child): child is ExplorerGraphNode => Boolean(child))
@@ -236,17 +233,4 @@ function isDefaultRoot(node?: Node): boolean {
   if (!node) return false
   if (node.type !== NodeType.DATABASE && node.type !== NodeType.SCHEMA) return false
   return node.attributes.isDefault
-}
-
-function createParentIdsById(nodesById: Record<string, ExplorerNodeState>) {
-  const parentIdsById: Record<string, string> = {}
-  for (const id of Object.keys(nodesById)) {
-    const node = nodesById[id]
-    if (!node) continue
-    for (const childId of node.childIds) {
-      if (!nodesById[childId]) continue
-      parentIdsById[childId] = id
-    }
-  }
-  return parentIdsById
 }
