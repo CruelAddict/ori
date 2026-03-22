@@ -3,7 +3,8 @@ import type { Accessor } from "solid-js"
 import { batch, createComputed, createMemo, createSignal, onCleanup } from "solid-js"
 import { createExplorerGraph } from "./explorer-graph"
 import { createExplorerRenderedRows } from "./explorer-rendered-rows"
-import { createExplorerRows } from "./explorer-rows"
+import { createExplorerRows, getFirstVisibleRowId, isRowVisible, moveVisibleRowId } from "./explorer-rows"
+import type { ExplorerRowState } from "./explorer-rows"
 import type { UIMode } from "./explorer-types"
 
 type CreateVMOptions = {
@@ -42,8 +43,6 @@ export function createVM(options: CreateVMOptions) {
     graph,
     mode,
     filter,
-    isSelected: (id) => selectedId() === id,
-    select: (id) => setSelectedId(id),
     ensureNodes: (ids) => options.introspection.ensureNodes(ids),
   })
   const renderedRowsState = createExplorerRenderedRows({
@@ -55,21 +54,23 @@ export function createVM(options: CreateVMOptions) {
     setFilterState(value)
     queueMicrotask(() => {
       if (mode() !== "search") return
-      const firstVisibleRowId = rowsState.rows()[0]?.id ?? null
+      const firstVisibleRowId = getFirstVisibleRowId(rowsState.rows())
       setSearchSelectedId(firstVisibleRowId)
     })
   }
 
   createComputed(() => {
     if (mode() !== "default") return
-    const next = rowsState.normalizeId(defaultSelectedId())
+    const current = defaultSelectedId()
+    const next = getDefaultSelectedId(current, rowsState.rows(), rowsState.indexById())
     if (next === defaultSelectedId()) return
     setDefaultSelectedId(next)
   })
 
   createComputed(() => {
     if (mode() !== "search") return
-    const next = rowsState.normalizeId(searchSelectedId(), { preserveHidden: false })
+    const current = searchSelectedId()
+    const next = getSearchSelectedId(current, rowsState.rows(), rowsState.indexById())
     if (next === searchSelectedId()) return
     setSearchSelectedId(next)
   })
@@ -84,11 +85,11 @@ export function createVM(options: CreateVMOptions) {
 
   function selectedId() {
     const id = mode() === "search" ? searchSelectedId() : defaultSelectedId()
-    return id ?? rowsState.rows()[0]?.id ?? null
+    return id ?? getFirstVisibleRowId(rowsState.rows())
   }
 
   const moveSelection = (delta: number) => {
-    setSelectedId(rowsState.moveId(selectedId(), delta))
+    setSelectedId(moveVisibleRowId(selectedId(), delta, rowsState.rows(), rowsState.indexById()))
   }
 
   const selectedRow = createMemo(() => renderedRowsState.getRow(selectedId()))
@@ -140,12 +141,28 @@ export function createVM(options: CreateVMOptions) {
     filter,
     setFilter,
     visibleRows,
+    selectedId,
+    select: setSelectedId,
     selectedRow,
     moveSelection,
     handleMoveIn,
     handleMoveOut,
     toggleExpanded,
   }
+}
+
+function getDefaultSelectedId(current: string | null, rows: ExplorerRowState[], rowIndexMap: Map<string, number>) {
+  if (!rows.length) return current
+  if (!current) return getFirstVisibleRowId(rows)
+  if (isRowVisible(current, rowIndexMap)) return current
+  return current
+}
+
+function getSearchSelectedId(current: string | null, rows: ExplorerRowState[], rowIndexMap: Map<string, number>) {
+  if (!rows.length) return current
+  if (!current) return getFirstVisibleRowId(rows)
+  if (isRowVisible(current, rowIndexMap)) return current
+  return getFirstVisibleRowId(rows)
 }
 
 export type ExplorerViewModel = ReturnType<typeof createVM>

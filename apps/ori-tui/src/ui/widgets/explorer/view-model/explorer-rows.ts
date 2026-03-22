@@ -27,8 +27,6 @@ export type ExplorerRow = {
   parent: () => ExplorerRow | null
   children: () => ExplorerRow[]
   firstChild: () => ExplorerRow | null
-  isSelected: () => boolean
-  select: () => void
   expand: () => void
   collapse: () => void
   toggle: () => void
@@ -45,8 +43,6 @@ type CreateExplorerRowsOptions = {
   graph: Accessor<ExplorerGraph>
   mode: Accessor<UIMode>
   filter: Accessor<string>
-  isSelected: (id: string) => boolean
-  select: (id: string) => void
   ensureNodes: (ids: string[]) => Promise<void>
 }
 
@@ -148,8 +144,6 @@ export function createExplorerRows(options: CreateExplorerRowsOptions) {
         }
         return null
       },
-      isSelected: () => options.isSelected(id),
-      select: () => options.select(id),
       expand: () => expandNode(id),
       collapse: () => collapseNode(id),
       toggle: () => toggleNode(id),
@@ -239,12 +233,11 @@ export function createExplorerRows(options: CreateExplorerRowsOptions) {
 
   return {
     rows,
+    indexById,
     rowById,
     change,
     getRow,
     getState,
-    moveId,
-    normalizeId,
     isExpanded,
     expandNode,
     collapseNode,
@@ -254,14 +247,6 @@ export function createExplorerRows(options: CreateExplorerRowsOptions) {
   function getState(id: string | null) {
     if (!id) return null
     return rowById().get(id) ?? null
-  }
-
-  function normalizeId(current: string | null, options?: NormalizeSelectedIdOptions) {
-    return normalizeSelectedId(current, rows(), indexById(), options)
-  }
-
-  function moveId(current: string | null, delta: number) {
-    return moveSelectedId(current, delta, rows(), indexById())
   }
 
   function syncDefaultRows(graph: ExplorerGraph) {
@@ -442,25 +427,16 @@ function getRowRange(rows: ExplorerRowState[], rowId: string) {
   }
 }
 
-type NormalizeSelectedIdOptions = {
-  preserveHidden?: boolean
+export function isRowVisible(current: string | null, rowIndexMap: Map<string, number>) {
+  if (!current) return false
+  return rowIndexMap.has(current)
 }
 
-export function normalizeSelectedId(
-  current: string | null,
-  rows: ExplorerRowState[],
-  rowIndexMap: Map<string, number>,
-  options?: NormalizeSelectedIdOptions,
-) {
-  const preserveHidden = options?.preserveHidden ?? true
-  if (!rows.length) return current
-  if (!current) return rows[0]?.id ?? null
-  if (rowIndexMap.has(current)) return current
-  if (!preserveHidden) return rows[0]?.id ?? null
-  return current
+export function getFirstVisibleRowId(rows: ExplorerRowState[]) {
+  return rows[0]?.id ?? null
 }
 
-export function moveSelectedId(
+export function moveVisibleRowId(
   current: string | null,
   delta: number,
   rows: ExplorerRowState[],

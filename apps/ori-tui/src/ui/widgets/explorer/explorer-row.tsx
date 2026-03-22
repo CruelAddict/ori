@@ -23,7 +23,7 @@ export function ExplorerRow(props: ExplorerRowProps) {
   const row = () => renderedRow().row
   const node = () => row().node
   const depth = () => row().depth
-  const isSelected = () => row().isSelected()
+  const isSelected = () => props.explorer.selectedId() === row().id
 
   const fg = () => (isSelected() && props.isFocused() ? theme().get("selection_foreground") : theme().get("text"))
   const bg = () => {
@@ -38,7 +38,7 @@ export function ExplorerRow(props: ExplorerRowProps) {
     props.explorer.focusSelf()
 
     if (!isSelected()) {
-      row().select()
+      props.explorer.select(row().id)
       return
     }
 
