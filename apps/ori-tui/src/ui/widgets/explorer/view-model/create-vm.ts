@@ -3,8 +3,8 @@ import type { Accessor } from "solid-js"
 import { batch, createComputed, createMemo, createSignal, onCleanup } from "solid-js"
 import { createExplorerGraph } from "./explorer-graph"
 import { createExplorerRenderedRows } from "./explorer-rendered-rows"
-import { createExplorerRows, getFirstVisibleRowId, isRowVisible, moveVisibleRowId } from "./explorer-rows"
 import type { ExplorerRowState } from "./explorer-rows"
+import { createExplorerRows, getFirstVisibleRowId, isRowVisible, moveVisibleRowId } from "./explorer-rows"
 import type { UIMode } from "./explorer-types"
 
 type CreateVMOptions = {
@@ -17,9 +17,9 @@ type Introspection = Pick<ResourceIntrospectionUsecase, "subscribe" | "getState"
 
 export function createVM(options: CreateVMOptions) {
   const [snapshot, setSnapshot] = createSignal(options.introspection.getState())
-  const [mode, setMode] = createSignal("default" as UIMode)
+  const [mode, setMode] = createSignal("tree" as UIMode)
   const [filter, setFilterState] = createSignal("")
-  const [defaultSelectedId, setDefaultSelectedId] = createSignal<string | null>(null)
+  const [treeSelectedId, setTreeSelectedId] = createSignal<string | null>(null)
   const [searchSelectedId, setSearchSelectedId] = createSignal<string | null>(null)
 
   const unsubscribe = options.introspection.subscribe(() => {
@@ -60,11 +60,11 @@ export function createVM(options: CreateVMOptions) {
   }
 
   createComputed(() => {
-    if (mode() !== "default") return
-    const current = defaultSelectedId()
-    const next = getDefaultSelectedId(current, rowsState.rows(), rowsState.indexById())
-    if (next === defaultSelectedId()) return
-    setDefaultSelectedId(next)
+    if (mode() !== "tree") return
+    const current = treeSelectedId()
+    const next = getTreeSelectedId(current, rowsState.rows(), rowsState.indexById())
+    if (next === treeSelectedId()) return
+    setTreeSelectedId(next)
   })
 
   createComputed(() => {
@@ -80,11 +80,11 @@ export function createVM(options: CreateVMOptions) {
       setSearchSelectedId(nodeId)
       return
     }
-    setDefaultSelectedId(nodeId)
+    setTreeSelectedId(nodeId)
   }
 
   function selectedId() {
-    const id = mode() === "search" ? searchSelectedId() : defaultSelectedId()
+    const id = mode() === "search" ? searchSelectedId() : treeSelectedId()
     return id ?? getFirstVisibleRowId(rowsState.rows())
   }
 
@@ -151,7 +151,7 @@ export function createVM(options: CreateVMOptions) {
   }
 }
 
-function getDefaultSelectedId(current: string | null, rows: ExplorerRowState[], rowIndexMap: Map<string, number>) {
+function getTreeSelectedId(current: string | null, rows: ExplorerRowState[], rowIndexMap: Map<string, number>) {
   if (!rows.length) return current
   if (!current) return getFirstVisibleRowId(rows)
   if (isRowVisible(current, rowIndexMap)) return current

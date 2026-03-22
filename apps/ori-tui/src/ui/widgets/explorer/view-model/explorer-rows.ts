@@ -80,8 +80,8 @@ export function createExplorerRows(options: CreateExplorerRowsOptions) {
       return
     }
 
-    if (prevMode !== "default" || prevRootKey !== roots) {
-      const next = buildDefaultRows(graph, untrack(expandedNodes))
+    if (prevMode !== "tree" || prevRootKey !== roots) {
+      const next = buildTreeRows(graph, untrack(expandedNodes))
       setRows(next)
       setChange({ type: "reset", rows: next })
       prevMode = mode
@@ -89,7 +89,7 @@ export function createExplorerRows(options: CreateExplorerRowsOptions) {
       return
     }
 
-    syncDefaultRows(graph)
+    syncTreeRows(graph)
     prevMode = mode
     prevRootKey = roots
   })
@@ -154,7 +154,7 @@ export function createExplorerRows(options: CreateExplorerRowsOptions) {
 
   const expandNode = (nodeId: string | null) => {
     if (!nodeId) return
-    if (options.mode() !== "default") return
+    if (options.mode() !== "tree") return
     const current = rows()
     const match = findExplorerRow(current, nodeId)
     if (!match) return
@@ -187,7 +187,7 @@ export function createExplorerRows(options: CreateExplorerRowsOptions) {
 
   const collapseNode = (nodeId: string | null) => {
     if (!nodeId) return
-    if (options.mode() !== "default") return
+    if (options.mode() !== "tree") return
     const current = rows()
     const match = findExplorerRow(current, nodeId)
     if (!match) return
@@ -249,7 +249,7 @@ export function createExplorerRows(options: CreateExplorerRowsOptions) {
     return rowById().get(id) ?? null
   }
 
-  function syncDefaultRows(graph: ExplorerGraph) {
+  function syncTreeRows(graph: ExplorerGraph) {
     const current = rows()
     const nextRows = current.slice()
     const updates: ExplorerRowState[] = []
@@ -260,7 +260,7 @@ export function createExplorerRows(options: CreateExplorerRowsOptions) {
       if (!row) continue
       const nextRow = createRow(graph, row.id, row.depth, row.parentId, Boolean(expanded[row.id]))
       if (!nextRow) {
-        const resetRows = buildDefaultRows(graph, expanded)
+        const resetRows = buildTreeRows(graph, expanded)
         setRows(resetRows)
         setChange({ type: "reset", rows: resetRows })
         return
@@ -280,7 +280,7 @@ export function createExplorerRows(options: CreateExplorerRowsOptions) {
       if (!row?.isExpanded) continue
       const visibleIds = getVisibleChildIds(nextRows, row.id)
       if (visibleIds.some((id) => !row.childIds.includes(id))) {
-        const resetRows = buildDefaultRows(graph, expanded)
+        const resetRows = buildTreeRows(graph, expanded)
         setRows(resetRows)
         setChange({ type: "reset", rows: resetRows })
         return
@@ -319,7 +319,7 @@ function buildSearchRows(graph: ExplorerGraph, filter: string) {
   return rows
 }
 
-function buildDefaultRows(graph: ExplorerGraph, expandedNodes: Record<string, true>) {
+function buildTreeRows(graph: ExplorerGraph, expandedNodes: Record<string, true>) {
   return buildSubtreeRows(graph, expandedNodes, graph.rootIds, undefined, 0)
 }
 

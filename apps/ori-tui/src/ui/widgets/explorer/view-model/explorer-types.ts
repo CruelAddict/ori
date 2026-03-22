@@ -1,1 +1,1 @@
-export type UIMode = "default" | "search"
+export type UIMode = "tree" | "search"

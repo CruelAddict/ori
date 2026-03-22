@@ -79,14 +79,14 @@ export function Explorer(props: ExplorerProps) {
       {
         pattern: "escape",
         handler: () => {
-          explorer.setMode("default")
+          explorer.setMode("tree")
           explorer.setFilter("")
           setTimeout(() => ensureSelectedVisible(), 0)
         },
         preventDefault: true,
       },
     ]
-    if (explorer.mode() === "default") {
+    if (explorer.mode() === "tree") {
       bindings.push(
         { pattern: "j", handler: () => explorer.moveSelection(1), preventDefault: true },
         { pattern: "k", handler: () => explorer.moveSelection(-1), preventDefault: true },
