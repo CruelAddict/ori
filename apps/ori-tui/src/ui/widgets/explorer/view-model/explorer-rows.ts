@@ -47,6 +47,7 @@ type CreateExplorerRowsOptions = {
   filter: Accessor<string>
   isSelected: (id: string) => boolean
   select: (id: string) => void
+  ensureNodes: (ids: string[]) => Promise<void>
 }
 
 export function createExplorerRows(options: CreateExplorerRowsOptions) {
@@ -182,6 +183,12 @@ export function createExplorerRows(options: CreateExplorerRowsOptions) {
     }
     setRows(nextRows)
     setChange(patches.length === 1 ? patches[0] : { type: "batch", patches })
+
+    const node = options.graph().getNode(nodeId)
+    if (!node?.hasChildren) return
+    const missingIds = node.childIds.filter((childId) => !options.graph().nodesById[childId])
+    if (missingIds.length === 0) return
+    void options.ensureNodes(missingIds)
   }
 
   const collapseNode = (nodeId: string | null) => {

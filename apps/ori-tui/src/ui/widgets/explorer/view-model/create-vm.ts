@@ -45,6 +45,7 @@ export function createVM(options: CreateVMOptions) {
     filter,
     isSelected: (id) => activeSelectedId() === id,
     select: (id) => setSelectedId(id),
+    ensureNodes: (ids) => options.introspection.ensureNodes(ids),
   })
   const renderedRowsState = createExplorerRenderedRows({
     change: rowsState.change,
@@ -56,7 +57,8 @@ export function createVM(options: CreateVMOptions) {
     setFilterState(value)
     queueMicrotask(() => {
       if (mode() !== "search") return
-      setSearchSelectedId(firstVisibleRowId(rowsState.rows()))
+      const firstVisibleRowId = rowsState.rows()[0]?.id ?? null
+      setSearchSelectedId(firstVisibleRowId)
     })
   }
 
@@ -82,27 +84,6 @@ export function createVM(options: CreateVMOptions) {
     setDefaultSelectedId(nodeId)
   }
 
-  const expandNode = (nodeId: string | null) => {
-    if (!nodeId) return
-    const node = graph().nodesById[nodeId]
-    if (!node?.hasChildren) return
-    if (rowsState.isExpanded(nodeId)) return
-    rowsState.expandNode(nodeId)
-    const missingIds = node.childIds.filter((childId) => !graph().nodesById[childId])
-    if (missingIds.length === 0) return
-    void options.introspection.ensureNodes(missingIds)
-  }
-
-  const collapseNode = (nodeId: string | null) => {
-    if (!nodeId) return
-    if (!rowsState.isExpanded(nodeId)) return
-    rowsState.collapseNode(nodeId)
-  }
-
-  const selectedRowState = createMemo(() => {
-    return rowsState.getState(selectedId())
-  })
-
   const moveSelection = (delta: number) => {
     setSelectedId(rowsState.moveId(selectedId(), delta))
   }
@@ -110,40 +91,33 @@ export function createVM(options: CreateVMOptions) {
   const selectedRow = createMemo(() => renderedRowsState.getRow(selectedId()))
 
   const focusFirstChild = () => {
-    const row = selectedRowState()
+    const row = selectedRow()?.row
     if (!row?.hasChildren) return
-    const childId = row.childIds[0]
-    if (!childId) return
     batch(() => {
-      expandNode(row.id)
-      setSelectedId(childId)
+      row.expand()
+      setSelectedId(row.firstChild()?.id ?? null)
     })
   }
 
   const collapseCurrentOrParent = () => {
-    const row = selectedRowState()
+    const row = selectedRow()?.row
     if (!row) return
     if (row.hasChildren && row.isExpanded) {
-      collapseNode(row.id)
+      row.collapse()
       return
     }
-    if (!row.parentId) return
+    const parent = row.parent()
+    if (!parent) return
     batch(() => {
-      const parentId = row.parentId
-      if (!parentId) return
-      collapseNode(parentId)
-      setSelectedId(parentId)
+      parent.collapse()
+      setSelectedId(parent.id)
     })
   }
 
   const activateSelection = () => {
-    const row = selectedRowState()
+    const row = selectedRow()?.row
     if (!row?.hasChildren) return
-    if (row.isExpanded) {
-      collapseNode(row.id)
-      return
-    }
-    expandNode(row.id)
+    row.toggle()
   }
 
   const refreshGraph = async () => {
@@ -177,11 +151,3 @@ export function createVM(options: CreateVMOptions) {
 }
 
 export type ExplorerViewModel = ReturnType<typeof createVM>
-
-export function findVisibleRow<Row extends { id: string }>(rows: Row[], rowId: string) {
-  return findExplorerRow(rows, rowId)
-}
-
-function firstVisibleRowId(rows: Array<{ id: string }>) {
-  return rows[0]?.id ?? null
-}
