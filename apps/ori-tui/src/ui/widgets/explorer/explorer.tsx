@@ -68,10 +68,10 @@ export function Explorer(props: ExplorerProps) {
     const bindings: KeyBinding[] = [
       { pattern: "down", handler: () => explorer.moveSelection(1), preventDefault: true },
       { pattern: "up", handler: () => explorer.moveSelection(-1), preventDefault: true },
-      { pattern: "right", handler: () => explorer.focusFirstChild(), preventDefault: true },
-      { pattern: "left", handler: () => explorer.collapseCurrentOrParent(), preventDefault: true },
+      { pattern: "right", handler: () => explorer.handleMoveIn(), preventDefault: true },
+      { pattern: "left", handler: () => explorer.handleMoveOut(), preventDefault: true },
       { pattern: "ctrl+l", handler: () => handleManualHorizontalScroll("right"), preventDefault: true },
-      { pattern: "enter", handler: () => explorer.activateSelection(), preventDefault: true },
+      { pattern: "enter", handler: () => explorer.toggleExpanded(), preventDefault: true },
       {
         pattern: ["ctrl+w", "ctrl+backspace", "meta+backspace"],
         handler: () => syncFilterFromInput(),
@@ -90,14 +90,14 @@ export function Explorer(props: ExplorerProps) {
       bindings.push(
         { pattern: "j", handler: () => explorer.moveSelection(1), preventDefault: true },
         { pattern: "k", handler: () => explorer.moveSelection(-1), preventDefault: true },
-        { pattern: "l", handler: () => explorer.focusFirstChild(), preventDefault: true },
-        { pattern: "h", handler: () => explorer.collapseCurrentOrParent(), preventDefault: true },
+        { pattern: "l", handler: () => explorer.handleMoveIn(), preventDefault: true },
+        { pattern: "h", handler: () => explorer.handleMoveOut(), preventDefault: true },
         {
           pattern: ["ctrl+h", "backspace"],
           handler: () => handleManualHorizontalScroll("left"),
           preventDefault: true,
         },
-        { pattern: "space", handler: () => explorer.activateSelection(), preventDefault: true },
+        { pattern: "space", handler: () => explorer.toggleExpanded(), preventDefault: true },
         {
           pattern: "s",
           handler: () => {

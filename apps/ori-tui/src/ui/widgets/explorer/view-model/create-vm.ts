@@ -93,7 +93,7 @@ export function createVM(options: CreateVMOptions) {
 
   const selectedRow = createMemo(() => renderedRowsState.getRow(selectedId()))
 
-  const focusFirstChild = () => {
+  const handleMoveIn = () => {
     const row = selectedRow()?.row
     if (!row?.hasChildren) return
     batch(() => {
@@ -102,7 +102,7 @@ export function createVM(options: CreateVMOptions) {
     })
   }
 
-  const collapseCurrentOrParent = () => {
+  const handleMoveOut = () => {
     const row = selectedRow()?.row
     if (!row) return
     if (row.hasChildren && row.isExpanded) {
@@ -117,7 +117,7 @@ export function createVM(options: CreateVMOptions) {
     })
   }
 
-  const activateSelection = () => {
+  const toggleExpanded = () => {
     const row = selectedRow()?.row
     if (!row?.hasChildren) return
     row.toggle()
@@ -147,9 +147,9 @@ export function createVM(options: CreateVMOptions) {
     visibleRows,
     selectedRow,
     moveSelection,
-    focusFirstChild,
-    collapseCurrentOrParent,
-    activateSelection,
+    handleMoveIn,
+    handleMoveOut,
+    toggleExpanded,
   }
 }
 
