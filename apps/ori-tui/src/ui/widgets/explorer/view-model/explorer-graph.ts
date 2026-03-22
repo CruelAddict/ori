@@ -2,20 +2,21 @@ import { type Node, type NodeEdge, NodeType } from "@adapters/ori/client"
 import {
   createEdgeExplorerNode,
   createSnapshotExplorerNode,
-  type ExplorerNode as ExplorerNodeState,
+  type ExplorerNode,
+  type SnapshotExplorerNode,
 } from "../model/explorer-node"
 
 type ConstraintNode = Extract<Node, { type: typeof NodeType.CONSTRAINT }>
 type TriggerNode = Extract<Node, { type: typeof NodeType.TRIGGER }>
 
 export type ExplorerGraph = {
-  nodesById: Record<string, ExplorerNodeState>
+  nodesById: Record<string, ExplorerNode>
   rootIds: string[]
   searchable: Array<{ id: string; name: string }>
 }
 
 export function createExplorerGraph(snapshot: { nodesById: Record<string, Node>; rootIds: string[] }): ExplorerGraph {
-  const nodesById: Record<string, ExplorerNodeState> = {}
+  const nodesById: Record<string, ExplorerNode> = {}
   for (const id of Object.keys(snapshot.nodesById)) {
     const node = snapshot.nodesById[id]
     if (!node) continue
@@ -24,15 +25,31 @@ export function createExplorerGraph(snapshot: { nodesById: Record<string, Node>;
     }
   }
 
+  const rootIds = snapshot.rootIds
+    .map((id) => nodesById[id])
+    .filter((node): node is SnapshotExplorerNode => Boolean(node) && node.kind === "node")
+    .sort((left, right) => {
+      const isLeftDefault = "isDefault" in left.node.attributes && Boolean(left.node.attributes.isDefault)
+      const isRightDefault = "isDefault" in right.node.attributes && Boolean(right.node.attributes.isDefault)
+
+      if (isLeftDefault !== isRightDefault) {
+        return isLeftDefault ? -1 : 1
+      }
+
+      const byName = left.node.name.toLocaleLowerCase().localeCompare(right.node.name.toLocaleLowerCase())
+      return byName
+    })
+    .map((node) => node.id)
+
   return {
     nodesById,
-    rootIds: sortRootIds(snapshot.rootIds, nodesById),
+    rootIds,
     searchable: Object.values(nodesById).map((node) => ({ id: node.id, name: node.label })),
   }
 }
 
-export function convertSnapshotNodeEntities(node: Node): ExplorerNodeState[] {
-  const explorerNodes: ExplorerNodeState[] = []
+export function convertSnapshotNodeEntities(node: Node): ExplorerNode[] {
+  const explorerNodes: ExplorerNode[] = []
   const explorerNode = createSnapshotExplorerNode(node)
   explorerNodes.push(explorerNode)
 
@@ -132,38 +149,4 @@ function formatTriggerActionLabel(attrs: TriggerNode["attributes"]): string | un
   if (statement) labels.push(statement.toLowerCase())
   if (labels.length === 0) return undefined
   return labels.join(", ")
-}
-
-function sortRootIds(rootIds: string[], nodesById: Record<string, ExplorerNodeState>) {
-  const nodes = rootIds.map((id) => nodesById[id]).filter((node): node is ExplorerNodeState => Boolean(node))
-  nodes.sort((left, right) => {
-    const leftNode = getSnapshotNode(left)
-    const rightNode = getSnapshotNode(right)
-    const leftDefault = isDefaultRoot(leftNode)
-    const rightDefault = isDefaultRoot(rightNode)
-
-    if (leftDefault !== rightDefault) {
-      return leftDefault ? -1 : 1
-    }
-
-    const byName = (leftNode?.name ?? "").toLocaleLowerCase().localeCompare((rightNode?.name ?? "").toLocaleLowerCase())
-    if (byName !== 0) {
-      return byName
-    }
-
-    return left.id.localeCompare(right.id)
-  })
-  return nodes.map((node) => node.id)
-}
-
-function getSnapshotNode(node: ExplorerNodeState | undefined) {
-  if (!node) return undefined
-  if (node.kind !== "node") return undefined
-  return node.node
-}
-
-function isDefaultRoot(node?: Node): boolean {
-  if (!node) return false
-  if (node.type !== NodeType.DATABASE && node.type !== NodeType.SCHEMA) return false
-  return node.attributes.isDefault
 }
