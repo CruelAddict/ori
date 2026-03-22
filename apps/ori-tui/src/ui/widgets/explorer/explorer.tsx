@@ -3,7 +3,7 @@ import { TextAttributes } from "@opentui/core"
 import { getViewportRect, OriScrollbox, scrollIntoView } from "@ui/components/ori-scrollbox"
 import { useTheme } from "@ui/providers/theme"
 import { type KeyBinding, KeyScope } from "@ui/services/key-scopes"
-import { type Accessor, createEffect, createMemo, createSelector, For, on, Show } from "solid-js"
+import { type Accessor, createEffect, createMemo, For, on, Show } from "solid-js"
 import { ExplorerRow } from "./explorer-row.tsx"
 import type { ExplorerViewModel } from "./view-model/create-vm"
 
@@ -18,8 +18,7 @@ export type ExplorerProps = {
 export function Explorer(props: ExplorerProps) {
   const explorer = props.viewModel
   const rows = explorer.visibleRows
-  const selectedId = explorer.selectedId
-  const isRowSelected = createSelector(selectedId)
+  const selectedRow = explorer.selectedRow
   const { theme } = useTheme()
 
   let scrollBoxRef: ScrollBoxRenderable | undefined
@@ -34,10 +33,10 @@ export function Explorer(props: ExplorerProps) {
   }
 
   const ensureSelectedVisible = () => {
-    const selected = selectedId()
+    const selected = selectedRow()
     if (!selected || !scrollBoxRef) return
     const rowsList = rows()
-    const index = rowsList.findIndex((row) => row.id === selected)
+    const index = rowsList.findIndex((row) => row.id === selected.id)
     if (index < 0) return
     const depth = rowsList[index].depth
     const viewport = getViewportRect(scrollBoxRef)
@@ -52,7 +51,7 @@ export function Explorer(props: ExplorerProps) {
     )
   }
 
-  createEffect(on(selectedId, ensureSelectedVisible, { defer: true }))
+  createEffect(on(selectedRow, ensureSelectedVisible, { defer: true }))
 
   const handleManualHorizontalScroll = (direction: "left" | "right") => {
     const delta = direction === "left" ? -HORIZONTAL_SCROLL_STEP : HORIZONTAL_SCROLL_STEP
@@ -195,7 +194,6 @@ export function Explorer(props: ExplorerProps) {
                       row={() => row}
                       isFocused={explorer.isFocused}
                       explorer={explorer}
-                      isRowSelected={isRowSelected}
                     />
                   )}
                 </For>

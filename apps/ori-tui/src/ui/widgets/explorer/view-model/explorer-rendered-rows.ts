@@ -26,13 +26,9 @@ type ActiveRenderPatch = {
   nextIndex: number
 }
 
-type CreateExplorerRenderedRowsOptions = {
-  change: Accessor<ExplorerRowsPatch | null>
-}
-
 type NonBatchExplorerRowsPatch = Exclude<ExplorerRowsPatch, { type: "batch" }>
 
-export function createExplorerRenderedRows(options: CreateExplorerRenderedRowsOptions) {
+export function createExplorerRenderedRows(change: Accessor<ExplorerRowsPatch | null>) {
   const [rows, setRows] = createSignal<ExplorerRenderedRow[]>([])
   const stack: ActiveRenderPatch[] = []
   let timeoutHandle: ReturnType<typeof setTimeout> | null = null
@@ -64,15 +60,15 @@ export function createExplorerRenderedRows(options: CreateExplorerRenderedRowsOp
   }
 
   createComputed(() => {
-    const change = options.change()
-    if (!change) return
-    if (change.type === "batch") {
-      for (const patch of change.patches) {
-        applyChange(patch as NonBatchExplorerRowsPatch)
+    const patch = change()
+    if (!patch) return
+    if (patch.type === "batch") {
+      for (const item of patch.patches) {
+        applyChange(item as NonBatchExplorerRowsPatch)
       }
       return
     }
-    applyChange(change)
+    applyChange(patch)
   })
 
   onCleanup(() => {

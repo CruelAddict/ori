@@ -2,16 +2,15 @@ import type { MouseEvent } from "@opentui/core"
 import { useTheme } from "@ui/providers/theme"
 import { type Accessor, createMemo, createSignal } from "solid-js"
 import type { ExplorerRowSegment } from "./explorer-row-renderable.ts"
-import type { ExplorerRenderedRow, ExplorerViewModel } from "./view-model/create-vm"
+import type { ExplorerRow as ExplorerRowModel, ExplorerViewModel } from "./view-model/create-vm"
 import "./explorer-row-renderable.ts"
 
 const ROW_LEFT_PADDING = 2
 
 type ExplorerRowProps = {
-  row: Accessor<ExplorerRenderedRow>
+  row: Accessor<ExplorerRowModel>
   isFocused: Accessor<boolean>
   explorer: ExplorerViewModel
-  isRowSelected: (key: string) => boolean
 }
 
 export function ExplorerRow(props: ExplorerRowProps) {
@@ -20,9 +19,9 @@ export function ExplorerRow(props: ExplorerRowProps) {
 
   const isSearchMode = () => props.explorer.mode() === "search"
   const row = () => props.row()
-  const rowId = () => row().id
+  const node = () => row().node()
   const depth = () => row().depth
-  const isSelected = () => props.isRowSelected(rowId())
+  const isSelected = () => row().isSelected()
 
   const fg = () => (isSelected() && props.isFocused() ? theme().get("selection_foreground") : theme().get("text"))
   const bg = () => {
@@ -34,11 +33,10 @@ export function ExplorerRow(props: ExplorerRowProps) {
   const handleMouseDown = (event: MouseEvent) => {
     event.preventDefault()
     const wasFocused = props.isFocused()
-    const id = rowId()
     props.explorer.focusSelf()
 
     if (!isSelected()) {
-      props.explorer.selectNode(id)
+      row().select()
       return
     }
 
@@ -46,11 +44,11 @@ export function ExplorerRow(props: ExplorerRowProps) {
 
     if (!row().hasChildren) return
     if (row().isExpanded) {
-      props.explorer.collapseNode(id)
+      row().collapse()
       return
     }
 
-    props.explorer.expandNode(id)
+    row().expand()
   }
 
   const rowSegments = createMemo(() => {
@@ -63,25 +61,28 @@ export function ExplorerRow(props: ExplorerRowProps) {
       description: isCursorRow ? fg() : theme().get("text_muted"),
       badge: isCursorRow ? fg() : theme().get("accent"),
     }
-    return parts.map((part): ExplorerRowSegment => ({
-      text: part.text,
-      bg: colors.baseBg,
-      fg: part.role === "glyph"
-        ? colors.glyph
-        : part.role === "description"
-          ? colors.description
-          : part.role === "badge"
-            ? colors.badge
-            : colors.baseFg,
-      attributes: part.attributes,
-    }))
+    return parts.map(
+      (part): ExplorerRowSegment => ({
+        text: part.text,
+        bg: colors.baseBg,
+        fg:
+          part.role === "glyph"
+            ? colors.glyph
+            : part.role === "description"
+              ? colors.description
+              : part.role === "badge"
+                ? colors.badge
+                : colors.baseFg,
+        attributes: part.attributes,
+      }),
+    )
   })
 
   const rowWidth = createMemo(() => row().width)
 
   return (
     <box
-      id={`explorer-row-${rowId()}`}
+      id={`explorer-row-${node().id}`}
       flexDirection="row"
       paddingLeft={ROW_LEFT_PADDING + depth() * 2}
       paddingRight={1}
