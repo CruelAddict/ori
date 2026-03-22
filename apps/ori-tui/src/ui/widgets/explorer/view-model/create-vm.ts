@@ -3,7 +3,6 @@ import type { Accessor } from "solid-js"
 import { batch, createComputed, createMemo, createSignal, onCleanup } from "solid-js"
 import { createExplorerGraph } from "./explorer-graph"
 import { createExplorerRenderedRows } from "./explorer-rendered-rows"
-import type { ExplorerRowState } from "./explorer-rows"
 import { createExplorerRows, getFirstVisibleRowId, isRowVisible, moveVisibleRowId } from "./explorer-rows"
 import type { UIMode } from "./explorer-types"
 
@@ -54,23 +53,16 @@ export function createVM(options: CreateVMOptions) {
     setFilterState(value)
     queueMicrotask(() => {
       if (mode() !== "search") return
-      const firstVisibleRowId = getFirstVisibleRowId(rowsState.rows())
-      setSearchSelectedId(firstVisibleRowId)
+      setSearchSelectedId(getFirstVisibleRowId(rowsState.rows()))
     })
   }
 
   createComputed(() => {
-    if (mode() !== "tree") return
-    const current = treeSelectedId()
-    const next = getTreeSelectedId(current, rowsState.rows(), rowsState.indexById())
-    if (next === treeSelectedId()) return
-    setTreeSelectedId(next)
-  })
-
-  createComputed(() => {
     if (mode() !== "search") return
     const current = searchSelectedId()
-    const next = getSearchSelectedId(current, rowsState.rows(), rowsState.indexById())
+    const rows = rowsState.rows()
+    // Search selection should always stay on a visible match as results change.
+    const next = !current || !isRowVisible(current, rowsState.indexById()) ? getFirstVisibleRowId(rows) : current
     if (next === searchSelectedId()) return
     setSearchSelectedId(next)
   })
@@ -149,20 +141,6 @@ export function createVM(options: CreateVMOptions) {
     handleMoveOut,
     toggleExpanded,
   }
-}
-
-function getTreeSelectedId(current: string | null, rows: ExplorerRowState[], rowIndexMap: Map<string, number>) {
-  if (!rows.length) return current
-  if (!current) return getFirstVisibleRowId(rows)
-  if (isRowVisible(current, rowIndexMap)) return current
-  return current
-}
-
-function getSearchSelectedId(current: string | null, rows: ExplorerRowState[], rowIndexMap: Map<string, number>) {
-  if (!rows.length) return current
-  if (!current) return getFirstVisibleRowId(rows)
-  if (isRowVisible(current, rowIndexMap)) return current
-  return getFirstVisibleRowId(rows)
 }
 
 export type ExplorerViewModel = ReturnType<typeof createVM>
