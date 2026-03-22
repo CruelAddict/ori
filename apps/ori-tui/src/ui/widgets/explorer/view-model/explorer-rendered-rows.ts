@@ -1,6 +1,6 @@
 import { TextAttributes } from "@opentui/core"
-import { createComputed, createSignal, onCleanup, untrack, type Accessor } from "solid-js"
-import type { ExplorerRow, ExplorerRowsPatch } from "./explorer-rows"
+import { type Accessor, createComputed, createMemo, createSignal, onCleanup, untrack } from "solid-js"
+import type { ExplorerRow, ExplorerRowState, ExplorerRowsPatch } from "./explorer-rows"
 
 const CHILD_BATCH_SIZE = 10
 
@@ -10,28 +10,91 @@ export type ExplorerRenderedRowElement = {
   attributes?: number
 }
 
-export type ExplorerRenderedRow = {
+export type ExplorerRenderedRowState = {
   id: string
   parentId?: string
-  depth: number
-  hasChildren: boolean
-  isExpanded: boolean
   width: number
   elements: ExplorerRenderedRowElement[]
 }
 
+export type ExplorerRenderedRow = {
+  readonly id: string
+  readonly width: number
+  readonly elements: readonly ExplorerRenderedRowElement[]
+  readonly row: ExplorerRow
+  parent: () => ExplorerRenderedRow | null
+  children: () => ExplorerRenderedRow[]
+  firstChild: () => ExplorerRenderedRow | null
+}
+
 type ActiveRenderPatch = {
   afterId: string | null
-  rows: ExplorerRenderedRow[]
+  rows: ExplorerRenderedRowState[]
   nextIndex: number
 }
 
 type NonBatchExplorerRowsPatch = Exclude<ExplorerRowsPatch, { type: "batch" }>
 
-export function createExplorerRenderedRows(change: Accessor<ExplorerRowsPatch | null>) {
-  const [rows, setRows] = createSignal<ExplorerRenderedRow[]>([])
+type CreateExplorerRenderedRowsOptions = {
+  change: Accessor<ExplorerRowsPatch | null>
+  getRow: (id: string | null) => ExplorerRow | null
+}
+
+export function createExplorerRenderedRows(options: CreateExplorerRenderedRowsOptions) {
+  const [rows, setRows] = createSignal<ExplorerRenderedRowState[]>([])
+  const renderedRows = new Map<string, ExplorerRenderedRow>()
   const stack: ActiveRenderPatch[] = []
   let timeoutHandle: ReturnType<typeof setTimeout> | null = null
+
+  const rowById = createMemo(() => {
+    const map = new Map<string, ExplorerRenderedRowState>()
+    for (const row of rows()) {
+      map.set(row.id, row)
+    }
+    return map
+  })
+
+  const getRow = (id: string | null): ExplorerRenderedRow | null => {
+    if (!id) return null
+    const cached = renderedRows.get(id)
+    if (cached) return cached
+    const state = rowById().get(id)
+    if (!state) return null
+    const row = options.getRow(id)
+    if (!row) return null
+    const renderedRow: ExplorerRenderedRow = {
+      get id() {
+        return id
+      },
+      get width() {
+        return rowById().get(id)?.width ?? 0
+      },
+      get elements() {
+        return rowById().get(id)?.elements ?? []
+      },
+      get row() {
+        return options.getRow(id) ?? row
+      },
+      parent: () => {
+        const parentId = rowById().get(id)?.parentId
+        if (!parentId) return null
+        return getRow(parentId)
+      },
+      children: () => {
+        const visibleChildren = renderedRow.row.children()
+        return visibleChildren
+          .map((child) => getRow(child.id))
+          .filter((child): child is ExplorerRenderedRow => Boolean(child))
+      },
+      firstChild: () => {
+        const child = renderedRow.row.firstChild()
+        if (!child) return null
+        return getRow(child.id)
+      },
+    }
+    renderedRows.set(id, renderedRow)
+    return renderedRow
+  }
 
   const clearSchedule = () => {
     if (timeoutHandle === null) return
@@ -44,7 +107,7 @@ export function createExplorerRenderedRows(change: Accessor<ExplorerRowsPatch | 
     timeoutHandle = setTimeout(process, 10)
   }
 
-  const enqueueInsert = (afterId: string | null, insertedRows: ExplorerRenderedRow[]) => {
+  const enqueueInsert = (afterId: string | null, insertedRows: ExplorerRenderedRowState[]) => {
     if (insertedRows.length === 0) return
     stack.unshift({ afterId, rows: insertedRows, nextIndex: 0 })
     process()
@@ -60,7 +123,7 @@ export function createExplorerRenderedRows(change: Accessor<ExplorerRowsPatch | 
   }
 
   createComputed(() => {
-    const patch = change()
+    const patch = options.change()
     if (!patch) return
     if (patch.type === "batch") {
       for (const item of patch.patches) {
@@ -76,7 +139,11 @@ export function createExplorerRenderedRows(change: Accessor<ExplorerRowsPatch | 
     stack.length = 0
   })
 
-  return { rows }
+  return {
+    rows,
+    rowById,
+    getRow,
+  }
 
   function applyChange(change: NonBatchExplorerRowsPatch) {
     if (change.type === "reset") {
@@ -112,7 +179,7 @@ export function createExplorerRenderedRows(change: Accessor<ExplorerRowsPatch | 
 }
 
 export function applyRenderPatchStep(
-  currentRows: ExplorerRenderedRow[],
+  currentRows: ExplorerRenderedRowState[],
   currentStack: ActiveRenderPatch[],
   batchSize = CHILD_BATCH_SIZE,
 ) {
@@ -147,7 +214,7 @@ export function applyRenderPatchStep(
   return { rows, stack }
 }
 
-function renderRow(row: ExplorerRow): ExplorerRenderedRow {
+function renderRow(row: ExplorerRowState): ExplorerRenderedRowState {
   const elements: ExplorerRenderedRowElement[] = [
     { text: `${row.glyph} `, role: "glyph", attributes: TextAttributes.DIM },
     { text: row.label, role: "main" },
@@ -164,15 +231,12 @@ function renderRow(row: ExplorerRow): ExplorerRenderedRow {
   return {
     id: row.id,
     parentId: row.parentId,
-    depth: row.depth,
-    hasChildren: row.hasChildren,
-    isExpanded: row.isExpanded,
     width: elements.reduce((sum, element) => sum + element.text.length, 0),
     elements,
   }
 }
 
-function getInsertIndex(rows: ExplorerRenderedRow[], afterId: string | null) {
+function getInsertIndex(rows: ExplorerRenderedRowState[], afterId: string | null) {
   if (!afterId) return 0
   const match = rows.findIndex((row) => row.id === afterId)
   if (match === -1) return rows.length

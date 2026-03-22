@@ -1,19 +1,37 @@
 import { type Node, type NodeEdge, NodeType } from "@adapters/ori/client"
-import { createEdgeExplorerNode, createSnapshotExplorerNode, type ExplorerNode } from "../model/explorer-node"
+import {
+  createEdgeExplorerNode,
+  createSnapshotExplorerNode,
+  type ExplorerNode as ExplorerNodeState,
+} from "../model/explorer-node"
 
 type ConstraintNode = Extract<Node, { type: typeof NodeType.CONSTRAINT }>
 type TriggerNode = Extract<Node, { type: typeof NodeType.TRIGGER }>
 
+export type ExplorerGraphNode = {
+  readonly id: string
+  readonly kind: ExplorerNodeState["kind"]
+  readonly label: string
+  readonly description?: string
+  readonly badges: readonly string[]
+  readonly hasChildren: boolean
+  readonly childIds: readonly string[]
+  parent: () => ExplorerGraphNode | null
+  children: () => ExplorerGraphNode[]
+  firstChild: () => ExplorerGraphNode | null
+}
+
 export type ExplorerGraph = {
-  nodesById: Record<string, ExplorerNode>
+  nodesById: Record<string, ExplorerNodeState>
   rootIds: string[]
   searchable: Array<{ id: string; name: string }>
+  getNode: (id: string | null) => ExplorerGraphNode | null
 }
 
 // Converts backend introspection graph to a format for representation in explorer
 // For example, certain edges (e.g. "columns") become nodes that you can select and expand
 export function createExplorerNodesById(nodes: Record<string, Node>) {
-  const explorerNodesById: Record<string, ExplorerNode> = {}
+  const explorerNodesById: Record<string, ExplorerNodeState> = {}
   for (const id of Object.keys(nodes)) {
     const node = nodes[id]
     if (!node) continue
@@ -26,15 +44,65 @@ export function createExplorerNodesById(nodes: Record<string, Node>) {
 
 export function createExplorerGraph(snapshot: { nodesById: Record<string, Node>; rootIds: string[] }): ExplorerGraph {
   const nodesById = createExplorerNodesById(snapshot.nodesById)
+  const parentIdsById = createParentIdsById(nodesById)
+  const nodes = new Map<string, ExplorerGraphNode>()
+
+  const getNode = (id: string | null): ExplorerGraphNode | null => {
+    if (!id) return null
+    const cached = nodes.get(id)
+    if (cached) return cached
+    const state = nodesById[id]
+    if (!state) return null
+    const node: ExplorerGraphNode = {
+      get id() {
+        return id
+      },
+      get kind() {
+        return nodesById[id]?.kind ?? "node"
+      },
+      get label() {
+        return nodesById[id]?.label ?? ""
+      },
+      get description() {
+        return nodesById[id]?.description
+      },
+      get badges() {
+        return nodesById[id]?.badges ?? []
+      },
+      get hasChildren() {
+        return nodesById[id]?.hasChildren ?? false
+      },
+      get childIds() {
+        return nodesById[id]?.childIds ?? []
+      },
+      parent: () => getNode(parentIdsById[id] ?? null),
+      children: () => {
+        const childIds = nodesById[id]?.childIds ?? []
+        return childIds.map((childId) => getNode(childId)).filter((child): child is ExplorerGraphNode => Boolean(child))
+      },
+      firstChild: () => {
+        const childIds = nodesById[id]?.childIds ?? []
+        for (const childId of childIds) {
+          const child = getNode(childId)
+          if (child) return child
+        }
+        return null
+      },
+    }
+    nodes.set(id, node)
+    return node
+  }
+
   return {
     nodesById,
     rootIds: sortRootIds(snapshot.rootIds, nodesById),
     searchable: Object.values(nodesById).map((node) => ({ id: node.id, name: node.label })),
+    getNode,
   }
 }
 
-export function convertSnapshotNodeEntities(node: Node): ExplorerNode[] {
-  const explorerNodes: ExplorerNode[] = []
+export function convertSnapshotNodeEntities(node: Node): ExplorerNodeState[] {
+  const explorerNodes: ExplorerNodeState[] = []
   const explorerNode = createSnapshotExplorerNode(node)
   explorerNodes.push(explorerNode)
 
@@ -136,8 +204,8 @@ function formatTriggerActionLabel(attrs: TriggerNode["attributes"]): string | un
   return labels.join(", ")
 }
 
-function sortRootIds(rootIds: string[], nodesById: Record<string, ExplorerNode>) {
-  const nodes = rootIds.map((id) => nodesById[id]).filter((node): node is ExplorerNode => Boolean(node))
+function sortRootIds(rootIds: string[], nodesById: Record<string, ExplorerNodeState>) {
+  const nodes = rootIds.map((id) => nodesById[id]).filter((node): node is ExplorerNodeState => Boolean(node))
   nodes.sort((left, right) => {
     const leftNode = getSnapshotNode(left)
     const rightNode = getSnapshotNode(right)
@@ -158,7 +226,7 @@ function sortRootIds(rootIds: string[], nodesById: Record<string, ExplorerNode>)
   return nodes.map((node) => node.id)
 }
 
-function getSnapshotNode(node: ExplorerNode | undefined) {
+function getSnapshotNode(node: ExplorerNodeState | undefined) {
   if (!node) return undefined
   if (node.kind !== "node") return undefined
   return node.node
@@ -168,4 +236,17 @@ function isDefaultRoot(node?: Node): boolean {
   if (!node) return false
   if (node.type !== NodeType.DATABASE && node.type !== NodeType.SCHEMA) return false
   return node.attributes.isDefault
+}
+
+function createParentIdsById(nodesById: Record<string, ExplorerNodeState>) {
+  const parentIdsById: Record<string, string> = {}
+  for (const id of Object.keys(nodesById)) {
+    const node = nodesById[id]
+    if (!node) continue
+    for (const childId of node.childIds) {
+      if (!nodesById[childId]) continue
+      parentIdsById[childId] = id
+    }
+  }
+  return parentIdsById
 }

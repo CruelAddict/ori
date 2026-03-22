@@ -1,11 +1,11 @@
 import { type Accessor, createComputed, createMemo, createSignal, untrack } from "solid-js"
 import { fuzzyFilter } from "../../../../utils/fuzzy/fuzzy-search"
-import type { UIMode } from "./create-vm"
-import type { ExplorerGraph } from "./explorer-graph"
+import type { ExplorerGraph, ExplorerGraphNode } from "./explorer-graph"
+import type { UIMode } from "./explorer-types"
 
 const SEARCH_RESULT_LIMIT = 100
 
-export type ExplorerRow = {
+export type ExplorerRowState = {
   id: string
   parentId?: string
   depth: number
@@ -18,26 +18,54 @@ export type ExplorerRow = {
   childIds: string[]
 }
 
+export type ExplorerRow = {
+  readonly id: string
+  readonly depth: number
+  readonly hasChildren: boolean
+  readonly isExpanded: boolean
+  readonly node: ExplorerGraphNode
+  parent: () => ExplorerRow | null
+  children: () => ExplorerRow[]
+  firstChild: () => ExplorerRow | null
+  isSelected: () => boolean
+  select: () => void
+  expand: () => void
+  collapse: () => void
+  toggle: () => void
+}
+
 export type ExplorerRowsPatch =
-  | { type: "insert"; afterId: string | null; rows: ExplorerRow[] }
+  | { type: "insert"; afterId: string | null; rows: ExplorerRowState[] }
   | { type: "remove"; rowIds: string[] }
-  | { type: "update"; rows: ExplorerRow[] }
-  | { type: "reset"; rows: ExplorerRow[] }
+  | { type: "update"; rows: ExplorerRowState[] }
+  | { type: "reset"; rows: ExplorerRowState[] }
   | { type: "batch"; patches: ExplorerRowsPatch[] }
 
 type CreateExplorerRowsOptions = {
   graph: Accessor<ExplorerGraph>
   mode: Accessor<UIMode>
   filter: Accessor<string>
+  isSelected: (id: string) => boolean
+  select: (id: string) => void
 }
 
 export function createExplorerRows(options: CreateExplorerRowsOptions) {
-  const [rows, setRows] = createSignal<ExplorerRow[]>([])
+  const [rows, setRows] = createSignal<ExplorerRowState[]>([])
   const [expandedNodes, setExpandedNodes] = createSignal<Record<string, true>>({})
   const [change, setChange] = createSignal<ExplorerRowsPatch | null>(null)
   const rootKey = createMemo(() => options.graph().rootIds.join("\0"))
+  const rowObjects = new Map<string, ExplorerRow>()
+  const indexById = createMemo(() => {
+    const map = new Map<string, number>()
+    const list = rows()
+    for (let index = 0; index < list.length; index += 1) {
+      const row = list[index]
+      if (!row) continue
+      map.set(row.id, index)
+    }
+    return map
+  })
   let prevMode: UIMode | undefined
-  let _prevFilter = ""
   let prevRootKey = ""
 
   createComputed(() => {
@@ -51,7 +79,6 @@ export function createExplorerRows(options: CreateExplorerRowsOptions) {
       setRows(next)
       setChange({ type: "reset", rows: next })
       prevMode = mode
-      _prevFilter = filter
       prevRootKey = roots
       return
     }
@@ -61,16 +88,74 @@ export function createExplorerRows(options: CreateExplorerRowsOptions) {
       setRows(next)
       setChange({ type: "reset", rows: next })
       prevMode = mode
-      _prevFilter = filter
       prevRootKey = roots
       return
     }
 
     syncDefaultRows(graph)
     prevMode = mode
-    _prevFilter = filter
     prevRootKey = roots
   })
+
+  const rowById = createMemo(() => {
+    const map = new Map<string, ExplorerRowState>()
+    for (const row of rows()) {
+      map.set(row.id, row)
+    }
+    return map
+  })
+
+  const getRow = (id: string | null): ExplorerRow | null => {
+    if (!id) return null
+    const cached = rowObjects.get(id)
+    if (cached) return cached
+    const state = rowById().get(id)
+    if (!state) return null
+    const node = options.graph().getNode(id)
+    if (!node) return null
+    const row: ExplorerRow = {
+      get id() {
+        return id
+      },
+      get depth() {
+        return rowById().get(id)?.depth ?? 0
+      },
+      get hasChildren() {
+        return rowById().get(id)?.hasChildren ?? false
+      },
+      get isExpanded() {
+        return rowById().get(id)?.isExpanded ?? false
+      },
+      get node() {
+        return options.graph().getNode(id) ?? node
+      },
+      parent: () => {
+        const parentId = rowById().get(id)?.parentId
+        if (!parentId) return null
+        return getRow(parentId)
+      },
+      children: () =>
+        rows()
+          .filter((child) => child.parentId === id)
+          .map((child) => getRow(child.id))
+          .filter((child): child is ExplorerRow => Boolean(child)),
+      firstChild: () => {
+        const visibleChildren = rows().filter((child) => child.parentId === id)
+        for (const childRow of visibleChildren) {
+          const child = getRow(childRow.id)
+          if (child) return child
+        }
+        return null
+      },
+      isSelected: () => options.isSelected(id),
+      select: () => options.select(id),
+      expand: () => expandNode(id),
+      collapse: () => collapseNode(id),
+      toggle: () => toggleNode(id),
+    }
+    rowObjects.set(id, row)
+    return row
+  }
 
   const expandNode = (nodeId: string | null) => {
     if (!nodeId) return
@@ -78,18 +163,18 @@ export function createExplorerRows(options: CreateExplorerRowsOptions) {
     const current = rows()
     const match = findExplorerRow(current, nodeId)
     if (!match) return
-    const row = match.row
-    if (!row.hasChildren) return
-    if (row.isExpanded) return
+    const currentRow = match.row
+    if (!currentRow.hasChildren) return
+    if (currentRow.isExpanded) return
     const nextExpanded: Record<string, true> = { ...expandedNodes(), [nodeId]: true }
     setExpandedNodes(nextExpanded)
 
-    const nextRow = createRow(options.graph(), nodeId, row.depth, row.parentId, true)
+    const nextRow = createRow(options.graph(), nodeId, currentRow.depth, currentRow.parentId, true)
     if (!nextRow) return
     const nextRows = current.slice()
     nextRows[match.index] = nextRow
     const patches: ExplorerRowsPatch[] = [{ type: "update", rows: [nextRow] }]
-    const inserted = buildSubtreeRows(options.graph(), nextExpanded, nextRow.childIds, nodeId, row.depth + 1)
+    const inserted = buildSubtreeRows(options.graph(), nextExpanded, nextRow.childIds, nodeId, currentRow.depth + 1)
     if (inserted.length > 0) {
       const insertAt = match.index + 1
       nextRows.splice(insertAt, 0, ...inserted)
@@ -131,6 +216,15 @@ export function createExplorerRows(options: CreateExplorerRowsOptions) {
     })
   }
 
+  const toggleNode = (nodeId: string | null) => {
+    if (!nodeId) return
+    if (isExpanded(nodeId)) {
+      collapseNode(nodeId)
+      return
+    }
+    expandNode(nodeId)
+  }
+
   const isExpanded = (nodeId: string | null) => {
     if (!nodeId) return false
     return Boolean(expandedNodes()[nodeId])
@@ -138,16 +232,35 @@ export function createExplorerRows(options: CreateExplorerRowsOptions) {
 
   return {
     rows,
+    rowById,
     change,
+    getRow,
+    getState,
+    moveId,
+    normalizeId,
     isExpanded,
     expandNode,
     collapseNode,
+    toggleNode,
+  }
+
+  function getState(id: string | null) {
+    if (!id) return null
+    return rowById().get(id) ?? null
+  }
+
+  function normalizeId(current: string | null, options?: NormalizeSelectedIdOptions) {
+    return normalizeSelectedId(current, rows(), indexById(), options)
+  }
+
+  function moveId(current: string | null, delta: number) {
+    return moveSelectedId(current, delta, rows(), indexById())
   }
 
   function syncDefaultRows(graph: ExplorerGraph) {
     const current = rows()
     const nextRows = current.slice()
-    const updates: ExplorerRow[] = []
+    const updates: ExplorerRowState[] = []
     const expanded = untrack(expandedNodes)
 
     for (let index = 0; index < nextRows.length; index += 1) {
@@ -205,7 +318,7 @@ function buildSearchRows(graph: ExplorerGraph, filter: string) {
   const query = filter.trim()
   if (!query) return []
   const results = fuzzyFilter(query, graph.searchable, { keys: ["name"], limit: SEARCH_RESULT_LIMIT })
-  const rows: ExplorerRow[] = []
+  const rows: ExplorerRowState[] = []
   for (const result of results) {
     const row = createRow(graph, result.id, 0)
     if (!row) continue
@@ -225,7 +338,7 @@ function buildSubtreeRows(
   parentId: string | undefined,
   depth: number,
 ) {
-  const rows: ExplorerRow[] = []
+  const rows: ExplorerRowState[] = []
   for (const id of ids) {
     const row = createRow(graph, id, depth, parentId, Boolean(expandedNodes[id]))
     if (!row) continue
@@ -255,7 +368,7 @@ function createRow(graph: ExplorerGraph, id: string, depth: number, parentId?: s
   }
 }
 
-function areRowsEqual(left: ExplorerRow, right: ExplorerRow) {
+function areRowsEqual(left: ExplorerRowState, right: ExplorerRowState) {
   if (left === right) return true
   if (left.id !== right.id) return false
   if (left.parentId !== right.parentId) return false
@@ -276,7 +389,7 @@ function areRowsEqual(left: ExplorerRow, right: ExplorerRow) {
   return true
 }
 
-function getVisibleChildIds(rows: ExplorerRow[], parentId: string) {
+function getVisibleChildIds(rows: ExplorerRowState[], parentId: string) {
   const row = findExplorerRow(rows, parentId)
   if (!row) return []
   const ids: string[] = []
@@ -291,14 +404,14 @@ function getVisibleChildIds(rows: ExplorerRow[], parentId: string) {
   return ids
 }
 
-function getInsertIndex(rows: ExplorerRow[], afterId: string | null) {
+function getInsertIndex(rows: ExplorerRowState[], afterId: string | null) {
   if (!afterId) return 0
   const range = getRowRange(rows, afterId)
   if (!range) return rows.length
   return range.end
 }
 
-function getSubtreeRange(rows: ExplorerRow[], nodeId: string) {
+function getSubtreeRange(rows: ExplorerRowState[], nodeId: string) {
   const range = getRowRange(rows, nodeId)
   if (!range) return null
   return {
@@ -307,7 +420,7 @@ function getSubtreeRange(rows: ExplorerRow[], nodeId: string) {
   }
 }
 
-function getRowRange(rows: ExplorerRow[], rowId: string) {
+function getRowRange(rows: ExplorerRowState[], rowId: string) {
   const match = findExplorerRow(rows, rowId)
   if (!match) return null
   let end = match.index + 1
@@ -328,7 +441,7 @@ type NormalizeSelectedIdOptions = {
 
 export function normalizeSelectedId(
   current: string | null,
-  rows: ExplorerRow[],
+  rows: ExplorerRowState[],
   rowIndexMap: Map<string, number>,
   options?: NormalizeSelectedIdOptions,
 ) {
@@ -343,7 +456,7 @@ export function normalizeSelectedId(
 export function moveSelectedId(
   current: string | null,
   delta: number,
-  rows: ExplorerRow[],
+  rows: ExplorerRowState[],
   rowIndexMap: Map<string, number>,
 ) {
   if (!rows.length) return null

@@ -2,13 +2,14 @@ import type { MouseEvent } from "@opentui/core"
 import { useTheme } from "@ui/providers/theme"
 import { type Accessor, createMemo, createSignal } from "solid-js"
 import type { ExplorerRowSegment } from "./explorer-row-renderable.ts"
-import type { ExplorerRow as ExplorerRowModel, ExplorerViewModel } from "./view-model/create-vm"
+import type { ExplorerViewModel } from "./view-model/create-vm"
+import type { ExplorerRenderedRow } from "./view-model/explorer-rendered-rows"
 import "./explorer-row-renderable.ts"
 
 const ROW_LEFT_PADDING = 2
 
 type ExplorerRowProps = {
-  row: Accessor<ExplorerRowModel>
+  row: Accessor<ExplorerRenderedRow>
   isFocused: Accessor<boolean>
   explorer: ExplorerViewModel
 }
@@ -18,8 +19,9 @@ export function ExplorerRow(props: ExplorerRowProps) {
   const [hovered, setHovered] = createSignal(false)
 
   const isSearchMode = () => props.explorer.mode() === "search"
-  const row = () => props.row()
-  const node = () => row().node()
+  const renderedRow = () => props.row()
+  const row = () => renderedRow().row
+  const node = () => row().node
   const depth = () => row().depth
   const isSelected = () => row().isSelected()
 
@@ -52,7 +54,7 @@ export function ExplorerRow(props: ExplorerRowProps) {
   }
 
   const rowSegments = createMemo(() => {
-    const parts = row().elements
+    const parts = renderedRow().elements
     const isCursorRow = isSelected() && props.isFocused()
     const colors = {
       baseFg: fg(),
@@ -78,7 +80,7 @@ export function ExplorerRow(props: ExplorerRowProps) {
     )
   })
 
-  const rowWidth = createMemo(() => row().width)
+  const rowWidth = createMemo(() => renderedRow().width)
 
   return (
     <box

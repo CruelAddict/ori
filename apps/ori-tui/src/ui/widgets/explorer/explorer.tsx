@@ -38,7 +38,9 @@ export function Explorer(props: ExplorerProps) {
     const rowsList = rows()
     const index = rowsList.findIndex((row) => row.id === selected.id)
     if (index < 0) return
-    const depth = rowsList[index].depth
+    const row = rowsList[index]
+    if (!row) return
+    const depth = row.row.depth
     const viewport = getViewportRect(scrollBoxRef)
     if (!viewport) return
     scrollIntoView(
