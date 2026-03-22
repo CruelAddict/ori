@@ -1,6 +1,7 @@
 import { type Accessor, createComputed, createMemo, createSignal, untrack } from "solid-js"
 import { fuzzyFilter } from "../../../../utils/fuzzy/fuzzy-search"
-import type { ExplorerGraph, ExplorerGraphNode } from "./explorer-graph"
+import type { ExplorerNode } from "../model/explorer-node"
+import type { ExplorerGraph } from "./explorer-graph"
 import type { UIMode } from "./explorer-types"
 
 const SEARCH_RESULT_LIMIT = 100
@@ -23,7 +24,7 @@ export type ExplorerRow = {
   readonly depth: number
   readonly hasChildren: boolean
   readonly isExpanded: boolean
-  readonly node: ExplorerGraphNode
+  readonly node: ExplorerNode
   parent: () => ExplorerRow | null
   children: () => ExplorerRow[]
   firstChild: () => ExplorerRow | null
@@ -108,7 +109,7 @@ export function createExplorerRows(options: CreateExplorerRowsOptions) {
     if (cached) return cached
     const state = rowById().get(id)
     if (!state) return null
-    const node = options.graph().getNode(id)
+    const node = options.graph().nodesById[id]
     if (!node) return null
     const row: ExplorerRow = {
       get id() {
@@ -124,7 +125,7 @@ export function createExplorerRows(options: CreateExplorerRowsOptions) {
         return rowById().get(id)?.isExpanded ?? false
       },
       get node() {
-        return options.graph().getNode(id) ?? node
+        return options.graph().nodesById[id] ?? node
       },
       parent: () => {
         const parentId = rowById().get(id)?.parentId
@@ -178,7 +179,7 @@ export function createExplorerRows(options: CreateExplorerRowsOptions) {
     setRows(nextRows)
     setChange(patches.length === 1 ? patches[0] : { type: "batch", patches })
 
-    const node = options.graph().getNode(nodeId)
+    const node = options.graph().nodesById[nodeId]
     if (!node?.hasChildren) return
     const missingIds = node.childIds.filter((childId) => !options.graph().nodesById[childId])
     if (missingIds.length === 0) return

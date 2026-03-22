@@ -8,93 +8,26 @@ import {
 type ConstraintNode = Extract<Node, { type: typeof NodeType.CONSTRAINT }>
 type TriggerNode = Extract<Node, { type: typeof NodeType.TRIGGER }>
 
-export type ExplorerGraphNode = {
-  readonly id: string
-  readonly kind: ExplorerNodeState["kind"]
-  readonly label: string
-  readonly description?: string
-  readonly badges: readonly string[]
-  readonly hasChildren: boolean
-  readonly childIds: readonly string[]
-  children: () => ExplorerGraphNode[]
-  firstChild: () => ExplorerGraphNode | null
-}
-
 export type ExplorerGraph = {
   nodesById: Record<string, ExplorerNodeState>
   rootIds: string[]
   searchable: Array<{ id: string; name: string }>
-  getNode: (id: string | null) => ExplorerGraphNode | null
-}
-
-// Converts backend introspection graph to a format for representation in explorer
-// For example, certain edges (e.g. "columns") become nodes that you can select and expand
-function createExplorerNodesById(nodes: Record<string, Node>) {
-  const explorerNodesById: Record<string, ExplorerNodeState> = {}
-  for (const id of Object.keys(nodes)) {
-    const node = nodes[id]
-    if (!node) continue
-    for (const explorerNode of convertSnapshotNodeEntities(node)) {
-      explorerNodesById[explorerNode.id] = explorerNode
-    }
-  }
-  return explorerNodesById
 }
 
 export function createExplorerGraph(snapshot: { nodesById: Record<string, Node>; rootIds: string[] }): ExplorerGraph {
-  const nodesById = createExplorerNodesById(snapshot.nodesById)
-  const nodes = new Map<string, ExplorerGraphNode>()
-
-  const getNode = (id: string | null): ExplorerGraphNode | null => {
-    if (!id) return null
-    const cached = nodes.get(id)
-    if (cached) return cached
-    const state = nodesById[id]
-    if (!state) return null
-    const node: ExplorerGraphNode = {
-      get id() {
-        return id
-      },
-      get kind() {
-        return nodesById[id]?.kind ?? "node"
-      },
-      get label() {
-        return nodesById[id]?.label ?? ""
-      },
-      get description() {
-        return nodesById[id]?.description
-      },
-      get badges() {
-        return nodesById[id]?.badges ?? []
-      },
-      get hasChildren() {
-        return nodesById[id]?.hasChildren ?? false
-      },
-      get childIds() {
-        return nodesById[id]?.childIds ?? []
-      },
-      children: () => {
-        const childIds = nodesById[id]?.childIds ?? []
-        return childIds.map((childId) => getNode(childId)).filter((child): child is ExplorerGraphNode => Boolean(child))
-      },
-      firstChild: () => {
-        const childIds = nodesById[id]?.childIds ?? []
-        for (const childId of childIds) {
-          const child = getNode(childId)
-          if (child) return child
-        }
-        return null
-      },
+  const nodesById: Record<string, ExplorerNodeState> = {}
+  for (const id of Object.keys(snapshot.nodesById)) {
+    const node = snapshot.nodesById[id]
+    if (!node) continue
+    for (const explorerNode of convertSnapshotNodeEntities(node)) {
+      nodesById[explorerNode.id] = explorerNode
     }
-    nodes.set(id, node)
-    return node
   }
 
   return {
     nodesById,
     rootIds: sortRootIds(snapshot.rootIds, nodesById),
     searchable: Object.values(nodesById).map((node) => ({ id: node.id, name: node.label })),
-    getNode,
   }
 }
 
