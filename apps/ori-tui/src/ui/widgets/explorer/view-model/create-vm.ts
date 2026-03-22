@@ -44,7 +44,7 @@ export function createVM(options: CreateVMOptions) {
     filter,
     ensureNodes: (ids) => options.introspection.ensureNodes(ids),
   })
-  const renderedRowsState = createExplorerRenderedRows({
+  const visibleRows = createExplorerRenderedRows({
     change: rowsState.change,
     getRow: rowsState.getRow,
   })
@@ -84,7 +84,11 @@ export function createVM(options: CreateVMOptions) {
     setSelectedId(moveVisibleRowId(selectedId(), delta, rowsState.rows(), rowsState.indexById()))
   }
 
-  const selectedRow = createMemo(() => renderedRowsState.getRow(selectedId()))
+  const selectedRow = createMemo(() => {
+    const id = selectedId()
+    if (!id) return null
+    return visibleRows().find((row) => row.id === id) ?? null
+  })
 
   const handleMoveIn = () => {
     const row = selectedRow()?.row
@@ -119,8 +123,6 @@ export function createVM(options: CreateVMOptions) {
   const refreshGraph = async () => {
     await options.introspection.refresh()
   }
-
-  const visibleRows = renderedRowsState.visibleRows
 
   return {
     isFocused: options.isFocused,

@@ -54,7 +54,7 @@ export function createExplorerRenderedRows(options: CreateExplorerRenderedRowsOp
     return map
   })
 
-  const getRow = (id: string | null): ExplorerRenderedRow | null => {
+  const getRenderedRow = (id: string | null): ExplorerRenderedRow | null => {
     if (!id) return null
     const cached = renderedRows.get(id)
     if (cached) return cached
@@ -78,18 +78,18 @@ export function createExplorerRenderedRows(options: CreateExplorerRenderedRowsOp
       parent: () => {
         const parentId = rowById().get(id)?.parentId
         if (!parentId) return null
-        return getRow(parentId)
+        return getRenderedRow(parentId)
       },
       children: () => {
         const visibleChildren = renderedRow.row.children()
         return visibleChildren
-          .map((child) => getRow(child.id))
+          .map((child) => getRenderedRow(child.id))
           .filter((child): child is ExplorerRenderedRow => Boolean(child))
       },
       firstChild: () => {
         const child = renderedRow.row.firstChild()
         if (!child) return null
-        return getRow(child.id)
+        return getRenderedRow(child.id)
       },
     }
     renderedRows.set(id, renderedRow)
@@ -98,7 +98,7 @@ export function createExplorerRenderedRows(options: CreateExplorerRenderedRowsOp
 
   const visibleRows = createMemo(() =>
     rows()
-      .map((row) => getRow(row.id))
+      .map((row) => getRenderedRow(row.id))
       .filter((row): row is ExplorerRenderedRow => Boolean(row)),
   )
 
@@ -145,12 +145,7 @@ export function createExplorerRenderedRows(options: CreateExplorerRenderedRowsOp
     stack.length = 0
   })
 
-  return {
-    rows,
-    rowById,
-    getRow,
-    visibleRows,
-  }
+  return visibleRows
 
   function applyChange(change: NonBatchExplorerRowsPatch) {
     if (change.type === "reset") {
