@@ -29,7 +29,7 @@ type ConstraintNode = Extract<Node, { type: typeof NodeType.CONSTRAINT }>
 type IndexNode = Extract<Node, { type: typeof NodeType.INDEX }>
 type TriggerNode = Extract<Node, { type: typeof NodeType.TRIGGER }>
 
-export function createSnapshotExplorerNode(node: Node): SnapshotExplorerNode {
+function createSnapshotExplorerNode(node: Node): SnapshotExplorerNode {
   return {
     id: node.id,
     kind: "node",
@@ -58,117 +58,88 @@ export function createEdgeExplorerNode(node: Node, edgeName: string, edge: NodeE
   }
 }
 
+// Explorer graph structure differs from that of the backend in following ways:
+//   - graph edges become nodes, so between every two nodes appears a new "edge" node
+//   - certain attributes like table columns become attached to the main node as a new synthetic edge
+//     with values as its children nodes
+//
+// This function is responsible for doing these conversions
 export function convertToExplorerNodes(node: Node): ExplorerNode[] {
   const nodes: ExplorerNode[] = []
   const self = createSnapshotExplorerNode(node)
   nodes.push(self)
 
-  const attachEdge = (edge: EdgeExplorerNode) => {
-    self.childIds.push(edge.id)
-    self.hasChildren = true
-    nodes.push(edge)
-  }
+  const edgeNodes = [
+    // synthetic edge nodes
+    ...collectExpandableAttributes(node)
+      .flatMap(([name, values]) => expandAttribute(node, name, values)),
+    // natural edge nodes
+    ...Object.entries(node.edges)
+      .filter(([, edge]) => edge.items.length > 0)
+      .map(([name, edge]) => createEdgeExplorerNode(node, name, edge))
+  ]
+
+  edgeNodes.forEach((node) => {
+    if (node.kind === "edge") {
+      self.childIds.push(node.id)
+      self.hasChildren = true
+    }
+
+    nodes.push(node)
+  })
+
+  return nodes
+}
+
+function expandAttribute(node: Node, attributeName: string, values: string[]): ExplorerNode[] {
+  const items = values.map((value, index) => createAttributeExplorerNode(node, attributeName, value, index))
+
+  return [
+    ...items,
+    createEdgeExplorerNode(node, attributeName, {
+      items: items.map((item) => item.id),
+      truncated: false,
+    }),
+  ]
+}
+
+// Returns node attributes that should be rendered as separate nodes/rows in explorer
+function collectExpandableAttributes(node: Node): Array<[string, string[]]> {
+  const attributes: Array<[string, string[]]> = []
 
   if (node.type === NodeType.INDEX) {
-    for (const child of createLabelNodes(node, "columns", node.attributes.columns ?? [])) {
-      if (child.kind === "edge") {
-        attachEdge(child)
-        continue
-      }
-      nodes.push(child)
-    }
-    for (const child of createLabelNodes(node, "include", node.attributes.includeColumns ?? [])) {
-      if (child.kind === "edge") {
-        attachEdge(child)
-        continue
-      }
-      nodes.push(child)
-    }
+    attributes.push(
+      ["columns", node.attributes.columns ?? []],
+      ["include", node.attributes.includeColumns ?? []],
+    )
   }
 
   if (node.type === NodeType.CONSTRAINT) {
-    for (const child of createLabelNodes(node, "columns", node.attributes.columns ?? [])) {
-      if (child.kind === "edge") {
-        attachEdge(child)
-        continue
-      }
-      nodes.push(child)
-    }
-    for (const child of createLabelNodes(node, "references", node.attributes.referencedColumns ?? [])) {
-      if (child.kind === "edge") {
-        attachEdge(child)
-        continue
-      }
-      nodes.push(child)
-    }
-    const label = formatConstraintActionLabel(node.attributes)
-    if (label) {
-      for (const child of createLabelNodes(node, "action_rules", [label])) {
-        if (child.kind === "edge") {
-          attachEdge(child)
-          continue
-        }
-        nodes.push(child)
-      }
-    }
+    const value = formatConstraintActionLabel(node.attributes)
+    attributes.push(
+      ["columns", node.attributes.columns ?? []],
+      ["references", node.attributes.referencedColumns ?? []],
+      ["action_rules", value ? [value] : []],
+    )
   }
 
   if (node.type === NodeType.TRIGGER) {
-    const label = formatTriggerActionLabel(node.attributes)
-    if (label) {
-      for (const child of createLabelNodes(node, "action_rules", [label])) {
-        if (child.kind === "edge") {
-          attachEdge(child)
-          continue
-        }
-        nodes.push(child)
-      }
-    }
+    const value = formatTriggerActionLabel(node.attributes)
+    attributes.push(["action_rules", value ? [value] : []])
   }
 
-  for (const [name, edge] of Object.entries(node.edges) as Array<[string, NodeEdge]>) {
-    if (!edge.items || edge.items.length === 0) continue
-    attachEdge(createEdgeExplorerNode(node, name, edge))
-  }
-
-  return nodes
+  return attributes.filter(([, values]) => values.length > 0)
 }
 
-function createLabelNodes(node: Node, edgeName: string, labels: string[]): ExplorerNode[] {
-  if (labels.length === 0) return []
-
-  const nodes: ExplorerNode[] = []
-  const ids: string[] = []
-
-  for (let index = 0; index < labels.length; index += 1) {
-    const label = labels[index]
-    if (!label) continue
-    const child = createLabelExplorerNode(node, edgeName, label, index)
-    nodes.push(child)
-    ids.push(child.id)
-  }
-
-  if (ids.length === 0) return nodes
-
-  nodes.push(
-    createEdgeExplorerNode(node, edgeName, {
-      items: ids,
-      truncated: false,
-    }),
-  )
-
-  return nodes
-}
-
-function createLabelExplorerNode(node: Node, edgeName: string, label: string, index: number): SnapshotExplorerNode {
+function createAttributeExplorerNode(node: Node, edgeName: string, value: string, index: number): SnapshotExplorerNode {
   return createSnapshotExplorerNode({
     id: syntheticEntityId(node.id, edgeName, index),
     type: NodeType.COLUMN,
-    name: label,
+    name: value,
     attributes: {
       resource: "synthetic",
       table: node.name,
-      column: label,
+      column: value,
       ordinal: index,
       dataType: "",
       notNull: false,
@@ -266,7 +237,6 @@ function describeNode(node: Node): string | undefined {
     case NodeType.TRIGGER:
       return describeTrigger(node.attributes)
   }
-  return undefined
 }
 
 function nodeBadges(node: Node): string[] {

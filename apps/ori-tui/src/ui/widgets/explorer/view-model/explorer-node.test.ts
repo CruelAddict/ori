@@ -1,8 +1,9 @@
 import { describe, expect, test } from "bun:test"
 import { type Node, type NodeEdge, NodeType } from "@adapters/ori/client"
 import {
+  convertToExplorerNodes,
   createEdgeExplorerNode,
-  createSnapshotExplorerNode,
+  type SnapshotExplorerNode,
 } from "./explorer-node"
 
 type NodeOverrides = {
@@ -145,14 +146,22 @@ const makeEdge = (items: string[], truncated = false): NodeEdge => ({
   truncated,
 })
 
+const getSnapshotNode = (node: Node): SnapshotExplorerNode => {
+  const item = convertToExplorerNodes(node).find((child) => child.id === node.id)
+  if (!item || item.kind !== "node") {
+    throw new Error(`Missing snapshot node for ${node.id}`)
+  }
+  return item
+}
+
 describe("createSnapshotExplorerNode", () => {
   test("describes database nodes", () => {
-    const node = createSnapshotExplorerNode(makeNode({ id: "db", type: NodeType.DATABASE, name: "main" }))
+    const node = getSnapshotNode(makeNode({ id: "db", type: NodeType.DATABASE, name: "main" }))
     expect(node.description).toBe("database")
   })
 
   test("describes schema nodes", () => {
-    const node = createSnapshotExplorerNode(makeNode({ id: "schema", type: NodeType.SCHEMA, name: "public" }))
+    const node = getSnapshotNode(makeNode({ id: "schema", type: NodeType.SCHEMA, name: "public" }))
     expect(node.description).toBe("schema")
   })
 
@@ -164,7 +173,7 @@ describe("createSnapshotExplorerNode", () => {
       attributes: { table: "users" },
       edges: { columns: makeEdge(["col-1"]) },
     })
-    const snapshotNode = createSnapshotExplorerNode(node)
+    const snapshotNode = getSnapshotNode(node)
     expect(snapshotNode).toEqual({
       id: "table-1",
       kind: "node",
@@ -172,13 +181,13 @@ describe("createSnapshotExplorerNode", () => {
       label: "public.users",
       description: "users",
       badges: [],
-      childIds: [],
-      hasChildren: false,
+      childIds: ["edge:table-1:columns"],
+      hasChildren: true,
     })
   })
 
   test("describes view nodes from attributes", () => {
-    const view = createSnapshotExplorerNode(
+    const view = getSnapshotNode(
       makeNode({
         id: "view-1",
         type: NodeType.VIEW,
@@ -190,7 +199,7 @@ describe("createSnapshotExplorerNode", () => {
   })
 
   test("describes columns and badges primary/!null", () => {
-    const node = createSnapshotExplorerNode(
+    const node = getSnapshotNode(
       makeNode({
         id: "col-1",
         type: NodeType.COLUMN,
@@ -203,7 +212,7 @@ describe("createSnapshotExplorerNode", () => {
   })
 
   test("describes CHECK constraints", () => {
-    const node = createSnapshotExplorerNode(
+    const node = getSnapshotNode(
       makeNode({
         id: "check-1",
         type: NodeType.CONSTRAINT,
@@ -215,7 +224,7 @@ describe("createSnapshotExplorerNode", () => {
   })
 
   test("describes foreign key constraints and badges", () => {
-    const node = createSnapshotExplorerNode(
+    const node = getSnapshotNode(
       makeNode({
         id: "fk-1",
         type: NodeType.CONSTRAINT,
@@ -235,7 +244,7 @@ describe("createSnapshotExplorerNode", () => {
   })
 
   test("describes UNIQUE constraints with index name", () => {
-    const node = createSnapshotExplorerNode(
+    const node = getSnapshotNode(
       makeNode({
         id: "uniq-1",
         type: NodeType.CONSTRAINT,
@@ -247,7 +256,7 @@ describe("createSnapshotExplorerNode", () => {
   })
 
   test("describes indexes with predicate and badges", () => {
-    const node = createSnapshotExplorerNode(
+    const node = getSnapshotNode(
       makeNode({
         id: "idx-1",
         type: NodeType.INDEX,
@@ -260,7 +269,7 @@ describe("createSnapshotExplorerNode", () => {
   })
 
   test("describes triggers and badges", () => {
-    const node = createSnapshotExplorerNode(
+    const node = getSnapshotNode(
       makeNode({
         id: "trg-1",
         type: NodeType.TRIGGER,
