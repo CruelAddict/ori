@@ -58,8 +58,161 @@ export function createEdgeExplorerNode(node: Node, edgeName: string, edge: NodeE
   }
 }
 
+export function convertToExplorerNodes(node: Node): ExplorerNode[] {
+  const nodes: ExplorerNode[] = []
+  const self = createSnapshotExplorerNode(node)
+  nodes.push(self)
+
+  const attachEdge = (edge: EdgeExplorerNode) => {
+    self.childIds.push(edge.id)
+    self.hasChildren = true
+    nodes.push(edge)
+  }
+
+  if (node.type === NodeType.INDEX) {
+    for (const child of createLabelNodes(node, "columns", node.attributes.columns ?? [])) {
+      if (child.kind === "edge") {
+        attachEdge(child)
+        continue
+      }
+      nodes.push(child)
+    }
+    for (const child of createLabelNodes(node, "include", node.attributes.includeColumns ?? [])) {
+      if (child.kind === "edge") {
+        attachEdge(child)
+        continue
+      }
+      nodes.push(child)
+    }
+  }
+
+  if (node.type === NodeType.CONSTRAINT) {
+    for (const child of createLabelNodes(node, "columns", node.attributes.columns ?? [])) {
+      if (child.kind === "edge") {
+        attachEdge(child)
+        continue
+      }
+      nodes.push(child)
+    }
+    for (const child of createLabelNodes(node, "references", node.attributes.referencedColumns ?? [])) {
+      if (child.kind === "edge") {
+        attachEdge(child)
+        continue
+      }
+      nodes.push(child)
+    }
+    const label = formatConstraintActionLabel(node.attributes)
+    if (label) {
+      for (const child of createLabelNodes(node, "action_rules", [label])) {
+        if (child.kind === "edge") {
+          attachEdge(child)
+          continue
+        }
+        nodes.push(child)
+      }
+    }
+  }
+
+  if (node.type === NodeType.TRIGGER) {
+    const label = formatTriggerActionLabel(node.attributes)
+    if (label) {
+      for (const child of createLabelNodes(node, "action_rules", [label])) {
+        if (child.kind === "edge") {
+          attachEdge(child)
+          continue
+        }
+        nodes.push(child)
+      }
+    }
+  }
+
+  for (const [name, edge] of Object.entries(node.edges) as Array<[string, NodeEdge]>) {
+    if (!edge.items || edge.items.length === 0) continue
+    attachEdge(createEdgeExplorerNode(node, name, edge))
+  }
+
+  return nodes
+}
+
+function createLabelNodes(node: Node, edgeName: string, labels: string[]): ExplorerNode[] {
+  if (labels.length === 0) return []
+
+  const nodes: ExplorerNode[] = []
+  const ids: string[] = []
+
+  for (let index = 0; index < labels.length; index += 1) {
+    const label = labels[index]
+    if (!label) continue
+    const child = createLabelExplorerNode(node, edgeName, label, index)
+    nodes.push(child)
+    ids.push(child.id)
+  }
+
+  if (ids.length === 0) return nodes
+
+  nodes.push(
+    createEdgeExplorerNode(node, edgeName, {
+      items: ids,
+      truncated: false,
+    }),
+  )
+
+  return nodes
+}
+
+function createLabelExplorerNode(node: Node, edgeName: string, label: string, index: number): SnapshotExplorerNode {
+  return createSnapshotExplorerNode({
+    id: syntheticEntityId(node.id, edgeName, index),
+    type: NodeType.COLUMN,
+    name: label,
+    attributes: {
+      resource: "synthetic",
+      table: node.name,
+      column: label,
+      ordinal: index,
+      dataType: "",
+      notNull: false,
+    },
+    edges: {},
+  })
+}
+
+function formatConstraintActionLabel(attrs: ConstraintNode["attributes"]): string | undefined {
+  const labels: string[] = []
+  const match = attrs.match ?? ""
+  const onUpdate = attrs.onUpdate ?? ""
+  const onDelete = attrs.onDelete ?? ""
+  if (match) labels.push(`match ${match.toLowerCase()}`)
+  if (onUpdate) labels.push(`on update ${onUpdate.toLowerCase()}`)
+  if (onDelete) labels.push(`on delete ${onDelete.toLowerCase()}`)
+  if (labels.length === 0) return undefined
+  return labels.join(", ")
+}
+
+function formatTriggerActionLabel(attrs: TriggerNode["attributes"]): string | undefined {
+  const labels: string[] = []
+  const timing = attrs.timing ?? ""
+  const events = (attrs.events ?? []).filter((event: string) => event.length > 0)
+  const eventsLabel = events.map((event: string) => event.toLowerCase()).join(" or ")
+  const orientation = attrs.orientation ?? ""
+  const condition = attrs.condition ?? ""
+  const statement = attrs.statement ?? ""
+  if (timing && eventsLabel) labels.push(`${timing.toLowerCase()} ${eventsLabel}`)
+  if (!timing && eventsLabel) labels.push(eventsLabel)
+  if (timing && !eventsLabel) labels.push(timing.toLowerCase())
+  if (orientation) labels.push(`for each ${orientation.toLowerCase()}`)
+  if (condition) labels.push(`when ${condition.toLowerCase()}`)
+  if (statement) labels.push(statement.toLowerCase())
+  if (labels.length === 0) return undefined
+  return labels.join(", ")
+}
+
 function edgeEntityId(nodeId: string, edgeName: string): string {
   return `edge:${nodeId}:${edgeName}`
+}
+
+function syntheticEntityId(nodeId: string, edgeName: string, index: number): string {
+  return `synthetic:${nodeId}:${edgeName}:${index}`
 }
 
 function edgeLabel(edgeName: string): string {

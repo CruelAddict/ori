@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { type Node, type NodeEdge, NodeType } from "@adapters/ori/client"
-import { convertSnapshotNodeEntities } from "../view-model/explorer-graph"
 import type { ExplorerNode } from "./explorer-node"
+import { convertToExplorerNodes } from "./explorer-node"
 
 type NodeOverrides = {
   id: string
@@ -138,13 +138,13 @@ const syntheticId = (nodeId: string, edgeName: string, index: number) => `synthe
 
 const toExplorerNodeMap = (node: Node) => {
   const map: Record<string, ExplorerNode> = {}
-  for (const child of convertSnapshotNodeEntities(node)) {
+  for (const child of convertToExplorerNodes(node)) {
     map[child.id] = child
   }
   return map
 }
 
-describe("convertSnapshotNodeEntities", () => {
+describe("expandExplorerNode", () => {
   test("creates edge explorer nodes for non-empty edges", () => {
     const db = makeNode({
       id: "db-1",

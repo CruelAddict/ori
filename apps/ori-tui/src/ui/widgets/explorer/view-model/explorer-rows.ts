@@ -1,6 +1,6 @@
 import { type Accessor, createComputed, createMemo, createSignal, untrack } from "solid-js"
 import { fuzzyFilter } from "../../../../utils/fuzzy/fuzzy-search"
-import type { ExplorerNode } from "../model/explorer-node"
+import type { ExplorerNode } from "./explorer-node"
 import type { ExplorerGraph } from "./explorer-graph"
 import type { UIMode } from "./explorer-types"
 

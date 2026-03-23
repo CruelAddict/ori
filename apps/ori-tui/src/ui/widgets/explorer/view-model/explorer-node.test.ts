@@ -1,6 +1,9 @@
 import { describe, expect, test } from "bun:test"
 import { type Node, type NodeEdge, NodeType } from "@adapters/ori/client"
-import { createEdgeExplorerNode, createSnapshotExplorerNode } from "./explorer-node"
+import {
+  createEdgeExplorerNode,
+  createSnapshotExplorerNode,
+} from "./explorer-node"
 
 type NodeOverrides = {
   id: string
