@@ -178,7 +178,7 @@ describe("createSnapshotExplorerNode", () => {
       id: "table-1",
       kind: "node",
       node,
-      label: "public.users",
+      name: "public.users",
       description: "users",
       badges: [],
       childIds: ["edge:table-1:columns"],
@@ -287,14 +287,14 @@ describe("createEdgeExplorerNode", () => {
     const node = makeNode({ id: "table-1", type: NodeType.TABLE, name: "users" })
     const edge = createEdgeExplorerNode(node, "columns", makeEdge(["col-1", "col-2"]))
     expect(edge.id).toBe("edge:table-1:columns")
-    expect(edge.label).toBe("columns")
+    expect(edge.name).toBe("columns")
     expect(edge.description).toBe("2")
   })
 
-  test("renders action rule edge label with spaces", () => {
+  test("renders action rule edge name with spaces", () => {
     const node = makeNode({ id: "trg-1", type: NodeType.TRIGGER, name: "users_audit" })
     const edge = createEdgeExplorerNode(node, "action_rules", makeEdge(["rule-1"]))
-    expect(edge.label).toBe("action rules")
+    expect(edge.name).toBe("action rules")
   })
 
   test("renders truncated edge descriptions", () => {

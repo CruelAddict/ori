@@ -203,9 +203,9 @@ describe("expandExplorerNode", () => {
     const firstColumn = explorerNodes[syntheticId(index.id, "columns", 0)]
     const secondColumn = explorerNodes[syntheticId(index.id, "columns", 1)]
     const includeColumn = explorerNodes[syntheticId(index.id, "include", 0)]
-    expect(firstColumn?.label).toBe("id")
-    expect(secondColumn?.label).toBe("email")
-    expect(includeColumn?.label).toBe("created_at")
+    expect(firstColumn?.name).toBe("id")
+    expect(secondColumn?.name).toBe("email")
+    expect(includeColumn?.name).toBe("created_at")
   })
 
   test("creates synthetic edges for constraint columns, references, and action rules", () => {
@@ -238,7 +238,7 @@ describe("expandExplorerNode", () => {
     expect(referencesEdge?.childIds).toEqual([syntheticId(constraint.id, "references", 0)])
     expect(rulesEdge?.childIds).toEqual([syntheticId(constraint.id, "action_rules", 0)])
     const actionRule = explorerNodes[syntheticId(constraint.id, "action_rules", 0)]
-    expect(actionRule?.label).toBe("match full, on update cascade, on delete restrict")
+    expect(actionRule?.name).toBe("match full, on update cascade, on delete restrict")
   })
 
   test("creates synthetic action rules edge for triggers", () => {
@@ -262,7 +262,7 @@ describe("expandExplorerNode", () => {
     const rulesEdge = explorerNodes[edgeId(trigger.id, "action_rules")]
     expect(rulesEdge?.childIds).toEqual([syntheticId(trigger.id, "action_rules", 0)])
     const actionRule = explorerNodes[syntheticId(trigger.id, "action_rules", 0)]
-    expect(actionRule?.label).toBe("before insert or update, for each row, when new.active = true")
+    expect(actionRule?.name).toBe("before insert or update, for each row, when new.active = true")
   })
 
   test("skips synthetic edges when arrays are empty", () => {

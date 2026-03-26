@@ -219,7 +219,7 @@ export function applyRenderPatchStep(
 function renderRow(row: ExplorerRowState): ExplorerRenderedRowState {
   const elements: ExplorerRenderedRowElement[] = [
     { text: `${row.glyph} `, role: "glyph", attributes: TextAttributes.DIM },
-    { text: row.label, role: "main" },
+    { text: row.name, role: "main" },
   ]
 
   if (row.description) {

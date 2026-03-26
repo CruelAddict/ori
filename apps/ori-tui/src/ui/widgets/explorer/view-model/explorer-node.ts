@@ -5,7 +5,7 @@ export type ExplorerNode = SnapshotExplorerNode | EdgeExplorerNode
 type BaseExplorerNode = {
   id: string
   kind: "node" | "edge"
-  label: string
+  name: string
   icon?: string
   description?: string
   badges: string[]
@@ -34,7 +34,7 @@ function createSnapshotExplorerNode(node: Node): SnapshotExplorerNode {
     id: node.id,
     kind: "node",
     node,
-    label: node.name,
+    name: node.name,
     description: describeNode(node),
     badges: nodeBadges(node),
     childIds: [],
@@ -49,7 +49,7 @@ export function createEdgeExplorerNode(node: Node, edgeName: string, edge: NodeE
     kind: "edge",
     sourceNodeId: node.id,
     edgeName,
-    label: edgeLabel(edgeName),
+    name: edgeNameText(edgeName),
     description: describeEdge(edge),
     badges: [],
     childIds,
@@ -105,6 +105,7 @@ function expandAttribute(node: Node, attributeName: string, values: string[]): E
 
 // Returns node attributes that should be rendered as separate nodes/rows in explorer
 function collectExpandableAttributes(node: Node): Array<[string, string[]]> {
+  // [edge node name, [child node names]
   const attributes: Array<[string, string[]]> = []
 
   if (node.type === NodeType.INDEX) {
@@ -115,17 +116,17 @@ function collectExpandableAttributes(node: Node): Array<[string, string[]]> {
   }
 
   if (node.type === NodeType.CONSTRAINT) {
-    const value = formatConstraintActionLabel(node.attributes)
+    const contraintName = formatConstraintActionName(node.attributes)
     attributes.push(
       ["columns", node.attributes.columns ?? []],
       ["references", node.attributes.referencedColumns ?? []],
-      ["action_rules", value ? [value] : []],
+      ["action_rules", contraintName ? [contraintName] : []],
     )
   }
 
   if (node.type === NodeType.TRIGGER) {
-    const value = formatTriggerActionLabel(node.attributes)
-    attributes.push(["action_rules", value ? [value] : []])
+    const ruleName = formatTriggerActionName(node.attributes)
+    attributes.push(["action_rules", ruleName ? [ruleName] : []])
   }
 
   return attributes.filter(([, values]) => values.length > 0)
@@ -148,34 +149,34 @@ function createAttributeExplorerNode(node: Node, edgeName: string, value: string
   })
 }
 
-function formatConstraintActionLabel(attrs: ConstraintNode["attributes"]): string | undefined {
-  const labels: string[] = []
+function formatConstraintActionName(attrs: ConstraintNode["attributes"]): string | undefined {
+  const parts: string[] = []
   const match = attrs.match ?? ""
   const onUpdate = attrs.onUpdate ?? ""
   const onDelete = attrs.onDelete ?? ""
-  if (match) labels.push(`match ${match.toLowerCase()}`)
-  if (onUpdate) labels.push(`on update ${onUpdate.toLowerCase()}`)
-  if (onDelete) labels.push(`on delete ${onDelete.toLowerCase()}`)
-  if (labels.length === 0) return undefined
-  return labels.join(", ")
+  if (match) parts.push(`match ${match.toLowerCase()}`)
+  if (onUpdate) parts.push(`on update ${onUpdate.toLowerCase()}`)
+  if (onDelete) parts.push(`on delete ${onDelete.toLowerCase()}`)
+  if (parts.length === 0) return undefined
+  return parts.join(", ")
 }
 
-function formatTriggerActionLabel(attrs: TriggerNode["attributes"]): string | undefined {
-  const labels: string[] = []
+function formatTriggerActionName(attrs: TriggerNode["attributes"]): string | undefined {
+  const parts: string[] = []
   const timing = attrs.timing ?? ""
   const events = (attrs.events ?? []).filter((event: string) => event.length > 0)
-  const eventsLabel = events.map((event: string) => event.toLowerCase()).join(" or ")
+  const eventsText = events.map((event: string) => event.toLowerCase()).join(" or ")
   const orientation = attrs.orientation ?? ""
   const condition = attrs.condition ?? ""
   const statement = attrs.statement ?? ""
-  if (timing && eventsLabel) labels.push(`${timing.toLowerCase()} ${eventsLabel}`)
-  if (!timing && eventsLabel) labels.push(eventsLabel)
-  if (timing && !eventsLabel) labels.push(timing.toLowerCase())
-  if (orientation) labels.push(`for each ${orientation.toLowerCase()}`)
-  if (condition) labels.push(`when ${condition.toLowerCase()}`)
-  if (statement) labels.push(statement.toLowerCase())
-  if (labels.length === 0) return undefined
-  return labels.join(", ")
+  if (timing && eventsText) parts.push(`${timing.toLowerCase()} ${eventsText}`)
+  if (!timing && eventsText) parts.push(eventsText)
+  if (timing && !eventsText) parts.push(timing.toLowerCase())
+  if (orientation) parts.push(`for each ${orientation.toLowerCase()}`)
+  if (condition) parts.push(`when ${condition.toLowerCase()}`)
+  if (statement) parts.push(statement.toLowerCase())
+  if (parts.length === 0) return undefined
+  return parts.join(", ")
 }
 
 function edgeEntityId(nodeId: string, edgeName: string): string {
@@ -186,7 +187,7 @@ function syntheticEntityId(nodeId: string, edgeName: string, index: number): str
   return `synthetic:${nodeId}:${edgeName}:${index}`
 }
 
-function edgeLabel(edgeName: string): string {
+function edgeNameText(edgeName: string): string {
   return edgeName.replaceAll("_", " ")
 }
 

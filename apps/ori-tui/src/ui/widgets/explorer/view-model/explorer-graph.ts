@@ -36,6 +36,6 @@ export function createExplorerGraph(snapshot: { nodesById: Record<string, Node>;
   return {
     nodesById,
     rootIds,
-    searchable: Object.values(nodesById).map((node) => ({ id: node.id, name: node.label })),
+    searchable: Object.values(nodesById).map((node) => ({ id: node.id, name: node.name })),
   }
 }

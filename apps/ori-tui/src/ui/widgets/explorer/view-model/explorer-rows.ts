@@ -11,7 +11,7 @@ export type ExplorerRowState = {
   parentId?: string
   depth: number
   glyph: string
-  label: string
+  name: string
   description?: string
   badges: string[]
   hasChildren: boolean
@@ -352,7 +352,7 @@ function createRow(graph: ExplorerGraph, id: string, depth: number, parentId?: s
     parentId,
     depth,
     glyph: hasChildren ? (isExpanded ? "▽" : "▷") : "·",
-    label: node.label,
+    name: node.name,
     description: node.description,
     badges: node.badges,
     hasChildren,
@@ -367,7 +367,7 @@ function areRowsEqual(left: ExplorerRowState, right: ExplorerRowState) {
   if (left.parentId !== right.parentId) return false
   if (left.depth !== right.depth) return false
   if (left.glyph !== right.glyph) return false
-  if (left.label !== right.label) return false
+  if (left.name !== right.name) return false
   if (left.description !== right.description) return false
   if (left.hasChildren !== right.hasChildren) return false
   if (left.isExpanded !== right.isExpanded) return false
