@@ -13,5 +13,15 @@ runs:
       uses: docker/setup-docker-action@v5
     - name: Setup Docker (Macos)
       if: inputs.os == 'macos-latest'
-      run: brew install --cask docker
+      timeout-minutes: 20
+      run: |
+        brew install colima docker
+        colima start \
+          --cpu 2 \
+          --memory 4 \
+          --disk 20 \
+          --vm-type=vz \
+          --vz-rosetta \
+          --network-address \
+          --timeout 600s
       shell: bash
