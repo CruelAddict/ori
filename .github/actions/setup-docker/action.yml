@@ -10,11 +10,11 @@ runs:
   steps:
     - name: Setup QEMU
       uses: docker/setup-qemu-action@v4
-    - name: Setup Docker Buildx
-      uses: docker/setup-buildx-action@v4
     - name: Install Docker CLI (macOS)
       if: runner.os == 'macOS'
       shell: bash
       run: |
         echo "/opt/homebrew/bin" >> $GITHUB_PATH
         echo "/usr/local/bin" >> $GITHUB_PATH
+    - name: Setup Docker Buildx
+      uses: docker/setup-buildx-action@v4
