@@ -1,0 +1,13 @@
+---
+name: "Setup Docker"
+description: "Setup Docker for ${{ inputs.os }}"
+
+inputs:
+  os:
+    required: true
+
+runs:
+  using: "composite"
+  steps:
+    - name: Set up Docker
+      uses: docker/setup-docker-action@v5

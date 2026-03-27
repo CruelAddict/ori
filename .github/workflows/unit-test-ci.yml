@@ -1,12 +1,12 @@
 ---
-name: Github pipeline
+name: "CI: Unit tests (macos only)"
 on: [push]
 jobs:
   unit-test:
     runs-on: macos-latest
     steps:
       - name: Download Registry
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
       - uses: ./.github/actions/init
       - name: Build
         run: make build
