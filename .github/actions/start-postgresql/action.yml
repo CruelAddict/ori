@@ -1,6 +1,5 @@
 ---
 name: "Setup PostgreSQL"
-description: "Setup PostgreSQL for ${{ inputs.os }}"
 
 inputs:
   postgres-password:
