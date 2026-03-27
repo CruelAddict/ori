@@ -13,5 +13,5 @@ runs:
       uses: docker/setup-docker-action@v5
     - name: Setup Docker (Macos)
       if: inputs.os == 'macos-latest'
-      run: brew install --cask docker && open -a Docker
+      run: brew install --cask docker
       shell: bash
