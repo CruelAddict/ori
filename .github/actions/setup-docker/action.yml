@@ -22,5 +22,4 @@ runs:
           --vm-type=vz \
           --vz-rosetta \
           --network-address \
-          --timeout 600s
       shell: bash
