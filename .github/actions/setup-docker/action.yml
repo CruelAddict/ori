@@ -1,6 +1,5 @@
 ---
 name: "Setup Docker"
-description: "Setup Docker for ${{ inputs.os }}"
 
 inputs:
   os:
