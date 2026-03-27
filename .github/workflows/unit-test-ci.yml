@@ -3,7 +3,7 @@ name: "CI: Unit tests (macos only)"
 on: [push]
 jobs:
   unit-test:
-    runs-on: macos-latest
+    runs-on: macos-14
     steps:
       - name: Download Registry
         uses: actions/checkout@v6

@@ -9,10 +9,10 @@ runs:
   using: "composite"
   steps:
     - name: Setup Docker
-      if: inputs.os != 'macos-latest'
+      if: inputs.os != 'macos-14'
       uses: docker/setup-docker-action@v5
     - name: Setup Docker (Macos)
-      if: inputs.os == 'macos-latest'
+      if: inputs.os == 'macos-14'
       uses: douglascamata/setup-docker-macos-action@v1.0.1
       with:
         lima: v1.2.1
