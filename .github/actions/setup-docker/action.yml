@@ -8,7 +8,8 @@ inputs:
 runs:
   using: "composite"
   steps:
-    - name: Setup QEMU
+    - name: Setup Docker
+      if: inputs.os != 'macOS'
       uses: docker/setup-docker-action@v5
     - name: Setup Docker (Macos)
       if: inputs.os == 'macOS'
