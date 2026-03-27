@@ -9,4 +9,4 @@ runs:
   using: "composite"
   steps:
     - name: Setup QEMU
-      uses: docker/setup-qemu-action@v4
+      uses: docker/setup-docker-action@v5
