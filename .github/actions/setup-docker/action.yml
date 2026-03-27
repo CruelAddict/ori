@@ -13,5 +13,5 @@ runs:
       uses: docker/setup-docker-action@v5
     - name: Setup Docker (Macos)
       if: inputs.os == 'macos-latest'
-      run: brew install --cask docker
+      run: brew install colima docker && colima start
       shell: bash
