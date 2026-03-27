@@ -7,7 +7,7 @@ inputs:
   postgres-db:
     default: "testdb"
   postgres-user:
-    default: "Testov Test Testovich"
+    default: "testov_test_testovich"
 outputs:
   port:
     value: ${{ steps.container.outputs.port }}
