@@ -11,6 +11,7 @@ export type RowSnapshot = {
   depth: number
   name: string
   description?: string
+  type?: string
   badges: string[]
   hasChildren: boolean
   isExpanded: boolean
@@ -100,12 +101,12 @@ export function createExplorerRows(options: CreateExplorerRowsOptions) {
       insertedRows.length === 0
         ? { type: "update", rows: [expandedRow] }
         : {
-            type: "batch",
-            patches: [
-              { type: "update", rows: [expandedRow] },
-              { type: "insert", afterId: id, rows: insertedRows },
-            ],
-          },
+          type: "batch",
+          patches: [
+            { type: "update", rows: [expandedRow] },
+            { type: "insert", afterId: id, rows: insertedRows },
+          ],
+        },
     )
 
     const node = graph.nodesById[id]
@@ -142,12 +143,12 @@ export function createExplorerRows(options: CreateExplorerRowsOptions) {
       removedIds.length === 0
         ? { type: "update", rows: [collapsedRow] }
         : {
-            type: "batch",
-            patches: [
-              { type: "update", rows: [collapsedRow] },
-              { type: "remove", rowIds: removedIds },
-            ],
-          },
+          type: "batch",
+          patches: [
+            { type: "update", rows: [collapsedRow] },
+            { type: "remove", rowIds: removedIds },
+          ],
+        },
     )
   }
 
@@ -201,6 +202,7 @@ function buildSearchRows(graph: ExplorerGraph, filter: string) {
   for (const match of matches) {
     const row = createRow(graph, match.id, 0)
     if (!row) continue
+    if (row.type === undefined) continue
     rows.push({ ...row, isExpanded: false, parentId: undefined })
   }
   return rows
@@ -235,6 +237,7 @@ function createRow(graph: ExplorerGraph, id: string, depth: number, parentId?: s
     depth,
     name: node.name,
     description: node.description,
+    type: node.origin.type === "node" ? node.origin.nodeType : undefined,
     badges: node.badges,
     hasChildren: node.hasChildren,
     isExpanded,

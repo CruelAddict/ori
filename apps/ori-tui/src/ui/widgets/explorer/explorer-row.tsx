@@ -51,7 +51,7 @@ export function ExplorerRow(props: ExplorerRowProps) {
     props.explorer.expandRow(row().id)
   }
 
-  const rowSegments = createMemo(() => {
+  const treeModeSegments = () => {
     const isCursorRow = isSelected() && props.isFocused()
     const colors = {
       baseFg: fg(),
@@ -91,7 +91,44 @@ export function ExplorerRow(props: ExplorerRowProps) {
     }
 
     return parts
-  })
+  }
+
+  const searchModeSegments = () => {
+    const isCursorRow = isSelected() && props.isFocused()
+    const colors = {
+      baseFg: fg(),
+      baseBg: bg(),
+      glyph: isCursorRow ? fg() : theme().get("text"),
+      description: isCursorRow ? fg() : theme().get("text_muted"),
+      badge: isCursorRow ? fg() : theme().get("accent"),
+    }
+    const parts: ExplorerRowSegment[] = [
+      {
+        text: `${getRowGlyph(row(), isSearchMode())} `,
+        bg: colors.baseBg,
+        fg: colors.glyph,
+        attributes: TextAttributes.DIM,
+      },
+    ]
+
+    if (row().type) {
+      parts.push({
+        text: `${row().type} `,
+        bg: colors.baseBg,
+        fg: colors.badge,
+      })
+    }
+
+    parts.push({
+      text: row().name,
+      bg: colors.baseBg,
+      fg: colors.baseFg,
+    })
+
+    return parts
+  }
+
+  const rowSegments = createMemo(() => isSearchMode() ? searchModeSegments() : treeModeSegments())
 
   const rowWidth = createMemo(() => rowSegments().reduce((sum, part) => sum + part.text.length, 0))
 
@@ -120,6 +157,7 @@ export function ExplorerRow(props: ExplorerRowProps) {
     </box>
   )
 }
+
 
 function getRowGlyph(row: RowSnapshot, isSearchMode: boolean) {
   if (isSearchMode) return "·"
