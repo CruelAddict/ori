@@ -194,7 +194,19 @@ export function createResourceIntrospectionUC(deps: ResourceIntrospectionUsecase
     if (pending) {
       await pending
     }
-    await runHydrateQueue()
+    try {
+      await runHydrateQueue()
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      deps.logger.error(
+        { err, resource: deps.resourceName, nodeIds },
+        "resource introspection lazy hydration failed",
+      )
+      setState((current) => ({
+        ...current,
+        error: message,
+      }))
+    }
   }
 
   return {
