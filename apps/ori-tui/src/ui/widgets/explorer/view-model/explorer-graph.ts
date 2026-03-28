@@ -5,6 +5,7 @@ export type ExplorerGraph = {
   nodesById: Record<string, ExplorerNode>
   rootIds: string[]
   searchable: Array<{ id: string; name: string }>
+  parentById: Record<string, string>
 }
 
 export function createExplorerGraph(snapshot: { nodesById: Record<string, Node>; rootIds: string[] }): ExplorerGraph {
@@ -33,9 +34,38 @@ export function createExplorerGraph(snapshot: { nodesById: Record<string, Node>;
     })
     .map((node) => node.id)
 
+  const parentById = buildParentById(nodesById, rootIds)
+
   return {
     nodesById,
     rootIds,
     searchable: Object.values(nodesById).map((node) => ({ id: node.id, name: node.name })),
+    parentById,
   }
+}
+
+function buildParentById(nodesById: Record<string, ExplorerNode>, rootIds: string[]) {
+  const parentById: Record<string, string> = {}
+  const seen = new Set<string>()
+
+  const visit = (id: string) => {
+    if (seen.has(id)) return
+    seen.add(id)
+
+    const node = nodesById[id]
+    if (!node) return
+
+    for (const childId of node.childIds) {
+      if (nodesById[childId] && parentById[childId] === undefined) {
+        parentById[childId] = id
+      }
+      visit(childId)
+    }
+  }
+
+  for (const id of rootIds) {
+    visit(id)
+  }
+
+  return parentById
 }

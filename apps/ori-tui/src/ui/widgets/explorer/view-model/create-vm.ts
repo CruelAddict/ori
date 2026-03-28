@@ -135,6 +135,26 @@ export function createVM(options: CreateVMOptions) {
     rowsState.toggleNode(id)
   }
 
+  const handleSearchEnter = () => {
+    const id = searchSelectedId()
+    if (!id) return
+
+    const parentById = graph().parentById
+    const path: string[] = []
+    let current = parentById[id]
+
+    for (; current; current = parentById[current]) {
+      path.unshift(current)
+    }
+
+    batch(() => {
+      rowsState.expandPath(path)
+      setTreeSelectedId(id)
+      setMode("tree")
+      setFilterState("")
+    })
+  }
+
   const refreshGraph = async () => {
     await options.introspection.refresh()
   }
@@ -159,6 +179,7 @@ export function createVM(options: CreateVMOptions) {
     moveSelection,
     handleMoveIn,
     handleMoveOut,
+    handleSearchEnter,
     toggleExpanded,
   }
 }

@@ -71,7 +71,6 @@ export function Explorer(props: ExplorerProps) {
       { pattern: "right", handler: () => explorer.handleMoveIn(), preventDefault: true },
       { pattern: "left", handler: () => explorer.handleMoveOut(), preventDefault: true },
       { pattern: "ctrl+l", handler: () => handleManualHorizontalScroll("right"), preventDefault: true },
-      { pattern: "enter", handler: () => explorer.toggleExpanded(), preventDefault: true },
       {
         pattern: ["ctrl+w", "ctrl+backspace", "meta+backspace"],
         handler: () => syncFilterFromInput(),
@@ -92,6 +91,7 @@ export function Explorer(props: ExplorerProps) {
         { pattern: "k", handler: () => explorer.moveSelection(-1), preventDefault: true },
         { pattern: "l", handler: () => explorer.handleMoveIn(), preventDefault: true },
         { pattern: "h", handler: () => explorer.handleMoveOut(), preventDefault: true },
+        { pattern: "enter", handler: () => explorer.toggleExpanded(), preventDefault: true },
         {
           pattern: ["ctrl+h", "backspace"],
           handler: () => handleManualHorizontalScroll("left"),
@@ -107,6 +107,17 @@ export function Explorer(props: ExplorerProps) {
             })
           },
           preventDefault: true,
+        },
+      )
+    }
+    if (explorer.mode() === "search") {
+      bindings.push(
+        {
+          pattern: "enter", handler: () => {
+            explorer.handleSearchEnter()
+            setTimeout(() => ensureSelectedVisible(), 0)
+          },
+          preventDefault: true
         },
       )
     }

@@ -157,6 +157,23 @@ export function createExplorerRows(options: CreateExplorerRowsOptions) {
     expandNode(id)
   }
 
+  function expandPath(ids: string[]) {
+    const graph = options.graph()
+    const nextExpanded = { ...expandedNodes() }
+    let changed = false
+
+    for (const id of ids) {
+      const node = graph.nodesById[id]
+      if (!node?.hasChildren) continue
+      if (nextExpanded[id]) continue
+      nextExpanded[id] = true
+      changed = true
+    }
+
+    if (!changed) return
+    setExpandedNodes(nextExpanded)
+  }
+
   function isExpanded(id: string) {
     return Boolean(expandedNodes()[id])
   }
@@ -190,6 +207,7 @@ export function createExplorerRows(options: CreateExplorerRowsOptions) {
     expandNode,
     collapseNode,
     toggleNode,
+    expandPath,
   }
 }
 
