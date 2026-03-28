@@ -11,7 +11,10 @@ export function WelcomePane() {
   const { theme } = useTheme()
   const palette = theme
 
-  const commands: CommandRowProps[] = [{ shortcut: "q", label: "open query console" }]
+  const commands: CommandRowProps[] = [
+    { shortcut: "q", label: "open query console" },
+    { shortcut: "s", label: "search introspection results" },
+  ]
 
   return (
     <box

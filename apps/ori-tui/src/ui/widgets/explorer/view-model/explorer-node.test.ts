@@ -1,6 +1,10 @@
 import { describe, expect, test } from "bun:test"
 import { type Node, type NodeEdge, NodeType } from "@adapters/ori/client"
-import { createEdgeExplorerNode, createSnapshotExplorerNode } from "./explorer-node"
+import {
+  convertToExplorerNodes,
+  createEdgeExplorerNode,
+  type ExplorerNode,
+} from "./explorer-node"
 
 type NodeOverrides = {
   id: string
@@ -142,15 +146,23 @@ const makeEdge = (items: string[], truncated = false): NodeEdge => ({
   truncated,
 })
 
+const getSnapshotNode = (node: Node): ExplorerNode => {
+  const item = convertToExplorerNodes(node).find((child) => child.id === node.id)
+  if (!item || item.origin.type !== "node") {
+    throw new Error(`Missing snapshot node for ${node.id}`)
+  }
+  return item
+}
+
 describe("createSnapshotExplorerNode", () => {
   test("describes database nodes", () => {
-    const entity = createSnapshotExplorerNode(makeNode({ id: "db", type: NodeType.DATABASE, name: "main" }))
-    expect(entity.description).toBe("database")
+    const node = getSnapshotNode(makeNode({ id: "db", type: NodeType.DATABASE, name: "main" }))
+    expect(node.description).toBe("database")
   })
 
   test("describes schema nodes", () => {
-    const entity = createSnapshotExplorerNode(makeNode({ id: "schema", type: NodeType.SCHEMA, name: "public" }))
-    expect(entity.description).toBe("schema")
+    const node = getSnapshotNode(makeNode({ id: "schema", type: NodeType.SCHEMA, name: "public" }))
+    expect(node.description).toBe("schema")
   })
 
   test("builds table snapshot node", () => {
@@ -161,21 +173,25 @@ describe("createSnapshotExplorerNode", () => {
       attributes: { table: "users" },
       edges: { columns: makeEdge(["col-1"]) },
     })
-    const entity = createSnapshotExplorerNode(node)
-    expect(entity).toEqual({
+    const snapshotNode = getSnapshotNode(node)
+    expect(snapshotNode).toEqual({
       id: "table-1",
-      kind: "node",
-      node,
-      label: "public.users",
+      origin: {
+        type: "node",
+        nodeId: "table-1",
+        nodeType: NodeType.TABLE,
+      },
+      isDefault: undefined,
+      name: "public.users",
       description: "users",
       badges: [],
-      childIds: [],
-      hasChildren: false,
+      childIds: ["edge:table-1:columns"],
+      hasChildren: true,
     })
   })
 
   test("describes view nodes from attributes", () => {
-    const view = createSnapshotExplorerNode(
+    const view = getSnapshotNode(
       makeNode({
         id: "view-1",
         type: NodeType.VIEW,
@@ -187,7 +203,7 @@ describe("createSnapshotExplorerNode", () => {
   })
 
   test("describes columns and badges primary/!null", () => {
-    const entity = createSnapshotExplorerNode(
+    const node = getSnapshotNode(
       makeNode({
         id: "col-1",
         type: NodeType.COLUMN,
@@ -195,12 +211,12 @@ describe("createSnapshotExplorerNode", () => {
         attributes: { dataType: "uuid", primaryKeyPosition: 1, notNull: true },
       }),
     )
-    expect(entity.description).toBe("uuid")
-    expect(entity.badges).toEqual(["pk", "!null"])
+    expect(node.description).toBe("uuid")
+    expect(node.badges).toEqual(["pk", "!null"])
   })
 
   test("describes CHECK constraints", () => {
-    const entity = createSnapshotExplorerNode(
+    const node = getSnapshotNode(
       makeNode({
         id: "check-1",
         type: NodeType.CONSTRAINT,
@@ -208,11 +224,11 @@ describe("createSnapshotExplorerNode", () => {
         attributes: { constraintType: "CHECK", checkClause: "amount > 0" },
       }),
     )
-    expect(entity.description).toBe("amount > 0")
+    expect(node.description).toBe("amount > 0")
   })
 
   test("describes foreign key constraints and badges", () => {
-    const entity = createSnapshotExplorerNode(
+    const node = getSnapshotNode(
       makeNode({
         id: "fk-1",
         type: NodeType.CONSTRAINT,
@@ -227,12 +243,12 @@ describe("createSnapshotExplorerNode", () => {
         },
       }),
     )
-    expect(entity.description).toBe("references public.users")
-    expect(entity.badges).toEqual([])
+    expect(node.description).toBe("references public.users")
+    expect(node.badges).toEqual([])
   })
 
   test("describes UNIQUE constraints with index name", () => {
-    const entity = createSnapshotExplorerNode(
+    const node = getSnapshotNode(
       makeNode({
         id: "uniq-1",
         type: NodeType.CONSTRAINT,
@@ -240,11 +256,11 @@ describe("createSnapshotExplorerNode", () => {
         attributes: { constraintType: "UNIQUE", indexName: "users_email_idx" },
       }),
     )
-    expect(entity.description).toBe("index users_email_idx")
+    expect(node.description).toBe("index users_email_idx")
   })
 
   test("describes indexes with predicate and badges", () => {
-    const entity = createSnapshotExplorerNode(
+    const node = getSnapshotNode(
       makeNode({
         id: "idx-1",
         type: NodeType.INDEX,
@@ -252,12 +268,12 @@ describe("createSnapshotExplorerNode", () => {
         attributes: { predicate: "active = true", primary: true, unique: true },
       }),
     )
-    expect(entity.description).toBe("where active = true")
-    expect(entity.badges).toEqual(["primary", "unique"])
+    expect(node.description).toBe("where active = true")
+    expect(node.badges).toEqual(["primary", "unique"])
   })
 
   test("describes triggers and badges", () => {
-    const entity = createSnapshotExplorerNode(
+    const node = getSnapshotNode(
       makeNode({
         id: "trg-1",
         type: NodeType.TRIGGER,
@@ -265,8 +281,32 @@ describe("createSnapshotExplorerNode", () => {
         attributes: { timing: "BEFORE", events: ["INSERT", "UPDATE"], enabledState: "enabled" },
       }),
     )
-    expect(entity.description).toBeUndefined()
-    expect(entity.badges).toEqual(["enabled"])
+    expect(node.description).toBeUndefined()
+    expect(node.badges).toEqual(["enabled"])
+  })
+
+  test("creates synthetic attribute nodes without backend node payload", () => {
+    const index = makeNode({
+      id: "idx-1",
+      type: NodeType.INDEX,
+      name: "users_idx",
+      attributes: { columns: ["email"] },
+    })
+
+    const synthetic = convertToExplorerNodes(index).find((item) => item.id === "synthetic:idx-1:columns:0")
+    expect(synthetic).toEqual({
+      id: "synthetic:idx-1:columns:0",
+      origin: {
+        type: "attribute",
+        ownerNodeId: "idx-1",
+        attributeKey: "columns",
+        index: 0,
+      },
+      name: "email",
+      badges: [],
+      childIds: [],
+      hasChildren: false,
+    })
   })
 })
 
@@ -275,14 +315,15 @@ describe("createEdgeExplorerNode", () => {
     const node = makeNode({ id: "table-1", type: NodeType.TABLE, name: "users" })
     const edge = createEdgeExplorerNode(node, "columns", makeEdge(["col-1", "col-2"]))
     expect(edge.id).toBe("edge:table-1:columns")
-    expect(edge.label).toBe("columns")
+    expect(edge.origin).toEqual({ type: "edge", sourceNodeId: "table-1", edgeKey: "columns" })
+    expect(edge.name).toBe("columns")
     expect(edge.description).toBe("2")
   })
 
-  test("renders action rule edge label with spaces", () => {
+  test("renders action rule edge name with spaces", () => {
     const node = makeNode({ id: "trg-1", type: NodeType.TRIGGER, name: "users_audit" })
     const edge = createEdgeExplorerNode(node, "action_rules", makeEdge(["rule-1"]))
-    expect(edge.label).toBe("action rules")
+    expect(edge.name).toBe("action rules")
   })
 
   test("renders truncated edge descriptions", () => {

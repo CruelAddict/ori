@@ -1,9 +1,9 @@
-import type { ScrollBoxRenderable } from "@opentui/core"
+import type { InputRenderable, ScrollBoxRenderable } from "@opentui/core"
 import { TextAttributes } from "@opentui/core"
 import { getViewportRect, OriScrollbox, scrollIntoView } from "@ui/components/ori-scrollbox"
 import { useTheme } from "@ui/providers/theme"
 import { type KeyBinding, KeyScope } from "@ui/services/key-scopes"
-import { type Accessor, createEffect, createSelector, For, on, Show } from "solid-js"
+import { type Accessor, createEffect, createMemo, For, on, Show } from "solid-js"
 import { ExplorerRow } from "./explorer-row.tsx"
 import type { ExplorerViewModel } from "./view-model/create-vm"
 
@@ -17,21 +17,30 @@ export type ExplorerProps = {
 
 export function Explorer(props: ExplorerProps) {
   const explorer = props.viewModel
-  const rootIds = explorer.controller.rootIds
-  const rows = explorer.controller.visibleRows
-  const selectedId = explorer.controller.selectedId
-  const isRowSelected = createSelector(selectedId)
+  const rows = explorer.visibleRows
+  const selectedRow = explorer.selectedRow
   const { theme } = useTheme()
 
   let scrollBoxRef: ScrollBoxRenderable | undefined
+  let inputRef: InputRenderable | undefined
+
+  const syncFilterFromInput = () => {
+    queueMicrotask(() => {
+      const value = inputRef?.value ?? ""
+      if (value === explorer.filter()) return
+      explorer.setFilter(value)
+    })
+  }
 
   const ensureSelectedVisible = () => {
-    const selected = selectedId()
+    const selected = selectedRow()
     if (!selected || !scrollBoxRef) return
     const rowsList = rows()
-    const index = rowsList.findIndex((row) => row.id === selected)
+    const index = rowsList.findIndex((row) => row.id === selected.id)
     if (index < 0) return
-    const depth = rowsList[index].depth
+    const row = rowsList[index]
+    if (!row) return
+    const depth = row.depth
     const viewport = getViewportRect(scrollBoxRef)
     if (!viewport) return
     scrollIntoView(
@@ -44,7 +53,7 @@ export function Explorer(props: ExplorerProps) {
     )
   }
 
-  createEffect(on(selectedId, ensureSelectedVisible, { defer: true }))
+  createEffect(on(selectedRow, ensureSelectedVisible, { defer: true }))
 
   const handleManualHorizontalScroll = (direction: "left" | "right") => {
     const delta = direction === "left" ? -HORIZONTAL_SCROLL_STEP : HORIZONTAL_SCROLL_STEP
@@ -55,24 +64,66 @@ export function Explorer(props: ExplorerProps) {
     explorer.focusSelf()
   }
 
-  const bindings: KeyBinding[] = [
-    { pattern: "down", handler: () => explorer.controller.moveSelection(1), preventDefault: true },
-    { pattern: "j", handler: () => explorer.controller.moveSelection(1), preventDefault: true },
-    { pattern: "up", handler: () => explorer.controller.moveSelection(-1), preventDefault: true },
-    { pattern: "k", handler: () => explorer.controller.moveSelection(-1), preventDefault: true },
-    { pattern: "right", handler: () => explorer.controller.focusFirstChild(), preventDefault: true },
-    { pattern: "l", handler: () => explorer.controller.focusFirstChild(), preventDefault: true },
-    { pattern: "left", handler: () => explorer.controller.collapseCurrentOrParent(), preventDefault: true },
-    { pattern: "h", handler: () => explorer.controller.collapseCurrentOrParent(), preventDefault: true },
-    {
-      pattern: ["ctrl+h", "backspace"],
-      handler: () => handleManualHorizontalScroll("left"),
-      preventDefault: true,
-    },
-    { pattern: "ctrl+l", handler: () => handleManualHorizontalScroll("right"), preventDefault: true },
-    { pattern: "enter", handler: () => explorer.controller.activateSelection(), preventDefault: true },
-    { pattern: "space", handler: () => explorer.controller.activateSelection(), preventDefault: true },
-  ]
+  const bindings = createMemo<KeyBinding[]>(() => {
+    const bindings: KeyBinding[] = [
+      { pattern: "down", handler: () => explorer.moveSelection(1), preventDefault: true },
+      { pattern: "up", handler: () => explorer.moveSelection(-1), preventDefault: true },
+      { pattern: "right", handler: () => explorer.handleMoveIn(), preventDefault: true },
+      { pattern: "left", handler: () => explorer.handleMoveOut(), preventDefault: true },
+      { pattern: "ctrl+l", handler: () => handleManualHorizontalScroll("right"), preventDefault: true },
+      {
+        pattern: ["ctrl+w", "ctrl+backspace", "meta+backspace"],
+        handler: () => syncFilterFromInput(),
+      },
+      {
+        pattern: "escape",
+        handler: () => {
+          explorer.setMode("tree")
+          explorer.setFilter("")
+          setTimeout(() => ensureSelectedVisible(), 0)
+        },
+        preventDefault: true,
+      },
+    ]
+    if (explorer.mode() === "tree") {
+      bindings.push(
+        { pattern: "j", handler: () => explorer.moveSelection(1), preventDefault: true },
+        { pattern: "k", handler: () => explorer.moveSelection(-1), preventDefault: true },
+        { pattern: "l", handler: () => explorer.handleMoveIn(), preventDefault: true },
+        { pattern: "h", handler: () => explorer.handleMoveOut(), preventDefault: true },
+        { pattern: "enter", handler: () => explorer.toggleExpanded(), preventDefault: true },
+        {
+          pattern: ["ctrl+h", "backspace"],
+          handler: () => handleManualHorizontalScroll("left"),
+          preventDefault: true,
+        },
+        { pattern: "space", handler: () => explorer.toggleExpanded(), preventDefault: true },
+        {
+          pattern: "s",
+          handler: () => {
+            explorer.setMode("search")
+            queueMicrotask(() => {
+              inputRef?.focus()
+            })
+          },
+          preventDefault: true,
+        },
+      )
+    }
+    if (explorer.mode() === "search") {
+      bindings.push(
+        {
+          pattern: "enter", handler: () => {
+            explorer.handleSearchEnter()
+            setTimeout(() => ensureSelectedVisible(), 0)
+          },
+          preventDefault: true
+        },
+      )
+    }
+
+    return bindings
+  })
 
   const enabled = () => explorer.isFocused()
 
@@ -102,6 +153,24 @@ export function Explorer(props: ExplorerProps) {
               <text fg={theme().get("error")}>Failed to load graph: {message()}</text>
             )}
           </Show>
+          <Show when={explorer.mode() === "search"}>
+            <input
+              ref={(el) => {
+                inputRef = el
+              }}
+              value={explorer.filter()}
+              placeholder={"Type to search"}
+              cursorColor={theme().get("primary")}
+              textColor={theme().get("text")}
+              focusedTextColor={theme().get("text")}
+              backgroundColor={theme().get("editor_background")}
+              focusedBackgroundColor={theme().get("editor_background")}
+              onInput={(value) => {
+                explorer.setFilter(value)
+              }}
+              marginBottom={1}
+            />
+          </Show>
           <OriScrollbox
             onReady={(node) => {
               scrollBoxRef = node
@@ -119,7 +188,7 @@ export function Explorer(props: ExplorerProps) {
               minHeight="100%"
             >
               <Show
-                when={rootIds().length > 0}
+                when={rows().length > 0}
                 fallback={
                   <Show when={!explorer.loading() && !explorer.error()}>
                     <text
@@ -127,19 +196,17 @@ export function Explorer(props: ExplorerProps) {
                       fg={theme().get("text_muted")}
                       selectable={false}
                     >
-                      Graph is empty. Try refreshing later.
+                      {explorer.mode() === "search" ? "No matching nodes." : "Graph is empty. Try refreshing later."}
                     </text>
                   </Show>
                 }
               >
-                <For each={rootIds()}>
-                  {(id) => (
+                <For each={rows()}>
+                  {(row) => (
                     <ExplorerRow
-                      nodeId={id}
-                      depth={0}
+                      row={() => row}
                       isFocused={explorer.isFocused}
                       explorer={explorer}
-                      isRowSelected={isRowSelected}
                     />
                   )}
                 </For>

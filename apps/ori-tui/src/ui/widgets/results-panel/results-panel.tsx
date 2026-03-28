@@ -444,6 +444,7 @@ export function ResultsPanel(props: ResultsPanelProps) {
                   rowScrollRef.scrollTo({ x: 0, y: scrollRef?.scrollTop ?? 0 })
                 }}
                 flexDirection="column"
+                height="100%"
                 width={rowNumberLaneWidth()}
                 scrollX={false}
                 scrollY={false}
@@ -452,9 +453,14 @@ export function ResultsPanel(props: ResultsPanelProps) {
                 contentOptions={{
                   maxWidth: rowNumberCellWidth(),
                   width: rowNumberCellWidth(),
+                  minHeight: "100%",
                 }}
               >
-                <box flexDirection="column">
+                <box
+                  flexDirection="column"
+                  backgroundColor={theme().get("panel_background")}
+                  minHeight="100%"
+                >
                   <For each={resultRows()}>
                     {(_, rowIndex) => {
                       const rowNumberColor = () =>

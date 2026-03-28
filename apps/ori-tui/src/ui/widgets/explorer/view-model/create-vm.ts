@@ -1,19 +1,10 @@
-import { type Node, NodeType } from "@adapters/ori/client"
 import type { ResourceIntrospectionUsecase } from "@usecase/introspection/usecase"
 import type { Accessor } from "solid-js"
-import { createEffect, createMemo, createSignal, onCleanup } from "solid-js"
-import { createExplorerGraph } from "../model/explorer-graph"
-
-type Introspection = Pick<ResourceIntrospectionUsecase, "subscribe" | "getState" | "load" | "refresh">
-
-export type ExplorerViewModel = {
-  controller: ReturnType<typeof createExplorerGraph>
-  isFocused: Accessor<boolean>
-  loading: Accessor<boolean>
-  error: Accessor<string | null>
-  focusSelf: () => void
-  refreshGraph: () => Promise<void>
-}
+import { batch, createComputed, createMemo, createSignal, onCleanup } from "solid-js"
+import { createBufferedRows } from "./buffered-rows"
+import { createExplorerGraph } from "./explorer-graph"
+import { createExplorerRows, getFirstVisibleRowId, moveVisibleRowId } from "./explorer-rows"
+import type { UIMode } from "./explorer-types"
 
 type CreateVMOptions = {
   introspection: Introspection
@@ -21,70 +12,186 @@ type CreateVMOptions = {
   focusSelf: () => void
 }
 
-export function createVM(options: CreateVMOptions): ExplorerViewModel {
-  const [nodesByIdState, setNodesByIdState] = createSignal(options.introspection.getState().nodesById)
-  const [rootIdsState, setRootIdsState] = createSignal(options.introspection.getState().rootIds)
-  const [loadingState, setLoadingState] = createSignal(options.introspection.getState().loading)
-  const [errorState, setErrorState] = createSignal(options.introspection.getState().error)
+type Introspection = Pick<ResourceIntrospectionUsecase, "subscribe" | "getState" | "load" | "refresh" | "ensureNodes">
+
+export function createVM(options: CreateVMOptions) {
+  const [snapshot, setSnapshot] = createSignal(options.introspection.getState())
+  const [mode, setMode] = createSignal("tree" as UIMode)
+  const [filter, setFilterState] = createSignal("")
+  const [treeSelectedId, setTreeSelectedId] = createSignal<string | null>(null)
+  const [searchSelectedId, setSearchSelectedId] = createSignal<string | null>(null)
 
   const unsubscribe = options.introspection.subscribe(() => {
-    setNodesByIdState(options.introspection.getState().nodesById)
-    setRootIdsState(options.introspection.getState().rootIds)
-    setLoadingState(options.introspection.getState().loading)
-    setErrorState(options.introspection.getState().error)
+    setSnapshot(options.introspection.getState())
   })
 
   onCleanup(() => {
     unsubscribe()
   })
 
-  createEffect(() => {
-    void options.introspection.load()
+  void options.introspection.load()
+
+  const graph = createMemo(() =>
+    createExplorerGraph({
+      nodesById: snapshot().nodesById,
+      rootIds: snapshot().rootIds,
+    }),
+  )
+
+  const rowsState = createExplorerRows({
+    graph,
+    mode,
+    filter,
+    ensureNodes: (ids) => options.introspection.ensureNodes(ids),
+  })
+  const visibleRows = createBufferedRows({
+    change: rowsState.change,
   })
 
-  const nodesById = createMemo(() => nodesByIdState())
-  const rootIds = createMemo(() => {
-    const ids = [...rootIdsState()]
-    const nodes = nodesById()
-    ids.sort((leftId, rightId) => compareRootIds(leftId, rightId, nodes[leftId], nodes[rightId]))
-    return ids
-  })
-  const loading = createMemo(() => loadingState())
-  const error = createMemo(() => errorState())
+  const setFilter = (value: string) => {
+    setFilterState(value)
+    queueMicrotask(() => {
+      if (mode() !== "search") return
+      setSearchSelectedId(getFirstVisibleRowId(rowsState.rows()))
+    })
+  }
 
-  const controller = createExplorerGraph(nodesById, rootIds)
+  createComputed(() => {
+    if (mode() !== "search") return
+    const current = searchSelectedId()
+    const rows = rowsState.rows()
+    // Search selection should always stay on a visible match as results change.
+    const next = !current || !rowsState.indexById().has(current) ? getFirstVisibleRowId(rows) : current
+    if (next === searchSelectedId()) return
+    setSearchSelectedId(next)
+  })
+
+  // Keep tree selection pinned to a visible row in case graph refreshes make selected id invalid
+  createComputed(() => {
+    if (mode() !== "tree") return
+    const current = treeSelectedId()
+    const rows = rowsState.rows()
+    const next = !current || !rowsState.indexById().has(current) ? getFirstVisibleRowId(rows) : current
+    if (next === treeSelectedId()) return
+    setTreeSelectedId(next)
+  })
+
+  const setSelectedId = (nodeId: string | null) => {
+    if (mode() === "search") {
+      setSearchSelectedId(nodeId)
+      return
+    }
+    setTreeSelectedId(nodeId)
+  }
+
+  function selectedId() {
+    const id = mode() === "search" ? searchSelectedId() : treeSelectedId()
+    return id ?? getFirstVisibleRowId(rowsState.rows())
+  }
+
+  const moveSelection = (delta: number) => {
+    const current = selectedId()
+    const rows = rowsState.rows()
+    if (!current) {
+      setSelectedId(getFirstVisibleRowId(rows))
+      return
+    }
+    setSelectedId(moveVisibleRowId(current, delta, rows, rowsState.indexById()))
+  }
+
+  const selectedRow = createMemo(() => {
+    const id = selectedId()
+    if (!id) return null
+    return visibleRows().find((row) => row.id === id) ?? null
+  })
+
+  const expandRow = (id: string) => rowsState.expandNode(id)
+  const collapseRow = (id: string) => rowsState.collapseNode(id)
+  const toggleRow = (id: string) => rowsState.toggleNode(id)
+
+  const handleMoveIn = () => {
+    const id = selectedId()
+    if (!id) return
+    const row = rowsState.getState(id)
+    if (!row?.hasChildren) return
+    batch(() => {
+      rowsState.expandNode(id)
+      setSelectedId(rowsState.getFirstChildId(id))
+    })
+  }
+
+  const handleMoveOut = () => {
+    const id = selectedId()
+    if (!id) return
+    const row = rowsState.getState(id)
+    if (!row) return
+    if (row.hasChildren && row.isExpanded) {
+      rowsState.collapseNode(id)
+      return
+    }
+    const parentId = rowsState.getParentId(id)
+    if (!parentId) return
+    batch(() => {
+      rowsState.collapseNode(parentId)
+      setSelectedId(parentId)
+    })
+  }
+
+  const toggleExpanded = () => {
+    const id = selectedId()
+    if (!id) return
+    const row = rowsState.getState(id)
+    if (!row?.hasChildren) return
+    rowsState.toggleNode(id)
+  }
+
+  const handleSearchEnter = () => {
+    const id = searchSelectedId()
+    if (!id) return
+
+    const parentById = graph().parentById
+    const path: string[] = []
+    let current = parentById[id]
+
+    for (; current; current = parentById[current]) {
+      path.unshift(current)
+    }
+
+    batch(() => {
+      rowsState.expandPath(path)
+      setTreeSelectedId(id)
+      setMode("tree")
+      setFilterState("")
+    })
+  }
 
   const refreshGraph = async () => {
     await options.introspection.refresh()
   }
 
   return {
-    controller,
     isFocused: options.isFocused,
     focusSelf: options.focusSelf,
-    loading,
-    error,
+    loading: () => snapshot().loading,
+    error: () => snapshot().error,
     refreshGraph,
+    mode,
+    setMode,
+    filter,
+    setFilter,
+    visibleRows,
+    selectedId,
+    select: setSelectedId,
+    selectedRow,
+    expandRow,
+    collapseRow,
+    toggleRow,
+    moveSelection,
+    handleMoveIn,
+    handleMoveOut,
+    handleSearchEnter,
+    toggleExpanded,
   }
 }
 
-function compareRootIds(leftId: string, rightId: string, leftNode?: Node, rightNode?: Node): number {
-  const leftDefault = isDefaultRoot(leftNode)
-  const rightDefault = isDefaultRoot(rightNode)
-  if (leftDefault !== rightDefault) {
-    return leftDefault ? -1 : 1
-  }
-
-  const byName = (leftNode?.name ?? "").toLocaleLowerCase().localeCompare((rightNode?.name ?? "").toLocaleLowerCase())
-  if (byName !== 0) {
-    return byName
-  }
-
-  return leftId.localeCompare(rightId)
-}
-
-function isDefaultRoot(node?: Node): boolean {
-  if (!node) return false
-  if (node.type !== NodeType.DATABASE && node.type !== NodeType.SCHEMA) return false
-  return node.attributes.isDefault
-}
+export type ExplorerViewModel = ReturnType<typeof createVM>

@@ -22,8 +22,6 @@ export async function loadGraphIncremental(
 ): Promise<GraphSnapshot> {
   logger?.debug({ resource: resourceName }, "resource introspection load started")
   const nodes = new Map<string, Node>()
-  const queue = new Set<string>()
-
   const rootNodes = await client.getNodes(resourceName)
   const rootIds = rootNodes.map((node) => node.id)
   handlers.onRoots?.(rootNodes, rootIds)
@@ -32,32 +30,9 @@ export async function loadGraphIncremental(
   for (const node of rootNodes) {
     nodes.set(node.id, node)
     handlers.onNode?.(node)
-    enqueueEdges(node, queue, nodes)
   }
 
-  while (queue.size > 0) {
-    const batch = Array.from(queue).slice(0, BATCH_SIZE)
-    for (const id of batch) {
-      queue.delete(id)
-    }
-
-    try {
-      logger?.debug(
-        { resource: resourceName, batchSize: batch.length, queueRemaining: queue.size },
-        "resource introspection: fetching node batch",
-      )
-      const fetched = await client.getNodes(resourceName, batch)
-      handlers.onNodes?.(fetched)
-      for (const node of fetched) {
-        nodes.set(node.id, node)
-        handlers.onNode?.(node)
-        enqueueEdges(node, queue, nodes)
-      }
-    } catch (err) {
-      logger?.error({ err, batchSize: batch.length }, "resource introspection: failed to hydrate node batch")
-      throw err
-    }
-  }
+  await hydrateGraphIncremental(client, resourceName, rootIds, nodes, handlers, logger)
 
   const snapshot: GraphSnapshot = {
     nodesById: Object.fromEntries(nodes.entries()),
@@ -74,6 +49,49 @@ export async function loadGraphIncremental(
   )
 
   return snapshot
+}
+
+export async function hydrateGraphIncremental(
+  client: OriClient,
+  resourceName: string,
+  nodeIds: string[],
+  knownNodes: Map<string, Node>,
+  handlers: GraphIncrementalHandlers,
+  logger?: Logger,
+): Promise<void> {
+  const queue = new Set<string>()
+  for (const nodeId of nodeIds) {
+    if (knownNodes.has(nodeId)) {
+      const node = knownNodes.get(nodeId)
+      if (node) enqueueEdges(node, queue, knownNodes)
+      continue
+    }
+    queue.add(nodeId)
+  }
+
+  while (queue.size > 0) {
+    const batch = Array.from(queue).slice(0, BATCH_SIZE)
+    for (const id of batch) {
+      queue.delete(id)
+    }
+
+    try {
+      logger?.debug(
+        { resource: resourceName, batchSize: batch.length, queueRemaining: queue.size },
+        "resource introspection: fetching node batch",
+      )
+      const fetched = await client.getNodes(resourceName, batch)
+      handlers.onNodes?.(fetched)
+      for (const node of fetched) {
+        knownNodes.set(node.id, node)
+        handlers.onNode?.(node)
+        enqueueEdges(node, queue, knownNodes)
+      }
+    } catch (err) {
+      logger?.error({ err, batchSize: batch.length }, "resource introspection: failed to hydrate node batch")
+      throw err
+    }
+  }
 }
 
 function enqueueEdges(node: Node, queue: Set<string>, knownNodes: Map<string, Node>) {

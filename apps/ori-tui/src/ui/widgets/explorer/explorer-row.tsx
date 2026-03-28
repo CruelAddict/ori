@@ -1,37 +1,27 @@
-import type { MouseEvent } from "@opentui/core"
-import { TextAttributes } from "@opentui/core"
+import { TextAttributes, type MouseEvent } from "@opentui/core"
 import { useTheme } from "@ui/providers/theme"
-import { type Accessor, createEffect, createMemo, createSignal, For, Show } from "solid-js"
+import { type Accessor, createMemo, createSignal } from "solid-js"
 import type { ExplorerRowSegment } from "./explorer-row-renderable.ts"
-import type { ExplorerNode } from "./model/explorer-node"
 import type { ExplorerViewModel } from "./view-model/create-vm"
+import type { RowSnapshot } from "./view-model/explorer-rows"
 import "./explorer-row-renderable.ts"
 
 const ROW_LEFT_PADDING = 2
-const GLYPH_SEPARATOR_WIDTH = 1
 
 type ExplorerRowProps = {
-  nodeId: string
-  depth: number
+  row: Accessor<RowSnapshot>
   isFocused: Accessor<boolean>
   explorer: ExplorerViewModel
-  isRowSelected: (key: string) => boolean
 }
 
 export function ExplorerRow(props: ExplorerRowProps) {
   const { theme } = useTheme()
-
-  const entity = createMemo(() => props.explorer.controller.getEntity(props.nodeId))
-  const childIds = createMemo(() => props.explorer.controller.getRenderableChildIds(props.nodeId))
-  const rowId = () => props.nodeId
-  const isExpanded = () => props.explorer.controller.isExpanded(props.nodeId)
-  const isSelected = () => props.isRowSelected(props.nodeId)
-  const [childrenMounted, setChildrenMounted] = createSignal(false)
   const [hovered, setHovered] = createSignal(false)
 
-  createEffect(() => {
-    if (isExpanded()) setChildrenMounted(true)
-  })
+  const isSearchMode = () => props.explorer.mode() === "search"
+  const row = () => props.row()
+  const depth = () => row().depth
+  const isSelected = () => props.explorer.selectedId() === row().id
 
   const fg = () => (isSelected() && props.isFocused() ? theme().get("selection_foreground") : theme().get("text"))
   const bg = () => {
@@ -46,25 +36,22 @@ export function ExplorerRow(props: ExplorerRowProps) {
     props.explorer.focusSelf()
 
     if (!isSelected()) {
-      props.explorer.controller.selectNode(props.nodeId)
+      props.explorer.select(row().id)
       return
     }
 
-    if (!wasFocused) return
+    if (!wasFocused || isSearchMode()) return
 
-    const details = entity()
-    if (!details?.hasChildren) return
-    if (isExpanded()) {
-      props.explorer.controller.collapseNode(props.nodeId)
-    } else {
-      props.explorer.controller.expandNode(props.nodeId)
+    if (!row().hasChildren) return
+    if (row().isExpanded) {
+      props.explorer.collapseRow(row().id)
+      return
     }
+
+    props.explorer.expandRow(row().id)
   }
 
-  const rowParts = createMemo(() => buildRowTextParts(entity(), isExpanded()))
-
-  const rowSegments = createMemo(() => {
-    const parts = rowParts()
+  const treeModeSegments = () => {
     const isCursorRow = isSelected() && props.isFocused()
     const colors = {
       baseFg: fg(),
@@ -73,108 +60,108 @@ export function ExplorerRow(props: ExplorerRowProps) {
       description: isCursorRow ? fg() : theme().get("text_muted"),
       badge: isCursorRow ? fg() : theme().get("accent"),
     }
-    const segments: ExplorerRowSegment[] = [
-      { text: `${parts.glyph} `, fg: colors.glyph, bg: colors.baseBg, attributes: TextAttributes.DIM },
-      { text: parts.main, fg: colors.baseFg, bg: colors.baseBg },
-    ]
-    if (parts.description) {
-      segments.push({
-        text: ` ${parts.description}`,
-        fg: colors.description,
+    const parts: ExplorerRowSegment[] = [
+      {
+        text: `${getRowGlyph(row(), isSearchMode())} `,
         bg: colors.baseBg,
+        fg: colors.glyph,
         attributes: TextAttributes.DIM,
-      })
-    }
-    if (parts.badges.length > 0) {
-      const badges = parts.badges.join(" • ")
-      segments.push({
-        text: ` ${badges}`,
-        fg: colors.badge,
+      },
+      {
+        text: row().name,
         bg: colors.baseBg,
+        fg: colors.baseFg,
+      },
+    ]
+
+    if (row().description) {
+      parts.push({
+        text: ` ${row().description}`,
+        bg: colors.baseBg,
+        fg: colors.description,
       })
     }
-    return segments
-  })
-  const rowWidth = createMemo(() => calculateRowTextWidth(rowParts()))
+
+    if (row().badges.length > 0) {
+      parts.push({
+        text: ` ${row().badges.join(" • ")}`,
+        bg: colors.baseBg,
+        fg: colors.badge,
+      })
+    }
+
+    return parts
+  }
+
+  const searchModeSegments = () => {
+    const isCursorRow = isSelected() && props.isFocused()
+    const colors = {
+      baseFg: fg(),
+      baseBg: bg(),
+      glyph: isCursorRow ? fg() : theme().get("text"),
+      description: isCursorRow ? fg() : theme().get("text_muted"),
+      badge: isCursorRow ? fg() : theme().get("accent"),
+    }
+    const parts: ExplorerRowSegment[] = [
+      {
+        text: `${getRowGlyph(row(), isSearchMode())} `,
+        bg: colors.baseBg,
+        fg: colors.glyph,
+        attributes: TextAttributes.DIM,
+      },
+    ]
+
+    if (row().type) {
+      parts.push({
+        text: `${row().type} `,
+        bg: colors.baseBg,
+        fg: colors.badge,
+      })
+    }
+
+    parts.push({
+      text: row().name,
+      bg: colors.baseBg,
+      fg: colors.baseFg,
+    })
+
+    return parts
+  }
+
+  const rowSegments = createMemo(() => isSearchMode() ? searchModeSegments() : treeModeSegments())
+
+  const rowWidth = createMemo(() => rowSegments().reduce((sum, part) => sum + part.text.length, 0))
 
   return (
-    <Show
-      when={entity()}
-      keyed
+    <box
+      id={`explorer-row-${row().id}`}
+      flexDirection="row"
+      paddingLeft={ROW_LEFT_PADDING + depth() * 2}
+      paddingRight={1}
+      minWidth={30}
+      alignSelf="stretch"
+      flexShrink={1}
+      backgroundColor={bg()}
+      onMouseOver={() => setHovered(true)}
+      onMouseOut={() => setHovered(false)}
+      onMouseDown={handleMouseDown}
     >
-      {(_: ExplorerNode) => (
-        <>
-          <box
-            id={`explorer-row-${rowId()}`}
-            flexDirection="row"
-            paddingLeft={ROW_LEFT_PADDING + props.depth * 2}
-            paddingRight={1}
-            minWidth={30}
-            alignSelf="stretch"
-            flexShrink={1}
-            backgroundColor={bg()}
-            onMouseOver={() => setHovered(true)}
-            onMouseOut={() => setHovered(false)}
-            onMouseDown={handleMouseDown}
-          >
-            <explorer_row
-              segments={rowSegments()}
-              width={rowWidth()}
-              fg={fg()}
-              bg={bg()}
-              defaultFg={fg()}
-              selectable={false}
-            />
-          </box>
-          <Show when={childrenMounted()}>
-            <box
-              flexDirection="column"
-              visible={isExpanded()}
-            >
-              <For each={childIds()}>
-                {(childId) => (
-                  <ExplorerRow
-                    nodeId={childId}
-                    depth={props.depth + 1}
-                    isFocused={props.isFocused}
-                    explorer={props.explorer}
-                    isRowSelected={props.isRowSelected}
-                  />
-                )}
-              </For>
-            </box>
-          </Show>
-        </>
-      )}
-    </Show>
+      <explorer_row
+        segments={rowSegments()}
+        width={rowWidth()}
+        fg={fg()}
+        bg={bg()}
+        defaultFg={fg()}
+        selectable={false}
+      />
+    </box>
   )
 }
 
-type RowTextParts = {
-  glyph: string
-  main: string
-  description?: string
-  badges: string[]
-}
 
-function buildRowTextParts(details: ExplorerNode | undefined, expanded: boolean): RowTextParts {
-  const hasChildren = Boolean(details?.hasChildren)
-  const glyph = hasChildren ? (expanded ? "▽" : "▷") : "·"
-  const label = details?.label ?? ""
-  return {
-    glyph,
-    main: label,
-    description: details?.description,
-    badges: details?.badges ?? [],
-  }
-}
-
-function calculateRowTextWidth(parts: RowTextParts): number {
-  let width = parts.glyph.length + GLYPH_SEPARATOR_WIDTH + parts.main.length
-  if (parts.description) width += 1 + parts.description.length
-  if (parts.badges.length > 0) {
-    const badges = parts.badges.join(" • ")
-    width += 1 + badges.length
-  }
-  return width
+function getRowGlyph(row: RowSnapshot, isSearchMode: boolean) {
+  if (isSearchMode) return "·"
+  if (!row.hasChildren) return "·"
+  if (row.isExpanded) return "▽"
+  return "▷"
 }
