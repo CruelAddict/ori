@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { type Node, type NodeEdge, NodeType } from "@adapters/ori/client"
+import { createExplorerGraph } from "./explorer-graph"
 import type { ExplorerNode } from "./explorer-node"
 import { convertToExplorerNodes } from "./explorer-node"
 
@@ -157,11 +158,19 @@ describe("expandExplorerNode", () => {
     const explorerNodes = toExplorerNodeMap(db)
 
     const dbExplorerNode = explorerNodes[db.id]
-    expect(dbExplorerNode?.kind).toBe("node")
+    expect(dbExplorerNode?.origin).toEqual({
+      type: "node",
+      nodeId: db.id,
+      nodeType: NodeType.DATABASE,
+    })
     expect(dbExplorerNode?.childIds).toEqual([edgeId(db.id, "tables")])
 
     const tablesEdge = explorerNodes[edgeId(db.id, "tables")]
-    expect(tablesEdge?.kind).toBe("edge")
+    expect(tablesEdge?.origin).toEqual({
+      type: "edge",
+      sourceNodeId: db.id,
+      edgeKey: "tables",
+    })
     expect(tablesEdge?.childIds).toEqual([table.id])
     expect(tablesEdge?.hasChildren).toBe(true)
   })
@@ -197,12 +206,15 @@ describe("expandExplorerNode", () => {
 
     const columnsEdge = explorerNodes[edgeId(index.id, "columns")]
     const includeEdge = explorerNodes[edgeId(index.id, "include")]
+    expect(columnsEdge?.origin).toEqual({ type: "attribute", ownerNodeId: index.id, attributeKey: "columns" })
+    expect(includeEdge?.origin).toEqual({ type: "attribute", ownerNodeId: index.id, attributeKey: "include" })
     expect(columnsEdge?.childIds).toEqual([syntheticId(index.id, "columns", 0), syntheticId(index.id, "columns", 1)])
     expect(includeEdge?.childIds).toEqual([syntheticId(index.id, "include", 0)])
 
     const firstColumn = explorerNodes[syntheticId(index.id, "columns", 0)]
     const secondColumn = explorerNodes[syntheticId(index.id, "columns", 1)]
     const includeColumn = explorerNodes[syntheticId(index.id, "include", 0)]
+    expect(firstColumn?.origin).toEqual({ type: "attribute", ownerNodeId: index.id, attributeKey: "columns", index: 0 })
     expect(firstColumn?.name).toBe("id")
     expect(secondColumn?.name).toBe("email")
     expect(includeColumn?.name).toBe("created_at")
@@ -278,5 +290,37 @@ describe("expandExplorerNode", () => {
     const indexExplorerNode = explorerNodes[index.id]
     expect(indexExplorerNode?.childIds).toEqual([])
     expect(explorerNodes[edgeId(index.id, "columns")]).toBeUndefined()
+  })
+
+  test("sorts root snapshot nodes by isDefault and name", () => {
+    const alpha = makeNode({
+      id: "db-1",
+      type: NodeType.DATABASE,
+      name: "alpha",
+      attributes: { isDefault: false },
+    })
+    const main = makeNode({
+      id: "db-2",
+      type: NodeType.DATABASE,
+      name: "main",
+      attributes: { isDefault: true },
+    })
+    const zoo = makeNode({
+      id: "db-3",
+      type: NodeType.DATABASE,
+      name: "zoo",
+      attributes: { isDefault: false },
+    })
+
+    const graph = createExplorerGraph({
+      nodesById: {
+        [alpha.id]: alpha,
+        [main.id]: main,
+        [zoo.id]: zoo,
+      },
+      rootIds: [zoo.id, alpha.id, main.id],
+    })
+
+    expect(graph.rootIds).toEqual([main.id, alpha.id, zoo.id])
   })
 })

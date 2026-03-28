@@ -3,7 +3,7 @@ import { type Node, type NodeEdge, NodeType } from "@adapters/ori/client"
 import {
   convertToExplorerNodes,
   createEdgeExplorerNode,
-  type SnapshotExplorerNode,
+  type ExplorerNode,
 } from "./explorer-node"
 
 type NodeOverrides = {
@@ -146,9 +146,9 @@ const makeEdge = (items: string[], truncated = false): NodeEdge => ({
   truncated,
 })
 
-const getSnapshotNode = (node: Node): SnapshotExplorerNode => {
+const getSnapshotNode = (node: Node): ExplorerNode => {
   const item = convertToExplorerNodes(node).find((child) => child.id === node.id)
-  if (!item || item.kind !== "node") {
+  if (!item || item.origin.type !== "node") {
     throw new Error(`Missing snapshot node for ${node.id}`)
   }
   return item
@@ -176,8 +176,12 @@ describe("createSnapshotExplorerNode", () => {
     const snapshotNode = getSnapshotNode(node)
     expect(snapshotNode).toEqual({
       id: "table-1",
-      kind: "node",
-      node,
+      origin: {
+        type: "node",
+        nodeId: "table-1",
+        nodeType: NodeType.TABLE,
+      },
+      isDefault: undefined,
       name: "public.users",
       description: "users",
       badges: [],
@@ -280,6 +284,30 @@ describe("createSnapshotExplorerNode", () => {
     expect(node.description).toBeUndefined()
     expect(node.badges).toEqual(["enabled"])
   })
+
+  test("creates synthetic attribute nodes without backend node payload", () => {
+    const index = makeNode({
+      id: "idx-1",
+      type: NodeType.INDEX,
+      name: "users_idx",
+      attributes: { columns: ["email"] },
+    })
+
+    const synthetic = convertToExplorerNodes(index).find((item) => item.id === "synthetic:idx-1:columns:0")
+    expect(synthetic).toEqual({
+      id: "synthetic:idx-1:columns:0",
+      origin: {
+        type: "attribute",
+        ownerNodeId: "idx-1",
+        attributeKey: "columns",
+        index: 0,
+      },
+      name: "email",
+      badges: [],
+      childIds: [],
+      hasChildren: false,
+    })
+  })
 })
 
 describe("createEdgeExplorerNode", () => {
@@ -287,6 +315,7 @@ describe("createEdgeExplorerNode", () => {
     const node = makeNode({ id: "table-1", type: NodeType.TABLE, name: "users" })
     const edge = createEdgeExplorerNode(node, "columns", makeEdge(["col-1", "col-2"]))
     expect(edge.id).toBe("edge:table-1:columns")
+    expect(edge.origin).toEqual({ type: "edge", sourceNodeId: "table-1", edgeKey: "columns" })
     expect(edge.name).toBe("columns")
     expect(edge.description).toBe("2")
   })

@@ -1,39 +1,49 @@
 import { type Node, type NodeEdge, NodeType } from "@adapters/ori/client"
 
-export type ExplorerNode = SnapshotExplorerNode | EdgeExplorerNode
+export type ExplorerOrigin =
+  | {
+    type: "node"
+    nodeId: string
+    nodeType: Node["type"]
+  }
+  | {
+    type: "edge"
+    sourceNodeId: string
+    edgeKey: string
+  }
+  | {
+    type: "attribute"
+    ownerNodeId: string
+    attributeKey: string
+    index?: number
+  }
 
-type BaseExplorerNode = {
+export type ExplorerNode = {
   id: string
-  kind: "node" | "edge"
   name: string
   icon?: string
   description?: string
   badges: string[]
   childIds: string[]
   hasChildren: boolean
-}
-
-export interface SnapshotExplorerNode extends BaseExplorerNode {
-  kind: "node"
-  node: Node
-}
-
-export interface EdgeExplorerNode extends BaseExplorerNode {
-  kind: "edge"
-  sourceNodeId: string
-  edgeName: string
-  truncated: boolean
+  origin: ExplorerOrigin
+  isDefault?: boolean
 }
 
 type ConstraintNode = Extract<Node, { type: typeof NodeType.CONSTRAINT }>
 type IndexNode = Extract<Node, { type: typeof NodeType.INDEX }>
 type TriggerNode = Extract<Node, { type: typeof NodeType.TRIGGER }>
 
-function createSnapshotExplorerNode(node: Node): SnapshotExplorerNode {
+function explorerNodeFromSnapshotNode(node: Node): ExplorerNode {
+  const isDefault = "isDefault" in node.attributes ? Boolean(node.attributes.isDefault) : undefined
   return {
     id: node.id,
-    kind: "node",
-    node,
+    origin: {
+      type: "node",
+      nodeId: node.id,
+      nodeType: node.type,
+    },
+    isDefault,
     name: node.name,
     description: describeNode(node),
     badges: nodeBadges(node),
@@ -42,19 +52,20 @@ function createSnapshotExplorerNode(node: Node): SnapshotExplorerNode {
   }
 }
 
-export function createEdgeExplorerNode(node: Node, edgeName: string, edge: NodeEdge): EdgeExplorerNode {
+export function createEdgeExplorerNode(node: Node, edgeName: string, edge: NodeEdge): ExplorerNode {
   const childIds = edge.items.slice()
   return {
-    id: edgeEntityId(node.id, edgeName),
-    kind: "edge",
-    sourceNodeId: node.id,
-    edgeName,
-    name: edgeNameText(edgeName),
+    id: `edge:${node.id}:${edgeName}`,
+    origin: {
+      type: "edge",
+      sourceNodeId: node.id,
+      edgeKey: edgeName,
+    },
+    name: edgeName.replaceAll("_", " "),
     description: describeEdge(edge),
     badges: [],
     childIds,
     hasChildren: childIds.length > 0,
-    truncated: edge.truncated,
   }
 }
 
@@ -66,26 +77,24 @@ export function createEdgeExplorerNode(node: Node, edgeName: string, edge: NodeE
 // This function is responsible for doing these conversions
 export function convertToExplorerNodes(node: Node): ExplorerNode[] {
   const nodes: ExplorerNode[] = []
-  const self = createSnapshotExplorerNode(node)
+  const self = explorerNodeFromSnapshotNode(node)
   nodes.push(self)
 
-  const edgeNodes = [
-    // synthetic edge nodes
-    ...collectExpandableAttributes(node)
-      .flatMap(([name, values]) => expandAttribute(node, name, values)),
-    // natural edge nodes
-    ...Object.entries(node.edges)
-      .filter(([, edge]) => edge.items.length > 0)
-      .map(([name, edge]) => createEdgeExplorerNode(node, name, edge))
-  ]
+  const naturalEdgeNodes = Object.entries(node.edges)
+    .filter(([, edge]) => edge.items.length > 0)
+    .map(([name, edge]) => createEdgeExplorerNode(node, name, edge))
 
-  edgeNodes.forEach((node) => {
-    if (node.kind === "edge") {
-      self.childIds.push(node.id)
+  const syntheticEdgeNodes = collectExpandableAttributes(node)
+    .flatMap(([name, values]) => expandAttribute(node, name, values))
+
+  const children = [...naturalEdgeNodes, ...syntheticEdgeNodes]
+  children.forEach((n) => {
+    if (n.origin.type === "edge" || (n.origin.type === "attribute" && n.origin.index === undefined)) {
+      self.childIds.push(n.id)
       self.hasChildren = true
     }
 
-    nodes.push(node)
+    nodes.push(n)
   })
 
   return nodes
@@ -96,10 +105,11 @@ function expandAttribute(node: Node, attributeName: string, values: string[]): E
 
   return [
     ...items,
-    createEdgeExplorerNode(node, attributeName, {
-      items: items.map((item) => item.id),
-      truncated: false,
-    }),
+    createAttributeExplorerGroup(
+      node,
+      attributeName,
+      items.map((item) => item.id),
+    ),
   ]
 }
 
@@ -132,21 +142,36 @@ function collectExpandableAttributes(node: Node): Array<[string, string[]]> {
   return attributes.filter(([, values]) => values.length > 0)
 }
 
-function createAttributeExplorerNode(node: Node, edgeName: string, value: string, index: number): SnapshotExplorerNode {
-  return createSnapshotExplorerNode({
-    id: syntheticEntityId(node.id, edgeName, index),
-    type: NodeType.COLUMN,
-    name: value,
-    attributes: {
-      resource: "synthetic",
-      table: node.name,
-      column: value,
-      ordinal: index,
-      dataType: "",
-      notNull: false,
+function createAttributeExplorerNode(node: Node, edgeName: string, value: string, index: number): ExplorerNode {
+  return {
+    id: `synthetic:${node.id}:${edgeName}:${index}`,
+    origin: {
+      type: "attribute",
+      ownerNodeId: node.id,
+      attributeKey: edgeName,
+      index,
     },
-    edges: {},
-  })
+    name: value,
+    badges: [],
+    childIds: [],
+    hasChildren: false,
+  }
+}
+
+function createAttributeExplorerGroup(node: Node, attributeName: string, childIds: string[]): ExplorerNode {
+  return {
+    id: `edge:${node.id}:${attributeName}`,
+    origin: {
+      type: "attribute",
+      ownerNodeId: node.id,
+      attributeKey: attributeName,
+    },
+    name: attributeName.replaceAll("_", " "),
+    description: describeEdge({ items: childIds, truncated: false }),
+    badges: [],
+    childIds,
+    hasChildren: childIds.length > 0,
+  }
 }
 
 function formatConstraintActionName(attrs: ConstraintNode["attributes"]): string | undefined {
@@ -177,18 +202,6 @@ function formatTriggerActionName(attrs: TriggerNode["attributes"]): string | und
   if (statement) parts.push(statement.toLowerCase())
   if (parts.length === 0) return undefined
   return parts.join(", ")
-}
-
-function edgeEntityId(nodeId: string, edgeName: string): string {
-  return `edge:${nodeId}:${edgeName}`
-}
-
-function syntheticEntityId(nodeId: string, edgeName: string, index: number): string {
-  return `synthetic:${nodeId}:${edgeName}:${index}`
-}
-
-function edgeNameText(edgeName: string): string {
-  return edgeName.replaceAll("_", " ")
 }
 
 function describeEdge(edge: NodeEdge): string | undefined {
@@ -236,7 +249,7 @@ function describeNode(node: Node): string | undefined {
     case NodeType.INDEX:
       return describeIndex(node.attributes)
     case NodeType.TRIGGER:
-      return describeTrigger(node.attributes)
+      return undefined
   }
 }
 
@@ -252,7 +265,7 @@ function nodeBadges(node: Node): string[] {
     return badges
   }
   if (node.type === NodeType.CONSTRAINT) {
-    return constraintBadges(node.attributes)
+    return []
   }
   if (node.type === NodeType.INDEX) {
     return indexBadges(node.attributes)
@@ -292,20 +305,12 @@ function describeConstraint(attrs: ConstraintNode["attributes"]): string | undef
   return constraintType.toLowerCase()
 }
 
-function constraintBadges(_attrs: ConstraintNode["attributes"]): string[] {
-  return []
-}
-
 function describeIndex(attrs: IndexNode["attributes"]): string | undefined {
   const predicate = attrs.predicate ?? ""
   if (predicate) {
     return `where ${predicate.toLowerCase()}`
   }
   return "index"
-}
-
-function describeTrigger(_attrs: TriggerNode["attributes"]): string | undefined {
-  return undefined
 }
 
 function indexBadges(attrs: IndexNode["attributes"]): string[] {

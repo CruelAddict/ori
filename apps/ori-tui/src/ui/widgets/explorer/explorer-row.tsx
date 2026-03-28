@@ -21,7 +21,6 @@ export function ExplorerRow(props: ExplorerRowProps) {
   const isSearchMode = () => props.explorer.mode() === "search"
   const renderedRow = () => props.row()
   const row = () => renderedRow().row
-  const node = () => row().node
   const depth = () => row().depth
   const isSelected = () => props.explorer.selectedId() === row().id
 
@@ -84,7 +83,7 @@ export function ExplorerRow(props: ExplorerRowProps) {
 
   return (
     <box
-      id={`explorer-row-${node().id}`}
+      id={`explorer-row-${row().id}`}
       flexDirection="row"
       paddingLeft={ROW_LEFT_PADDING + depth() * 2}
       paddingRight={1}

@@ -1,5 +1,5 @@
 import type { Node } from "@adapters/ori/client"
-import { convertToExplorerNodes, type ExplorerNode, type SnapshotExplorerNode } from "./explorer-node"
+import { convertToExplorerNodes, type ExplorerNode } from "./explorer-node"
 
 export type ExplorerGraph = {
   nodesById: Record<string, ExplorerNode>
@@ -19,16 +19,16 @@ export function createExplorerGraph(snapshot: { nodesById: Record<string, Node>;
 
   const rootIds = snapshot.rootIds
     .map((id) => nodesById[id])
-    .filter((node): node is SnapshotExplorerNode => Boolean(node) && node.kind === "node")
+    .filter((node): node is ExplorerNode => Boolean(node) && node.origin.type === "node")
     .sort((left, right) => {
-      const isLeftDefault = "isDefault" in left.node.attributes && Boolean(left.node.attributes.isDefault)
-      const isRightDefault = "isDefault" in right.node.attributes && Boolean(right.node.attributes.isDefault)
+      const isLeftDefault = Boolean(left.isDefault)
+      const isRightDefault = Boolean(right.isDefault)
 
       if (isLeftDefault !== isRightDefault) {
         return isLeftDefault ? -1 : 1
       }
 
-      const byName = left.node.name.toLocaleLowerCase().localeCompare(right.node.name.toLocaleLowerCase())
+      const byName = left.name.toLocaleLowerCase().localeCompare(right.name.toLocaleLowerCase())
       return byName
     })
     .map((node) => node.id)
