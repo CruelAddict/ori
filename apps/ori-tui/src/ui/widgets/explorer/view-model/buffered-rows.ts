@@ -1,37 +1,22 @@
-import { TextAttributes } from "@opentui/core"
 import { type Accessor, createComputed, createSignal, onCleanup, untrack } from "solid-js"
 import type { ExplorerRowsPatch, RowSnapshot } from "./explorer-rows"
 
 const CHILD_BATCH_SIZE = 10
 
-export type ExplorerRenderedRowElement = {
-  text: string
-  role: "glyph" | "main" | "description" | "badge"
-  attributes?: number
-}
-
-export type RenderedRow = {
-  id: string
-  parentId?: string
-  depth: number
-  width: number
-  elements: ExplorerRenderedRowElement[]
-}
-
 type ActiveRenderPatch = {
   afterId: string | null
-  rows: RenderedRow[]
+  rows: RowSnapshot[]
   nextIndex: number
 }
 
 type NonBatchExplorerRowsPatch = Exclude<ExplorerRowsPatch, { type: "batch" }>
 
-type CreateExplorerRenderedRowsOptions = {
+type CreateBufferedRowsOptions = {
   change: Accessor<ExplorerRowsPatch | null>
 }
 
-export function createExplorerRenderedRows(options: CreateExplorerRenderedRowsOptions) {
-  const [rows, setRows] = createSignal<RenderedRow[]>([])
+export function createBufferedRows(options: CreateBufferedRowsOptions) {
+  const [rows, setRows] = createSignal<RowSnapshot[]>([])
   const stack: ActiveRenderPatch[] = []
   let timeoutHandle: ReturnType<typeof setTimeout> | null = null
 
@@ -58,12 +43,12 @@ export function createExplorerRenderedRows(options: CreateExplorerRenderedRowsOp
     if (change.type === "reset") {
       clearSchedule()
       stack.length = 0
-      setRows(change.rows.map(renderRow))
+      setRows(change.rows)
       return
     }
 
     if (change.type === "update") {
-      const updates = new Map(change.rows.map((row) => [row.id, renderRow(row)]))
+      const updates = new Map(change.rows.map((row) => [row.id, row]))
       setRows((current) => current.map((row) => updates.get(row.id) ?? row))
       return
     }
@@ -83,7 +68,7 @@ export function createExplorerRenderedRows(options: CreateExplorerRenderedRowsOp
       return
     }
 
-    const insertedRows = change.rows.map(renderRow)
+    const insertedRows = change.rows
     if (insertedRows.length === 0) return
     stack.unshift({ afterId: change.afterId, rows: insertedRows, nextIndex: 0 })
     process()
@@ -91,7 +76,7 @@ export function createExplorerRenderedRows(options: CreateExplorerRenderedRowsOp
 
   function process() {
     timeoutHandle = null
-    const next = applyRenderPatchStep(untrack(rows), stack)
+    const next = applyBufferPatchStep(untrack(rows), stack)
     stack.splice(0, stack.length, ...next.stack)
     setRows(next.rows)
     if (stack.length === 0) return
@@ -110,8 +95,8 @@ export function createExplorerRenderedRows(options: CreateExplorerRenderedRowsOp
   }
 }
 
-export function applyRenderPatchStep(
-  currentRows: RenderedRow[],
+export function applyBufferPatchStep(
+  currentRows: RowSnapshot[],
   currentStack: ActiveRenderPatch[],
   batchSize = CHILD_BATCH_SIZE,
 ) {
@@ -146,30 +131,7 @@ export function applyRenderPatchStep(
   return { rows, stack }
 }
 
-function renderRow(row: RowSnapshot): RenderedRow {
-  const elements: ExplorerRenderedRowElement[] = [
-    { text: `${row.glyph} `, role: "glyph", attributes: TextAttributes.DIM },
-    { text: row.name, role: "main" },
-  ]
-
-  if (row.description) {
-    elements.push({ text: ` ${row.description}`, role: "description", attributes: TextAttributes.DIM })
-  }
-
-  if (row.badges.length > 0) {
-    elements.push({ text: ` ${row.badges.join(" • ")}`, role: "badge" })
-  }
-
-  return {
-    id: row.id,
-    parentId: row.parentId,
-    depth: row.depth,
-    width: elements.reduce((sum, element) => sum + element.text.length, 0),
-    elements,
-  }
-}
-
-function getInsertIndex(rows: RenderedRow[], afterId: string | null) {
+function getInsertIndex(rows: RowSnapshot[], afterId: string | null) {
   if (!afterId) return 0
   const match = rows.findIndex((row) => row.id === afterId)
   if (match === -1) return rows.length

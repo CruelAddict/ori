@@ -1,8 +1,8 @@
 import type { ResourceIntrospectionUsecase } from "@usecase/introspection/usecase"
 import type { Accessor } from "solid-js"
 import { batch, createComputed, createMemo, createSignal, onCleanup } from "solid-js"
+import { createBufferedRows } from "./buffered-rows"
 import { createExplorerGraph } from "./explorer-graph"
-import { createExplorerRenderedRows } from "./explorer-rendered-rows"
 import { createExplorerRows, getFirstVisibleRowId, moveVisibleRowId } from "./explorer-rows"
 import type { UIMode } from "./explorer-types"
 
@@ -44,7 +44,7 @@ export function createVM(options: CreateVMOptions) {
     filter,
     ensureNodes: (ids) => options.introspection.ensureNodes(ids),
   })
-  const visibleRows = createExplorerRenderedRows({
+  const visibleRows = createBufferedRows({
     change: rowsState.change,
   })
 
@@ -95,7 +95,6 @@ export function createVM(options: CreateVMOptions) {
     return visibleRows().find((row) => row.id === id) ?? null
   })
 
-  const rowState = (id: string) => rowsState.getState(id)
   const expandRow = (id: string) => rowsState.expandNode(id)
   const collapseRow = (id: string) => rowsState.collapseNode(id)
   const toggleRow = (id: string) => rowsState.toggleNode(id)
@@ -154,7 +153,6 @@ export function createVM(options: CreateVMOptions) {
     selectedId,
     select: setSelectedId,
     selectedRow,
-    rowState,
     expandRow,
     collapseRow,
     toggleRow,

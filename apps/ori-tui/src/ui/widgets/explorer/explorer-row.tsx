@@ -1,15 +1,15 @@
-import type { MouseEvent } from "@opentui/core"
+import { TextAttributes, type MouseEvent } from "@opentui/core"
 import { useTheme } from "@ui/providers/theme"
 import { type Accessor, createMemo, createSignal } from "solid-js"
 import type { ExplorerRowSegment } from "./explorer-row-renderable.ts"
 import type { ExplorerViewModel } from "./view-model/create-vm"
-import type { RenderedRow } from "./view-model/explorer-rendered-rows"
+import type { RowSnapshot } from "./view-model/explorer-rows"
 import "./explorer-row-renderable.ts"
 
 const ROW_LEFT_PADDING = 2
 
 type ExplorerRowProps = {
-  row: Accessor<RenderedRow>
+  row: Accessor<RowSnapshot>
   isFocused: Accessor<boolean>
   explorer: ExplorerViewModel
 }
@@ -20,7 +20,6 @@ export function ExplorerRow(props: ExplorerRowProps) {
 
   const isSearchMode = () => props.explorer.mode() === "search"
   const row = () => props.row()
-  const state = () => props.explorer.rowState(row().id)
   const depth = () => row().depth
   const isSelected = () => props.explorer.selectedId() === row().id
 
@@ -43,8 +42,8 @@ export function ExplorerRow(props: ExplorerRowProps) {
 
     if (!wasFocused || isSearchMode()) return
 
-    if (!state()?.hasChildren) return
-    if (state()?.isExpanded) {
+    if (!row().hasChildren) return
+    if (row().isExpanded) {
       props.explorer.collapseRow(row().id)
       return
     }
@@ -53,7 +52,6 @@ export function ExplorerRow(props: ExplorerRowProps) {
   }
 
   const rowSegments = createMemo(() => {
-    const parts = row().elements
     const isCursorRow = isSelected() && props.isFocused()
     const colors = {
       baseFg: fg(),
@@ -62,24 +60,41 @@ export function ExplorerRow(props: ExplorerRowProps) {
       description: isCursorRow ? fg() : theme().get("text_muted"),
       badge: isCursorRow ? fg() : theme().get("accent"),
     }
-    return parts.map(
-      (part): ExplorerRowSegment => ({
-        text: part.text,
+    const parts: ExplorerRowSegment[] = [
+      {
+        text: `${getRowGlyph(row(), isSearchMode())} `,
         bg: colors.baseBg,
-        fg:
-          part.role === "glyph"
-            ? colors.glyph
-            : part.role === "description"
-              ? colors.description
-              : part.role === "badge"
-                ? colors.badge
-                : colors.baseFg,
-        attributes: part.attributes,
-      }),
-    )
+        fg: colors.glyph,
+        attributes: TextAttributes.DIM,
+      },
+      {
+        text: row().name,
+        bg: colors.baseBg,
+        fg: colors.baseFg,
+      },
+    ]
+
+    if (row().description) {
+      parts.push({
+        text: ` ${row().description}`,
+        bg: colors.baseBg,
+        fg: colors.description,
+        attributes: TextAttributes.DIM,
+      })
+    }
+
+    if (row().badges.length > 0) {
+      parts.push({
+        text: ` ${row().badges.join(" • ")}`,
+        bg: colors.baseBg,
+        fg: colors.badge,
+      })
+    }
+
+    return parts
   })
 
-  const rowWidth = createMemo(() => row().width)
+  const rowWidth = createMemo(() => rowSegments().reduce((sum, part) => sum + part.text.length, 0))
 
   return (
     <box
@@ -105,4 +120,11 @@ export function ExplorerRow(props: ExplorerRowProps) {
       />
     </box>
   )
+}
+
+function getRowGlyph(row: RowSnapshot, isSearchMode: boolean) {
+  if (isSearchMode) return "·"
+  if (!row.hasChildren) return "·"
+  if (row.isExpanded) return "▽"
+  return "▷"
 }

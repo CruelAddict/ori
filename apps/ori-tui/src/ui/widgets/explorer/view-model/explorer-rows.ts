@@ -9,7 +9,6 @@ export type RowSnapshot = {
   id: string
   parentId?: string
   depth: number
-  glyph: string
   name: string
   description?: string
   badges: string[]
@@ -202,7 +201,7 @@ function buildSearchRows(graph: ExplorerGraph, filter: string) {
   for (const match of matches) {
     const row = createRow(graph, match.id, 0)
     if (!row) continue
-    rows.push({ ...row, glyph: "·", isExpanded: false, parentId: undefined })
+    rows.push({ ...row, isExpanded: false, parentId: undefined })
   }
   return rows
 }
@@ -234,7 +233,6 @@ function createRow(graph: ExplorerGraph, id: string, depth: number, parentId?: s
     id,
     parentId,
     depth,
-    glyph: node.hasChildren ? (isExpanded ? "▽" : "▷") : "·",
     name: node.name,
     description: node.description,
     badges: node.badges,
@@ -354,7 +352,6 @@ function areRowsEqual(currentRow: RowSnapshot, nextRow: RowSnapshot) {
   if (currentRow.id !== nextRow.id) return false
   if (currentRow.parentId !== nextRow.parentId) return false
   if (currentRow.depth !== nextRow.depth) return false
-  if (currentRow.glyph !== nextRow.glyph) return false
   if (currentRow.name !== nextRow.name) return false
   if (currentRow.description !== nextRow.description) return false
   if (currentRow.hasChildren !== nextRow.hasChildren) return false
