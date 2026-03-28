@@ -3,13 +3,13 @@ import { useTheme } from "@ui/providers/theme"
 import { type Accessor, createMemo, createSignal } from "solid-js"
 import type { ExplorerRowSegment } from "./explorer-row-renderable.ts"
 import type { ExplorerViewModel } from "./view-model/create-vm"
-import type { ExplorerRenderedRow } from "./view-model/explorer-rendered-rows"
+import type { RenderedRow } from "./view-model/explorer-rendered-rows"
 import "./explorer-row-renderable.ts"
 
 const ROW_LEFT_PADDING = 2
 
 type ExplorerRowProps = {
-  row: Accessor<ExplorerRenderedRow>
+  row: Accessor<RenderedRow>
   isFocused: Accessor<boolean>
   explorer: ExplorerViewModel
 }
@@ -19,8 +19,8 @@ export function ExplorerRow(props: ExplorerRowProps) {
   const [hovered, setHovered] = createSignal(false)
 
   const isSearchMode = () => props.explorer.mode() === "search"
-  const renderedRow = () => props.row()
-  const row = () => renderedRow().row
+  const row = () => props.row()
+  const state = () => props.explorer.rowState(row().id)
   const depth = () => row().depth
   const isSelected = () => props.explorer.selectedId() === row().id
 
@@ -43,17 +43,17 @@ export function ExplorerRow(props: ExplorerRowProps) {
 
     if (!wasFocused || isSearchMode()) return
 
-    if (!row().hasChildren) return
-    if (row().isExpanded) {
-      row().collapse()
+    if (!state()?.hasChildren) return
+    if (state()?.isExpanded) {
+      props.explorer.collapseRow(row().id)
       return
     }
 
-    row().expand()
+    props.explorer.expandRow(row().id)
   }
 
   const rowSegments = createMemo(() => {
-    const parts = renderedRow().elements
+    const parts = row().elements
     const isCursorRow = isSelected() && props.isFocused()
     const colors = {
       baseFg: fg(),
@@ -79,7 +79,7 @@ export function ExplorerRow(props: ExplorerRowProps) {
     )
   })
 
-  const rowWidth = createMemo(() => renderedRow().width)
+  const rowWidth = createMemo(() => row().width)
 
   return (
     <box

@@ -40,7 +40,7 @@ export function Explorer(props: ExplorerProps) {
     if (index < 0) return
     const row = rowsList[index]
     if (!row) return
-    const depth = row.row.depth
+    const depth = row.depth
     const viewport = getViewportRect(scrollBoxRef)
     if (!viewport) return
     scrollIntoView(

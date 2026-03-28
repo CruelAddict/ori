@@ -1,12 +1,11 @@
 import { type Accessor, createComputed, createMemo, createSignal, untrack } from "solid-js"
 import { fuzzyFilter } from "../../../../utils/fuzzy/fuzzy-search"
 import type { ExplorerGraph } from "./explorer-graph"
-import type { ExplorerNode } from "./explorer-node"
 import type { UIMode } from "./explorer-types"
 
 const SEARCH_RESULT_LIMIT = 100
 
-export type ExplorerRowState = {
+export type RowSnapshot = {
   id: string
   parentId?: string
   depth: number
@@ -19,25 +18,11 @@ export type ExplorerRowState = {
   childIds: string[]
 }
 
-export type ExplorerRow = {
-  readonly id: string
-  readonly depth: number
-  readonly hasChildren: boolean
-  readonly isExpanded: boolean
-  readonly node: ExplorerNode
-  parent: () => ExplorerRow | null
-  children: () => ExplorerRow[]
-  firstChild: () => ExplorerRow | null
-  expand: () => void
-  collapse: () => void
-  toggle: () => void
-}
-
 export type ExplorerRowsPatch =
-  | { type: "insert"; afterId: string | null; rows: ExplorerRowState[] }
+  | { type: "insert"; afterId: string | null; rows: RowSnapshot[] }
   | { type: "remove"; rowIds: string[] }
-  | { type: "update"; rows: ExplorerRowState[] }
-  | { type: "reset"; rows: ExplorerRowState[] }
+  | { type: "update"; rows: RowSnapshot[] }
+  | { type: "reset"; rows: RowSnapshot[] }
   | { type: "batch"; patches: ExplorerRowsPatch[] }
 
 type CreateExplorerRowsOptions = {
@@ -47,30 +32,16 @@ type CreateExplorerRowsOptions = {
   ensureNodes: (ids: string[]) => Promise<void>
 }
 
-type CreateExplorerRowsResult = {
-  rows: Accessor<ExplorerRowState[]>
-  rowById: () => Map<string, ExplorerRowState>
-  indexById: () => Map<string, number>
-  change: Accessor<ExplorerRowsPatch | null>
-  getRow: (id: string) => ExplorerRow | null
-  getState: (id: string) => ExplorerRowState | null
-  isExpanded: (id: string) => boolean
-  expandNode: (id: string) => void
-  collapseNode: (id: string) => void
-  toggleNode: (id: string) => void
-}
-
 type ExplorerRowLookup = {
-  rowById: Map<string, ExplorerRowState>
+  rowById: Map<string, RowSnapshot>
   indexById: Map<string, number>
   childIdsByParent: Map<string, string[]>
 }
 
-export function createExplorerRows(options: CreateExplorerRowsOptions): CreateExplorerRowsResult {
-  const [rows, setRows] = createSignal<ExplorerRowState[]>([])
+export function createExplorerRows(options: CreateExplorerRowsOptions) {
+  const [rows, setRows] = createSignal<RowSnapshot[]>([])
   const [expandedNodes, setExpandedNodes] = createSignal<Record<string, true>>({})
   const [change, setChange] = createSignal<ExplorerRowsPatch | null>(null)
-  const rowObjects = new Map<string, ExplorerRow>()
   const rowLookup = createMemo(() => buildRowLookup(rows()))
   let lastMode: UIMode | undefined
 
@@ -86,7 +57,7 @@ export function createExplorerRows(options: CreateExplorerRowsOptions): CreateEx
       return
     }
 
-    const nextRows = buildTreeRows(graph, untrack(expandedNodes))
+    const nextRows = buildSubtreeRows(graph, untrack(expandedNodes), graph.rootIds, undefined, 0)
     if (lastMode !== "tree") {
       setRows(nextRows)
       setChange({ type: "reset", rows: nextRows })
@@ -101,71 +72,23 @@ export function createExplorerRows(options: CreateExplorerRowsOptions): CreateEx
     setChange(patch)
   })
 
-  const getRow = (id: string): ExplorerRow | null => {
-    const cached = rowObjects.get(id)
-    if (cached) return cached
-    if (!rowLookup().rowById.has(id)) return null
-    const node = options.graph().nodesById[id]
-    if (!node) return null
-
-    const row: ExplorerRow = {
-      get id() {
-        return id
-      },
-      get depth() {
-        return rowLookup().rowById.get(id)?.depth ?? 0
-      },
-      get hasChildren() {
-        return rowLookup().rowById.get(id)?.hasChildren ?? false
-      },
-      get isExpanded() {
-        return rowLookup().rowById.get(id)?.isExpanded ?? false
-      },
-      get node() {
-        return options.graph().nodesById[id] ?? node
-      },
-      parent: () => {
-        const parentId = rowLookup().rowById.get(id)?.parentId
-        if (!parentId) return null
-        return getRow(parentId)
-      },
-      children: () => {
-        const ids = rowLookup().childIdsByParent.get(id) ?? []
-        return ids.map((childId) => getRow(childId)).filter((child): child is ExplorerRow => Boolean(child))
-      },
-      firstChild: () => {
-        for (const childId of rowLookup().childIdsByParent.get(id) ?? []) {
-          const child = getRow(childId)
-          if (child) return child
-        }
-        return null
-      },
-      expand: () => expandNode(id),
-      collapse: () => collapseNode(id),
-      toggle: () => toggleNode(id),
-    }
-
-    rowObjects.set(id, row)
-    return row
-  }
-
-  const expandNode = (nodeId: string) => {
+  function expandNode(id: string) {
     if (options.mode() !== "tree") return
 
     const visibleRows = rows()
-    const current = findExplorerRow(visibleRows, nodeId)
+    const current = findExplorerRow(visibleRows, id)
     if (!current) return
     if (!current.row.hasChildren) return
     if (current.row.isExpanded) return
 
     const graph = options.graph()
-    const nextExpanded = { ...expandedNodes() }
-    nextExpanded[nodeId] = true
+    const nextExpanded: Record<string, true> = { ...expandedNodes() }
+    nextExpanded[id] = true
 
-    const expandedRow = createRow(graph, nodeId, current.row.depth, current.row.parentId, true)
+    const expandedRow = createRow(graph, id, current.row.depth, current.row.parentId, true)
     if (!expandedRow) return
 
-    const insertedRows = buildSubtreeRows(graph, nextExpanded, expandedRow.childIds, nodeId, expandedRow.depth + 1)
+    const insertedRows = buildSubtreeRows(graph, nextExpanded, expandedRow.childIds, id, expandedRow.depth + 1)
     const nextRows = visibleRows.slice()
     nextRows[current.index] = expandedRow
     if (insertedRows.length > 0) {
@@ -181,34 +104,34 @@ export function createExplorerRows(options: CreateExplorerRowsOptions): CreateEx
             type: "batch",
             patches: [
               { type: "update", rows: [expandedRow] },
-              { type: "insert", afterId: nodeId, rows: insertedRows },
+              { type: "insert", afterId: id, rows: insertedRows },
             ],
           },
     )
 
-    const node = graph.nodesById[nodeId]
+    const node = graph.nodesById[id]
     if (!node?.hasChildren) return
     const missingIds = node.childIds.filter((childId) => !graph.nodesById[childId])
     if (missingIds.length === 0) return
     void options.ensureNodes(missingIds)
   }
 
-  const collapseNode = (nodeId: string) => {
+  function collapseNode(id: string) {
     if (options.mode() !== "tree") return
 
     const visibleRows = rows()
-    const current = findExplorerRow(visibleRows, nodeId)
+    const current = findExplorerRow(visibleRows, id)
     if (!current) return
     if (!current.row.isExpanded) return
 
     const graph = options.graph()
-    const collapsedRow = createRow(graph, nodeId, current.row.depth, current.row.parentId, false)
-    const subtree = getSubtreeRange(visibleRows, nodeId)
+    const collapsedRow = createRow(graph, id, current.row.depth, current.row.parentId, false)
+    const subtree = getSubtreeRange(visibleRows, id)
     if (!collapsedRow || !subtree) return
 
     const removedIds = visibleRows.slice(subtree.start, subtree.end).map((row) => row.id)
-    const nextExpanded = { ...expandedNodes() }
-    delete nextExpanded[nodeId]
+    const nextExpanded: Record<string, true> = { ...expandedNodes() }
+    delete nextExpanded[id]
 
     const nextRows = visibleRows.slice()
     nextRows[current.index] = collapsedRow
@@ -229,20 +152,40 @@ export function createExplorerRows(options: CreateExplorerRowsOptions): CreateEx
     )
   }
 
-  const toggleNode = (nodeId: string) => {
-    if (isExpanded(nodeId)) return collapseNode(nodeId)
-    expandNode(nodeId)
+  function toggleNode(id: string) {
+    if (isExpanded(id)) return collapseNode(id)
+    expandNode(id)
   }
 
-  const isExpanded = (nodeId: string) => Boolean(expandedNodes()[nodeId])
+  function isExpanded(id: string) {
+    return Boolean(expandedNodes()[id])
+  }
+
+  function getState(id: string) {
+    return rowLookup().rowById.get(id) ?? null
+  }
+
+  function getParentId(id: string) {
+    return rowLookup().rowById.get(id)?.parentId ?? null
+  }
+
+  function getChildIds(id: string) {
+    return rowLookup().childIdsByParent.get(id) ?? []
+  }
+
+  function getFirstChildId(id: string) {
+    return getChildIds(id)[0] ?? null
+  }
 
   return {
     rows,
     rowById: () => rowLookup().rowById,
     indexById: () => rowLookup().indexById,
     change,
-    getRow,
-    getState: (id: string) => rowLookup().rowById.get(id) ?? null,
+    getState,
+    getParentId,
+    getChildIds,
+    getFirstChildId,
     isExpanded,
     expandNode,
     collapseNode,
@@ -250,15 +193,11 @@ export function createExplorerRows(options: CreateExplorerRowsOptions): CreateEx
   }
 }
 
-function buildTreeRows(graph: ExplorerGraph, expandedNodes: Record<string, true>) {
-  return buildSubtreeRows(graph, expandedNodes, graph.rootIds, undefined, 0)
-}
-
 function buildSearchRows(graph: ExplorerGraph, filter: string) {
   const query = filter.trim()
   if (!query) return []
 
-  const rows: ExplorerRowState[] = []
+  const rows: RowSnapshot[] = []
   const matches = fuzzyFilter(query, graph.searchable, { keys: ["name"], limit: SEARCH_RESULT_LIMIT })
   for (const match of matches) {
     const row = createRow(graph, match.id, 0)
@@ -275,7 +214,7 @@ function buildSubtreeRows(
   parentId: string | undefined,
   depth: number,
 ) {
-  const rows: ExplorerRowState[] = []
+  const rows: RowSnapshot[] = []
   for (const id of ids) {
     const row = createRow(graph, id, depth, parentId, Boolean(expandedNodes[id]))
     if (!row) continue
@@ -305,8 +244,8 @@ function createRow(graph: ExplorerGraph, id: string, depth: number, parentId?: s
   }
 }
 
-function buildRowLookup(rows: ExplorerRowState[]): ExplorerRowLookup {
-  const rowById = new Map<string, ExplorerRowState>()
+function buildRowLookup(rows: RowSnapshot[]): ExplorerRowLookup {
+  const rowById = new Map<string, RowSnapshot>()
   const indexById = new Map<string, number>()
   const childIdsByParent = new Map<string, string[]>()
 
@@ -328,9 +267,14 @@ function buildRowLookup(rows: ExplorerRowState[]): ExplorerRowLookup {
   return { rowById, indexById, childIdsByParent }
 }
 
-function diffRows(currentRows: ExplorerRowState[], nextRows: ExplorerRowState[]): ExplorerRowsPatch | null {
-  if (haveSameRowIds(currentRows, nextRows)) {
-    const updatedRows: ExplorerRowState[] = []
+function diffRows(currentRows: RowSnapshot[], nextRows: RowSnapshot[]): ExplorerRowsPatch | null {
+  if (
+    haveSameIds(
+      currentRows.map((row) => row.id),
+      nextRows.map((row) => row.id),
+    )
+  ) {
+    const updatedRows: RowSnapshot[] = []
     for (let index = 0; index < nextRows.length; index += 1) {
       const nextRow = nextRows[index]
       const currentRow = currentRows[index]
@@ -351,7 +295,7 @@ function diffRows(currentRows: ExplorerRowState[], nextRows: ExplorerRowState[])
   }
 
   const currentRowsById = new Map(currentRows.map((row) => [row.id, row]))
-  const updatedRows: ExplorerRowState[] = []
+  const updatedRows: RowSnapshot[] = []
   for (const nextRow of nextRows) {
     const currentRow = currentRowsById.get(nextRow.id)
     if (!currentRow) continue
@@ -374,10 +318,10 @@ function diffRows(currentRows: ExplorerRowState[], nextRows: ExplorerRowState[])
   return { type: "batch", patches }
 }
 
-function collectInsertPatches(nextRows: ExplorerRowState[], currentIds: Set<string>) {
+function collectInsertPatches(nextRows: RowSnapshot[], currentIds: Set<string>) {
   const patches: Array<Extract<ExplorerRowsPatch, { type: "insert" }>> = []
   let afterId: string | null = null
-  let insertedRows: ExplorerRowState[] = []
+  let insertedRows: RowSnapshot[] = []
 
   for (const row of nextRows) {
     if (!currentIds.has(row.id)) {
@@ -397,14 +341,6 @@ function collectInsertPatches(nextRows: ExplorerRowState[], currentIds: Set<stri
   return patches
 }
 
-function haveSameRowIds(currentRows: ExplorerRowState[], nextRows: ExplorerRowState[]) {
-  if (currentRows.length !== nextRows.length) return false
-  for (let index = 0; index < currentRows.length; index += 1) {
-    if (currentRows[index]?.id !== nextRows[index]?.id) return false
-  }
-  return true
-}
-
 function haveSameIds(currentIds: string[], nextIds: string[]) {
   if (currentIds.length !== nextIds.length) return false
   for (let index = 0; index < currentIds.length; index += 1) {
@@ -413,7 +349,7 @@ function haveSameIds(currentIds: string[], nextIds: string[]) {
   return true
 }
 
-function areRowsEqual(currentRow: ExplorerRowState, nextRow: ExplorerRowState) {
+function areRowsEqual(currentRow: RowSnapshot, nextRow: RowSnapshot) {
   if (currentRow === nextRow) return true
   if (currentRow.id !== nextRow.id) return false
   if (currentRow.parentId !== nextRow.parentId) return false
@@ -435,13 +371,13 @@ function areRowsEqual(currentRow: ExplorerRowState, nextRow: ExplorerRowState) {
   return true
 }
 
-function getSubtreeRange(rows: ExplorerRowState[], rowId: string) {
+function getSubtreeRange(rows: RowSnapshot[], rowId: string) {
   const range = getRowRange(rows, rowId)
   if (!range) return null
   return { start: range.start + 1, end: range.end }
 }
 
-function getRowRange(rows: ExplorerRowState[], rowId: string) {
+function getRowRange(rows: RowSnapshot[], rowId: string) {
   const current = findExplorerRow(rows, rowId)
   if (!current) return null
 
@@ -454,12 +390,12 @@ function getRowRange(rows: ExplorerRowState[], rowId: string) {
   return { start: current.index, end }
 }
 
-export const getFirstVisibleRowId = (rows: ExplorerRowState[]) => rows[0]?.id ?? null
+export const getFirstVisibleRowId = (rows: Array<{ id: string }>) => rows[0]?.id ?? null
 
 export function moveVisibleRowId(
   current: string,
   delta: number,
-  rows: ExplorerRowState[],
+  rows: Array<{ id: string }>,
   rowIndexMap: Map<string, number>,
 ) {
   if (!rows.length) return null

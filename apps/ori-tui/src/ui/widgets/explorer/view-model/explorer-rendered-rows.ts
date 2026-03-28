@@ -1,6 +1,6 @@
 import { TextAttributes } from "@opentui/core"
-import { type Accessor, createComputed, createMemo, createSignal, onCleanup, untrack } from "solid-js"
-import type { ExplorerRow, ExplorerRowState, ExplorerRowsPatch } from "./explorer-rows"
+import { type Accessor, createComputed, createSignal, onCleanup, untrack } from "solid-js"
+import type { ExplorerRowsPatch, RowSnapshot } from "./explorer-rows"
 
 const CHILD_BATCH_SIZE = 10
 
@@ -10,26 +10,17 @@ export type ExplorerRenderedRowElement = {
   attributes?: number
 }
 
-export type ExplorerRenderedRowState = {
+export type RenderedRow = {
   id: string
   parentId?: string
+  depth: number
   width: number
   elements: ExplorerRenderedRowElement[]
 }
 
-export type ExplorerRenderedRow = {
-  readonly id: string
-  readonly width: number
-  readonly elements: readonly ExplorerRenderedRowElement[]
-  readonly row: ExplorerRow
-  parent: () => ExplorerRenderedRow | null
-  children: () => ExplorerRenderedRow[]
-  firstChild: () => ExplorerRenderedRow | null
-}
-
 type ActiveRenderPatch = {
   afterId: string | null
-  rows: ExplorerRenderedRowState[]
+  rows: RenderedRow[]
   nextIndex: number
 }
 
@@ -37,95 +28,12 @@ type NonBatchExplorerRowsPatch = Exclude<ExplorerRowsPatch, { type: "batch" }>
 
 type CreateExplorerRenderedRowsOptions = {
   change: Accessor<ExplorerRowsPatch | null>
-  getRow: (id: string) => ExplorerRow | null
 }
 
 export function createExplorerRenderedRows(options: CreateExplorerRenderedRowsOptions) {
-  const [rows, setRows] = createSignal<ExplorerRenderedRowState[]>([])
-  const renderedRows = new Map<string, ExplorerRenderedRow>()
+  const [rows, setRows] = createSignal<RenderedRow[]>([])
   const stack: ActiveRenderPatch[] = []
   let timeoutHandle: ReturnType<typeof setTimeout> | null = null
-
-  const rowById = createMemo(() => {
-    const map = new Map<string, ExplorerRenderedRowState>()
-    for (const row of rows()) {
-      map.set(row.id, row)
-    }
-    return map
-  })
-
-  const getRenderedRow = (id: string): ExplorerRenderedRow | null => {
-    const cached = renderedRows.get(id)
-    if (cached) return cached
-    const state = rowById().get(id)
-    if (!state) return null
-    const row = options.getRow(id)
-    if (!row) return null
-    const renderedRow: ExplorerRenderedRow = {
-      get id() {
-        return id
-      },
-      get width() {
-        return rowById().get(id)?.width ?? 0
-      },
-      get elements() {
-        return rowById().get(id)?.elements ?? []
-      },
-      get row() {
-        return options.getRow(id) ?? row
-      },
-      parent: () => {
-        const parentId = rowById().get(id)?.parentId
-        if (!parentId) return null
-        return getRenderedRow(parentId)
-      },
-      children: () => {
-        const visibleChildren = renderedRow.row.children()
-        return visibleChildren
-          .map((child) => getRenderedRow(child.id))
-          .filter((child): child is ExplorerRenderedRow => Boolean(child))
-      },
-      firstChild: () => {
-        const child = renderedRow.row.firstChild()
-        if (!child) return null
-        return getRenderedRow(child.id)
-      },
-    }
-    renderedRows.set(id, renderedRow)
-    return renderedRow
-  }
-
-  const visibleRows = createMemo(() =>
-    rows()
-      .map((row) => getRenderedRow(row.id))
-      .filter((row): row is ExplorerRenderedRow => Boolean(row)),
-  )
-
-  const clearSchedule = () => {
-    if (timeoutHandle === null) return
-    clearTimeout(timeoutHandle)
-    timeoutHandle = null
-  }
-
-  const schedule = () => {
-    if (timeoutHandle !== null) return
-    timeoutHandle = setTimeout(process, 10)
-  }
-
-  const enqueueInsert = (afterId: string | null, insertedRows: ExplorerRenderedRowState[]) => {
-    if (insertedRows.length === 0) return
-    stack.unshift({ afterId, rows: insertedRows, nextIndex: 0 })
-    process()
-  }
-
-  const process = () => {
-    timeoutHandle = null
-    const next = applyRenderPatchStep(untrack(rows), stack)
-    stack.splice(0, stack.length, ...next.stack)
-    setRows(next.rows)
-    if (stack.length === 0) return
-    schedule()
-  }
 
   createComputed(() => {
     const patch = options.change()
@@ -144,7 +52,7 @@ export function createExplorerRenderedRows(options: CreateExplorerRenderedRowsOp
     stack.length = 0
   })
 
-  return visibleRows
+  return rows
 
   function applyChange(change: NonBatchExplorerRowsPatch) {
     if (change.type === "reset") {
@@ -175,12 +83,35 @@ export function createExplorerRenderedRows(options: CreateExplorerRenderedRowsOp
       return
     }
 
-    enqueueInsert(change.afterId, change.rows.map(renderRow))
+    const insertedRows = change.rows.map(renderRow)
+    if (insertedRows.length === 0) return
+    stack.unshift({ afterId: change.afterId, rows: insertedRows, nextIndex: 0 })
+    process()
+  }
+
+  function process() {
+    timeoutHandle = null
+    const next = applyRenderPatchStep(untrack(rows), stack)
+    stack.splice(0, stack.length, ...next.stack)
+    setRows(next.rows)
+    if (stack.length === 0) return
+    schedule()
+  }
+
+  function schedule() {
+    if (timeoutHandle !== null) return
+    timeoutHandle = setTimeout(process, 10)
+  }
+
+  function clearSchedule() {
+    if (timeoutHandle === null) return
+    clearTimeout(timeoutHandle)
+    timeoutHandle = null
   }
 }
 
 export function applyRenderPatchStep(
-  currentRows: ExplorerRenderedRowState[],
+  currentRows: RenderedRow[],
   currentStack: ActiveRenderPatch[],
   batchSize = CHILD_BATCH_SIZE,
 ) {
@@ -215,7 +146,7 @@ export function applyRenderPatchStep(
   return { rows, stack }
 }
 
-function renderRow(row: ExplorerRowState): ExplorerRenderedRowState {
+function renderRow(row: RowSnapshot): RenderedRow {
   const elements: ExplorerRenderedRowElement[] = [
     { text: `${row.glyph} `, role: "glyph", attributes: TextAttributes.DIM },
     { text: row.name, role: "main" },
@@ -232,12 +163,13 @@ function renderRow(row: ExplorerRowState): ExplorerRenderedRowState {
   return {
     id: row.id,
     parentId: row.parentId,
+    depth: row.depth,
     width: elements.reduce((sum, element) => sum + element.text.length, 0),
     elements,
   }
 }
 
-function getInsertIndex(rows: ExplorerRenderedRowState[], afterId: string | null) {
+function getInsertIndex(rows: RenderedRow[], afterId: string | null) {
   if (!afterId) return 0
   const match = rows.findIndex((row) => row.id === afterId)
   if (match === -1) return rows.length

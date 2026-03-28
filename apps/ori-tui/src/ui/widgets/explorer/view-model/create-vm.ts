@@ -46,7 +46,6 @@ export function createVM(options: CreateVMOptions) {
   })
   const visibleRows = createExplorerRenderedRows({
     change: rowsState.change,
-    getRow: rowsState.getRow,
   })
 
   const setFilter = (value: string) => {
@@ -96,34 +95,45 @@ export function createVM(options: CreateVMOptions) {
     return visibleRows().find((row) => row.id === id) ?? null
   })
 
+  const rowState = (id: string) => rowsState.getState(id)
+  const expandRow = (id: string) => rowsState.expandNode(id)
+  const collapseRow = (id: string) => rowsState.collapseNode(id)
+  const toggleRow = (id: string) => rowsState.toggleNode(id)
+
   const handleMoveIn = () => {
-    const row = selectedRow()?.row
+    const id = selectedId()
+    if (!id) return
+    const row = rowsState.getState(id)
     if (!row?.hasChildren) return
     batch(() => {
-      row.expand()
-      setSelectedId(row.firstChild()?.id ?? null)
+      rowsState.expandNode(id)
+      setSelectedId(rowsState.getFirstChildId(id))
     })
   }
 
   const handleMoveOut = () => {
-    const row = selectedRow()?.row
+    const id = selectedId()
+    if (!id) return
+    const row = rowsState.getState(id)
     if (!row) return
     if (row.hasChildren && row.isExpanded) {
-      row.collapse()
+      rowsState.collapseNode(id)
       return
     }
-    const parent = row.parent()
-    if (!parent) return
+    const parentId = rowsState.getParentId(id)
+    if (!parentId) return
     batch(() => {
-      parent.collapse()
-      setSelectedId(parent.id)
+      rowsState.collapseNode(parentId)
+      setSelectedId(parentId)
     })
   }
 
   const toggleExpanded = () => {
-    const row = selectedRow()?.row
+    const id = selectedId()
+    if (!id) return
+    const row = rowsState.getState(id)
     if (!row?.hasChildren) return
-    row.toggle()
+    rowsState.toggleNode(id)
   }
 
   const refreshGraph = async () => {
@@ -144,6 +154,10 @@ export function createVM(options: CreateVMOptions) {
     selectedId,
     select: setSelectedId,
     selectedRow,
+    rowState,
+    expandRow,
+    collapseRow,
+    toggleRow,
     moveSelection,
     handleMoveIn,
     handleMoveOut,
