@@ -66,6 +66,16 @@ export function createVM(options: CreateVMOptions) {
     setSearchSelectedId(next)
   })
 
+  // Keep tree selection pinned to a visible row in case graph refreshes make selected id invalid
+  createComputed(() => {
+    if (mode() !== "tree") return
+    const current = treeSelectedId()
+    const rows = rowsState.rows()
+    const next = !current || !rowsState.indexById().has(current) ? getFirstVisibleRowId(rows) : current
+    if (next === treeSelectedId()) return
+    setTreeSelectedId(next)
+  })
+
   const setSelectedId = (nodeId: string | null) => {
     if (mode() === "search") {
       setSearchSelectedId(nodeId)
