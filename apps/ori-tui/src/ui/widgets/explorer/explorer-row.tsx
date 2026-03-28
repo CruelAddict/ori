@@ -79,7 +79,6 @@ export function ExplorerRow(props: ExplorerRowProps) {
         text: ` ${row().description}`,
         bg: colors.baseBg,
         fg: colors.description,
-        attributes: TextAttributes.DIM,
       })
     }
 
