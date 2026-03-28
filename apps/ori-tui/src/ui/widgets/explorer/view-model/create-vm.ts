@@ -3,7 +3,7 @@ import type { Accessor } from "solid-js"
 import { batch, createComputed, createMemo, createSignal, onCleanup } from "solid-js"
 import { createExplorerGraph } from "./explorer-graph"
 import { createExplorerRenderedRows } from "./explorer-rendered-rows"
-import { createExplorerRows, getFirstVisibleRowId, isRowVisible, moveVisibleRowId } from "./explorer-rows"
+import { createExplorerRows, getFirstVisibleRowId, moveVisibleRowId } from "./explorer-rows"
 import type { UIMode } from "./explorer-types"
 
 type CreateVMOptions = {
@@ -62,7 +62,7 @@ export function createVM(options: CreateVMOptions) {
     const current = searchSelectedId()
     const rows = rowsState.rows()
     // Search selection should always stay on a visible match as results change.
-    const next = !current || !isRowVisible(current, rowsState.indexById()) ? getFirstVisibleRowId(rows) : current
+    const next = !current || !rowsState.indexById().has(current) ? getFirstVisibleRowId(rows) : current
     if (next === searchSelectedId()) return
     setSearchSelectedId(next)
   })
@@ -81,7 +81,13 @@ export function createVM(options: CreateVMOptions) {
   }
 
   const moveSelection = (delta: number) => {
-    setSelectedId(moveVisibleRowId(selectedId(), delta, rowsState.rows(), rowsState.indexById()))
+    const current = selectedId()
+    const rows = rowsState.rows()
+    if (!current) {
+      setSelectedId(getFirstVisibleRowId(rows))
+      return
+    }
+    setSelectedId(moveVisibleRowId(current, delta, rows, rowsState.indexById()))
   }
 
   const selectedRow = createMemo(() => {

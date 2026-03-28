@@ -37,7 +37,7 @@ type NonBatchExplorerRowsPatch = Exclude<ExplorerRowsPatch, { type: "batch" }>
 
 type CreateExplorerRenderedRowsOptions = {
   change: Accessor<ExplorerRowsPatch | null>
-  getRow: (id: string | null) => ExplorerRow | null
+  getRow: (id: string) => ExplorerRow | null
 }
 
 export function createExplorerRenderedRows(options: CreateExplorerRenderedRowsOptions) {
@@ -54,8 +54,7 @@ export function createExplorerRenderedRows(options: CreateExplorerRenderedRowsOp
     return map
   })
 
-  const getRenderedRow = (id: string | null): ExplorerRenderedRow | null => {
-    if (!id) return null
+  const getRenderedRow = (id: string): ExplorerRenderedRow | null => {
     const cached = renderedRows.get(id)
     if (cached) return cached
     const state = rowById().get(id)
