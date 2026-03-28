@@ -38,6 +38,7 @@ export function createResourceIntrospectionUC(deps: ResourceIntrospectionUsecase
   const listeners = new Set<Listener>()
   let pending: Promise<GraphSnapshot | null> | null = null
   let hydratePending: Promise<void> | null = null
+  let version = 0
   const hydrateQueue = new Set<string>()
 
   const emit = () => {
@@ -65,13 +66,21 @@ export function createResourceIntrospectionUC(deps: ResourceIntrospectionUsecase
     })
   }
 
+  const mergeNodesFor = (targetVersion: number, nodes: Node[]) => {
+    if (targetVersion !== version) return
+    mergeNodes(nodes)
+  }
+
   const runHydrateQueue = () => {
     if (hydratePending) {
       return hydratePending
     }
 
+    const targetVersion = version
+
     const request = (async () => {
       while (hydrateQueue.size > 0) {
+        if (targetVersion !== version) return
         const ids = Array.from(hydrateQueue)
         hydrateQueue.clear()
         const knownNodes = new Map(Object.entries(state.nodesById))
@@ -80,7 +89,7 @@ export function createResourceIntrospectionUC(deps: ResourceIntrospectionUsecase
           deps.resourceName,
           ids,
           knownNodes,
-          { onNodes: mergeNodes },
+          { onNodes: (nodes) => mergeNodesFor(targetVersion, nodes) },
           deps.logger,
         )
       }
@@ -98,6 +107,8 @@ export function createResourceIntrospectionUC(deps: ResourceIntrospectionUsecase
       return pending
     }
 
+    version += 1
+    const targetVersion = version
     hydrateQueue.clear()
     setState(() => ({
       nodesById: {},
@@ -113,6 +124,7 @@ export function createResourceIntrospectionUC(deps: ResourceIntrospectionUsecase
       deps.resourceName,
       {
         onRoots: (nodes, rootIds) => {
+          if (targetVersion !== version) return
           setState((current) => {
             const nodesById = { ...current.nodesById }
             for (const node of nodes) {
@@ -125,7 +137,7 @@ export function createResourceIntrospectionUC(deps: ResourceIntrospectionUsecase
             }
           })
         },
-        onNodes: mergeNodes,
+        onNodes: (nodes) => mergeNodesFor(targetVersion, nodes),
       },
       deps.logger,
     )
