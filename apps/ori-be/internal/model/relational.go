@@ -62,7 +62,7 @@ func (s Database) NewRootNode() Node {
 	return NewDatabaseNode(s)
 }
 
-// Schema is a root scope for engines with schemas (for example postgres).
+// Schema is a root scope for engines with schemas (for example postgres and duckdb).
 type Schema struct {
 	Engine         string
 	ConnectionName string
@@ -72,7 +72,7 @@ type Schema struct {
 }
 
 func (s Schema) Slug() string {
-	return stringutil.Slug(s.Engine, s.ConnectionName, s.Name)
+	return stringutil.Slug(s.Engine, s.ConnectionName, s.Database, s.Name)
 }
 
 func (s Schema) Connection() string {

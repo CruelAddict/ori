@@ -13,6 +13,7 @@ import (
 
 	"github.com/crueladdict/ori/apps/ori-server/internal/events"
 	httpapi "github.com/crueladdict/ori/apps/ori-server/internal/httpapi"
+	duckdbadapter "github.com/crueladdict/ori/apps/ori-server/internal/infrastructure/database/duckdb"
 	postgresadapter "github.com/crueladdict/ori/apps/ori-server/internal/infrastructure/database/postgres"
 	sqliteadapter "github.com/crueladdict/ori/apps/ori-server/internal/infrastructure/database/sqlite"
 	"github.com/crueladdict/ori/apps/ori-server/internal/pkg/logctx"
@@ -85,6 +86,7 @@ func run() int {
 
 	eventHub := events.NewHub()
 	connectionService := service.NewResourceSessionService(configService, eventHub)
+	connectionService.RegisterAdapter("duckdb", duckdbadapter.NewAdapter)
 	connectionService.RegisterAdapter("sqlite", sqliteadapter.NewAdapter)
 	connectionService.RegisterAdapter("postgresql", postgresadapter.NewAdapter)
 	connectionService.RegisterAdapter("postgres", postgresadapter.NewAdapter)

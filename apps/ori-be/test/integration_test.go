@@ -17,6 +17,7 @@ import (
 
 	"github.com/crueladdict/ori/apps/ori-server/internal/events"
 	httpapi "github.com/crueladdict/ori/apps/ori-server/internal/httpapi"
+	duckdbadapter "github.com/crueladdict/ori/apps/ori-server/internal/infrastructure/database/duckdb"
 	sqliteadapter "github.com/crueladdict/ori/apps/ori-server/internal/infrastructure/database/sqlite"
 	"github.com/crueladdict/ori/apps/ori-server/internal/service"
 )
@@ -274,6 +275,207 @@ func TestQueryExecAndGetResult(t *testing.T) {
 	}
 }
 
+func TestDuckDBIntrospectionAndCSVQuery(t *testing.T) {
+	ctx := context.Background()
+	fixtureConfigPath, err := filepath.Abs("../../../testdata/resources.json")
+	if err != nil {
+		t.Fatalf("Failed to resolve test config path: %v", err)
+	}
+	fixtureRoot := filepath.Dir(fixtureConfigPath)
+	tempRoot := t.TempDir()
+
+	tempConfigPath := filepath.Join(tempRoot, "resources.json")
+	if err := copyFile(fixtureConfigPath, tempConfigPath); err != nil {
+		t.Fatalf("failed to copy config: %v", err)
+	}
+	tempDuckDBDir := filepath.Join(tempRoot, "duckdb")
+	if err := os.MkdirAll(tempDuckDBDir, 0o755); err != nil {
+		t.Fatalf("failed to create duckdb dir: %v", err)
+	}
+	tempDBPath := filepath.Join(tempDuckDBDir, "rich.duckdb")
+	srcDBPath := filepath.Join(fixtureRoot, "duckdb", "rich.duckdb")
+	if err := copyFile(srcDBPath, tempDBPath); err != nil {
+		t.Fatalf("failed to copy duckdb db: %v", err)
+	}
+
+	configService := service.NewResourceCatalogService(tempConfigPath)
+	if err := configService.LoadResources(); err != nil {
+		t.Fatalf("Failed to load config: %v", err)
+	}
+
+	eventHub := events.NewHub()
+	connectionService := service.NewResourceSessionService(configService, eventHub)
+	connectionService.RegisterAdapter("duckdb", duckdbadapter.NewAdapter)
+	nodeService := service.NewNodeService(configService, connectionService)
+	queryService := service.NewQueryService(connectionService, eventHub, ctx)
+	handler := httpapi.NewHandler(configService, connectionService, nodeService, queryService)
+
+	sockPath := unixSocketPath("ori-be-duckdb")
+	_ = os.Remove(sockPath)
+	srv, err := httpapi.NewUnixServer(ctx, handler, eventHub, sockPath)
+	if err != nil {
+		t.Fatalf("Failed to create unix server: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = srv.Shutdown()
+	})
+
+	client := newContractClient(t, sockPath)
+
+	connectReq := dto.ConnectResourceJSONRequestBody{ResourceName: "local-duckdb"}
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		resp, err := client.ConnectResourceWithResponse(ctx, connectReq)
+		if err != nil {
+			t.Fatalf("Connect failed: %v", err)
+		}
+		if resp.JSON201 != nil && resp.JSON201.Result == dto.Success {
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+
+	rootResp, err := client.GetNodesWithResponse(ctx, "local-duckdb", nil)
+	if err != nil {
+		t.Fatalf("getNodes root failed: %v", err)
+	}
+	if rootResp.JSON200 == nil || len(rootResp.JSON200.Nodes) == 0 {
+		t.Fatalf("expected at least one root node")
+	}
+
+	var analyticsSchema dto.SchemaNode
+	for _, node := range rootResp.JSON200.Nodes {
+		schemaNode := mustSchemaNode(t, node)
+		if schemaNode.Name == "analytics" {
+			analyticsSchema = schemaNode
+			break
+		}
+	}
+	if analyticsSchema.Id == "" {
+		t.Fatalf("expected analytics schema root node")
+	}
+	if analyticsSchema.Attributes.Engine != "duckdb" {
+		t.Fatalf("expected duckdb engine, got %q", analyticsSchema.Attributes.Engine)
+	}
+
+	schemaIDs := []string{analyticsSchema.Id}
+	schemaParams := &dto.GetNodesParams{NodeId: &schemaIDs}
+	schemaResp, err := client.GetNodesWithResponse(ctx, "local-duckdb", schemaParams)
+	if err != nil {
+		t.Fatalf("getNodes schema failed: %v", err)
+	}
+	if schemaResp.JSON200 == nil || len(schemaResp.JSON200.Nodes) != 1 {
+		t.Fatalf("expected single schema node")
+	}
+	hydratedSchema := mustSchemaNode(t, schemaResp.JSON200.Nodes[0])
+	tablesEdge, ok := hydratedSchema.Edges["tables"]
+	if !ok || len(tablesEdge.Items) == 0 {
+		t.Fatalf("expected tables edge on analytics schema")
+	}
+	viewsEdge, ok := hydratedSchema.Edges["views"]
+	if !ok || len(viewsEdge.Items) == 0 {
+		t.Fatalf("expected views edge on analytics schema")
+	}
+
+	tableIDs := append([]string(nil), tablesEdge.Items...)
+	tableParams := &dto.GetNodesParams{NodeId: &tableIDs}
+	tableResp, err := client.GetNodesWithResponse(ctx, "local-duckdb", tableParams)
+	if err != nil {
+		t.Fatalf("getNodes table failed: %v", err)
+	}
+	if tableResp.JSON200 == nil || len(tableResp.JSON200.Nodes) == 0 {
+		t.Fatalf("expected at least one table node")
+	}
+	var booksTable dto.TableNode
+	var editionsTable dto.TableNode
+	for _, node := range tableResp.JSON200.Nodes {
+		tableNode := mustTableNode(t, node)
+		if tableNode.Name == "books" {
+			booksTable = tableNode
+		}
+		if tableNode.Name == "book_editions" {
+			editionsTable = tableNode
+		}
+	}
+	if booksTable.Id == "" {
+		t.Fatalf("expected books table node")
+	}
+	if editionsTable.Id == "" {
+		t.Fatalf("expected book_editions table node")
+	}
+	if booksTable.Name != "books" {
+		t.Fatalf("expected books table, got %q", booksTable.Name)
+	}
+	if edge, ok := booksTable.Edges["columns"]; !ok || len(edge.Items) < 4 {
+		t.Fatalf("expected multiple columns on books table")
+	}
+	if edge, ok := booksTable.Edges["constraints"]; !ok || len(edge.Items) == 0 {
+		t.Fatalf("expected constraints on books table")
+	}
+	if edge, ok := booksTable.Edges["indexes"]; !ok || len(edge.Items) == 0 {
+		t.Fatalf("expected indexes on books table")
+	}
+	if edge, ok := booksTable.Edges["triggers"]; !ok {
+		t.Fatalf("expected triggers edge on books table")
+	} else if edge.Items == nil {
+		t.Fatalf("expected triggers edge items")
+	}
+	if edge, ok := editionsTable.Edges["indexes"]; !ok || len(edge.Items) == 0 {
+		t.Fatalf("expected backing indexes on book_editions table")
+	}
+
+	csvPath := filepath.Join(tempRoot, "people.csv")
+	csvContent := "id,name\n1,Ada\n2,Grace\n"
+	if err := os.WriteFile(csvPath, []byte(csvContent), 0o644); err != nil {
+		t.Fatalf("failed to write csv fixture: %v", err)
+	}
+
+	execReq := dto.ExecQueryJSONRequestBody{
+		ResourceName: "local-duckdb",
+		JobId:        uuid.New(),
+		Query:        fmt.Sprintf("SELECT id, name FROM read_csv_auto('%s') ORDER BY id", csvPath),
+	}
+	execResp, err := client.ExecQueryWithResponse(ctx, execReq)
+	if err != nil {
+		t.Fatalf("DuckDB query exec failed: %v", err)
+	}
+	if execResp.JSON202 == nil || execResp.JSON202.JobId == "" {
+		t.Fatalf("expected job id from DuckDB query exec")
+	}
+
+	result := waitForQueryResult(t, ctx, client, execResp.JSON202.JobId, nil, nil)
+	if len(result.Columns) != 2 {
+		t.Fatalf("expected 2 columns, got %d", len(result.Columns))
+	}
+	if len(result.Rows) != 2 {
+		t.Fatalf("expected 2 rows, got %d", len(result.Rows))
+	}
+	if got := fmt.Sprint(result.Rows[0][1]); got != "Ada" {
+		t.Fatalf("expected first csv row to contain Ada, got %q", got)
+	}
+
+	jsonReq := dto.ExecQueryJSONRequestBody{
+		ResourceName: "local-duckdb",
+		JobId:        uuid.New(),
+		Query:        "SELECT profile, rating FROM analytics.authors ORDER BY id LIMIT 1",
+	}
+	jsonResp, err := client.ExecQueryWithResponse(ctx, jsonReq)
+	if err != nil {
+		t.Fatalf("DuckDB json query exec failed: %v", err)
+	}
+	if jsonResp.JSON202 == nil || jsonResp.JSON202.JobId == "" {
+		t.Fatalf("expected job id from DuckDB json query exec")
+	}
+
+	jsonResult := waitForQueryResult(t, ctx, client, jsonResp.JSON202.JobId, nil, nil)
+	if got := fmt.Sprint(jsonResult.Rows[0][0]); got != `{"awards":["Royal Society"]}` {
+		t.Fatalf("expected JSON string result, got %q", got)
+	}
+	if got := fmt.Sprint(jsonResult.Rows[0][1]); got != "9.75" {
+		t.Fatalf("expected decimal string result, got %q", got)
+	}
+}
+
 func waitForQueryResult(t *testing.T, ctx context.Context, client *dto.ClientWithResponses, jobID string, limit, offset *int) *dto.QueryResultResponse {
 	t.Helper()
 	dl := time.Now().Add(5 * time.Second)
@@ -306,6 +508,22 @@ func mustDatabaseNode(t *testing.T, node dto.Node) dto.DatabaseNode {
 		t.Fatalf("failed to decode database node: %v", err)
 	}
 	return dbNode
+}
+
+func mustSchemaNode(t *testing.T, node dto.Node) dto.SchemaNode {
+	t.Helper()
+	discriminator, err := node.Discriminator()
+	if err != nil {
+		t.Fatalf("failed to read node discriminator: %v", err)
+	}
+	if discriminator != string(dto.Schema) {
+		t.Fatalf("expected schema node discriminator, got %q", discriminator)
+	}
+	schemaNode, err := node.AsSchemaNode()
+	if err != nil {
+		t.Fatalf("failed to decode schema node: %v", err)
+	}
+	return schemaNode
 }
 
 func mustTableNode(t *testing.T, node dto.Node) dto.TableNode {

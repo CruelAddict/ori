@@ -62,10 +62,10 @@ func (cl *ResourceLoader) validate(config *model.Config) error {
 
 		// Driver-specific validation
 		switch conn.Type {
-		case "sqlite":
-			// For sqlite, database is a file path; other fields optional
+		case "sqlite", "duckdb":
+			// For file-based engines, database is a file path; other fields optional
 			if conn.TLS != nil {
-				slog.Warn("tls settings ignored for sqlite resource", slog.String("resource", conn.Name))
+				slog.Warn("tls settings ignored for file-based resource", slog.String("resource", conn.Name), slog.String("type", conn.Type))
 			}
 		default:
 			if conn.Host == nil || *conn.Host == "" {

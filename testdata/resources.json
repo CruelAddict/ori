@@ -47,6 +47,11 @@
       "database": "./sqlite/long_names.db"
     },
     {
+      "name": "local-duckdb",
+      "type": "duckdb",
+      "database": "./duckdb/rich.duckdb"
+    },
+    {
       "name": "shell-password-example",
       "type": "postgresql",
       "host": "localhost",

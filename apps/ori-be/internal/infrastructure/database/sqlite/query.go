@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 
+	"github.com/crueladdict/ori/apps/ori-server/internal/pkg/querycell"
 	"github.com/crueladdict/ori/apps/ori-server/internal/pkg/sqlutil"
 	"github.com/crueladdict/ori/apps/ori-server/internal/service"
 	"github.com/jmoiron/sqlx"
@@ -102,7 +103,9 @@ func (a *Adapter) executeSelect(ctx context.Context, stmt *sqlx.Stmt, query stri
 
 		// Create a copy of the row data
 		rowCopy := make([]any, len(rowData))
-		copy(rowCopy, rowData)
+		for i, value := range rowData {
+			rowCopy[i] = querycell.Stringify(value)
+		}
 
 		allRows = append(allRows, rowCopy)
 		rowCount++

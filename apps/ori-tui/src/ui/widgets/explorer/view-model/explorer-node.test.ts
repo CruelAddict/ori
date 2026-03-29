@@ -257,6 +257,7 @@ describe("createSnapshotExplorerNode", () => {
       }),
     )
     expect(node.description).toBe("index users_email_idx")
+    expect(node.badges).toEqual(["unique"])
   })
 
   test("describes indexes with predicate and badges", () => {

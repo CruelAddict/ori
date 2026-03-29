@@ -265,7 +265,7 @@ function nodeBadges(node: Node): string[] {
     return badges
   }
   if (node.type === NodeType.CONSTRAINT) {
-    return []
+    return constraintBadges(node.attributes)
   }
   if (node.type === NodeType.INDEX) {
     return indexBadges(node.attributes)
@@ -274,6 +274,17 @@ function nodeBadges(node: Node): string[] {
     const state = node.attributes.enabledState ?? ""
     if (!state) return []
     return [state.toLowerCase()]
+  }
+  return []
+}
+
+function constraintBadges(attrs: ConstraintNode["attributes"]): string[] {
+  const constraintType = attrs.constraintType ?? ""
+  if (constraintType === "PRIMARY KEY") {
+    return ["primary"]
+  }
+  if (constraintType === "UNIQUE") {
+    return ["unique"]
   }
   return []
 }
@@ -302,7 +313,7 @@ function describeConstraint(attrs: ConstraintNode["attributes"]): string | undef
     }
     return ""
   }
-  return constraintType.toLowerCase()
+  return undefined
 }
 
 function describeIndex(attrs: IndexNode["attributes"]): string | undefined {
@@ -310,7 +321,7 @@ function describeIndex(attrs: IndexNode["attributes"]): string | undefined {
   if (predicate) {
     return `where ${predicate.toLowerCase()}`
   }
-  return "index"
+  return undefined
 }
 
 function indexBadges(attrs: IndexNode["attributes"]): string[] {
