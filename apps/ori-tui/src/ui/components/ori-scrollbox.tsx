@@ -2,6 +2,10 @@ import type { MouseEvent, Renderable, ScrollBoxRenderable } from "@opentui/core"
 import { useTheme } from "@ui/providers/theme"
 import type { JSX } from "solid-js"
 import { patchBrailleScrollbarThumbs } from "./ori-scrollbox-braille"
+import {
+  needsCoupledOverflowPatch as getNeedsCoupledOverflowPatch,
+  installCoupledOverflowPatch,
+} from "./ori-scrollbox-coupled-overflow"
 
 const defaultMultipliers = {
   horizontal: 3,
@@ -100,6 +104,17 @@ export function OriScrollbox(props: OriScrollboxProps) {
     ...scrollboxProps
   } = props
 
+  const enabledScrollX = scrollX ?? true
+  const enabledScrollY = scrollY ?? true
+
+  const needsCoupledOverflowPatch = getNeedsCoupledOverflowPatch({
+    scrollX: enabledScrollX,
+    scrollY: enabledScrollY,
+    scrollbarOptions: scrollboxProps.scrollbarOptions,
+    horizontalScrollbarOptions,
+    verticalScrollbarOptions,
+  })
+
   const handleRef = (node: ScrollBoxRenderable | undefined) => {
     onReady?.(node)
     if (!node) return
@@ -115,7 +130,13 @@ export function OriScrollbox(props: OriScrollboxProps) {
       enforceScrollbarMinThumbSize(node, "vertical", minVerticalThumbHeight)
     }
 
-    if (!scrollSpeed && !onSync && !onUserScroll) {
+    if (needsCoupledOverflowPatch) {
+      installCoupledOverflowPatch(node)
+    }
+
+    const needsEventSyncPatch = Boolean(scrollSpeed) || Boolean(onSync) || Boolean(onUserScroll)
+
+    if (!needsEventSyncPatch) {
       return
     }
 
@@ -128,7 +149,7 @@ export function OriScrollbox(props: OriScrollboxProps) {
         ? createScrollSpeedHandler(originalOnMouseEvent, scrollSpeed)
         : originalOnMouseEvent
 
-    patchScrollbarUserScroll(node, onUserScroll, onSync)
+    installScrollbarUserScrollPatch(node, onUserScroll, onSync)
 
     // @ts-expect-error onUpdate is protected in typings
     node.onUpdate = (deltaTime: number) => {
@@ -159,14 +180,16 @@ export function OriScrollbox(props: OriScrollboxProps) {
       }
       onSync?.()
     }
+
+    process.nextTick(() => onSync?.())
   }
 
   return (
     <scrollbox
       {...scrollboxProps}
       ref={handleRef}
-      scrollX={scrollX ?? true}
-      scrollY={scrollY ?? true}
+      scrollX={enabledScrollX}
+      scrollY={enabledScrollY}
       horizontalScrollbarOptions={mergeScrollbarOptions(
         {
           flexShrink: 0,
@@ -270,14 +293,14 @@ function mergeScrollbarOptions(base: ScrollbarOptions, custom: ScrollbarOptions 
   }
 }
 
-function patchScrollbarUserScroll(
+function installScrollbarUserScrollPatch(
   node: ScrollBoxRenderable,
   onUserScroll: ((context: OriScrollboxUserScrollContext) => void) | undefined,
   onSync: (() => void) | undefined,
 ) {
   type State = {
     active: boolean
-    event?: MouseEvent
+    event: MouseEvent | null
     scrollLeft: number
     scrollTop: number
   }
@@ -296,28 +319,27 @@ function patchScrollbarUserScroll(
     if (!state.active) return
     if (delta.x === 0 && delta.y === 0) return
 
-    const event = state.event
-    if (event) {
-      onUserScroll?.({
-        event,
-        delta,
-        scrollLeft,
-        scrollTop,
-      })
-    }
+    if (!state.event) return
+
+    onUserScroll?.({
+      event: state.event,
+      delta,
+      scrollLeft,
+      scrollTop,
+    })
 
     onSync?.()
   }
 
   const verticalState: State = {
     active: false,
-    event: undefined,
+    event: null,
     scrollLeft: node.scrollLeft ?? 0,
     scrollTop: node.scrollTop ?? 0,
   }
   const horizontalState: State = {
     active: false,
-    event: undefined,
+    event: null,
     scrollLeft: node.scrollLeft ?? 0,
     scrollTop: node.scrollTop ?? 0,
   }
