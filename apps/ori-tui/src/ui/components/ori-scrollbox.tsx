@@ -9,10 +9,11 @@ const defaultMultipliers = {
 }
 
 type ScrollDirection = "up" | "down" | "left" | "right"
+type ScrollbarOrientation = "horizontal" | "vertical"
 
 type SliderWithMinThumbPatch = {
   __minThumbSizePatch?: {
-    minWidth: number
+    minSize: number
     getVirtualThumbSize: () => number
   }
   getVirtualThumbSize?: () => number
@@ -67,6 +68,7 @@ type ScrollboxBaseProps = {
 export type OriScrollboxProps = ScrollboxBaseProps & {
   onReady?: (node: ScrollBoxRenderable | undefined) => void
   minHorizontalThumbWidth?: number
+  minVerticalThumbHeight?: number
   scrollSpeed?: ScrollSpeedMultipliers
   onSync?: () => void
   onUserScroll?: (context: OriScrollboxUserScrollContext) => void
@@ -86,6 +88,7 @@ export function OriScrollbox(props: OriScrollboxProps) {
   const {
     onReady,
     minHorizontalThumbWidth,
+    minVerticalThumbHeight,
     scrollSpeed,
     onSync,
     onUserScroll,
@@ -97,30 +100,6 @@ export function OriScrollbox(props: OriScrollboxProps) {
     ...scrollboxProps
   } = props
 
-  const horizontal = mergeScrollbarOptions(
-    {
-      flexShrink: 0,
-      minHeight: 1,
-      trackOptions: {
-        foregroundColor: theme().get("scrollbar_foreground"),
-        backgroundColor: theme().get("scrollbar_background"),
-      },
-    },
-    horizontalScrollbarOptions,
-  )
-
-  const vertical = mergeScrollbarOptions(
-    {
-      flexShrink: 0,
-      minWidth: 1,
-      trackOptions: {
-        foregroundColor: theme().get("scrollbar_foreground"),
-        backgroundColor: theme().get("scrollbar_background"),
-      },
-    },
-    verticalScrollbarOptions,
-  )
-
   const handleRef = (node: ScrollBoxRenderable | undefined) => {
     onReady?.(node)
     if (!node) return
@@ -129,7 +108,11 @@ export function OriScrollbox(props: OriScrollboxProps) {
     patchBrailleScrollbarThumbs(node)
 
     if (typeof minHorizontalThumbWidth === "number") {
-      enforceHorizontalScrollbarMinThumbWidth(node, minHorizontalThumbWidth)
+      enforceScrollbarMinThumbSize(node, "horizontal", minHorizontalThumbWidth)
+    }
+
+    if (typeof minVerticalThumbHeight === "number") {
+      enforceScrollbarMinThumbSize(node, "vertical", minVerticalThumbHeight)
     }
 
     if (!scrollSpeed && !onSync && !onUserScroll) {
@@ -184,8 +167,28 @@ export function OriScrollbox(props: OriScrollboxProps) {
       ref={handleRef}
       scrollX={scrollX ?? true}
       scrollY={scrollY ?? true}
-      horizontalScrollbarOptions={horizontal}
-      verticalScrollbarOptions={vertical}
+      horizontalScrollbarOptions={mergeScrollbarOptions(
+        {
+          flexShrink: 0,
+          minHeight: 1,
+          trackOptions: {
+            foregroundColor: theme().get("scrollbar_foreground"),
+            backgroundColor: theme().get("scrollbar_background"),
+          },
+        },
+        horizontalScrollbarOptions,
+      )}
+      verticalScrollbarOptions={mergeScrollbarOptions(
+        {
+          flexShrink: 0,
+          minWidth: 1,
+          trackOptions: {
+            foregroundColor: theme().get("scrollbar_foreground"),
+            backgroundColor: theme().get("scrollbar_background"),
+          },
+        },
+        verticalScrollbarOptions,
+      )}
     >
       {children}
     </scrollbox>
@@ -357,23 +360,28 @@ function patchScrollbarUserScroll(
   })
 }
 
-// there's a bug that makes horizontal scrollbox tiny for no reason in opentui
-// we're working aroung
-function enforceHorizontalScrollbarMinThumbWidth(scrollBox: ScrollBoxRenderable | undefined, minWidth: number) {
-  if (!scrollBox || !Number.isFinite(minWidth) || minWidth <= 0) return
+// there's a bug that makes scrollbox thumbs tiny for no reason in opentui
+function enforceScrollbarMinThumbSize(
+  scrollBox: ScrollBoxRenderable | undefined,
+  orientation: ScrollbarOrientation,
+  minSize: number,
+) {
+  if (!scrollBox || !Number.isFinite(minSize) || minSize <= 0) return
 
-  const slider = scrollBox.horizontalScrollBar?.slider as unknown as SliderWithMinThumbPatch | undefined
+  const slider =
+    orientation === "vertical"
+      ? (scrollBox.verticalScrollBar?.slider as unknown as SliderWithMinThumbPatch | undefined)
+      : (scrollBox.horizontalScrollBar?.slider as unknown as SliderWithMinThumbPatch | undefined)
   if (!slider) return
-  if (slider.__minThumbSizePatch?.minWidth === minWidth) return
+  if (slider.__minThumbSizePatch?.minSize === minSize) return
 
   const original = slider.__minThumbSizePatch?.getVirtualThumbSize ?? slider.getVirtualThumbSize?.bind(slider)
   if (!original) return
 
-  slider.__minThumbSizePatch = { minWidth, getVirtualThumbSize: original }
+  slider.__minThumbSizePatch = { minSize, getVirtualThumbSize: original }
 
-  const minVirtual = Math.max(1, Math.round(minWidth * 2))
+  const minVirtual = Math.max(1, Math.round(minSize * 2))
   slider.getVirtualThumbSize = () => {
-    const orientation = (slider as { orientation?: "vertical" | "horizontal" }).orientation
     const width = (slider as { width?: number }).width ?? 0
     const height = (slider as { height?: number }).height ?? 0
     const trackSize = orientation === "vertical" ? height * 2 : width * 2

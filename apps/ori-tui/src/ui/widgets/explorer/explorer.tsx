@@ -178,6 +178,7 @@ export function Explorer(props: ExplorerProps) {
             }}
             scrollSpeed={{ horizontal: 3, vertical: 1 }}
             minHorizontalThumbWidth={5}
+            minVerticalThumbHeight={2}
             height="100%"
             contentOptions={{ maxWidth: undefined, width: "auto", minHeight: "100%", flexGrow: 1, flexShrink: 0 }}
           >

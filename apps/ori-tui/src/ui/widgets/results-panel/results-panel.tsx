@@ -449,6 +449,8 @@ export function ResultsPanel(props: ResultsPanelProps) {
                 scrollX={false}
                 scrollY={false}
                 scrollbarOptions={{ visible: false }}
+                minHorizontalThumbWidth={5}
+                minVerticalThumbHeight={2}
                 backgroundColor={theme().get("panel_background")}
                 contentOptions={{
                   maxWidth: rowNumberCellWidth(),
@@ -497,9 +499,9 @@ export function ResultsPanel(props: ResultsPanelProps) {
                   const viewport = getViewportRect(scrollRef)
                   bodyViewportSize = viewport
                     ? {
-                        width: viewport.width,
-                        height: viewport.height,
-                      }
+                      width: viewport.width,
+                      height: viewport.height,
+                    }
                     : null
                   syncScrollState()
                   ensureRowVisible(cursorRow())
@@ -507,6 +509,7 @@ export function ResultsPanel(props: ResultsPanelProps) {
                 onSync={handleBodySync}
                 scrollSpeed={resultsScrollSpeed}
                 minHorizontalThumbWidth={5}
+                minVerticalThumbHeight={2}
                 flexGrow={1}
                 onMouseDown={pane.focusSelf}
                 contentOptions={{

@@ -412,6 +412,7 @@ export function Buffer(props: BufferProps) {
             backgroundColor: palette().get("editor_background"),
           },
         }}
+        minVerticalThumbHeight={2}
       >
         <box
           flexDirection="column"
