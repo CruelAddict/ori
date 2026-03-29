@@ -1,6 +1,7 @@
 import type { MouseEvent, Renderable, ScrollBoxRenderable } from "@opentui/core"
 import { useTheme } from "@ui/providers/theme"
 import type { JSX } from "solid-js"
+import { patchBrailleScrollbarThumbs } from "./ori-scrollbox-braille"
 
 const defaultMultipliers = {
   horizontal: 3,
@@ -125,6 +126,7 @@ export function OriScrollbox(props: OriScrollboxProps) {
     if (!node) return
 
     enforceStableScrollboxOverflowLayout(node)
+    patchBrailleScrollbarThumbs(node)
 
     if (typeof minHorizontalThumbWidth === "number") {
       enforceHorizontalScrollbarMinThumbWidth(node, minHorizontalThumbWidth)
