@@ -55,6 +55,16 @@ export function Explorer(props: ExplorerProps) {
 
   createEffect(on(selectedRow, ensureSelectedVisible, { defer: true }))
 
+  const handleMoveIn = () => {
+    explorer.handleMoveIn()
+    setTimeout(() => ensureSelectedVisible(), 10)
+  }
+
+  const handleToggleExpanded = () => {
+    explorer.toggleExpanded()
+    setTimeout(() => ensureSelectedVisible(), 10)
+  }
+
   const handleManualHorizontalScroll = (direction: "left" | "right") => {
     const delta = direction === "left" ? -HORIZONTAL_SCROLL_STEP : HORIZONTAL_SCROLL_STEP
     scrollBoxRef?.scrollBy({ x: delta, y: 0 })
@@ -68,7 +78,7 @@ export function Explorer(props: ExplorerProps) {
     const bindings: KeyBinding[] = [
       { pattern: "down", handler: () => explorer.moveSelection(1), preventDefault: true },
       { pattern: "up", handler: () => explorer.moveSelection(-1), preventDefault: true },
-      { pattern: "right", handler: () => explorer.handleMoveIn(), preventDefault: true },
+      { pattern: "right", handler: () => handleMoveIn(), preventDefault: true },
       { pattern: "left", handler: () => explorer.handleMoveOut(), preventDefault: true },
       { pattern: "ctrl+l", handler: () => handleManualHorizontalScroll("right"), preventDefault: true },
       {
@@ -89,15 +99,15 @@ export function Explorer(props: ExplorerProps) {
       bindings.push(
         { pattern: "j", handler: () => explorer.moveSelection(1), preventDefault: true },
         { pattern: "k", handler: () => explorer.moveSelection(-1), preventDefault: true },
-        { pattern: "l", handler: () => explorer.handleMoveIn(), preventDefault: true },
+        { pattern: "l", handler: () => handleMoveIn(), preventDefault: true },
         { pattern: "h", handler: () => explorer.handleMoveOut(), preventDefault: true },
-        { pattern: "enter", handler: () => explorer.toggleExpanded(), preventDefault: true },
+        { pattern: "enter", handler: () => handleToggleExpanded(), preventDefault: true },
         {
           pattern: ["ctrl+h", "backspace"],
           handler: () => handleManualHorizontalScroll("left"),
           preventDefault: true,
         },
-        { pattern: "space", handler: () => explorer.toggleExpanded(), preventDefault: true },
+        { pattern: "space", handler: () => handleToggleExpanded(), preventDefault: true },
         {
           pattern: "s",
           handler: () => {
@@ -111,15 +121,14 @@ export function Explorer(props: ExplorerProps) {
       )
     }
     if (explorer.mode() === "search") {
-      bindings.push(
-        {
-          pattern: "enter", handler: () => {
-            explorer.handleSearchEnter()
-            setTimeout(() => ensureSelectedVisible(), 0)
-          },
-          preventDefault: true
+      bindings.push({
+        pattern: "enter",
+        handler: () => {
+          explorer.handleSearchEnter()
+          setTimeout(() => ensureSelectedVisible(), 0)
         },
-      )
+        preventDefault: true,
+      })
     }
 
     return bindings
