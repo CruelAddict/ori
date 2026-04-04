@@ -1,8 +1,9 @@
+import { Buffer, type BufferGutterContext } from "@ui/components/buffer"
 import { useTheme } from "@ui/providers/theme"
 import { type KeyBinding, KeyScope } from "@ui/services/key-scopes"
 import { useStatusline } from "@ui/widgets/statusline/statusline-context"
 import { onMount } from "solid-js"
-import { Buffer } from "./buffer"
+import { collectSqlStatements } from "./sql-statement-detector"
 import type { EditorPaneViewModel } from "./view-model/create-vm"
 
 export type EditorPanelProps = {
@@ -17,6 +18,28 @@ export function EditorPanel(props: EditorPanelProps) {
   onMount(() => {
     statusline.fileOpenedInBuffer(pane.filePath())
   })
+
+  const buildGutterMarkers = (context: BufferGutterContext) => {
+    const statements = collectSqlStatements(context.text, context.lineStarts)
+    if (statements.length < 2) {
+      return new Map<number, string>()
+    }
+
+    const markers = new Map<number, string>()
+    const current = statements.find(
+      (statement) => statement.startLine <= context.focusedRow && statement.endLine >= context.focusedRow,
+    )
+    if (current) {
+      markers.set(current.startLine, "󰻃 ")
+    }
+    for (const statement of statements) {
+      if (statement.startLine === current?.startLine) {
+        continue
+      }
+      markers.set(statement.startLine, "• ")
+    }
+    return markers
+  }
 
   const handleTextChange = (text: string, info: { modified: boolean }) => {
     if (info.modified) {
@@ -56,10 +79,12 @@ export function EditorPanel(props: EditorPanelProps) {
       >
         <Buffer
           initialText={pane.queryText()}
+          language="sql"
           isFocused={pane.isFocused}
           onTextChange={handleTextChange}
           onUnfocus={handleUnfocus}
           focusSelf={pane.focusSelf}
+          buildGutterMarkers={buildGutterMarkers}
         />
       </box>
     </KeyScope>

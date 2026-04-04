@@ -4,7 +4,6 @@ import { buildLineStarts } from "@utils/line-offsets"
 import type { SyntaxHighlightResult } from "@utils/syntax-highlighter"
 import { type Accessor, createMemo, createSignal } from "solid-js"
 import { createStore } from "solid-js/store"
-import { collectSqlStatements } from "../sql-statement-detector"
 import * as edit from "./editing"
 import * as hl from "./highlighting"
 import * as nav from "./navigation"
@@ -59,10 +58,6 @@ export function createBufferModel(options: BufferModelOptions) {
       .join("\n"),
   )
   const lineStarts = createMemo(() => buildLineStarts(fullText()))
-  const statements = createMemo(() => collectSqlStatements(fullText(), lineStarts()))
-  const statementAtCursor = createMemo(() =>
-    statements().find((stmt) => stmt.startLine <= focusedRow() && stmt.endLine >= focusedRow()),
-  )
 
   const nextLineId = () => {
     const id = `line-${buffer._nextLineId}`
@@ -87,8 +82,6 @@ export function createBufferModel(options: BufferModelOptions) {
     linesById,
     fullText,
     lineStarts,
-    statements,
-    statementAtCursor,
 
     // Editing
     contentModified,

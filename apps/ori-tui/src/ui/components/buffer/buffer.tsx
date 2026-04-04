@@ -9,22 +9,32 @@ import { useLogger } from "@ui/providers/logger"
 import { useTheme } from "@ui/providers/theme"
 import { type KeyBinding, KeyScope } from "@ui/services/key-scopes"
 import { syntaxHighlighter } from "@utils/syntax-highlighter"
-import { type Accessor, createEffect, For, on, onCleanup, onMount, Show, untrack } from "solid-js"
+import { type Accessor, createEffect, createMemo, For, on, onCleanup, onMount, Show, untrack } from "solid-js"
 import { type CursorContext, createBufferModel } from "./buffer-model"
 
 const DEBOUNCE_MS = 200
+const EMPTY_GUTTER_MARKERS = new Map<number, string>()
+
 export type BufferApi = {
   setText: (text: string) => void
   focus: () => void
 }
 
+export type BufferGutterContext = {
+  text: string
+  lineStarts: number[]
+  focusedRow: number
+}
+
 export type BufferProps = {
   initialText: string
+  language?: string
   isFocused: Accessor<boolean>
   onTextChange: (text: string, info: { modified: boolean }) => void
   onUnfocus?: () => void
   registerApi?: (api: BufferApi) => void
   focusSelf: () => void
+  buildGutterMarkers?: (context: BufferGutterContext) => ReadonlyMap<number, string>
 }
 
 export function Buffer(props: BufferProps) {
@@ -34,7 +44,7 @@ export function Buffer(props: BufferProps) {
 
   const highlighter = syntaxHighlighter({
     theme: palette,
-    language: "sql",
+    language: props.language ?? "sql",
     logger,
   })
 
@@ -50,6 +60,18 @@ export function Buffer(props: BufferProps) {
   let scrollRef: ScrollBoxRenderable | undefined
   const lineRenderables = new Map<string, BoxRenderable>()
   let previousCursorForFollow: CursorContext | null = null
+  const gutterMarkers = createMemo(() => {
+    const build = props.buildGutterMarkers
+    if (!build) {
+      return EMPTY_GUTTER_MARKERS
+    }
+
+    return build({
+      text: bufferModel.fullText(),
+      lineStarts: bufferModel.lineStarts(),
+      focusedRow: bufferModel.focusedRow(),
+    })
+  })
 
   const getCursorPoint = (): ScrollPoint | null => {
     const cursor = bufferModel.getCursorContext()
@@ -351,13 +373,11 @@ export function Buffer(props: BufferProps) {
     if (!props.isFocused()) {
       return
     }
-    // Re-run follow logic when the focused cursor target changes
     bufferModel.focusedRow()
     bufferModel.navColumn()
     const next = bufferModel.getCursorContext()
     const prev = previousCursorForFollow
     previousCursorForFollow = next ?? null
-    // Ignore no-op cursor updates emitted during Enter split/focus churn
     if (prev && next && isSameCursor(prev, next)) {
       return
     }
@@ -366,7 +386,6 @@ export function Buffer(props: BufferProps) {
     const expectedCursor = next
     queueMicrotask(() => {
       const currentCursor = bufferModel.getCursorContext()
-      // Drop stale queued follow if cursor changed again before this microtask ran
       if (!expectedCursor || !currentCursor || !isSameCursor(expectedCursor, currentCursor)) {
         return
       }
@@ -429,7 +448,6 @@ export function Buffer(props: BufferProps) {
                 const line = () => bufferModel.linesById().get(lineId)
                 const initialText = untrack(line)?.text
                 return (
-                  // Wrapper for the whole line
                   <box
                     ref={(node) => {
                       if (!node) {
@@ -442,7 +460,6 @@ export function Buffer(props: BufferProps) {
                     width="100%"
                     backgroundColor={lineBg(indexAccessor())}
                   >
-                    {/* Line info (number, indicators) */}
                     <box
                       flexDirection="row"
                       minWidth={5}
@@ -457,19 +474,7 @@ export function Buffer(props: BufferProps) {
                         fg={palette().get("text_muted")}
                         bg={lineBg(indexAccessor())}
                       >
-                        {(() => {
-                          if (bufferModel.statements().length < 2) {
-                            return ""
-                          }
-                          const target = bufferModel.statementAtCursor()
-                          if (target?.startLine === indexAccessor()) {
-                            return "󰻃 "
-                          }
-                          const hasStart = bufferModel
-                            .statements()
-                            .some((statement) => statement.startLine === indexAccessor())
-                          return hasStart ? "• " : ""
-                        })()}
+                        {gutterMarkers().get(indexAccessor()) ?? ""}
                       </text>
                       <text
                         maxHeight={1}
@@ -479,7 +484,6 @@ export function Buffer(props: BufferProps) {
                         {indexAccessor() + 1}
                       </text>
                     </box>
-                    {/* Per-line input field */}
                     <textarea
                       backgroundColor={lineBg(indexAccessor())}
                       focusedBackgroundColor={lineBg(indexAccessor())}
@@ -510,7 +514,6 @@ export function Buffer(props: BufferProps) {
                       initialValue={initialText}
                       onContentChange={() => bufferModel.handleTextAreaChange(indexAccessor())}
                     />
-                    {/* Fills the rest of the line to handle mouse clicks */}
                     <box
                       flexGrow={1}
                       backgroundColor={lineBg(indexAccessor())}
