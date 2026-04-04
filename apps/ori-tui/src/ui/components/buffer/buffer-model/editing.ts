@@ -1,25 +1,13 @@
-import { resolveRenderLib, type TextareaRenderable } from "@opentui/core"
 import { reapplyLineHighlight } from "./highlighting"
-import type { BufferModel, Line } from "./model"
+import type { BufferChangeOrigin, BufferModel, Line } from "./model"
 import { clampFocus, getLineRef, moveFocus } from "./navigation"
-import { displayColumnToCharIndex, toDisplayColumn } from "./text-metrics"
+import { displayColumnToCharIndex, getTabWidth, toDisplayColumn } from "./text-metrics"
 
 type LineEdit = {
   nextLines: Line[]
   lineIdsToSync: string[]
   focusRow: number
   focusCol: number
-}
-
-function getTabWidth(node: TextareaRenderable): number {
-  const renderLib = resolveRenderLib() as unknown as { textBufferGetTabWidth?: (ptr: unknown) => number }
-  const textBufferPtr = (node.editBuffer as unknown as { textBufferPtr?: unknown }).textBufferPtr
-  if (!textBufferPtr || typeof renderLib.textBufferGetTabWidth !== "function") {
-    return 4
-  }
-
-  const width = renderLib.textBufferGetTabWidth(textBufferPtr)
-  return width > 0 ? width : 4
 }
 
 function schedulePush(buffer: BufferModel) {
@@ -98,21 +86,56 @@ export function handleTextAreaChange(buffer: BufferModel, index: number) {
   }
 
   const text = node.plainText
+  const origin = buffer._pendingChangeOrigin ?? "user"
+  buffer._pendingChangeOrigin = undefined
   if (!line.rendered) {
     buffer._setLine(index, { ...line, text, rendered: true })
-    return
+    return origin
   }
   if (text === line.text) {
-    return
+    return origin
   }
   if (text.includes("\n")) {
     commitLineEdit(buffer, buildLineSplitEdit(buffer, buffer.lines(), index, text))
-    return
+    return origin
   }
 
   buffer._setLine(index, { ...line, text, rendered: true })
   buffer.setContentModified(true)
   schedulePush(buffer)
+  return origin
+}
+
+export function replaceTextRange(text: string, start: number, end: number, insertText: string) {
+  const safeStart = Math.max(0, Math.min(start, text.length))
+  const safeEnd = Math.max(safeStart, Math.min(end, text.length))
+  return text.slice(0, safeStart) + insertText + text.slice(safeEnd)
+}
+
+export function replaceRangeInLine(
+  buffer: BufferModel,
+  index: number,
+  start: number,
+  end: number,
+  insertText: string,
+  origin: BufferChangeOrigin,
+) {
+  const line = buffer.lines()[index]
+  const ref = getLineRef(buffer, index)
+  if (!line || !ref) {
+    return false
+  }
+
+  if (start < 0 || end > line.text.length || start > end) {
+    return false
+  }
+
+  const nextText = replaceTextRange(ref.plainText, start, end, insertText)
+  buffer._pendingChangeOrigin = origin
+  ref.replaceText(nextText)
+  ref.editBuffer.setCursorByOffset(start + insertText.length)
+  buffer.setNavColumn(ref.logicalCursor.col)
+  return true
 }
 
 function buildLineSplitEdit(buffer: BufferModel, lines: Line[], index: number, text: string): LineEdit | undefined {

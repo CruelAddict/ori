@@ -1,5 +1,6 @@
 import type { TextareaRenderable } from "@opentui/core"
 import type { BufferModel, CursorContext, Line } from "./model"
+import { displayColumnToCharIndex, getTabWidth } from "./text-metrics"
 
 export function getLineRef(buffer: BufferModel, index: number) {
   const line = buffer.lines()[index]
@@ -87,6 +88,23 @@ export function getCursorContext(buffer: BufferModel): CursorContext | undefined
   }
   const cursor = node.logicalCursor
   return { index, cursorCol: cursor.col, cursorRow: cursor.row }
+}
+
+export function getCursorOffset(buffer: BufferModel): number | undefined {
+  const cursor = getCursorContext(buffer)
+  if (!cursor) {
+    return undefined
+  }
+
+  const line = buffer.lines()[cursor.index]
+  const ref = getLineRef(buffer, cursor.index)
+  if (!line || !ref) {
+    return undefined
+  }
+
+  const start = buffer.lineStarts()[cursor.index] ?? 0
+  const charIndex = displayColumnToCharIndex(ref.plainText, cursor.cursorCol, getTabWidth(ref), buffer._widthMethod)
+  return start + charIndex
 }
 
 export function handleVerticalMove(buffer: BufferModel, index: number, delta: -1 | 1) {

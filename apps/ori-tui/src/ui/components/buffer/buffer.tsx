@@ -8,9 +8,25 @@ import {
 import { useLogger } from "@ui/providers/logger"
 import { useTheme } from "@ui/providers/theme"
 import { type KeyBinding, KeyScope } from "@ui/services/key-scopes"
+import { offsetToLineCol } from "@utils/line-offsets"
 import { syntaxHighlighter } from "@utils/syntax-highlighter"
-import { type Accessor, createEffect, createMemo, For, on, onCleanup, onMount, Show, untrack } from "solid-js"
+import {
+  type Accessor,
+  createEffect,
+  createMemo,
+  createSignal,
+  For,
+  on,
+  onCleanup,
+  onMount,
+  Show,
+  untrack,
+} from "solid-js"
+import { createBufferAutocompleteController } from "./autocomplete/controller"
+import { BufferAutocompletePopup } from "./autocomplete/popup"
+import type { BufferAutocompleteAnchor, BufferAutocompleteProvider } from "./autocomplete/types"
 import { type CursorContext, createBufferModel } from "./buffer-model"
+import { toDisplayColumn } from "./buffer-model/text-metrics"
 
 const DEBOUNCE_MS = 200
 const EMPTY_GUTTER_MARKERS = new Map<number, string>()
@@ -35,6 +51,7 @@ export type BufferProps = {
   registerApi?: (api: BufferApi) => void
   focusSelf: () => void
   buildGutterMarkers?: (context: BufferGutterContext) => ReadonlyMap<number, string>
+  autocomplete?: BufferAutocompleteProvider
 }
 
 export function Buffer(props: BufferProps) {
@@ -57,9 +74,31 @@ export function Buffer(props: BufferProps) {
     highlightResult: highlighter.highlightResult,
   })
 
+  const autocomplete = createBufferAutocompleteController({
+    provider: () => props.autocomplete,
+    isFocused: props.isFocused,
+    getText: bufferModel.fullText,
+    getCursorOffset: bufferModel.getCursorOffset,
+    accept: (item, replaceStart, replaceEnd) => {
+      const start = offsetToLineCol(replaceStart, bufferModel.lineStarts())
+      const end = offsetToLineCol(replaceEnd, bufferModel.lineStarts())
+      if (start.line !== end.line) {
+        return false
+      }
+
+      return bufferModel.replaceRangeInLine(start.line, start.col, end.col, item.insertText, "autocomplete")
+    },
+  })
+
   let scrollRef: ScrollBoxRenderable | undefined
+  let containerRef: BoxRenderable | undefined
   const lineRenderables = new Map<string, BoxRenderable>()
   let previousCursorForFollow: CursorContext | null = null
+  let anchorResolveId = 0
+  const [autocompleteAnchor, setAutocompleteAnchor] = createSignal<BufferAutocompleteAnchor | null>(null)
+  const autocompletePopupMaxWidth = createMemo(() => Math.max(24, (autocompleteAnchor()?.containerWidth ?? 0) - 2))
+  const autocompletePopupMaxHeight = createMemo(() => Math.max(1, (autocompleteAnchor()?.containerHeight ?? 0) - 2))
+
   const gutterMarkers = createMemo(() => {
     const build = props.buildGutterMarkers
     if (!build) {
@@ -95,6 +134,67 @@ export function Buffer(props: BufferProps) {
       x: ref.x + visual.visualCol,
       y: lineRenderable.y + visual.visualRow,
     }
+  }
+
+  const getAnchor = (): BufferAutocompleteAnchor | null => {
+    const state = autocomplete.state()
+    if (!state?.isOpen || !containerRef) {
+      return null
+    }
+
+    const cursor = offsetToLineCol(state.replaceStart, bufferModel.lineStarts())
+    const line = bufferModel.lines()[cursor.line]
+    const row = line && lineRenderables.get(line.id)
+    const ref = bufferModel.getLineRef(cursor.line)
+    if (!line || !row || !ref) {
+      return null
+    }
+
+    const lineStart = bufferModel.lineStarts()[cursor.line] ?? 0
+    const localOffset = state.replaceStart - lineStart
+    const displayCol = toDisplayColumn(line.text, localOffset, bufferModel._widthMethod)
+    const info = ref.lineInfo
+    const wrapRow = info.lineStartCols.findLastIndex((startCol) => startCol <= displayCol)
+    const visualRow = wrapRow >= 0 ? wrapRow : 0
+    const visualCol = displayCol - (info.lineStartCols[visualRow] ?? 0)
+    const nextAnchor = {
+      x: Math.max(0, ref.x + visualCol - containerRef.x),
+      y: Math.max(0, row.y + visualRow - containerRef.y),
+      containerWidth: containerRef.width,
+      containerHeight: containerRef.height,
+    }
+
+    return nextAnchor
+  }
+
+  const resolveAutocompleteAnchor = () => {
+    const nextAnchor = getAnchor()
+    setAutocompleteAnchor(nextAnchor)
+  }
+
+  const scheduleAutocompleteAnchorResolve = () => {
+    const state = autocomplete.state()
+    if (!state?.isOpen) {
+      anchorResolveId += 1
+      setAutocompleteAnchor(null)
+      return
+    }
+
+    const id = anchorResolveId + 1
+    anchorResolveId = id
+    setTimeout(() => {
+      if (anchorResolveId !== id) {
+        return
+      }
+
+      const current = autocomplete.state()
+      if (!current?.isOpen) {
+        setAutocompleteAnchor(null)
+        return
+      }
+
+      resolveAutocompleteAnchor()
+    }, 0)
   }
 
   const isSameCursor = (a: CursorContext, b: CursorContext) => {
@@ -154,8 +254,23 @@ export function Buffer(props: BufferProps) {
   })
 
   onCleanup(() => {
+    anchorResolveId += 1
+    autocomplete.close()
     bufferModel.dispose()
     highlighter.dispose()
+  })
+
+  createEffect(() => {
+    const state = autocomplete.state()
+    if (!state?.isOpen) {
+      anchorResolveId += 1
+      setAutocompleteAnchor(null)
+      return
+    }
+
+    if (!autocompleteAnchor()) {
+      scheduleAutocompleteAnchorResolve()
+    }
   })
 
   const focusLineEnd = (index: number) => {
@@ -175,12 +290,14 @@ export function Buffer(props: BufferProps) {
 
   const handleBufferMouseDown = (event: MouseEvent) => {
     event.preventDefault()
+    autocomplete.close()
     props.focusSelf()
     focusLastLineEnd()
   }
 
   const handleMouseDown = (index: number, event: MouseEvent) => {
     event.stopPropagation()
+    autocomplete.close()
     props.focusSelf()
     event.target?.focus()
     bufferModel.setFocusedRow(index)
@@ -196,6 +313,7 @@ export function Buffer(props: BufferProps) {
   const handleLineMouseDown = (index: number, event: MouseEvent) => {
     event.stopPropagation()
     event.preventDefault()
+    autocomplete.close()
     props.focusSelf()
     focusLineEnd(index)
   }
@@ -211,7 +329,12 @@ export function Buffer(props: BufferProps) {
   const bindings: KeyBinding[] = [
     {
       pattern: "escape",
-      handler: () => {
+      handler: (event) => {
+        if (autocomplete.state()) {
+          event.preventDefault()
+          autocomplete.close()
+          return
+        }
         bufferModel.flush()
         props.onUnfocus?.()
       },
@@ -220,6 +343,12 @@ export function Buffer(props: BufferProps) {
     {
       pattern: "return",
       handler: withCursor((ctx, event) => {
+        if (autocomplete.state()) {
+          event.preventDefault()
+          autocomplete.accept()
+          return
+        }
+
         event.preventDefault()
         const point = getCursorPoint()
         if (!point) {
@@ -238,6 +367,12 @@ export function Buffer(props: BufferProps) {
     {
       pattern: "tab",
       handler: withCursor((ctx, event) => {
+        if (autocomplete.state()) {
+          event.preventDefault()
+          autocomplete.accept()
+          return
+        }
+
         event.preventDefault()
         const lineRef = bufferModel.getLineRef?.(ctx.index)
         if (!lineRef) {
@@ -249,6 +384,12 @@ export function Buffer(props: BufferProps) {
     {
       pattern: "up",
       handler: withCursor((ctx, event) => {
+        if (autocomplete.state()) {
+          event.preventDefault()
+          autocomplete.move(-1)
+          return
+        }
+
         event.preventDefault()
         bufferModel.handleVerticalMove(ctx.index, -1)
       }),
@@ -256,6 +397,12 @@ export function Buffer(props: BufferProps) {
     {
       pattern: "down",
       handler: withCursor((ctx, event) => {
+        if (autocomplete.state()) {
+          event.preventDefault()
+          autocomplete.move(1)
+          return
+        }
+
         event.preventDefault()
         bufferModel.handleVerticalMove(ctx.index, 1)
       }),
@@ -361,6 +508,7 @@ export function Buffer(props: BufferProps) {
       bufferModel.handleFocusChange(isFocused)
       if (!isFocused) {
         previousCursorForFollow = null
+        autocomplete.close()
         return
       }
       queueMicrotask(() => {
@@ -406,129 +554,153 @@ export function Buffer(props: BufferProps) {
       bindings={bindings}
       enabled={props.isFocused}
     >
-      <OriScrollbox
-        marginTop={1}
-        stickyScroll={true}
-        onReady={(node) => {
-          scrollRef = node
-          if (!node || !props.isFocused()) {
-            return
-          }
-          queueMicrotask(() => {
-            scrollToCursor()
-          })
+      <box
+        ref={(node) => {
+          containerRef = node
         }}
-        onSync={() => queueMicrotask(() => scrollToCursor())}
-        onUserScroll={moveCursorIntoView}
-        height={"100%"}
-        horizontalScrollbarOptions={{
-          trackOptions: {
-            backgroundColor: palette().get("editor_background"),
-          },
-        }}
-        verticalScrollbarOptions={{
-          trackOptions: {
-            backgroundColor: palette().get("editor_background"),
-          },
-        }}
-        minVerticalThumbHeight={2}
+        position="relative"
+        flexDirection="column"
+        flexGrow={1}
       >
-        <box
-          flexDirection="column"
-          backgroundColor={palette().get("editor_background")}
-          flexGrow={1}
+        <OriScrollbox
+          marginTop={1}
+          stickyScroll={true}
+          onReady={(node) => {
+            scrollRef = node
+            if (!node || !props.isFocused()) {
+              return
+            }
+            queueMicrotask(() => {
+              scrollToCursor()
+            })
+          }}
+          onSync={() =>
+            queueMicrotask(() => {
+              scrollToCursor()
+            })
+          }
+          onUserScroll={moveCursorIntoView}
+          height={"100%"}
+          horizontalScrollbarOptions={{
+            trackOptions: {
+              backgroundColor: palette().get("editor_background"),
+            },
+          }}
+          verticalScrollbarOptions={{
+            trackOptions: {
+              backgroundColor: palette().get("editor_background"),
+            },
+          }}
+          minVerticalThumbHeight={2}
         >
           <box
             flexDirection="column"
+            backgroundColor={palette().get("editor_background")}
             flexGrow={1}
-            onMouseDown={handleBufferMouseDown}
           >
-            <For each={bufferModel.lineIds()}>
-              {(lineId, indexAccessor) => {
-                const line = () => bufferModel.linesById().get(lineId)
-                const initialText = untrack(line)?.text
-                return (
-                  <box
-                    ref={(node) => {
-                      if (!node) {
-                        lineRenderables.delete(lineId)
-                        return
-                      }
-                      lineRenderables.set(lineId, node)
-                    }}
-                    flexDirection="row"
-                    width="100%"
-                    backgroundColor={lineBg(indexAccessor())}
-                  >
+            <box
+              flexDirection="column"
+              flexGrow={1}
+              onMouseDown={handleBufferMouseDown}
+            >
+              <For each={bufferModel.lineIds()}>
+                {(lineId, indexAccessor) => {
+                  const line = () => bufferModel.linesById().get(lineId)
+                  const initialText = untrack(line)?.text
+                  return (
                     <box
+                      ref={(node) => {
+                        if (!node) {
+                          lineRenderables.delete(lineId)
+                          return
+                        }
+                        lineRenderables.set(lineId, node)
+                      }}
                       flexDirection="row"
-                      minWidth={5}
-                      justifyContent="flex-end"
-                      alignItems="flex-start"
-                      paddingRight={1}
-                      onMouseDown={(event: MouseEvent) => handleLineMouseDown(indexAccessor(), event)}
+                      width="100%"
                       backgroundColor={lineBg(indexAccessor())}
                     >
-                      <text
-                        maxHeight={1}
-                        fg={palette().get("text_muted")}
-                        bg={lineBg(indexAccessor())}
+                      <box
+                        flexDirection="row"
+                        minWidth={5}
+                        justifyContent="flex-end"
+                        alignItems="flex-start"
+                        paddingRight={1}
+                        onMouseDown={(event: MouseEvent) => handleLineMouseDown(indexAccessor(), event)}
+                        backgroundColor={lineBg(indexAccessor())}
                       >
-                        {gutterMarkers().get(indexAccessor()) ?? ""}
-                      </text>
-                      <text
-                        maxHeight={1}
-                        fg={palette().get("text_muted")}
-                        bg={lineBg(indexAccessor())}
-                      >
-                        {indexAccessor() + 1}
-                      </text>
+                        <text
+                          maxHeight={1}
+                          fg={palette().get("text_muted")}
+                          bg={lineBg(indexAccessor())}
+                        >
+                          {gutterMarkers().get(indexAccessor()) ?? ""}
+                        </text>
+                        <text
+                          maxHeight={1}
+                          fg={palette().get("text_muted")}
+                          bg={lineBg(indexAccessor())}
+                        >
+                          {indexAccessor() + 1}
+                        </text>
+                      </box>
+                      <textarea
+                        backgroundColor={lineBg(indexAccessor())}
+                        focusedBackgroundColor={lineBg(indexAccessor())}
+                        ref={(renderable: TextareaRenderable | undefined) => {
+                          const lineValue = untrack(line)
+                          if (!lineValue) {
+                            return
+                          }
+                          bufferModel.setLineRef(lineValue.id, renderable)
+                        }}
+                        textColor={palette().get("editor_text")}
+                        focusedTextColor={palette().get("editor_text")}
+                        cursorColor={palette().get("editor_cursor")}
+                        syntaxStyle={highlighter.highlightResult().syntaxStyle}
+                        selectable={true}
+                        keyBindings={[]}
+                        onMouseDown={(event: MouseEvent) => {
+                          handleMouseDown(indexAccessor(), event)
+                        }}
+                        onCursorChange={() => {
+                          const idx = indexAccessor()
+                          const ref = bufferModel.getLineRef(idx)
+                          if (!ref) {
+                            return
+                          }
+                          bufferModel.setNavColumn(ref.logicalCursor.col)
+                        }}
+                        initialValue={initialText}
+                        onContentChange={() => {
+                          const origin = bufferModel.handleTextAreaChange(indexAccessor()) ?? "user"
+                          queueMicrotask(() => origin === "user" && autocomplete.refresh())
+                        }}
+                      />
+                      <box
+                        flexGrow={1}
+                        backgroundColor={lineBg(indexAccessor())}
+                        onMouseDown={(event: MouseEvent) => handleLineMouseDown(indexAccessor(), event)}
+                      />
                     </box>
-                    <textarea
-                      backgroundColor={lineBg(indexAccessor())}
-                      focusedBackgroundColor={lineBg(indexAccessor())}
-                      ref={(renderable: TextareaRenderable | undefined) => {
-                        const lineValue = untrack(line)
-                        if (!lineValue) {
-                          return
-                        }
-                        bufferModel.setLineRef(lineValue.id, renderable)
-                      }}
-                      textColor={palette().get("editor_text")}
-                      focusedTextColor={palette().get("editor_text")}
-                      cursorColor={palette().get("editor_cursor")}
-                      syntaxStyle={highlighter.highlightResult().syntaxStyle}
-                      selectable={true}
-                      keyBindings={[]}
-                      onMouseDown={(event: MouseEvent) => {
-                        handleMouseDown(indexAccessor(), event)
-                      }}
-                      onCursorChange={() => {
-                        const idx = indexAccessor()
-                        const ref = bufferModel.getLineRef(idx)
-                        if (!ref) {
-                          return
-                        }
-                        bufferModel.setNavColumn(ref.logicalCursor.col)
-                      }}
-                      initialValue={initialText}
-                      onContentChange={() => bufferModel.handleTextAreaChange(indexAccessor())}
-                    />
-                    <box
-                      flexGrow={1}
-                      backgroundColor={lineBg(indexAccessor())}
-                      onMouseDown={(event: MouseEvent) => handleLineMouseDown(indexAccessor(), event)}
-                    />
-                  </box>
-                )
-              }}
-            </For>
-            <Show when={bufferModel.lines().length === 0}>
-              <text fg={palette().get("editor_text")}> </text>
-            </Show>
+                  )
+                }}
+              </For>
+              <Show when={bufferModel.lines().length === 0}>
+                <text fg={palette().get("editor_text")}> </text>
+              </Show>
+            </box>
           </box>
-        </box>
-      </OriScrollbox>
+        </OriScrollbox>
+        <BufferAutocompletePopup
+          state={autocomplete.state}
+          anchor={autocompleteAnchor}
+          maxWidth={autocompletePopupMaxWidth}
+          maxHeight={autocompletePopupMaxHeight}
+          onHover={autocomplete.hover}
+          onSelect={autocomplete.accept}
+        />
+      </box>
     </KeyScope>
   )
 }

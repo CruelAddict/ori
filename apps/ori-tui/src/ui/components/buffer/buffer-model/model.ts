@@ -20,6 +20,8 @@ export type BufferModelOptions = {
   highlightResult: Accessor<SyntaxHighlightResult>
 }
 
+export type BufferChangeOrigin = "user" | "autocomplete"
+
 export type CursorContext = {
   index: number
   cursorCol: number
@@ -91,6 +93,8 @@ export function createBufferModel(options: BufferModelOptions) {
     handleEnter: (index: number) => edit.handleEnter(buffer, index),
     handleBackwardMerge: (index: number) => edit.handleBackwardMerge(buffer, index),
     handleForwardMerge: (index: number) => edit.handleForwardMerge(buffer, index),
+    replaceRangeInLine: (index: number, start: number, end: number, text: string, origin: BufferChangeOrigin) =>
+      edit.replaceRangeInLine(buffer, index, start, end, text, origin),
     flush: () => edit.flush(buffer),
     dispose: () => edit.dispose(buffer),
 
@@ -101,6 +105,7 @@ export function createBufferModel(options: BufferModelOptions) {
     setNavColumn,
     getVisualEOLColumn: (index: number) => nav.getVisualEOLColumn(buffer, index),
     getCursorContext: () => nav.getCursorContext(buffer),
+    getCursorOffset: () => nav.getCursorOffset(buffer),
     handleFocusChange: (isFocusedNow: boolean) => nav.handleFocusChange(buffer, isFocusedNow),
     focusCurrent: () => nav.focusCurrent(buffer),
     handleVerticalMove: (index: number, delta: -1 | 1) => nav.handleVerticalMove(buffer, index, delta),
@@ -114,6 +119,7 @@ export function createBufferModel(options: BufferModelOptions) {
     _syntaxStyle: undefined as SyntaxStyle | undefined,
     _widthMethod: undefined as WidthMethod | undefined,
     _nextLineId: 0,
+    _pendingChangeOrigin: undefined as BufferChangeOrigin | undefined,
 
     _debouncedPush: debounce(() => {
       const text = document.lines.map((line) => line.text).join("\n")

@@ -1,4 +1,4 @@
-import { Buffer, type BufferGutterContext } from "@ui/components/buffer"
+import { Buffer, type BufferAutocompleteProvider, type BufferGutterContext } from "@ui/components/buffer"
 import { useTheme } from "@ui/providers/theme"
 import { type KeyBinding, KeyScope } from "@ui/services/key-scopes"
 import { useStatusline } from "@ui/widgets/statusline/statusline-context"
@@ -14,6 +14,52 @@ export function EditorPanel(props: EditorPanelProps) {
   const pane = props.viewModel
   const statusline = useStatusline()
   const { theme } = useTheme()
+  const autocomplete: BufferAutocompleteProvider = {
+    getCompletions: ({ text, cursorOffset }) => {
+      const prefix = text
+        .slice(0, cursorOffset)
+        .match(/[A-Za-z]+$/)?.[0]
+        ?.toLowerCase()
+      if (!prefix || !prefix.startsWith("a")) {
+        return undefined
+      }
+
+      const words = [
+        "autocomplete",
+        "autobahn",
+        "automobile",
+        "albuquerque",
+        "alphabet",
+        "almanac",
+        "altitude",
+        "anchor",
+        "android",
+        "anatomy",
+        "angular",
+        "aperture",
+        "asteroid",
+        "avalanche",
+        "azure",
+      ]
+      const items = words
+        .filter((word) => word.startsWith(prefix))
+        .map((word) => ({
+          id: word,
+          label: word,
+          insertText: word,
+          detail: `${word.length} chars`,
+        }))
+      if (items.length === 0) {
+        return undefined
+      }
+
+      return {
+        replaceStart: cursorOffset - prefix.length,
+        replaceEnd: cursorOffset,
+        items,
+      }
+    },
+  }
 
   onMount(() => {
     statusline.fileOpenedInBuffer(pane.filePath())
@@ -85,6 +131,7 @@ export function EditorPanel(props: EditorPanelProps) {
           onUnfocus={handleUnfocus}
           focusSelf={pane.focusSelf}
           buildGutterMarkers={buildGutterMarkers}
+          autocomplete={autocomplete}
         />
       </box>
     </KeyScope>

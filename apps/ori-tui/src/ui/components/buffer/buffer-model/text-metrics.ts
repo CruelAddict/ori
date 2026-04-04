@@ -1,6 +1,17 @@
-import { resolveRenderLib, type WidthMethod } from "@opentui/core"
+import { resolveRenderLib, type TextareaRenderable, type WidthMethod } from "@opentui/core"
 
 const graphemeSegmenter = new Intl.Segmenter(undefined, { granularity: "grapheme" })
+
+export function getTabWidth(node: TextareaRenderable): number {
+  const renderLib = resolveRenderLib() as unknown as { textBufferGetTabWidth?: (ptr: unknown) => number }
+  const textBufferPtr = (node.editBuffer as unknown as { textBufferPtr?: unknown }).textBufferPtr
+  if (!textBufferPtr || typeof renderLib.textBufferGetTabWidth !== "function") {
+    return 4
+  }
+
+  const width = renderLib.textBufferGetTabWidth(textBufferPtr)
+  return width > 0 ? width : 4
+}
 
 function unicodeWidth(text: string, widthMethod: WidthMethod | undefined): number {
   if (!text) {
