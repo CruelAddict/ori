@@ -1,15 +1,26 @@
 import { type Accessor, createSignal } from "solid-js"
-import type { BufferAutocompleteItem, BufferAutocompleteProvider, BufferAutocompleteState } from "./types"
+import type {
+  BufferAutocompleteAnchor,
+  BufferAutocompleteItem,
+  BufferAutocompletePopupModel,
+  BufferAutocompleteProvider,
+} from "./types"
 
 type CreateBufferAutocompleteControllerOptions = {
   provider: Accessor<BufferAutocompleteProvider | undefined>
   isFocused: Accessor<boolean>
   getText: () => string
   getCursorOffset: () => number | undefined
+  getAnchor: (result: { replaceStart: number; replaceEnd: number }) => BufferAutocompleteAnchor | null
   accept: (item: BufferAutocompleteItem, replaceStart: number, replaceEnd: number) => boolean
 }
 
-function getSelectedIndex(current: BufferAutocompleteState | undefined, nextItems: BufferAutocompleteItem[]) {
+type BufferAutocompleteSession = BufferAutocompletePopupModel & {
+  replaceStart: number
+  replaceEnd: number
+}
+
+function getSelectedIndex(current: BufferAutocompleteSession | undefined, nextItems: BufferAutocompleteItem[]) {
   const selected = current?.items[current.selectedIndex]
   if (!selected) {
     return 0
@@ -24,13 +35,13 @@ function getSelectedIndex(current: BufferAutocompleteState | undefined, nextItem
 }
 
 export function createBufferAutocompleteController(options: CreateBufferAutocompleteControllerOptions) {
-  const [state, setState] = createSignal<BufferAutocompleteState | undefined>()
+  const [popup, setPopup] = createSignal<BufferAutocompleteSession | undefined>()
 
   const close = () => {
-    setState(undefined)
+    setPopup(undefined)
   }
 
-  const refresh = () => {
+  const refresh = (allowRetry = true) => {
     const provider = options.provider()
     const cursorOffset = options.getCursorOffset()
     if (!provider || !options.isFocused() || cursorOffset === undefined) {
@@ -47,27 +58,35 @@ export function createBufferAutocompleteController(options: CreateBufferAutocomp
       return
     }
 
-    const current = state()
-    setState({
-      isOpen: true,
+    const anchor = options.getAnchor(result)
+    if (!anchor) {
+      if (allowRetry) {
+        queueMicrotask(() => refresh(false))
+      }
+      return
+    }
+
+    const current = popup()
+    setPopup({
       ...result,
+      anchor,
       selectedIndex: getSelectedIndex(current, result.items),
     })
   }
 
   const move = (delta: -1 | 1) => {
-    const current = state()
+    const current = popup()
     if (!current) {
       return
     }
 
     const size = current.items.length
     const selectedIndex = (current.selectedIndex + delta + size) % size
-    setState({ ...current, selectedIndex })
+    setPopup({ ...current, selectedIndex })
   }
 
   const hover = (index: number) => {
-    setState((current) => {
+    setPopup((current) => {
       if (!current) {
         return current
       }
@@ -80,7 +99,7 @@ export function createBufferAutocompleteController(options: CreateBufferAutocomp
   }
 
   const accept = () => {
-    const current = state()
+    const current = popup()
     if (!current) {
       return false
     }
@@ -100,7 +119,7 @@ export function createBufferAutocompleteController(options: CreateBufferAutocomp
   }
 
   return {
-    state,
+    popup,
     close,
     refresh,
     move,

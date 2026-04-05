@@ -31,3 +31,9 @@ export type BufferAutocompleteAnchor = {
   containerWidth: number
   containerHeight: number
 }
+
+export type BufferAutocompletePopupModel = {
+  anchor: BufferAutocompleteAnchor
+  items: BufferAutocompleteItem[]
+  selectedIndex: number
+}

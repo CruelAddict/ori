@@ -1,6 +1,7 @@
 export type {
   BufferAutocompleteAnchor,
   BufferAutocompleteItem,
+  BufferAutocompletePopupModel,
   BufferAutocompleteProvider,
   BufferAutocompleteRequest,
   BufferAutocompleteResult,

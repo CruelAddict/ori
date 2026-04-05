@@ -14,7 +14,6 @@ import {
   type Accessor,
   createEffect,
   createMemo,
-  createSignal,
   For,
   on,
   onCleanup,
@@ -79,6 +78,7 @@ export function Buffer(props: BufferProps) {
     isFocused: props.isFocused,
     getText: bufferModel.fullText,
     getCursorOffset: bufferModel.getCursorOffset,
+    getAnchor: (result) => getAnchor(result.replaceStart),
     accept: (item, replaceStart, replaceEnd) => {
       const start = offsetToLineCol(replaceStart, bufferModel.lineStarts())
       const end = offsetToLineCol(replaceEnd, bufferModel.lineStarts())
@@ -94,10 +94,6 @@ export function Buffer(props: BufferProps) {
   let containerRef: BoxRenderable | undefined
   const lineRenderables = new Map<string, BoxRenderable>()
   let previousCursorForFollow: CursorContext | null = null
-  let anchorResolveId = 0
-  const [autocompleteAnchor, setAutocompleteAnchor] = createSignal<BufferAutocompleteAnchor | null>(null)
-  const autocompletePopupMaxWidth = createMemo(() => Math.max(24, (autocompleteAnchor()?.containerWidth ?? 0) - 2))
-  const autocompletePopupMaxHeight = createMemo(() => Math.max(1, (autocompleteAnchor()?.containerHeight ?? 0) - 2))
 
   const gutterMarkers = createMemo(() => {
     const build = props.buildGutterMarkers
@@ -136,13 +132,12 @@ export function Buffer(props: BufferProps) {
     }
   }
 
-  const getAnchor = (): BufferAutocompleteAnchor | null => {
-    const state = autocomplete.state()
-    if (!state?.isOpen || !containerRef) {
+  const getAnchor = (replaceStart: number): BufferAutocompleteAnchor | null => {
+    if (!containerRef) {
       return null
     }
 
-    const cursor = offsetToLineCol(state.replaceStart, bufferModel.lineStarts())
+    const cursor = offsetToLineCol(replaceStart, bufferModel.lineStarts())
     const line = bufferModel.lines()[cursor.line]
     const row = line && lineRenderables.get(line.id)
     const ref = bufferModel.getLineRef(cursor.line)
@@ -151,7 +146,7 @@ export function Buffer(props: BufferProps) {
     }
 
     const lineStart = bufferModel.lineStarts()[cursor.line] ?? 0
-    const localOffset = state.replaceStart - lineStart
+    const localOffset = replaceStart - lineStart
     const displayCol = toDisplayColumn(line.text, localOffset, bufferModel._widthMethod)
     const info = ref.lineInfo
     const wrapRow = info.lineStartCols.findLastIndex((startCol) => startCol <= displayCol)
@@ -165,36 +160,6 @@ export function Buffer(props: BufferProps) {
     }
 
     return nextAnchor
-  }
-
-  const resolveAutocompleteAnchor = () => {
-    const nextAnchor = getAnchor()
-    setAutocompleteAnchor(nextAnchor)
-  }
-
-  const scheduleAutocompleteAnchorResolve = () => {
-    const state = autocomplete.state()
-    if (!state?.isOpen) {
-      anchorResolveId += 1
-      setAutocompleteAnchor(null)
-      return
-    }
-
-    const id = anchorResolveId + 1
-    anchorResolveId = id
-    setTimeout(() => {
-      if (anchorResolveId !== id) {
-        return
-      }
-
-      const current = autocomplete.state()
-      if (!current?.isOpen) {
-        setAutocompleteAnchor(null)
-        return
-      }
-
-      resolveAutocompleteAnchor()
-    }, 0)
   }
 
   const isSameCursor = (a: CursorContext, b: CursorContext) => {
@@ -254,23 +219,9 @@ export function Buffer(props: BufferProps) {
   })
 
   onCleanup(() => {
-    anchorResolveId += 1
     autocomplete.close()
     bufferModel.dispose()
     highlighter.dispose()
-  })
-
-  createEffect(() => {
-    const state = autocomplete.state()
-    if (!state?.isOpen) {
-      anchorResolveId += 1
-      setAutocompleteAnchor(null)
-      return
-    }
-
-    if (!autocompleteAnchor()) {
-      scheduleAutocompleteAnchorResolve()
-    }
   })
 
   const focusLineEnd = (index: number) => {
@@ -330,7 +281,7 @@ export function Buffer(props: BufferProps) {
     {
       pattern: "escape",
       handler: (event) => {
-        if (autocomplete.state()) {
+        if (autocomplete.popup()) {
           event.preventDefault()
           autocomplete.close()
           return
@@ -343,7 +294,7 @@ export function Buffer(props: BufferProps) {
     {
       pattern: "return",
       handler: withCursor((ctx, event) => {
-        if (autocomplete.state()) {
+        if (autocomplete.popup()) {
           event.preventDefault()
           autocomplete.accept()
           return
@@ -367,7 +318,7 @@ export function Buffer(props: BufferProps) {
     {
       pattern: "tab",
       handler: withCursor((ctx, event) => {
-        if (autocomplete.state()) {
+        if (autocomplete.popup()) {
           event.preventDefault()
           autocomplete.accept()
           return
@@ -384,7 +335,7 @@ export function Buffer(props: BufferProps) {
     {
       pattern: "up",
       handler: withCursor((ctx, event) => {
-        if (autocomplete.state()) {
+        if (autocomplete.popup()) {
           event.preventDefault()
           autocomplete.move(-1)
           return
@@ -397,7 +348,7 @@ export function Buffer(props: BufferProps) {
     {
       pattern: "down",
       handler: withCursor((ctx, event) => {
-        if (autocomplete.state()) {
+        if (autocomplete.popup()) {
           event.preventDefault()
           autocomplete.move(1)
           return
@@ -576,10 +527,14 @@ export function Buffer(props: BufferProps) {
           }}
           onSync={() =>
             queueMicrotask(() => {
+              autocomplete.close()
               scrollToCursor()
             })
           }
-          onUserScroll={moveCursorIntoView}
+          onUserScroll={() => {
+            autocomplete.close()
+            moveCursorIntoView()
+          }}
           height={"100%"}
           horizontalScrollbarOptions={{
             trackOptions: {
@@ -693,10 +648,7 @@ export function Buffer(props: BufferProps) {
           </box>
         </OriScrollbox>
         <BufferAutocompletePopup
-          state={autocomplete.state}
-          anchor={autocompleteAnchor}
-          maxWidth={autocompletePopupMaxWidth}
-          maxHeight={autocompletePopupMaxHeight}
+          popup={autocomplete.popup}
           onHover={autocomplete.hover}
           onSelect={autocomplete.accept}
         />

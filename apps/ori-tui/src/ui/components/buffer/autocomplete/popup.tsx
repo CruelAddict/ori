@@ -2,13 +2,10 @@ import type { ScrollBoxRenderable } from "@opentui/core"
 import { OriScrollbox } from "@ui/components/ori-scrollbox"
 import { useTheme } from "@ui/providers/theme"
 import { type Accessor, createEffect, createMemo, For, Show } from "solid-js"
-import type { BufferAutocompleteAnchor, BufferAutocompleteState } from "./types"
+import type { BufferAutocompleteAnchor, BufferAutocompletePopupModel } from "./types"
 
 type BufferAutocompletePopupProps = {
-  state: Accessor<BufferAutocompleteState | undefined>
-  anchor: Accessor<BufferAutocompleteAnchor | null>
-  maxWidth: Accessor<number>
-  maxHeight: Accessor<number>
+  popup: Accessor<BufferAutocompletePopupModel | undefined>
   onHover: (index: number) => void
   onSelect: () => void
 }
@@ -25,8 +22,8 @@ function getPopupLeft(anchor: BufferAutocompleteAnchor, width: number) {
   return Math.max(0, anchor.x + 1 - width)
 }
 
-function getPopupWidth(state: BufferAutocompleteState, availableWidth: number, maxLimit: number) {
-  const widths = state.items.map((item) => Bun.stringWidth(item.label) + Bun.stringWidth(item.detail ?? "") + 6)
+function getPopupWidth(popup: BufferAutocompletePopupModel, availableWidth: number, maxLimit: number) {
+  const widths = popup.items.map((item) => Bun.stringWidth(item.label) + Bun.stringWidth(item.detail ?? "") + 6)
   const contentWidth = widths.length > 0 ? Math.max(...widths) : MIN_WIDTH
   return Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, availableWidth, contentWidth, maxLimit))
 }
@@ -36,26 +33,21 @@ export function BufferAutocompletePopup(props: BufferAutocompletePopupProps) {
   let scrollRef: ScrollBoxRenderable | undefined
 
   const rowCount = createMemo(() => {
-    const count = props.state()?.items.length ?? 0
+    const count = props.popup()?.items.length ?? 0
     return Math.min(MAX_VISIBLE_ROWS, count)
   })
 
-  const popupKey = createMemo(() => {
-    const state = props.state()
-    return `${state?.replaceStart ?? -1}:${state?.replaceEnd ?? -1}:${rowCount()}`
-  })
-
   const layout = createMemo(() => {
-    const anchor = props.anchor()
-    const state = props.state()
-    if (!anchor || !state?.isOpen) {
+    const popup = props.popup()
+    const anchor = popup?.anchor
+    if (!popup || !anchor) {
       return null
     }
 
-    const maxWidth = Math.max(MIN_WIDTH, props.maxWidth())
-    const maxHeight = Math.max(1, props.maxHeight())
+    const maxWidth = Math.max(MIN_WIDTH, anchor.containerWidth - 2)
+    const maxHeight = Math.max(1, anchor.containerHeight - 2)
     const availableWidth = Math.max(MIN_WIDTH, anchor.containerWidth)
-    const width = getPopupWidth(state, availableWidth, maxWidth)
+    const width = getPopupWidth(popup, availableWidth, maxWidth)
     const left = getPopupLeft(anchor, width)
     const height = Math.min(rowCount(), maxHeight)
     const belowTop = anchor.y + 1
@@ -71,20 +63,20 @@ export function BufferAutocompletePopup(props: BufferAutocompletePopupProps) {
   })
 
   createEffect(() => {
-    const state = props.state()
-    if (!state || !scrollRef) {
+    const popup = props.popup()
+    if (!popup || !scrollRef) {
       return
     }
 
     const viewportHeight = rowCount()
     const scrollTop = scrollRef.scrollTop
     const scrollBottom = scrollTop + viewportHeight
-    if (state.selectedIndex < scrollTop) {
-      scrollRef.scrollBy(state.selectedIndex - scrollTop)
+    if (popup.selectedIndex < scrollTop) {
+      scrollRef.scrollBy(popup.selectedIndex - scrollTop)
       return
     }
-    if (state.selectedIndex + 1 > scrollBottom) {
-      scrollRef.scrollBy(state.selectedIndex + 1 - scrollBottom)
+    if (popup.selectedIndex + 1 > scrollBottom) {
+      scrollRef.scrollBy(popup.selectedIndex + 1 - scrollBottom)
     }
   })
 
@@ -102,10 +94,7 @@ export function BufferAutocompletePopup(props: BufferAutocompletePopupProps) {
           borderColor={theme().get("border")}
           backgroundColor={theme().get("editor_background")}
         >
-          <Show
-            when={popupKey() && rowCount() > 0}
-            keyed
-          >
+          <Show when={rowCount() > 0}>
             {() => (
               <OriScrollbox
                 onReady={(node) => {
@@ -115,9 +104,9 @@ export function BufferAutocompletePopup(props: BufferAutocompletePopupProps) {
                 scrollbarOptions={{ visible: false }}
               >
                 <box flexDirection="column">
-                  <For each={props.state()?.items ?? []}>
+                  <For each={props.popup()?.items ?? []}>
                     {(item, index) => {
-                      const selected = () => props.state()?.selectedIndex === index()
+                      const selected = () => props.popup()?.selectedIndex === index()
                       return (
                         <box
                           flexDirection="row"
