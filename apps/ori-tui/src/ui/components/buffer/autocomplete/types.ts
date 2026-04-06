@@ -1,8 +1,7 @@
-export type BufferAutocompleteItem = {
-  id: string
-  label: string
+import type { SelectPopupItem } from "@ui/components/select-popup"
+
+export type BufferAutocompleteItem = SelectPopupItem & {
   insertText: string
-  detail?: string
 }
 
 export type BufferAutocompleteRequest = {
@@ -22,18 +21,5 @@ export type BufferAutocompleteProvider = {
 
 export type BufferAutocompleteState = BufferAutocompleteResult & {
   isOpen: boolean
-  selectedIndex: number
-}
-
-export type BufferAutocompleteAnchor = {
-  x: number
-  y: number
-  containerWidth: number
-  containerHeight: number
-}
-
-export type BufferAutocompletePopupModel = {
-  anchor: BufferAutocompleteAnchor
-  items: BufferAutocompleteItem[]
   selectedIndex: number
 }

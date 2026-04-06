@@ -8,13 +8,13 @@ import {
 import { useLogger } from "@ui/providers/logger"
 import { useTheme } from "@ui/providers/theme"
 import { type KeyBinding, KeyScope } from "@ui/services/key-scopes"
+import { SelectPopup, type SelectPopupAnchor, type SelectPopupViewModel } from "@ui/components/select-popup"
 import { offsetToLineCol } from "@utils/line-offsets"
 import { syntaxHighlighter } from "@utils/syntax-highlighter"
 import {
   type Accessor,
   createEffect,
   createMemo,
-  createSignal,
   For,
   on,
   onCleanup,
@@ -22,9 +22,8 @@ import {
   Show,
   untrack,
 } from "solid-js"
-import { createBufferAutocompleteController } from "./autocomplete/controller"
-import { BufferAutocompletePopup } from "./autocomplete/popup"
-import type { BufferAutocompleteAnchor, BufferAutocompleteProvider } from "./autocomplete/types"
+import { createBufferAutocomplete } from "./autocomplete/controller"
+import type { BufferAutocompleteProvider } from "./autocomplete/types"
 import { type CursorContext, createBufferModel } from "./buffer-model"
 import { toDisplayColumn } from "./buffer-model/text-metrics"
 
@@ -74,7 +73,7 @@ export function Buffer(props: BufferProps) {
     highlightResult: highlighter.highlightResult,
   })
 
-  const autocomplete = createBufferAutocompleteController({
+  const autocomplete = createBufferAutocomplete({
     provider: () => props.autocomplete,
     isFocused: props.isFocused,
     getText: bufferModel.fullText,
@@ -95,19 +94,15 @@ export function Buffer(props: BufferProps) {
   const lineRenderables = new Map<string, BoxRenderable>()
   let previousCursorForFollow: CursorContext | null = null
   let anchorResolveId = 0
-  const [autocompleteAnchor, setAutocompleteAnchor] = createSignal<BufferAutocompleteAnchor | null>(null)
-  const autocompletePopup = createMemo(() => {
-    const popup = autocomplete.popup()
-    const anchor = autocompleteAnchor()
-    if (!popup || !anchor) {
+  const autocompletePopup = createMemo<SelectPopupViewModel | undefined>(() => {
+    if (autocomplete.replaceStart() === undefined) {
+      return undefined
+    }
+    if (!autocomplete.anchor()) {
       return undefined
     }
 
-    return {
-      anchor,
-      items: popup.items,
-      selectedIndex: popup.selectedIndex,
-    }
+    return autocomplete
   })
 
   const gutterMarkers = createMemo(() => {
@@ -147,7 +142,7 @@ export function Buffer(props: BufferProps) {
     }
   }
 
-  const getAnchor = (replaceStart: number): BufferAutocompleteAnchor | null => {
+  const getAnchor = (replaceStart: number): SelectPopupAnchor | null => {
     if (!containerRef) {
       return null
     }
@@ -178,20 +173,19 @@ export function Buffer(props: BufferProps) {
   }
 
   const resolveAutocompleteAnchor = () => {
-    const popup = autocomplete.popup()
-    if (!popup) {
-      setAutocompleteAnchor(null)
+    const replaceStart = autocomplete.replaceStart()
+    if (replaceStart === undefined) {
+      autocomplete.setAnchor(null)
       return
     }
 
-    setAutocompleteAnchor(getAnchor(popup.replaceStart))
+    autocomplete.setAnchor(getAnchor(replaceStart))
   }
 
   const scheduleAutocompleteAnchorResolve = () => {
-    const popup = autocomplete.popup()
-    if (!popup) {
+    if (autocomplete.replaceStart() === undefined) {
       anchorResolveId += 1
-      setAutocompleteAnchor(null)
+      autocomplete.setAnchor(null)
       return
     }
 
@@ -202,8 +196,8 @@ export function Buffer(props: BufferProps) {
         return
       }
 
-      if (!autocomplete.popup()) {
-        setAutocompleteAnchor(null)
+      if (autocomplete.replaceStart() === undefined) {
+        autocomplete.setAnchor(null)
         return
       }
 
@@ -275,14 +269,13 @@ export function Buffer(props: BufferProps) {
   })
 
   createEffect(() => {
-    const popup = autocomplete.popup()
-    if (!popup) {
+    if (autocomplete.replaceStart() === undefined) {
       anchorResolveId += 1
-      setAutocompleteAnchor(null)
+      autocomplete.setAnchor(null)
       return
     }
 
-    if (!autocompleteAnchor()) {
+    if (!autocomplete.anchor()) {
       scheduleAutocompleteAnchorResolve()
     }
   })
@@ -680,13 +673,7 @@ export function Buffer(props: BufferProps) {
             </box>
           </box>
         </OriScrollbox>
-        <BufferAutocompletePopup
-          popup={autocompletePopup}
-          onClose={autocomplete.close}
-          onMove={autocomplete.move}
-          onHover={autocomplete.hover}
-          onSelect={autocomplete.accept}
-        />
+        <SelectPopup viewModel={autocompletePopup} />
       </box>
     </KeyScope>
   )
