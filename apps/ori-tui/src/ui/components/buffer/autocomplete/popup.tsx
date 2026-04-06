@@ -1,11 +1,14 @@
 import type { ScrollBoxRenderable } from "@opentui/core"
 import { OriScrollbox } from "@ui/components/ori-scrollbox"
 import { useTheme } from "@ui/providers/theme"
+import { type KeyBinding, KeyScope } from "@ui/services/key-scopes"
 import { type Accessor, createEffect, createMemo, For, Show } from "solid-js"
 import type { BufferAutocompleteAnchor, BufferAutocompletePopupModel } from "./types"
 
 type BufferAutocompletePopupProps = {
   popup: Accessor<BufferAutocompletePopupModel | undefined>
+  onClose: () => void
+  onMove: (delta: -1 | 1) => void
   onHover: (index: number) => void
   onSelect: () => void
 }
@@ -31,6 +34,33 @@ function getPopupWidth(popup: BufferAutocompletePopupModel, availableWidth: numb
 export function BufferAutocompletePopup(props: BufferAutocompletePopupProps) {
   const { theme } = useTheme()
   let scrollRef: ScrollBoxRenderable | undefined
+  const bindings: KeyBinding[] = [
+    {
+      pattern: "escape",
+      preventDefault: true,
+      handler: () => props.onClose(),
+    },
+    {
+      pattern: "return",
+      preventDefault: true,
+      handler: () => props.onSelect(),
+    },
+    {
+      pattern: "tab",
+      preventDefault: true,
+      handler: () => props.onSelect(),
+    },
+    {
+      pattern: "up",
+      preventDefault: true,
+      handler: () => props.onMove(-1),
+    },
+    {
+      pattern: "down",
+      preventDefault: true,
+      handler: () => props.onMove(1),
+    },
+  ]
 
   const rowCount = createMemo(() => {
     const count = props.popup()?.items.length ?? 0
@@ -81,66 +111,71 @@ export function BufferAutocompletePopup(props: BufferAutocompletePopupProps) {
   })
 
   return (
-    <Show when={layout()}>
-      {(nextLayout: Accessor<NonNullable<ReturnType<typeof layout>>>) => (
-        <box
-          position="absolute"
-          top={nextLayout().top}
-          left={nextLayout().left}
-          width={nextLayout().width}
-          height={nextLayout().height + 2}
-          zIndex={30}
-          border
-          borderColor={theme().get("border")}
-          backgroundColor={theme().get("editor_background")}
-        >
-          <Show when={rowCount() > 0}>
-            {() => (
-              <OriScrollbox
-                onReady={(node) => {
-                  scrollRef = node
-                }}
-                height={nextLayout().height}
-                scrollbarOptions={{ visible: false }}
-              >
-                <box flexDirection="column">
-                  <For each={props.popup()?.items ?? []}>
-                    {(item, index) => {
-                      const selected = () => props.popup()?.selectedIndex === index()
-                      return (
-                        <box
-                          flexDirection="row"
-                          paddingLeft={1}
-                          paddingRight={1}
-                          backgroundColor={selected() ? theme().get("primary") : theme().get("editor_background")}
-                          onMouseOver={() => props.onHover(index())}
-                          onMouseDown={() => {
-                            props.onHover(index())
-                          }}
-                          onMouseUp={props.onSelect}
-                        >
-                          <box flexGrow={1}>
-                            <text fg={selected() ? theme().get("editor_background") : theme().get("text")}>
-                              {item.label}
-                            </text>
-                          </box>
-                          <Show when={item.detail}>
-                            <box paddingLeft={2}>
-                              <text fg={selected() ? theme().get("editor_background") : theme().get("text_muted")}>
-                                {item.detail}
+    <KeyScope
+      bindings={bindings}
+      enabled={() => Boolean(layout())}
+    >
+      <Show when={layout()}>
+        {(nextLayout: Accessor<NonNullable<ReturnType<typeof layout>>>) => (
+          <box
+            position="absolute"
+            top={nextLayout().top}
+            left={nextLayout().left}
+            width={nextLayout().width}
+            height={nextLayout().height + 2}
+            zIndex={30}
+            border
+            borderColor={theme().get("border")}
+            backgroundColor={theme().get("editor_background")}
+          >
+            <Show when={rowCount() > 0}>
+              {() => (
+                <OriScrollbox
+                  onReady={(node) => {
+                    scrollRef = node
+                  }}
+                  height={nextLayout().height}
+                  scrollbarOptions={{ visible: false }}
+                >
+                  <box flexDirection="column">
+                    <For each={props.popup()?.items ?? []}>
+                      {(item, index) => {
+                        const selected = () => props.popup()?.selectedIndex === index()
+                        return (
+                          <box
+                            flexDirection="row"
+                            paddingLeft={1}
+                            paddingRight={1}
+                            backgroundColor={selected() ? theme().get("primary") : theme().get("editor_background")}
+                            onMouseOver={() => props.onHover(index())}
+                            onMouseDown={() => {
+                              props.onHover(index())
+                            }}
+                            onMouseUp={props.onSelect}
+                          >
+                            <box flexGrow={1}>
+                              <text fg={selected() ? theme().get("editor_background") : theme().get("text")}>
+                                {item.label}
                               </text>
                             </box>
-                          </Show>
-                        </box>
-                      )
-                    }}
-                  </For>
-                </box>
-              </OriScrollbox>
-            )}
-          </Show>
-        </box>
-      )}
-    </Show>
+                            <Show when={item.detail}>
+                              <box paddingLeft={2}>
+                                <text fg={selected() ? theme().get("editor_background") : theme().get("text_muted")}>
+                                  {item.detail}
+                                </text>
+                              </box>
+                            </Show>
+                          </box>
+                        )
+                      }}
+                    </For>
+                  </box>
+                </OriScrollbox>
+              )}
+            </Show>
+          </box>
+        )}
+      </Show>
+    </KeyScope>
   )
 }

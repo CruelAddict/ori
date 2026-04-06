@@ -14,6 +14,7 @@ import {
   type Accessor,
   createEffect,
   createMemo,
+  createSignal,
   For,
   on,
   onCleanup,
@@ -78,7 +79,6 @@ export function Buffer(props: BufferProps) {
     isFocused: props.isFocused,
     getText: bufferModel.fullText,
     getCursorOffset: bufferModel.getCursorOffset,
-    getAnchor: (result) => getAnchor(result.replaceStart),
     accept: (item, replaceStart, replaceEnd) => {
       const start = offsetToLineCol(replaceStart, bufferModel.lineStarts())
       const end = offsetToLineCol(replaceEnd, bufferModel.lineStarts())
@@ -94,6 +94,21 @@ export function Buffer(props: BufferProps) {
   let containerRef: BoxRenderable | undefined
   const lineRenderables = new Map<string, BoxRenderable>()
   let previousCursorForFollow: CursorContext | null = null
+  let anchorResolveId = 0
+  const [autocompleteAnchor, setAutocompleteAnchor] = createSignal<BufferAutocompleteAnchor | null>(null)
+  const autocompletePopup = createMemo(() => {
+    const popup = autocomplete.popup()
+    const anchor = autocompleteAnchor()
+    if (!popup || !anchor) {
+      return undefined
+    }
+
+    return {
+      anchor,
+      items: popup.items,
+      selectedIndex: popup.selectedIndex,
+    }
+  })
 
   const gutterMarkers = createMemo(() => {
     const build = props.buildGutterMarkers
@@ -162,6 +177,40 @@ export function Buffer(props: BufferProps) {
     return nextAnchor
   }
 
+  const resolveAutocompleteAnchor = () => {
+    const popup = autocomplete.popup()
+    if (!popup) {
+      setAutocompleteAnchor(null)
+      return
+    }
+
+    setAutocompleteAnchor(getAnchor(popup.replaceStart))
+  }
+
+  const scheduleAutocompleteAnchorResolve = () => {
+    const popup = autocomplete.popup()
+    if (!popup) {
+      anchorResolveId += 1
+      setAutocompleteAnchor(null)
+      return
+    }
+
+    const id = anchorResolveId + 1
+    anchorResolveId = id
+    setTimeout(() => {
+      if (anchorResolveId !== id) {
+        return
+      }
+
+      if (!autocomplete.popup()) {
+        setAutocompleteAnchor(null)
+        return
+      }
+
+      resolveAutocompleteAnchor()
+    }, 0)
+  }
+
   const isSameCursor = (a: CursorContext, b: CursorContext) => {
     return a.index === b.index && a.cursorRow === b.cursorRow && a.cursorCol === b.cursorCol
   }
@@ -219,9 +268,23 @@ export function Buffer(props: BufferProps) {
   })
 
   onCleanup(() => {
+    anchorResolveId += 1
     autocomplete.close()
     bufferModel.dispose()
     highlighter.dispose()
+  })
+
+  createEffect(() => {
+    const popup = autocomplete.popup()
+    if (!popup) {
+      anchorResolveId += 1
+      setAutocompleteAnchor(null)
+      return
+    }
+
+    if (!autocompleteAnchor()) {
+      scheduleAutocompleteAnchorResolve()
+    }
   })
 
   const focusLineEnd = (index: number) => {
@@ -280,12 +343,7 @@ export function Buffer(props: BufferProps) {
   const bindings: KeyBinding[] = [
     {
       pattern: "escape",
-      handler: (event) => {
-        if (autocomplete.popup()) {
-          event.preventDefault()
-          autocomplete.close()
-          return
-        }
+      handler: () => {
         bufferModel.flush()
         props.onUnfocus?.()
       },
@@ -294,12 +352,6 @@ export function Buffer(props: BufferProps) {
     {
       pattern: "return",
       handler: withCursor((ctx, event) => {
-        if (autocomplete.popup()) {
-          event.preventDefault()
-          autocomplete.accept()
-          return
-        }
-
         event.preventDefault()
         const point = getCursorPoint()
         if (!point) {
@@ -318,12 +370,6 @@ export function Buffer(props: BufferProps) {
     {
       pattern: "tab",
       handler: withCursor((ctx, event) => {
-        if (autocomplete.popup()) {
-          event.preventDefault()
-          autocomplete.accept()
-          return
-        }
-
         event.preventDefault()
         const lineRef = bufferModel.getLineRef?.(ctx.index)
         if (!lineRef) {
@@ -335,12 +381,6 @@ export function Buffer(props: BufferProps) {
     {
       pattern: "up",
       handler: withCursor((ctx, event) => {
-        if (autocomplete.popup()) {
-          event.preventDefault()
-          autocomplete.move(-1)
-          return
-        }
-
         event.preventDefault()
         bufferModel.handleVerticalMove(ctx.index, -1)
       }),
@@ -348,12 +388,6 @@ export function Buffer(props: BufferProps) {
     {
       pattern: "down",
       handler: withCursor((ctx, event) => {
-        if (autocomplete.popup()) {
-          event.preventDefault()
-          autocomplete.move(1)
-          return
-        }
-
         event.preventDefault()
         bufferModel.handleVerticalMove(ctx.index, 1)
       }),
@@ -527,7 +561,6 @@ export function Buffer(props: BufferProps) {
           }}
           onSync={() =>
             queueMicrotask(() => {
-              autocomplete.close()
               scrollToCursor()
             })
           }
@@ -648,7 +681,9 @@ export function Buffer(props: BufferProps) {
           </box>
         </OriScrollbox>
         <BufferAutocompletePopup
-          popup={autocomplete.popup}
+          popup={autocompletePopup}
+          onClose={autocomplete.close}
+          onMove={autocomplete.move}
           onHover={autocomplete.hover}
           onSelect={autocomplete.accept}
         />

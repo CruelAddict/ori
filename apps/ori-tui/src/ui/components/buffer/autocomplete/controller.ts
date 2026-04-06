@@ -1,24 +1,15 @@
 import { type Accessor, createSignal } from "solid-js"
-import type {
-  BufferAutocompleteAnchor,
-  BufferAutocompleteItem,
-  BufferAutocompletePopupModel,
-  BufferAutocompleteProvider,
-} from "./types"
+import type { BufferAutocompleteItem, BufferAutocompleteProvider, BufferAutocompleteResult } from "./types"
 
 type CreateBufferAutocompleteControllerOptions = {
   provider: Accessor<BufferAutocompleteProvider | undefined>
   isFocused: Accessor<boolean>
   getText: () => string
   getCursorOffset: () => number | undefined
-  getAnchor: (result: { replaceStart: number; replaceEnd: number }) => BufferAutocompleteAnchor | null
   accept: (item: BufferAutocompleteItem, replaceStart: number, replaceEnd: number) => boolean
 }
 
-type BufferAutocompleteSession = BufferAutocompletePopupModel & {
-  replaceStart: number
-  replaceEnd: number
-}
+type BufferAutocompleteSession = BufferAutocompleteResult & { selectedIndex: number }
 
 function getSelectedIndex(current: BufferAutocompleteSession | undefined, nextItems: BufferAutocompleteItem[]) {
   const selected = current?.items[current.selectedIndex]
@@ -41,7 +32,7 @@ export function createBufferAutocompleteController(options: CreateBufferAutocomp
     setPopup(undefined)
   }
 
-  const refresh = (allowRetry = true) => {
+  const refresh = () => {
     const provider = options.provider()
     const cursorOffset = options.getCursorOffset()
     if (!provider || !options.isFocused() || cursorOffset === undefined) {
@@ -58,18 +49,9 @@ export function createBufferAutocompleteController(options: CreateBufferAutocomp
       return
     }
 
-    const anchor = options.getAnchor(result)
-    if (!anchor) {
-      if (allowRetry) {
-        queueMicrotask(() => refresh(false))
-      }
-      return
-    }
-
     const current = popup()
     setPopup({
       ...result,
-      anchor,
       selectedIndex: getSelectedIndex(current, result.items),
     })
   }
