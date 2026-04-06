@@ -1,5 +1,5 @@
-import { type Accessor, createSignal } from "solid-js"
-import { createSelectPopup, type SelectPopupModel } from "@ui/components/select-popup"
+import { createSelectPopup, type SelectPopupAnchor, type SelectPopupViewModel } from "@ui/components/select-popup"
+import { type Accessor, createMemo, createSignal } from "solid-js"
 import type { BufferAutocompleteItem, BufferAutocompleteProvider } from "./types"
 
 type CreateBufferAutocompleteOptions = {
@@ -7,17 +7,20 @@ type CreateBufferAutocompleteOptions = {
   isFocused: Accessor<boolean>
   getText: () => string
   getCursorOffset: () => number | undefined
+  resolveAnchor: (replaceStart: number) => SelectPopupAnchor | null
   accept: (item: BufferAutocompleteItem, replaceStart: number, replaceEnd: number) => boolean
 }
 
-type BufferAutocompleteViewModel = SelectPopupModel<BufferAutocompleteItem> & {
+type BufferAutocompleteViewModel = {
+  viewModel: Accessor<SelectPopupViewModel<BufferAutocompleteItem> | undefined>
+  close: () => void
   refresh: () => void
-  replaceStart: Accessor<number | undefined>
 }
 
 export function createBufferAutocomplete(options: CreateBufferAutocompleteOptions) {
   const [replaceStart, setReplaceStart] = createSignal<number | undefined>()
   const [replaceEnd, setReplaceEnd] = createSignal<number | undefined>()
+  let anchorTimer: ReturnType<typeof setTimeout> | undefined
   const popup = createSelectPopup<BufferAutocompleteItem>({
     onSelect: (item) => {
       const start = replaceStart()
@@ -29,10 +32,33 @@ export function createBufferAutocomplete(options: CreateBufferAutocompleteOption
       return options.accept(item, start, end)
     },
     onClose: () => {
+      cancelAnchorResolve()
       setReplaceStart(undefined)
       setReplaceEnd(undefined)
     },
   })
+
+  const cancelAnchorResolve = () => {
+    if (anchorTimer === undefined) {
+      return
+    }
+
+    clearTimeout(anchorTimer)
+    anchorTimer = undefined
+  }
+
+  const scheduleAnchorResolve = (start: number) => {
+    cancelAnchorResolve()
+    anchorTimer = setTimeout(() => {
+      anchorTimer = undefined
+      if (replaceStart() !== start) {
+        popup.setAnchor(null)
+        return
+      }
+
+      popup.setAnchor(options.resolveAnchor(start))
+    }, 0)
+  }
 
   const refresh = () => {
     const provider = options.provider()
@@ -51,14 +77,32 @@ export function createBufferAutocomplete(options: CreateBufferAutocompleteOption
       return
     }
 
+    const prevStart = replaceStart()
     setReplaceStart(result.replaceStart)
     setReplaceEnd(result.replaceEnd)
     popup.setItems(result.items)
+    if (prevStart === result.replaceStart && popup.anchor()) {
+      return
+    }
+
+    popup.setAnchor(null)
+    scheduleAnchorResolve(result.replaceStart)
   }
 
+  const viewModel = createMemo<SelectPopupViewModel<BufferAutocompleteItem> | undefined>(() => {
+    if (replaceStart() === undefined) {
+      return
+    }
+    if (!popup.anchor()) {
+      return undefined
+    }
+
+    return popup
+  })
+
   return {
-    ...popup,
-    replaceStart,
+    viewModel,
+    close: popup.close,
     refresh,
   } satisfies BufferAutocompleteViewModel
 }

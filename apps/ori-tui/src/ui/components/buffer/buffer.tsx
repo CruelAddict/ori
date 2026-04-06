@@ -5,23 +5,13 @@ import {
   type ScrollPoint,
   scrollIntoView,
 } from "@ui/components/ori-scrollbox"
+import { SelectPopup, type SelectPopupAnchor } from "@ui/components/select-popup"
 import { useLogger } from "@ui/providers/logger"
 import { useTheme } from "@ui/providers/theme"
 import { type KeyBinding, KeyScope } from "@ui/services/key-scopes"
-import { SelectPopup, type SelectPopupAnchor, type SelectPopupViewModel } from "@ui/components/select-popup"
 import { offsetToLineCol } from "@utils/line-offsets"
 import { syntaxHighlighter } from "@utils/syntax-highlighter"
-import {
-  type Accessor,
-  createEffect,
-  createMemo,
-  For,
-  on,
-  onCleanup,
-  onMount,
-  Show,
-  untrack,
-} from "solid-js"
+import { type Accessor, createEffect, createMemo, For, on, onCleanup, onMount, Show, untrack } from "solid-js"
 import { createBufferAutocomplete } from "./autocomplete/controller"
 import type { BufferAutocompleteProvider } from "./autocomplete/types"
 import { type CursorContext, createBufferModel } from "./buffer-model"
@@ -78,6 +68,7 @@ export function Buffer(props: BufferProps) {
     isFocused: props.isFocused,
     getText: bufferModel.fullText,
     getCursorOffset: bufferModel.getCursorOffset,
+    resolveAnchor: (replaceStart) => getAnchor(replaceStart),
     accept: (item, replaceStart, replaceEnd) => {
       const start = offsetToLineCol(replaceStart, bufferModel.lineStarts())
       const end = offsetToLineCol(replaceEnd, bufferModel.lineStarts())
@@ -93,17 +84,6 @@ export function Buffer(props: BufferProps) {
   let containerRef: BoxRenderable | undefined
   const lineRenderables = new Map<string, BoxRenderable>()
   let previousCursorForFollow: CursorContext | null = null
-  let anchorResolveId = 0
-  const autocompletePopup = createMemo<SelectPopupViewModel | undefined>(() => {
-    if (autocomplete.replaceStart() === undefined) {
-      return undefined
-    }
-    if (!autocomplete.anchor()) {
-      return undefined
-    }
-
-    return autocomplete
-  })
 
   const gutterMarkers = createMemo(() => {
     const build = props.buildGutterMarkers
@@ -142,7 +122,7 @@ export function Buffer(props: BufferProps) {
     }
   }
 
-  const getAnchor = (replaceStart: number): SelectPopupAnchor | null => {
+  function getAnchor(replaceStart: number): SelectPopupAnchor | null {
     if (!containerRef) {
       return null
     }
@@ -170,39 +150,6 @@ export function Buffer(props: BufferProps) {
     }
 
     return nextAnchor
-  }
-
-  const resolveAutocompleteAnchor = () => {
-    const replaceStart = autocomplete.replaceStart()
-    if (replaceStart === undefined) {
-      autocomplete.setAnchor(null)
-      return
-    }
-
-    autocomplete.setAnchor(getAnchor(replaceStart))
-  }
-
-  const scheduleAutocompleteAnchorResolve = () => {
-    if (autocomplete.replaceStart() === undefined) {
-      anchorResolveId += 1
-      autocomplete.setAnchor(null)
-      return
-    }
-
-    const id = anchorResolveId + 1
-    anchorResolveId = id
-    setTimeout(() => {
-      if (anchorResolveId !== id) {
-        return
-      }
-
-      if (autocomplete.replaceStart() === undefined) {
-        autocomplete.setAnchor(null)
-        return
-      }
-
-      resolveAutocompleteAnchor()
-    }, 0)
   }
 
   const isSameCursor = (a: CursorContext, b: CursorContext) => {
@@ -262,22 +209,9 @@ export function Buffer(props: BufferProps) {
   })
 
   onCleanup(() => {
-    anchorResolveId += 1
     autocomplete.close()
     bufferModel.dispose()
     highlighter.dispose()
-  })
-
-  createEffect(() => {
-    if (autocomplete.replaceStart() === undefined) {
-      anchorResolveId += 1
-      autocomplete.setAnchor(null)
-      return
-    }
-
-    if (!autocomplete.anchor()) {
-      scheduleAutocompleteAnchorResolve()
-    }
   })
 
   const focusLineEnd = (index: number) => {
@@ -673,7 +607,7 @@ export function Buffer(props: BufferProps) {
             </box>
           </box>
         </OriScrollbox>
-        <SelectPopup viewModel={autocompletePopup} />
+        <SelectPopup viewModel={autocomplete.viewModel} />
       </box>
     </KeyScope>
   )
