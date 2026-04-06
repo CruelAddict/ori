@@ -131,10 +131,15 @@ export function replaceRangeInLine(
   }
 
   const nextText = replaceTextRange(ref.plainText, start, end, insertText)
+  const currentDisplayCol = ref.logicalCursor.col
+  const targetDisplayCol = currentDisplayCol + insertText.length - (end - start)
   buffer._pendingChangeOrigin = origin
   ref.replaceText(nextText)
-  ref.editBuffer.setCursorByOffset(start + insertText.length)
-  buffer.setNavColumn(ref.logicalCursor.col)
+  queueMicrotask(() => {
+    ref.editBuffer.setCursor(0, targetDisplayCol)
+    ref.requestRender()
+  })
+  buffer.setNavColumn(targetDisplayCol)
   return true
 }
 

@@ -15,7 +15,7 @@ import { type Accessor, createEffect, createMemo, For, on, onCleanup, onMount, S
 import { createBufferAutocomplete } from "./autocomplete/controller"
 import type { BufferAutocompleteProvider } from "./autocomplete/types"
 import { type CursorContext, createBufferModel } from "./buffer-model"
-import { toDisplayColumn } from "./buffer-model/text-metrics"
+import { displayColumnToCharIndex, getTabWidth } from "./buffer-model/text-metrics"
 
 const DEBOUNCE_MS = 200
 const EMPTY_GUTTER_MARKERS = new Map<number, string>()
@@ -137,13 +137,20 @@ export function Buffer(props: BufferProps) {
 
     const lineStart = bufferModel.lineStarts()[cursor.line] ?? 0
     const localOffset = replaceStart - lineStart
-    const displayCol = toDisplayColumn(line.text, localOffset, bufferModel._widthMethod)
+    const currentDisplayCol = ref.logicalCursor.col
+    const currentCharIndex = displayColumnToCharIndex(
+      ref.plainText,
+      currentDisplayCol,
+      getTabWidth(ref),
+      bufferModel._widthMethod,
+    )
+    const displayCol = Math.max(0, currentDisplayCol - (currentCharIndex - localOffset))
     const info = ref.lineInfo
     const wrapRow = info.lineStartCols.findLastIndex((startCol) => startCol <= displayCol)
     const visualRow = wrapRow >= 0 ? wrapRow : 0
     const visualCol = displayCol - (info.lineStartCols[visualRow] ?? 0)
     const nextAnchor = {
-      x: Math.max(0, ref.x + visualCol - containerRef.x),
+      x: Math.max(0, ref.x + visualCol - containerRef.x - 1),
       y: Math.max(0, row.y + visualRow - containerRef.y),
       containerWidth: containerRef.width,
       containerHeight: containerRef.height,
