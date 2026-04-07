@@ -4,10 +4,18 @@ import { buildLineStarts } from "@utils/line-offsets"
 import type { SyntaxHighlightResult } from "@utils/syntax-highlighter"
 import { type Accessor, createMemo, createSignal } from "solid-js"
 import { createStore } from "solid-js/store"
+import {
+  type DisplayColumn,
+  displayColumn,
+  type LineCharRange,
+  type LineIndex,
+  lineCharOffset,
+  lineIndex,
+} from "./coords"
 import * as edit from "./editing"
 import * as hl from "./highlighting"
 import * as nav from "./navigation"
-import { toDisplayColumn } from "./text-metrics"
+import { lineCharOffsetToDisplayColumn } from "./text-metrics"
 
 const DEBOUNCE_DEFAULT_MS = 20
 
@@ -21,12 +29,6 @@ export type BufferModelOptions = {
 }
 
 export type BufferChangeOrigin = "user" | "autocomplete"
-
-export type CursorContext = {
-  index: number
-  cursorCol: number
-  cursorRow: number
-}
 
 export type Line = {
   id: string
@@ -49,8 +51,8 @@ export function createBufferModel(options: BufferModelOptions) {
     lines: [] as Line[],
   })
   const [contentModified, setContentModified] = createSignal(false)
-  const [focusedRow, setFocusedRow] = createSignal(0)
-  const [navColumn, setNavColumn] = createSignal(0)
+  const [focusedRow, setFocusedRow] = createSignal<LineIndex>(lineIndex(0))
+  const [navColumn, setNavColumn] = createSignal<DisplayColumn>(displayColumn(0))
   const lines = () => document.lines
   const lineIds = createMemo(() => lines().map((entry) => entry.id))
   const linesById = createMemo(() => new Map(lines().map((entry) => [entry.id, entry])))
@@ -76,7 +78,7 @@ export function createBufferModel(options: BufferModelOptions) {
 
     // External resources
     setLineRef: (lineId: string, ref: TextareaRenderable | undefined) => nav.setLineRef(buffer, lineId, ref),
-    getLineRef: (index: number) => nav.getLineRef(buffer, index),
+    getLineRef: (index: LineIndex) => nav.getLineRef(buffer, index),
 
     // Memoed queries
     lines,
@@ -89,12 +91,12 @@ export function createBufferModel(options: BufferModelOptions) {
     contentModified,
     setContentModified,
     setText: (text: string) => edit.setText(buffer, text),
-    handleTextAreaChange: (index: number) => edit.handleTextAreaChange(buffer, index),
-    handleEnter: (index: number) => edit.handleEnter(buffer, index),
-    handleBackwardMerge: (index: number) => edit.handleBackwardMerge(buffer, index),
-    handleForwardMerge: (index: number) => edit.handleForwardMerge(buffer, index),
-    replaceRangeInLine: (index: number, start: number, end: number, text: string, origin: BufferChangeOrigin) =>
-      edit.replaceRangeInLine(buffer, index, start, end, text, origin),
+    handleTextAreaChange: (index: LineIndex) => edit.handleTextAreaChange(buffer, index),
+    handleEnter: (index: LineIndex) => edit.handleEnter(buffer, index),
+    handleBackwardMerge: (index: LineIndex) => edit.handleBackwardMerge(buffer, index),
+    handleForwardMerge: (index: LineIndex) => edit.handleForwardMerge(buffer, index),
+    replaceRangeInLine: (index: LineIndex, range: LineCharRange, text: string, origin: BufferChangeOrigin) =>
+      edit.replaceRangeInLine(buffer, index, range, text, origin),
     flush: () => edit.flush(buffer),
     dispose: () => edit.dispose(buffer),
 
@@ -103,14 +105,15 @@ export function createBufferModel(options: BufferModelOptions) {
     setFocusedRow,
     navColumn,
     setNavColumn,
-    getVisualEOLColumn: (index: number) => nav.getVisualEOLColumn(buffer, index),
+    getVisualEOLColumn: (index: LineIndex) => nav.getVisualEOLColumn(buffer, index),
     getCursorContext: () => nav.getCursorContext(buffer),
     getCursorOffset: () => nav.getCursorOffset(buffer),
     handleFocusChange: (isFocusedNow: boolean) => nav.handleFocusChange(buffer, isFocusedNow),
     focusCurrent: () => nav.focusCurrent(buffer),
-    handleVerticalMove: (index: number, delta: -1 | 1) => nav.handleVerticalMove(buffer, index, delta),
+    handleVerticalMove: (index: LineIndex, delta: -1 | 1) => nav.handleVerticalMove(buffer, index, delta),
     moveCursorByVisualRows: (delta: number) => nav.moveCursorByVisualRows(buffer, delta),
-    handleHorizontalJump: (index: number, toPrevious: boolean) => nav.handleHorizontalJump(buffer, index, toPrevious),
+    handleHorizontalJump: (index: LineIndex, toPrevious: boolean) =>
+      nav.handleHorizontalJump(buffer, index, toPrevious),
     clampFocus: (nextLines: Line[] = buffer.lines()) => nav.clampFocus(buffer, nextLines),
 
     _lineRefs: new Map<string, TextareaRenderable | undefined>(),
@@ -127,9 +130,9 @@ export function createBufferModel(options: BufferModelOptions) {
     }, options.debounceMs ?? DEBOUNCE_DEFAULT_MS),
     _makeLine: (text: string, rendered: boolean) => makeLine(nextLineId(), text, rendered),
     _makeLinesFromText: (text: string, rendered: boolean) => makeLinesFromText(text, rendered, nextLineId),
-    _getLineDisplayWidth: (index: number) => {
+    _getLineDisplayWidth: (index: LineIndex) => {
       const text = lines()[index]?.text ?? ""
-      return toDisplayColumn(text, text.length, buffer._widthMethod)
+      return lineCharOffsetToDisplayColumn(text, lineCharOffset(text.length), buffer._widthMethod)
     },
     _setLines: (nextLines: Line[]) => setDocument("lines", nextLines),
     _setLine: (index: number, line: Line) => setDocument("lines", index, line),

@@ -1,4 +1,5 @@
 import { Buffer, type BufferAutocompleteProvider, type BufferGutterContext } from "@ui/components/buffer"
+import { docCharRange } from "@ui/components/buffer/buffer-model/coords"
 import { useTheme } from "@ui/providers/theme"
 import { type KeyBinding, KeyScope } from "@ui/services/key-scopes"
 import { useStatusline } from "@ui/widgets/statusline/statusline-context"
@@ -15,9 +16,9 @@ export function EditorPanel(props: EditorPanelProps) {
   const statusline = useStatusline()
   const { theme } = useTheme()
   const autocomplete: BufferAutocompleteProvider = {
-    getCompletions: ({ text, cursorOffset }) => {
+    getCompletions: ({ text, cursor }) => {
       const prefix = text
-        .slice(0, cursorOffset)
+        .slice(0, cursor)
         .match(/[A-Za-z]+$/)?.[0]
         ?.toLowerCase()
       if (!prefix || !prefix.startsWith("a")) {
@@ -54,8 +55,7 @@ export function EditorPanel(props: EditorPanelProps) {
       }
 
       return {
-        replaceStart: cursorOffset - prefix.length,
-        replaceEnd: cursorOffset,
+        replace: docCharRange(cursor - prefix.length, cursor),
         items,
       }
     },

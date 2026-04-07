@@ -2,9 +2,10 @@ import type { Extmark } from "@opentui/core"
 import { offsetToLineCol } from "@utils/line-offsets"
 import type { SyntaxHighlightResult } from "@utils/syntax-highlighter"
 import { createEffect, on } from "solid-js"
+import { lineCharOffset, lineIndex } from "./coords"
 import type { BufferModel } from "./model"
 import { getLineRef } from "./navigation"
-import { toDisplayColumn } from "./text-metrics"
+import { lineCharOffsetToDisplayColumn } from "./text-metrics"
 
 const SYNTAX_EXTMARK_TYPE = "syntax-highlight"
 
@@ -37,7 +38,7 @@ export function mountHighlighting(buffer: BufferModel) {
         if (!line) {
           continue
         }
-        const ref = getLineRef(buffer, index)
+        const ref = getLineRef(buffer, lineIndex(index))
         if (styleChanged && ref) {
           ref.syntaxStyle = highlight.syntaxStyle
         }
@@ -88,8 +89,8 @@ function buildHighlightSpansByLine(
     const lineText = lines[start.line]?.text ?? ""
     const spans = spansByLine.get(start.line) ?? []
     spans.push({
-      start: toDisplayColumn(lineText, start.col, buffer._widthMethod),
-      end: toDisplayColumn(lineText, end.col, buffer._widthMethod),
+      start: lineCharOffsetToDisplayColumn(lineText, lineCharOffset(start.col), buffer._widthMethod),
+      end: lineCharOffsetToDisplayColumn(lineText, lineCharOffset(end.col), buffer._widthMethod),
       styleId: span.styleId,
     })
     spansByLine.set(start.line, spans)

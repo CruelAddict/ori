@@ -14,8 +14,9 @@ import { syntaxHighlighter } from "@utils/syntax-highlighter"
 import { type Accessor, createEffect, createMemo, For, on, onCleanup, onMount, Show, untrack } from "solid-js"
 import { createBufferAutocomplete } from "./autocomplete/controller"
 import type { BufferAutocompleteProvider } from "./autocomplete/types"
-import { type CursorContext, createBufferModel } from "./buffer-model"
-import { displayColumnToCharIndex, getTabWidth } from "./buffer-model/text-metrics"
+import { createBufferModel } from "./buffer-model"
+import { type BufferCursor, type DocCharOffset, displayColumn, lineCharRange, lineIndex } from "./buffer-model/coords"
+import { displayColumnToLineCharOffset, getTabWidth } from "./buffer-model/text-metrics"
 
 const DEBOUNCE_MS = 200
 const EMPTY_GUTTER_MARKERS = new Map<number, string>()
@@ -69,21 +70,26 @@ export function Buffer(props: BufferProps) {
     getText: bufferModel.fullText,
     getCursorOffset: bufferModel.getCursorOffset,
     resolveAnchor: (replaceStart) => getAnchor(replaceStart),
-    accept: (item, replaceStart, replaceEnd) => {
-      const start = offsetToLineCol(replaceStart, bufferModel.lineStarts())
-      const end = offsetToLineCol(replaceEnd, bufferModel.lineStarts())
+    accept: (item, range) => {
+      const start = offsetToLineCol(range.start, bufferModel.lineStarts())
+      const end = offsetToLineCol(range.end, bufferModel.lineStarts())
       if (start.line !== end.line) {
         return false
       }
 
-      return bufferModel.replaceRangeInLine(start.line, start.col, end.col, item.insertText, "autocomplete")
+      return bufferModel.replaceRangeInLine(
+        lineIndex(start.line),
+        lineCharRange(start.col, end.col),
+        item.insertText,
+        "autocomplete",
+      )
     },
   })
 
   let scrollRef: ScrollBoxRenderable | undefined
   let containerRef: BoxRenderable | undefined
   const lineRenderables = new Map<string, BoxRenderable>()
-  let previousCursorForFollow: CursorContext | null = null
+  let previousCursorForFollow: BufferCursor | null = null
 
   const gutterMarkers = createMemo(() => {
     const build = props.buildGutterMarkers
@@ -103,7 +109,7 @@ export function Buffer(props: BufferProps) {
     if (!cursor) {
       return null
     }
-    const line = bufferModel.lines()[cursor.index]
+    const line = bufferModel.lines()[cursor.line]
     if (!line) {
       return null
     }
@@ -111,7 +117,7 @@ export function Buffer(props: BufferProps) {
     if (!lineRenderable) {
       return null
     }
-    const ref = bufferModel.getLineRef(cursor.index)
+    const ref = bufferModel.getLineRef(cursor.line)
     if (!ref) {
       return null
     }
@@ -122,7 +128,7 @@ export function Buffer(props: BufferProps) {
     }
   }
 
-  function getAnchor(replaceStart: number): SelectPopupAnchor | null {
+  function getAnchor(replaceStart: DocCharOffset): SelectPopupAnchor | null {
     if (!containerRef) {
       return null
     }
@@ -130,7 +136,7 @@ export function Buffer(props: BufferProps) {
     const cursor = offsetToLineCol(replaceStart, bufferModel.lineStarts())
     const line = bufferModel.lines()[cursor.line]
     const row = line && lineRenderables.get(line.id)
-    const ref = bufferModel.getLineRef(cursor.line)
+    const ref = bufferModel.getLineRef(lineIndex(cursor.line))
     if (!line || !row || !ref) {
       return null
     }
@@ -138,9 +144,9 @@ export function Buffer(props: BufferProps) {
     const lineStart = bufferModel.lineStarts()[cursor.line] ?? 0
     const localOffset = replaceStart - lineStart
     const currentDisplayCol = ref.logicalCursor.col
-    const currentCharIndex = displayColumnToCharIndex(
+    const currentCharIndex = displayColumnToLineCharOffset(
       ref.plainText,
-      currentDisplayCol,
+      displayColumn(currentDisplayCol),
       getTabWidth(ref),
       bufferModel._widthMethod,
     )
@@ -159,8 +165,8 @@ export function Buffer(props: BufferProps) {
     return nextAnchor
   }
 
-  const isSameCursor = (a: CursorContext, b: CursorContext) => {
-    return a.index === b.index && a.cursorRow === b.cursorRow && a.cursorCol === b.cursorCol
+  const isSameCursor = (a: BufferCursor, b: BufferCursor) => {
+    return a.line === b.line && a.row === b.row && a.displayCol === b.displayCol
   }
 
   const scrollToCursor = (options: { allowUpward?: boolean } = {}) => {
@@ -222,8 +228,9 @@ export function Buffer(props: BufferProps) {
   })
 
   const focusLineEnd = (index: number) => {
-    const eolCol = bufferModel.getVisualEOLColumn(index)
-    bufferModel.setFocusedRow(index)
+    const line = lineIndex(index)
+    const eolCol = bufferModel.getVisualEOLColumn(line)
+    bufferModel.setFocusedRow(line)
     bufferModel.setNavColumn(eolCol)
     bufferModel.focusCurrent()
   }
@@ -248,13 +255,13 @@ export function Buffer(props: BufferProps) {
     autocomplete.close()
     props.focusSelf()
     event.target?.focus()
-    bufferModel.setFocusedRow(index)
+    bufferModel.setFocusedRow(lineIndex(index))
     queueMicrotask(() => {
       const ctx = bufferModel.getCursorContext()
-      if (!ctx || ctx.index !== index) {
+      if (!ctx || ctx.line !== index) {
         return
       }
-      bufferModel.setNavColumn(ctx.cursorCol)
+      bufferModel.setNavColumn(ctx.displayCol)
     })
   }
 
@@ -266,7 +273,7 @@ export function Buffer(props: BufferProps) {
     focusLineEnd(index)
   }
 
-  const withCursor = (handler: (ctx: CursorContext, event: KeyEvent) => void) => (event: KeyEvent) => {
+  const withCursor = (handler: (ctx: BufferCursor, event: KeyEvent) => void) => (event: KeyEvent) => {
     const ctx = bufferModel.getCursorContext()
     if (!ctx) {
       return
@@ -298,14 +305,14 @@ export function Buffer(props: BufferProps) {
         scrollIntoView(scrollRef, target, {
           trackX: false,
         })
-        bufferModel.handleEnter(ctx.index)
+        bufferModel.handleEnter(ctx.line)
       }),
     },
     {
       pattern: "tab",
       handler: withCursor((ctx, event) => {
         event.preventDefault()
-        const lineRef = bufferModel.getLineRef?.(ctx.index)
+        const lineRef = bufferModel.getLineRef?.(ctx.line)
         if (!lineRef) {
           return
         }
@@ -316,107 +323,107 @@ export function Buffer(props: BufferProps) {
       pattern: "up",
       handler: withCursor((ctx, event) => {
         event.preventDefault()
-        bufferModel.handleVerticalMove(ctx.index, -1)
+        bufferModel.handleVerticalMove(ctx.line, -1)
       }),
     },
     {
       pattern: "down",
       handler: withCursor((ctx, event) => {
         event.preventDefault()
-        bufferModel.handleVerticalMove(ctx.index, 1)
+        bufferModel.handleVerticalMove(ctx.line, 1)
       }),
     },
     {
       pattern: "left",
       handler: withCursor((ctx, event) => {
-        const atStart = ctx.cursorCol === 0 && ctx.cursorRow === 0
+        const atStart = ctx.displayCol === 0 && ctx.row === 0
         if (atStart) {
           event.preventDefault()
-          bufferModel.handleHorizontalJump(ctx.index, true)
+          bufferModel.handleHorizontalJump(ctx.line, true)
         }
       }),
     },
     {
       pattern: ["alt+left", "meta+left", "alt+b", "meta+b"],
       handler: withCursor((ctx, event) => {
-        const atStart = ctx.cursorCol === 0 && ctx.cursorRow === 0
+        const atStart = ctx.displayCol === 0 && ctx.row === 0
         if (atStart) {
           event.preventDefault()
-          bufferModel.handleHorizontalJump(ctx.index, true)
+          bufferModel.handleHorizontalJump(ctx.line, true)
         }
       }),
     },
     {
       pattern: "right",
       handler: withCursor((ctx, event) => {
-        const eolCol = bufferModel.getVisualEOLColumn(ctx.index)
-        const atEnd = ctx.cursorCol === eolCol && ctx.cursorRow === 0
+        const eolCol = bufferModel.getVisualEOLColumn(ctx.line)
+        const atEnd = ctx.displayCol === eolCol && ctx.row === 0
         if (atEnd) {
           event.preventDefault()
-          bufferModel.handleHorizontalJump(ctx.index, false)
+          bufferModel.handleHorizontalJump(ctx.line, false)
         }
       }),
     },
     {
       pattern: ["alt+right", "meta+right", "alt+f", "meta+f"],
       handler: withCursor((ctx, event) => {
-        const eolCol = bufferModel.getVisualEOLColumn(ctx.index)
-        const atEnd = ctx.cursorCol === eolCol && ctx.cursorRow === 0
+        const eolCol = bufferModel.getVisualEOLColumn(ctx.line)
+        const atEnd = ctx.displayCol === eolCol && ctx.row === 0
         if (atEnd) {
           event.preventDefault()
-          bufferModel.handleHorizontalJump(ctx.index, false)
+          bufferModel.handleHorizontalJump(ctx.line, false)
         }
       }),
     },
     {
       pattern: "backspace",
       handler: withCursor((ctx, event) => {
-        const atStart = ctx.cursorCol === 0 && ctx.cursorRow === 0
+        const atStart = ctx.displayCol === 0 && ctx.row === 0
         if (atStart) {
           event.preventDefault()
-          bufferModel.handleBackwardMerge(ctx.index)
+          bufferModel.handleBackwardMerge(ctx.line)
         }
       }),
     },
     {
       pattern: "delete",
       handler: withCursor((ctx, event) => {
-        const eolCol = bufferModel.getVisualEOLColumn(ctx.index)
-        const atEnd = ctx.cursorCol === eolCol && ctx.cursorRow === 0
+        const eolCol = bufferModel.getVisualEOLColumn(ctx.line)
+        const atEnd = ctx.displayCol === eolCol && ctx.row === 0
         if (atEnd) {
           event.preventDefault()
-          bufferModel.handleForwardMerge(ctx.index)
+          bufferModel.handleForwardMerge(ctx.line)
         }
       }),
     },
     {
       pattern: "ctrl+h",
       handler: withCursor((ctx, event) => {
-        const atStart = ctx.cursorCol === 0 && ctx.cursorRow === 0
+        const atStart = ctx.displayCol === 0 && ctx.row === 0
         if (atStart) {
           event.preventDefault()
-          bufferModel.handleBackwardMerge(ctx.index)
+          bufferModel.handleBackwardMerge(ctx.line)
         }
       }),
     },
     {
       pattern: "ctrl+w",
       handler: withCursor((ctx, event) => {
-        const atStart = ctx.cursorCol === 0 && ctx.cursorRow === 0
+        const atStart = ctx.displayCol === 0 && ctx.row === 0
         if (atStart) {
           event.preventDefault()
-          bufferModel.handleBackwardMerge(ctx.index)
+          bufferModel.handleBackwardMerge(ctx.line)
         }
       }),
     },
     {
       pattern: "ctrl+d",
       handler: withCursor((ctx, event) => {
-        const eolCol = bufferModel.getVisualEOLColumn(ctx.index)
-        const atEnd = ctx.cursorCol === eolCol && ctx.cursorRow === 0
+        const eolCol = bufferModel.getVisualEOLColumn(ctx.line)
+        const atEnd = ctx.displayCol === eolCol && ctx.row === 0
         if (atEnd) {
           event.preventDefault()
-          bufferModel.handleForwardMerge(ctx.index)
+          bufferModel.handleForwardMerge(ctx.line)
         }
       }),
     },
@@ -448,8 +455,7 @@ export function Buffer(props: BufferProps) {
     if (prev && next && isSameCursor(prev, next)) {
       return
     }
-    const movedDown =
-      !!next && !!prev && (next.index > prev.index || (next.index === prev.index && next.cursorRow > prev.cursorRow))
+    const movedDown = !!next && !!prev && (next.line > prev.line || (next.line === prev.line && next.row > prev.row))
     const expectedCursor = next
     queueMicrotask(() => {
       const currentCursor = bufferModel.getCursorContext()
@@ -586,16 +592,16 @@ export function Buffer(props: BufferProps) {
                           handleMouseDown(indexAccessor(), event)
                         }}
                         onCursorChange={() => {
-                          const idx = indexAccessor()
+                          const idx = lineIndex(indexAccessor())
                           const ref = bufferModel.getLineRef(idx)
                           if (!ref) {
                             return
                           }
-                          bufferModel.setNavColumn(ref.logicalCursor.col)
+                          bufferModel.setNavColumn(displayColumn(ref.logicalCursor.col))
                         }}
                         initialValue={initialText}
                         onContentChange={() => {
-                          const origin = bufferModel.handleTextAreaChange(indexAccessor()) ?? "user"
+                          const origin = bufferModel.handleTextAreaChange(lineIndex(indexAccessor())) ?? "user"
                           queueMicrotask(() => origin === "user" && autocomplete.refresh())
                         }}
                       />

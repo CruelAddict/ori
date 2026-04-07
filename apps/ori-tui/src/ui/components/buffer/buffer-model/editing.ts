@@ -1,13 +1,22 @@
+import {
+  addDisplayColumn,
+  type DisplayColumn,
+  displayColumn,
+  type LineCharRange,
+  type LineIndex,
+  lineCharOffset,
+  lineIndex,
+} from "./coords"
 import { reapplyLineHighlight } from "./highlighting"
 import type { BufferChangeOrigin, BufferModel, Line } from "./model"
 import { clampFocus, getLineRef, moveFocus } from "./navigation"
-import { displayColumnToCharIndex, getTabWidth, toDisplayColumn } from "./text-metrics"
+import { displayColumnToLineCharOffset, getTabWidth, lineCharOffsetToDisplayColumn } from "./text-metrics"
 
 type LineEdit = {
   nextLines: Line[]
   lineIdsToSync: string[]
-  focusRow: number
-  focusCol: number
+  focusRow: LineIndex
+  focusCol: DisplayColumn
 }
 
 function schedulePush(buffer: BufferModel) {
@@ -78,7 +87,7 @@ export function setText(buffer: BufferModel, text: string) {
   schedulePush(buffer)
 }
 
-export function handleTextAreaChange(buffer: BufferModel, index: number) {
+export function handleTextAreaChange(buffer: BufferModel, index: LineIndex) {
   const node = getLineRef(buffer, index)
   const line = buffer.lines()[index]
   if (!node || !line) {
@@ -114,9 +123,8 @@ export function replaceTextRange(text: string, start: number, end: number, inser
 
 export function replaceRangeInLine(
   buffer: BufferModel,
-  index: number,
-  start: number,
-  end: number,
+  index: LineIndex,
+  range: LineCharRange,
   insertText: string,
   origin: BufferChangeOrigin,
 ) {
@@ -126,13 +134,15 @@ export function replaceRangeInLine(
     return false
   }
 
+  const start = range.start
+  const end = range.end
   if (start < 0 || end > line.text.length || start > end) {
     return false
   }
 
   const nextText = replaceTextRange(ref.plainText, start, end, insertText)
   const currentDisplayCol = ref.logicalCursor.col
-  const targetDisplayCol = currentDisplayCol + insertText.length - (end - start)
+  const targetDisplayCol = addDisplayColumn(displayColumn(currentDisplayCol), insertText.length - (end - start))
   buffer._pendingChangeOrigin = origin
   ref.replaceText(nextText)
   queueMicrotask(() => {
@@ -143,7 +153,7 @@ export function replaceRangeInLine(
   return true
 }
 
-function buildLineSplitEdit(buffer: BufferModel, lines: Line[], index: number, text: string): LineEdit | undefined {
+function buildLineSplitEdit(buffer: BufferModel, lines: Line[], index: LineIndex, text: string): LineEdit | undefined {
   const pieces = text.split("\n")
   const head = pieces[0] ?? ""
   const tail = pieces.slice(1)
@@ -157,20 +167,20 @@ function buildLineSplitEdit(buffer: BufferModel, lines: Line[], index: number, t
   const headLine: Line = { ...current, text: head, rendered: false }
   const nextLines = [...lines]
   nextLines.splice(index, 1, headLine, ...tailLines)
-  const focusRow = index + tail.length
+  const focusRow = lineIndex(index + tail.length)
   return {
     nextLines,
     lineIdsToSync: [headLine.id],
     focusRow,
-    focusCol: toDisplayColumn(
+    focusCol: lineCharOffsetToDisplayColumn(
       nextLines[focusRow]?.text ?? "",
-      (nextLines[focusRow]?.text ?? "").length,
+      lineCharOffset((nextLines[focusRow]?.text ?? "").length),
       buffer._widthMethod,
     ),
   }
 }
 
-export function handleEnter(buffer: BufferModel, index: number) {
+export function handleEnter(buffer: BufferModel, index: LineIndex) {
   const node = getLineRef(buffer, index)
   if (!node) {
     return
@@ -178,7 +188,12 @@ export function handleEnter(buffer: BufferModel, index: number) {
 
   const cursor = node.logicalCursor
   const value = node.plainText
-  const splitIndex = displayColumnToCharIndex(value, cursor.col, getTabWidth(node), buffer._widthMethod)
+  const splitIndex = displayColumnToLineCharOffset(
+    value,
+    displayColumn(cursor.col),
+    getTabWidth(node),
+    buffer._widthMethod,
+  )
   const before = value.slice(0, splitIndex)
   const after = value.slice(splitIndex)
   const current = buffer.lines()[index]
@@ -193,13 +208,13 @@ export function handleEnter(buffer: BufferModel, index: number) {
   commitLineEdit(buffer, {
     nextLines,
     lineIdsToSync: [headLine.id],
-    focusRow: index + 1,
-    focusCol: 0,
+    focusRow: lineIndex(index + 1),
+    focusCol: displayColumn(0),
   })
 }
 
-export function handleBackwardMerge(buffer: BufferModel, index: number) {
-  const prevIndex = index - 1
+export function handleBackwardMerge(buffer: BufferModel, index: LineIndex) {
+  const prevIndex = lineIndex(index - 1)
   if (prevIndex < 0) {
     return
   }
@@ -217,11 +232,11 @@ export function handleBackwardMerge(buffer: BufferModel, index: number) {
     nextLines,
     lineIdsToSync: [mergedLine.id],
     focusRow: prevIndex,
-    focusCol: toDisplayColumn(prevLine.text, prevLine.text.length, buffer._widthMethod),
+    focusCol: lineCharOffsetToDisplayColumn(prevLine.text, lineCharOffset(prevLine.text.length), buffer._widthMethod),
   })
 }
 
-export function handleForwardMerge(buffer: BufferModel, index: number) {
+export function handleForwardMerge(buffer: BufferModel, index: LineIndex) {
   const current = buffer.lines()[index]
   const nextLine = buffer.lines()[index + 1]
   if (!current || !nextLine) {
@@ -235,7 +250,7 @@ export function handleForwardMerge(buffer: BufferModel, index: number) {
     nextLines,
     lineIdsToSync: [mergedLine.id],
     focusRow: index,
-    focusCol: toDisplayColumn(current.text, current.text.length, buffer._widthMethod),
+    focusCol: lineCharOffsetToDisplayColumn(current.text, lineCharOffset(current.text.length), buffer._widthMethod),
   })
 }
 

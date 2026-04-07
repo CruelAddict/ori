@@ -1,4 +1,5 @@
 import { resolveRenderLib, type TextareaRenderable, type WidthMethod } from "@opentui/core"
+import { type DisplayColumn, displayColumn, type LineCharOffset, lineCharOffset } from "./coords"
 
 const graphemeSegmenter = new Intl.Segmenter(undefined, { granularity: "grapheme" })
 
@@ -48,42 +49,46 @@ function graphemeWidth(
   return unicodeWidth(grapheme, widthMethod)
 }
 
-export function toDisplayColumn(text: string, column: number, widthMethod: WidthMethod | undefined): number {
-  if (column <= 0) {
-    return 0
+export function lineCharOffsetToDisplayColumn(
+  text: string,
+  offset: LineCharOffset,
+  widthMethod: WidthMethod | undefined,
+): DisplayColumn {
+  if (offset <= 0) {
+    return displayColumn(0)
   }
 
-  const end = Math.min(column, text.length)
+  const end = Math.min(offset, text.length)
   const prefix = text.slice(0, end)
   if (!prefix) {
-    return 0
+    return displayColumn(0)
   }
 
-  return unicodeWidth(prefix, widthMethod)
+  return displayColumn(unicodeWidth(prefix, widthMethod))
 }
 
-export function displayColumnToCharIndex(
+export function displayColumnToLineCharOffset(
   text: string,
-  targetCol: number,
+  targetCol: DisplayColumn,
   tabWidth: number,
   widthMethod: WidthMethod | undefined,
-): number {
+): LineCharOffset {
   if (targetCol <= 0) {
-    return 0
+    return lineCharOffset(0)
   }
 
   let displayCol = 0
   for (const segment of graphemeSegmenter.segment(text)) {
     if (targetCol <= displayCol) {
-      return segment.index
+      return lineCharOffset(segment.index)
     }
     const width = graphemeWidth(segment.segment, displayCol, tabWidth, widthMethod)
     const nextCol = displayCol + width
     if (targetCol <= nextCol) {
-      return segment.index + segment.segment.length
+      return lineCharOffset(segment.index + segment.segment.length)
     }
     displayCol = nextCol
   }
 
-  return text.length
+  return lineCharOffset(text.length)
 }

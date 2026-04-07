@@ -1,4 +1,5 @@
 import type { SelectPopupItem } from "@ui/components/select-popup"
+import type { DocCharOffset, DocCharRange } from "../buffer-model/coords"
 
 export type BufferAutocompleteItem = SelectPopupItem & {
   insertText: string
@@ -6,12 +7,11 @@ export type BufferAutocompleteItem = SelectPopupItem & {
 
 export type BufferAutocompleteRequest = {
   text: string
-  cursorOffset: number
+  cursor: DocCharOffset
 }
 
 export type BufferAutocompleteResult = {
-  replaceStart: number
-  replaceEnd: number
+  replace: DocCharRange
   items: BufferAutocompleteItem[]
 }
 

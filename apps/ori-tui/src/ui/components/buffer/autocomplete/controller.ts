@@ -1,14 +1,15 @@
 import { createSelectPopup, type SelectPopupAnchor, type SelectPopupViewModel } from "@ui/components/select-popup"
 import { type Accessor, createMemo, createSignal } from "solid-js"
+import type { DocCharOffset, DocCharRange } from "../buffer-model/coords"
 import type { BufferAutocompleteItem, BufferAutocompleteProvider } from "./types"
 
 type CreateBufferAutocompleteOptions = {
   provider: Accessor<BufferAutocompleteProvider | undefined>
   isFocused: Accessor<boolean>
   getText: () => string
-  getCursorOffset: () => number | undefined
-  resolveAnchor: (replaceStart: number) => SelectPopupAnchor | null
-  accept: (item: BufferAutocompleteItem, replaceStart: number, replaceEnd: number) => boolean
+  getCursorOffset: () => DocCharOffset | undefined
+  resolveAnchor: (replaceStart: DocCharOffset) => SelectPopupAnchor | null
+  accept: (item: BufferAutocompleteItem, range: DocCharRange) => boolean
 }
 
 type BufferAutocompleteViewModel = {
@@ -18,23 +19,20 @@ type BufferAutocompleteViewModel = {
 }
 
 export function createBufferAutocomplete(options: CreateBufferAutocompleteOptions) {
-  const [replaceStart, setReplaceStart] = createSignal<number | undefined>()
-  const [replaceEnd, setReplaceEnd] = createSignal<number | undefined>()
+  const [replace, setReplace] = createSignal<DocCharRange | undefined>()
   let anchorTimer: ReturnType<typeof setTimeout> | undefined
   const popup = createSelectPopup<BufferAutocompleteItem>({
     onSelect: (item) => {
-      const start = replaceStart()
-      const end = replaceEnd()
-      if (start === undefined || end === undefined) {
+      const range = replace()
+      if (!range) {
         return false
       }
 
-      return options.accept(item, start, end)
+      return options.accept(item, range)
     },
     onClose: () => {
       cancelAnchorResolve()
-      setReplaceStart(undefined)
-      setReplaceEnd(undefined)
+      setReplace(undefined)
     },
   })
 
@@ -47,11 +45,11 @@ export function createBufferAutocomplete(options: CreateBufferAutocompleteOption
     anchorTimer = undefined
   }
 
-  const scheduleAnchorResolve = (start: number) => {
+  const scheduleAnchorResolve = (start: DocCharOffset) => {
     cancelAnchorResolve()
     anchorTimer = setTimeout(() => {
       anchorTimer = undefined
-      if (replaceStart() !== start) {
+      if (replace()?.start !== start) {
         popup.setAnchor(null)
         return
       }
@@ -62,35 +60,34 @@ export function createBufferAutocomplete(options: CreateBufferAutocompleteOption
 
   const refresh = () => {
     const provider = options.provider()
-    const cursorOffset = options.getCursorOffset()
-    if (!provider || !options.isFocused() || cursorOffset === undefined) {
+    const cursor = options.getCursorOffset()
+    if (!provider || !options.isFocused() || cursor === undefined) {
       popup.close()
       return
     }
 
     const result = provider.getCompletions({
       text: options.getText(),
-      cursorOffset,
+      cursor,
     })
     if (!result || result.items.length === 0) {
       popup.close()
       return
     }
 
-    const prevStart = replaceStart()
-    setReplaceStart(result.replaceStart)
-    setReplaceEnd(result.replaceEnd)
+    const prevStart = replace()?.start
+    setReplace(result.replace)
     popup.setItems(result.items)
-    if (prevStart === result.replaceStart && popup.anchor()) {
+    if (prevStart === result.replace.start && popup.anchor()) {
       return
     }
 
     popup.setAnchor(null)
-    scheduleAnchorResolve(result.replaceStart)
+    scheduleAnchorResolve(result.replace.start)
   }
 
   const viewModel = createMemo<SelectPopupViewModel<BufferAutocompleteItem> | undefined>(() => {
-    if (replaceStart() === undefined) {
+    if (!replace()) {
       return
     }
     if (!popup.anchor()) {
