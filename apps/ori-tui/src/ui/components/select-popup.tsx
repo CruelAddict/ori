@@ -64,7 +64,7 @@ function getPopupLeft(anchor: SelectPopupAnchor, width: number) {
     return anchor.x
   }
 
-  return Math.max(0, anchor.x + 1 - width)
+  return Math.max(0, anchor.containerWidth - width)
 }
 
 function getPopupWidth<T extends SelectPopupItem>(viewModel: SelectPopupViewModel<T>, availableWidth: number, maxLimit: number) {
