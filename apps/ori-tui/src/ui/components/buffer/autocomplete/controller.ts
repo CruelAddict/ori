@@ -3,6 +3,15 @@ import { type Accessor, createMemo, createSignal } from "solid-js"
 import type { DocCharOffset, DocCharRange } from "../buffer-model/coords"
 import type { BufferAutocompleteItem, BufferAutocompleteProvider } from "./types"
 
+function isAutoAutocompleteAllowed(text: string, cursor: number) {
+  const next = text[cursor]
+  if (next === undefined) {
+    return true
+  }
+
+  return next === " " || next === "\t" || next === "\n" || next === "\r"
+}
+
 type CreateBufferAutocompleteOptions = {
   provider: Accessor<BufferAutocompleteProvider | undefined>
   isFocused: Accessor<boolean>
@@ -66,8 +75,14 @@ export function createBufferAutocomplete(options: CreateBufferAutocompleteOption
       return
     }
 
+    const text = options.getText()
+    if (!isAutoAutocompleteAllowed(text, cursor)) {
+      popup.close()
+      return
+    }
+
     const result = provider.getCompletions({
-      text: options.getText(),
+      text,
       cursor,
     })
     if (!result || result.items.length === 0) {

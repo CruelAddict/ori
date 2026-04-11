@@ -1,3 +1,4 @@
+import type { BufferAutocompleteProvider } from "@ui/components/buffer"
 import type { QueryJob, QueryUsecase } from "@usecase/query/usecase"
 import { getScriptFilePath, readScript, writeScript } from "@usecase/script/storage"
 import type { Accessor } from "solid-js"
@@ -10,6 +11,7 @@ export type EditorPaneViewModel = {
   currentJob: Accessor<QueryJob | undefined>
   isExecuting: Accessor<boolean>
   filePath: Accessor<string>
+  autocomplete: BufferAutocompleteProvider
   onQueryChange: (text: string) => void
   executeQuery: () => Promise<void>
   cancelQuery: () => Promise<void>
@@ -22,6 +24,7 @@ export type EditorPaneViewModel = {
 type CreateVMOptions = {
   query: Query
   resourceName: Accessor<string>
+  autocomplete: BufferAutocompleteProvider
   isFocused: Accessor<boolean>
   focusSelf: () => void
   unfocus: () => void
@@ -84,6 +87,7 @@ export function createVM(options: CreateVMOptions): EditorPaneViewModel {
     currentJob,
     isExecuting,
     filePath,
+    autocomplete: options.autocomplete,
     onQueryChange,
     executeQuery,
     cancelQuery,

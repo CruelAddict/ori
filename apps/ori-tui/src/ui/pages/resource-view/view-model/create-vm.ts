@@ -1,4 +1,5 @@
 import type { Resource } from "@model/resource"
+import { createDemoAutocompleteProvider } from "@ui/widgets/editor-panel/autocomplete/demo-provider"
 import { createVM as createEditorVM } from "@ui/widgets/editor-panel/view-model/create-vm"
 import { createVM as createExplorerVM } from "@ui/widgets/explorer/view-model/create-vm"
 import { createVM as createResultsVM } from "@ui/widgets/results-panel/view-model/create-vm"
@@ -98,6 +99,7 @@ export function createVM(options: CreateVMOptions) {
   const editorPane = createEditorVM({
     query: options.query,
     resourceName: options.resourceName,
+    autocomplete: createDemoAutocompleteProvider(),
     ...paneFocusFuncs("editor"),
     unfocus: focusPreviousVisiblePane,
   })
