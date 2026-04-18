@@ -141,6 +141,12 @@ export function replaceRangeInLine(
   }
 
   const nextText = replaceTextRange(ref.plainText, start, end, insertText)
+  // A no-op replace can still trip textarea change handling, where identical
+  // text short-circuits follow-up work like highlight refresh.
+  if (nextText === ref.plainText) {
+    return true
+  }
+
   const currentDisplayCol = ref.logicalCursor.col
   const targetDisplayCol = addDisplayColumn(displayColumn(currentDisplayCol), insertText.length - (end - start))
   buffer._pendingChangeOrigin = origin

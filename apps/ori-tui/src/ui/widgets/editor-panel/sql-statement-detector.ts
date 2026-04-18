@@ -3,6 +3,8 @@ import { offsetToLine } from "@utils/line-offsets"
 /* This will hopfully be replaced once we get proper access to treesitter */
 
 export type SqlStatement = {
+  start: number
+  end: number
   startLine: number
   endLine: number
 }
@@ -23,6 +25,7 @@ const SQL_START_KEYWORDS = new Set(
   [
     "with",
     "select",
+    "values",
     "insert",
     "update",
     "delete",
@@ -40,6 +43,10 @@ const SQL_START_KEYWORDS = new Set(
     "analyze",
     "show",
     "describe",
+    "pragma",
+    "vacuum",
+    "attach",
+    "detach",
   ].map((word) => word.toLowerCase()),
 )
 
@@ -314,10 +321,57 @@ export function collectSqlStatements(text: string, lineStarts: number[]): SqlSta
     const endLine = offsetToLine(logical.end - 1, lineStarts)
 
     result.push({
+      start: logical.start,
+      end: logical.end,
       startLine,
       endLine,
     })
   }
 
   return result
+}
+
+export function getSqlStatementAtOffset(text: string, lineStarts: number[], offset: number): SqlStatement | undefined {
+  if (!text.length) {
+    return undefined
+  }
+
+  const logical = collectStatementSpans(text)
+  const cursor = Math.max(0, Math.min(offset, text.length))
+  const directProbe = cursor === text.length ? cursor - 1 : cursor
+  const direct = logical.find((statement) => statement.start <= directProbe && directProbe < statement.end)
+  if (direct) {
+    return {
+      start: direct.start,
+      end: direct.end,
+      startLine: offsetToLine(direct.start, lineStarts),
+      endLine: offsetToLine(direct.end - 1, lineStarts),
+    }
+  }
+
+  let probe = Math.min(cursor - 1, text.length - 1)
+  for (; probe >= 0; probe -= 1) {
+    if (/\s/.test(text[probe]!)) {
+      continue
+    }
+    if (text[probe] === ";") {
+      return undefined
+    }
+    break
+  }
+  if (probe < 0) {
+    return undefined
+  }
+
+  const statement = logical.find((item) => item.start <= probe && probe < item.end)
+  if (!statement) {
+    return undefined
+  }
+
+  return {
+    start: statement.start,
+    end: statement.end,
+    startLine: offsetToLine(statement.start, lineStarts),
+    endLine: offsetToLine(statement.end - 1, lineStarts),
+  }
 }

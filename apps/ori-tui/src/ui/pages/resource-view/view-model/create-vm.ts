@@ -1,5 +1,5 @@
 import type { Resource } from "@model/resource"
-import { createDemoAutocompleteProvider } from "@ui/widgets/editor-panel/autocomplete/demo-provider"
+import { createSqlAutocompleteProvider } from "@ui/widgets/editor-panel/sql-autocomplete/provider"
 import { createVM as createEditorVM } from "@ui/widgets/editor-panel/view-model/create-vm"
 import { createVM as createExplorerVM } from "@ui/widgets/explorer/view-model/create-vm"
 import { createVM as createResultsVM } from "@ui/widgets/results-panel/view-model/create-vm"
@@ -99,7 +99,9 @@ export function createVM(options: CreateVMOptions) {
   const editorPane = createEditorVM({
     query: options.query,
     resourceName: options.resourceName,
-    autocomplete: createDemoAutocompleteProvider(),
+    autocomplete: createSqlAutocompleteProvider({
+      getState: options.introspection.getState,
+    }),
     ...paneFocusFuncs("editor"),
     unfocus: focusPreviousVisiblePane,
   })
