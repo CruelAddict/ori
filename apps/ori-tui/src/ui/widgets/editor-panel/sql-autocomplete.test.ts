@@ -248,6 +248,12 @@ describe("sql autocomplete", () => {
       const result = complete("select * from main.us|", catalog(DEFAULT_CATALOG, "sqlite"))
       expect(result).toBeUndefined()
     })
+
+    test("suggests relations inside a nested subquery FROM clause", () => {
+      const result = complete("select * from users where email in (select email from |)")
+      expectIncludes(result, ["users", "orders", "books"])
+      expectExcludes(result, ["email"])
+    })
   })
 
   describe("columns and expressions", () => {
@@ -261,6 +267,18 @@ describe("sql autocomplete", () => {
       const result = complete("select * from users where em|")
       expectIncludes(result, ["email"])
       expectExcludes(result, ["users"])
+    })
+
+    test("keeps WHERE suggestions inside parentheses without a nested query", () => {
+      const result = complete("select * from users where (em|)")
+      expectIncludes(result, ["email"])
+      expectExcludes(result, ["users"])
+    })
+
+    test("suggests inner query columns inside a nested WHERE clause", () => {
+      const result = complete("select * from users where exists (select 1 from orders where |)")
+      expectIncludes(result, ["id", "user_id", "status"])
+      expectExcludes(result, ["users", "orders"])
     })
 
     test("prefers FROM after SELECT star prefix", () => {

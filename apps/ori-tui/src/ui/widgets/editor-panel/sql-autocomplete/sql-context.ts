@@ -285,43 +285,6 @@ function maskSql(text: string) {
   return masked
 }
 
-function tokenizeTopLevel(masked: string) {
-  const tokens: string[] = []
-  let token = ""
-  let depth = 0
-
-  const push = () => {
-    if (!token) {
-      return
-    }
-    if (depth === 0) {
-      tokens.push(token.toLowerCase())
-    }
-    token = ""
-  }
-
-  for (const ch of masked) {
-    if (ch === "(") {
-      push()
-      depth += 1
-      continue
-    }
-    if (ch === ")") {
-      push()
-      depth = Math.max(0, depth - 1)
-      continue
-    }
-    if (/[A-Za-z_]/.test(ch) || (token && /[A-Za-z0-9_$]/.test(ch))) {
-      token += ch
-      continue
-    }
-    push()
-  }
-
-  push()
-  return tokens
-}
-
 export function getCurrentSqlStatement(text: string, cursorOffset: number): SqlStatementSlice | undefined {
   const lineStarts = buildLineStarts(text)
   const statement = getSqlStatementAtOffset(text, lineStarts, cursorOffset)
@@ -389,62 +352,81 @@ export function normalizeIdentifier(value: string | undefined) {
 }
 
 export function findCurrentClause(text: string, cursorOffset: number): SqlClause {
-  const tokens = tokenizeTopLevel(maskSql(text.slice(0, cursorOffset)))
-  let clause: SqlClause = "unknown"
+  const masked = maskSql(text.slice(0, cursorOffset))
+  const clauses: SqlClause[] = ["unknown"]
+  const previous: Array<string | undefined> = [undefined]
+  let token = ""
+  let depth = 0
 
-  for (let i = 0; i < tokens.length; i += 1) {
-    const token = tokens[i]
-    const next = tokens[i + 1]
-    if (token === "select") {
-      clause = "select"
-      continue
+  const push = () => {
+    if (!token) {
+      return
     }
-    if (token === "from") {
-      clause = "from"
-      continue
+
+    const current = token.toLowerCase()
+    const prev = previous[depth]
+
+    if (current === "select") {
+      clauses[depth] = "select"
     }
-    if (token === "where") {
-      clause = "where"
-      continue
+    if (current === "from") {
+      clauses[depth] = "from"
     }
-    if (token === "having") {
-      clause = "having"
-      continue
+    if (current === "where") {
+      clauses[depth] = "where"
     }
-    if (token === "set") {
-      clause = "set"
-      continue
+    if (current === "having") {
+      clauses[depth] = "having"
     }
-    if (token === "on") {
-      clause = "on"
-      continue
+    if (current === "set") {
+      clauses[depth] = "set"
     }
-    if (token === "insert" && next === "into") {
-      clause = "into"
-      continue
+    if (current === "on") {
+      clauses[depth] = "on"
     }
-    if (token === "update") {
-      clause = "into"
-      continue
+    if (current === "into" && prev === "insert") {
+      clauses[depth] = "into"
     }
-    if (token === "group" && next === "by") {
-      clause = "group"
-      continue
+    if (current === "update") {
+      clauses[depth] = "into"
     }
-    if (token === "order" && next === "by") {
-      clause = "order"
-      continue
+    if (current === "by" && prev === "group") {
+      clauses[depth] = "group"
     }
-    if (["join", "inner", "left", "right", "full", "cross", "outer"].includes(token) && next === "join") {
-      clause = "join"
-      continue
+    if (current === "by" && prev === "order") {
+      clauses[depth] = "order"
     }
-    if (token === "join") {
-      clause = "join"
+    if (current === "join") {
+      clauses[depth] = "join"
     }
+
+    previous[depth] = current
+    token = ""
   }
 
-  return clause
+  for (const ch of masked) {
+    if (ch === "(") {
+      push()
+      depth += 1
+      clauses[depth] = clauses[depth - 1] ?? "unknown"
+      previous[depth] = undefined
+      continue
+    }
+    if (ch === ")") {
+      push()
+      previous[depth] = undefined
+      depth = Math.max(0, depth - 1)
+      continue
+    }
+    if (/[A-Za-z_]/.test(ch) || (token && /[A-Za-z0-9_$]/.test(ch))) {
+      token += ch
+      continue
+    }
+    push()
+  }
+
+  push()
+  return clauses[depth] ?? "unknown"
 }
 
 export function extractTableRefs(text: string): SqlTableRef[] {
