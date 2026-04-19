@@ -40,6 +40,7 @@ export type QueryUsecase = {
   subscribe(listener: Listener): () => void
   setQueryText(text: string): void
   executeQuery(query: string): Promise<void>
+  failQuery(query: string, error: string): void
   cancelQuery(): Promise<void>
   clearQuery(): void
   dispose(): void
@@ -137,6 +138,31 @@ export function createQueryUC(deps: QueryUsecaseDeps): QueryUsecase {
       notifyError()
       deps.logger.error({ jobId, resourceName: deps.resourceName, err }, "query execution threw")
     }
+  }
+
+  const failQuery = (query: string, error: string) => {
+    const currentJob = state.job
+    if (currentJob && currentJob.status === "running") {
+      deps.logger.warn(
+        { resourceName: deps.resourceName, jobId: currentJob.jobId },
+        "query already running for resource; ignoring local failure",
+      )
+      return
+    }
+
+    const jobId = generateJobId()
+    setState((current) => ({
+      ...current,
+      job: {
+        jobId,
+        resourceName: deps.resourceName,
+        query,
+        status: "failed",
+        error,
+      },
+    }))
+    deps.notifications.notify(error, { level: "error", channel: "statusline" })
+    deps.logger.warn({ jobId, resourceName: deps.resourceName, error }, "query execution rejected locally")
   }
 
   const cancelQuery = async () => {
@@ -244,6 +270,7 @@ export function createQueryUC(deps: QueryUsecaseDeps): QueryUsecase {
     },
     setQueryText,
     executeQuery,
+    failQuery,
     cancelQuery,
     clearQuery,
     dispose: () => {

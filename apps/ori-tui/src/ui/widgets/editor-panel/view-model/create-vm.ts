@@ -1,10 +1,15 @@
 import type { BufferAutocompleteProvider } from "@ui/components/buffer"
 import type { QueryJob, QueryUsecase } from "@usecase/query/usecase"
 import { getScriptFilePath, readScript, writeScript } from "@usecase/script/storage"
+import { buildLineStarts } from "@utils/line-offsets"
 import type { Accessor } from "solid-js"
 import { createMemo, createSignal, onCleanup, onMount } from "solid-js"
+import { resolveSqlQueryAtOffset } from "../sql-statement-detector"
 
-type Query = Pick<QueryUsecase, "subscribe" | "getState" | "setQueryText" | "executeQuery" | "cancelQuery">
+type Query = Pick<
+  QueryUsecase,
+  "subscribe" | "getState" | "setQueryText" | "executeQuery" | "failQuery" | "cancelQuery"
+>
 
 export type EditorPaneViewModel = {
   queryText: Accessor<string>
@@ -13,7 +18,7 @@ export type EditorPaneViewModel = {
   filePath: Accessor<string>
   autocomplete: BufferAutocompleteProvider
   onQueryChange: (text: string) => void
-  executeQuery: () => Promise<void>
+  executeQuery: (cursorOffset?: number) => Promise<void>
   cancelQuery: () => Promise<void>
   saveQuery: () => boolean
   isFocused: Accessor<boolean>
@@ -51,12 +56,32 @@ export function createVM(options: CreateVMOptions): EditorPaneViewModel {
     options.query.setQueryText(text)
   }
 
-  const executeQuery = async () => {
+  const executeQuery = async (cursorOffset?: number) => {
     const text = queryText()
     if (!text.trim()) {
       return
     }
-    await options.query.executeQuery(text)
+
+    if (cursorOffset === undefined) {
+      await options.query.executeQuery(text)
+      return
+    }
+
+    const resolution = resolveSqlQueryAtOffset(text, buildLineStarts(text), cursorOffset)
+    if (resolution.kind === "ambiguous") {
+      options.query.failQuery(text, "cannot execute query when multiple queries share the cursor line")
+      return
+    }
+    if (resolution.kind === "none") {
+      return
+    }
+
+    const query = text.slice(resolution.query.start, resolution.query.end)
+    if (!query.trim()) {
+      return
+    }
+
+    await options.query.executeQuery(query)
   }
 
   const cancelQuery = async () => {

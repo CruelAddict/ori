@@ -1,9 +1,9 @@
-import { Buffer, type BufferGutterContext } from "@ui/components/buffer"
+import { Buffer, type BufferApi, type BufferGutterContext } from "@ui/components/buffer"
 import { useTheme } from "@ui/providers/theme"
 import { type KeyBinding, KeyScope } from "@ui/services/key-scopes"
 import { useStatusline } from "@ui/widgets/statusline/statusline-context"
 import { onMount } from "solid-js"
-import { collectSqlStatements } from "./sql-statement-detector"
+import { collectSqlQueries, resolveSqlQueryAtOffset } from "./sql-statement-detector"
 import type { EditorPaneViewModel } from "./view-model/create-vm"
 
 export type EditorPanelProps = {
@@ -14,29 +14,37 @@ export function EditorPanel(props: EditorPanelProps) {
   const pane = props.viewModel
   const statusline = useStatusline()
   const { theme } = useTheme()
+  let bufferApi: BufferApi | undefined
 
   onMount(() => {
     statusline.fileOpenedInBuffer(pane.filePath())
   })
 
   const buildGutterMarkers = (context: BufferGutterContext) => {
-    const statements = collectSqlStatements(context.text, context.lineStarts)
-    if (statements.length < 2) {
+    const queries = collectSqlQueries(context.text, context.lineStarts)
+    if (queries.length < 2) {
       return new Map<number, string>()
     }
 
     const markers = new Map<number, string>()
-    const current = statements.find(
-      (statement) => statement.startLine <= context.focusedRow && statement.endLine >= context.focusedRow,
-    )
+    const current =
+      context.cursorOffset === undefined
+        ? undefined
+        : (() => {
+            const resolution = resolveSqlQueryAtOffset(context.text, context.lineStarts, context.cursorOffset)
+            if (resolution.kind !== "query") {
+              return undefined
+            }
+            return resolution.query
+          })()
     if (current) {
       markers.set(current.startLine, "󰻃 ")
     }
-    for (const statement of statements) {
-      if (statement.startLine === current?.startLine) {
+    for (const query of queries) {
+      if (query.startLine === current?.startLine) {
         continue
       }
-      markers.set(statement.startLine, "• ")
+      markers.set(query.startLine, "• ")
     }
     return markers
   }
@@ -58,7 +66,7 @@ export function EditorPanel(props: EditorPanelProps) {
       mode: "leader",
       description: "Execute query",
       handler: () => {
-        void pane.executeQuery()
+        void pane.executeQuery(bufferApi?.getCursorOffset())
       },
       preventDefault: true,
       commandPaletteSection: "Query",
@@ -84,6 +92,9 @@ export function EditorPanel(props: EditorPanelProps) {
           onTextChange={handleTextChange}
           onUnfocus={handleUnfocus}
           focusSelf={pane.focusSelf}
+          registerApi={(api) => {
+            bufferApi = api
+          }}
           buildGutterMarkers={buildGutterMarkers}
           autocomplete={pane.autocomplete}
         />

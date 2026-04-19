@@ -1,13 +1,16 @@
 import { offsetToLine } from "@utils/line-offsets"
 
-/* This will hopfully be replaced once we get proper access to treesitter */
-
 export type SqlStatement = {
   start: number
   end: number
   startLine: number
   endLine: number
 }
+
+export type SqlQueryResolution =
+  | { kind: "query"; query: SqlStatement }
+  | { kind: "ambiguous"; queries: SqlStatement[] }
+  | { kind: "none" }
 
 type Span = { start: number; end: number }
 
@@ -269,15 +272,13 @@ function collectStatementSpans(text: string): Span[] {
       continue
     }
 
-    if (state.kind === "dollar-quote") {
-      if (text.startsWith(state.tag, i)) {
-        const tag = state.tag
-        state = { kind: "normal" }
-        i += tag.length
-        continue
-      }
-      i++
+    if (text.startsWith(state.tag, i)) {
+      const tag = state.tag
+      state = { kind: "normal" }
+      i += tag.length
+      continue
     }
+    i++
   }
 
   const tail = trimSpan(text, { start: segmentStart, end: spanEnd })
@@ -304,49 +305,35 @@ function trimSpan(text: string, span: Span): Span | undefined {
   return { start, end }
 }
 
-export function collectSqlStatements(text: string, lineStarts: number[]): SqlStatement[] {
-  if (!text.length) {
-    return []
+function toSqlStatement(span: Span, lineStarts: number[]): SqlStatement {
+  return {
+    start: span.start,
+    end: span.end,
+    startLine: offsetToLine(span.start, lineStarts),
+    endLine: offsetToLine(span.end - 1, lineStarts),
   }
-  const logicalSpans = collectStatementSpans(text)
-  const result: SqlStatement[] = []
-
-  for (const logical of logicalSpans) {
-    const leadingToken = getLeadingToken(text, logical)
-    if (!leadingToken || !SQL_START_KEYWORDS.has(leadingToken.token)) {
-      continue
-    }
-
-    const startLine = offsetToLine(leadingToken.tokenStart, lineStarts)
-    const endLine = offsetToLine(logical.end - 1, lineStarts)
-
-    result.push({
-      start: logical.start,
-      end: logical.end,
-      startLine,
-      endLine,
-    })
-  }
-
-  return result
 }
 
-export function getSqlStatementAtOffset(text: string, lineStarts: number[], offset: number): SqlStatement | undefined {
+function getCursorLine(text: string, lineStarts: number[], offset: number) {
+  if (!text.length) {
+    return 0
+  }
+
+  const cursor = Math.max(0, Math.min(offset, text.length))
+  const probe = cursor === text.length && cursor > 0 ? cursor - 1 : cursor
+  return offsetToLine(probe, lineStarts)
+}
+
+function findSpanAtOffset(text: string, spans: Span[], offset: number): Span | undefined {
   if (!text.length) {
     return undefined
   }
 
-  const logical = collectStatementSpans(text)
   const cursor = Math.max(0, Math.min(offset, text.length))
   const directProbe = cursor === text.length ? cursor - 1 : cursor
-  const direct = logical.find((statement) => statement.start <= directProbe && directProbe < statement.end)
+  const direct = spans.find((span) => span.start <= directProbe && directProbe < span.end)
   if (direct) {
-    return {
-      start: direct.start,
-      end: direct.end,
-      startLine: offsetToLine(direct.start, lineStarts),
-      endLine: offsetToLine(direct.end - 1, lineStarts),
-    }
+    return direct
   }
 
   let probe = Math.min(cursor - 1, text.length - 1)
@@ -363,15 +350,73 @@ export function getSqlStatementAtOffset(text: string, lineStarts: number[], offs
     return undefined
   }
 
-  const statement = logical.find((item) => item.start <= probe && probe < item.end)
-  if (!statement) {
+  return spans.find((span) => span.start <= probe && probe < span.end)
+}
+
+export function collectSqlQueries(text: string, lineStarts: number[]): SqlStatement[] {
+  if (!text.length) {
+    return []
+  }
+
+  return collectStatementSpans(text)
+    .filter((span) => getLeadingToken(text, span))
+    .map((span) => toSqlStatement(span, lineStarts))
+}
+
+export function collectSqlStatements(text: string, lineStarts: number[]): SqlStatement[] {
+  const result: SqlStatement[] = []
+
+  for (const logical of collectStatementSpans(text)) {
+    const leadingToken = getLeadingToken(text, logical)
+    if (!leadingToken || !SQL_START_KEYWORDS.has(leadingToken.token)) {
+      continue
+    }
+
+    result.push({
+      start: logical.start,
+      end: logical.end,
+      startLine: offsetToLine(leadingToken.tokenStart, lineStarts),
+      endLine: offsetToLine(logical.end - 1, lineStarts),
+    })
+  }
+
+  return result
+}
+
+export function resolveSqlQueryAtOffset(text: string, lineStarts: number[], offset: number): SqlQueryResolution {
+  const queries = collectSqlQueries(text, lineStarts)
+  if (!queries.length) {
+    return { kind: "none" }
+  }
+
+  const line = getCursorLine(text, lineStarts, offset)
+  const lineQueries = queries.filter((query) => query.startLine <= line && line <= query.endLine)
+  if (lineQueries.length > 1) {
+    return { kind: "ambiguous", queries: lineQueries }
+  }
+
+  const span = findSpanAtOffset(
+    text,
+    queries.map((query) => ({ start: query.start, end: query.end })),
+    offset,
+  )
+  if (!span) {
+    return { kind: "none" }
+  }
+
+  const query = queries.find((item) => item.start === span.start && item.end === span.end)
+  if (!query) {
+    return { kind: "none" }
+  }
+
+  return { kind: "query", query }
+}
+
+export function getSqlStatementAtOffset(text: string, lineStarts: number[], offset: number): SqlStatement | undefined {
+  const span = findSpanAtOffset(text, collectStatementSpans(text), offset)
+  if (!span) {
     return undefined
   }
 
-  return {
-    start: statement.start,
-    end: statement.end,
-    startLine: offsetToLine(statement.start, lineStarts),
-    endLine: offsetToLine(statement.end - 1, lineStarts),
-  }
+  return toSqlStatement(span, lineStarts)
 }

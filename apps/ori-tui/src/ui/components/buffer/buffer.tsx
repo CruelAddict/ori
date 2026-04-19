@@ -11,7 +11,18 @@ import { useTheme } from "@ui/providers/theme"
 import { type KeyBinding, KeyScope } from "@ui/services/key-scopes"
 import { offsetToLineCol } from "@utils/line-offsets"
 import { syntaxHighlighter } from "@utils/syntax-highlighter"
-import { type Accessor, createEffect, createMemo, For, on, onCleanup, onMount, Show, untrack } from "solid-js"
+import {
+  type Accessor,
+  createEffect,
+  createMemo,
+  createSignal,
+  For,
+  on,
+  onCleanup,
+  onMount,
+  Show,
+  untrack,
+} from "solid-js"
 import { createBufferAutocomplete } from "./autocomplete/controller"
 import type { BufferAutocompleteProvider } from "./autocomplete/types"
 import { createBufferModel } from "./buffer-model"
@@ -24,12 +35,14 @@ const EMPTY_GUTTER_MARKERS = new Map<number, string>()
 export type BufferApi = {
   setText: (text: string) => void
   focus: () => void
+  getCursorOffset: () => DocCharOffset | undefined
 }
 
 export type BufferGutterContext = {
   text: string
   lineStarts: number[]
   focusedRow: number
+  cursorOffset: DocCharOffset | undefined
 }
 
 export type BufferProps = {
@@ -90,6 +103,7 @@ export function Buffer(props: BufferProps) {
   let containerRef: BoxRenderable | undefined
   const lineRenderables = new Map<string, BoxRenderable>()
   let previousCursorForFollow: BufferCursor | null = null
+  const [cursorOffset, setCursorOffset] = createSignal<DocCharOffset | undefined>(bufferModel.getCursorOffset())
 
   const gutterMarkers = createMemo(() => {
     const build = props.buildGutterMarkers
@@ -101,6 +115,7 @@ export function Buffer(props: BufferProps) {
       text: bufferModel.fullText(),
       lineStarts: bufferModel.lineStarts(),
       focusedRow: bufferModel.focusedRow(),
+      cursorOffset: cursorOffset(),
     })
   })
 
@@ -216,8 +231,12 @@ export function Buffer(props: BufferProps) {
     bufferModel.setText(text)
   }
 
+  const getCursorOffset = () => {
+    return bufferModel.getCursorOffset()
+  }
+
   onMount(() => {
-    const api: BufferApi = { setText, focus }
+    const api: BufferApi = { setText, focus, getCursorOffset }
     props.registerApi?.(api)
   })
 
@@ -598,6 +617,7 @@ export function Buffer(props: BufferProps) {
                             return
                           }
                           bufferModel.setNavColumn(displayColumn(ref.logicalCursor.col))
+                          setCursorOffset(bufferModel.getCursorOffset())
                         }}
                         initialValue={initialText}
                         onContentChange={() => {

@@ -2,10 +2,12 @@ import { dirname, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 import { addDefaultParsers, getTreeSitterClient, RGBA, SyntaxStyle } from "@opentui/core"
 import { debounce } from "@utils/debounce"
+import { buildLineStarts } from "@utils/line-offsets"
 import type { Logger } from "pino"
 import { type Accessor, createEffect, createSignal, onCleanup } from "solid-js"
 import sqlHighlights from "../assets/highlights.scm" with { type: "file" }
 import sqlWasm from "../assets/tree-sitter-sql.wasm" with { type: "file" }
+import { collectSqlQueries, type SqlStatement } from "../ui/widgets/editor-panel/sql-statement-detector"
 
 type SyntaxThemePalette = {
   get(group: string): string
@@ -162,7 +164,7 @@ function mapGroupToStyleId(group: string, styleIds: StyleIds): number | null {
   }
 }
 
-async function collectSqlHighlights(text: string, styleIds: StyleIds, logger?: Logger): Promise<SyntaxHighlightSpan[]> {
+async function highlightSqlText(text: string, styleIds: StyleIds, logger?: Logger): Promise<SyntaxHighlightSpan[]> {
   await ensureSqlRegistered(logger)
   const client = getTreeSitterClient()
   const result = (await client.highlightOnce(text, FILETYPE_SQL)) as {
@@ -188,6 +190,56 @@ async function collectSqlHighlights(text: string, styleIds: StyleIds, logger?: L
       continue
     }
     spans.push({ start: startIndex, end: endIndex, styleId })
+  }
+
+  return spans
+}
+
+function getSqlHighlightRuns(text: string, lineStarts: number[]): SqlStatement[] {
+  const queries = collectSqlQueries(text, lineStarts)
+  const first = queries[0]
+  if (!first) {
+    return []
+  }
+
+  const runs: SqlStatement[] = []
+  let current = first
+  for (const query of queries.slice(1)) {
+    if (current.endLine < query.startLine) {
+      runs.push(current)
+      current = query
+      continue
+    }
+
+    current = {
+      start: current.start,
+      end: query.end,
+      startLine: current.startLine,
+      endLine: Math.max(current.endLine, query.endLine),
+    }
+  }
+
+  runs.push(current)
+  return runs
+}
+
+async function collectSqlHighlights(text: string, styleIds: StyleIds, logger?: Logger): Promise<SyntaxHighlightSpan[]> {
+  const runs = getSqlHighlightRuns(text, buildLineStarts(text))
+  const first = runs[0]
+  if (!first) {
+    return []
+  }
+
+  const spans: SyntaxHighlightSpan[] = []
+  for (const run of runs) {
+    const local = await highlightSqlText(text.slice(run.start, run.end), styleIds, logger)
+    for (const span of local) {
+      spans.push({
+        start: span.start + run.start,
+        end: span.end + run.start,
+        styleId: span.styleId,
+      })
+    }
   }
 
   return spans
