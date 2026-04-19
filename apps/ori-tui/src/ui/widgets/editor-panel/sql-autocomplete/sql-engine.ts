@@ -8,11 +8,14 @@ import {
   findCompletionSpan,
   findCurrentClause,
   getCurrentSqlStatement,
+  getInsertContext,
   getTempTableNames,
   isInsideSuppressedRegion,
   type SqlClause,
 } from "./sql-context"
 import type { SqlRelation, SqlSchemaIndex } from "./sql-schema-index"
+
+/* LLM-generated, use tests as source of truth for expected behavior */
 
 type RankedItem = BufferAutocompleteItem & {
   sortGroup: number
@@ -31,7 +34,26 @@ type TempRelation = SqlRelation & {
 
 type SqlCasePreference = "lower" | "upper"
 
-const STRUCTURAL_KEYWORDS = new Set(["from", "join", "into", "update", "set", "where", "on", "having"])
+const STRUCTURAL_KEYWORDS = new Set([
+  "from",
+  "join",
+  "into",
+  "update",
+  "set",
+  "where",
+  "on",
+  "having",
+  "insert",
+  "delete",
+  "group",
+  "order",
+  "left",
+  "right",
+  "inner",
+  "outer",
+  "full",
+  "cross",
+])
 const SELECT_CLAUSE_KEYWORDS = ["*", "DISTINCT", "ALL"] as const
 const EXPRESSION_KEYWORDS = [
   "CASE",
@@ -54,8 +76,16 @@ const EXPRESSION_KEYWORDS = [
 const ORDER_DIRECTION_KEYWORDS = ["ASC", "DESC"] as const
 const FROM_FOLLOWUP_KEYWORDS = ["WHERE", "JOIN", "GROUP BY", "ORDER BY", "LIMIT", "UNION"] as const
 const JOIN_FOLLOWUP_KEYWORDS = ["ON", "USING"] as const
-const IDENTIFIER = '(?:"(?:[^"]|"")+"|[[^]]+]|`[^`]+`|[A-Za-z_][A-Za-z0-9_$]*)'
-const QUALIFIED_IDENTIFIER = `${IDENTIFIER}(?:s*.s*${IDENTIFIER}){0,2}`
+const IDENTIFIER = '(?:"(?:[^"]|"")+"|\\[[^\\]]+\\]|`[^`]+`|[A-Za-z_][A-Za-z0-9_$]*)'
+const QUALIFIED_IDENTIFIER = `${IDENTIFIER}(?:\\s*\\.\\s*${IDENTIFIER}){0,2}`
+const KEYWORD_FOLLOW_UP_PATTERNS = [
+  { pattern: /\binsert\s+([A-Za-z_]*)$/i, keywords: ["INTO"] },
+  { pattern: /\bdelete\s+([A-Za-z_]*)$/i, keywords: ["FROM"] },
+  { pattern: /\bgroup\s+([A-Za-z_]*)$/i, keywords: ["BY"] },
+  { pattern: /\border\s+([A-Za-z_]*)$/i, keywords: ["BY"] },
+  { pattern: /\b(?:left|right|inner|outer|full|cross)\s+([A-Za-z_]*)$/i, keywords: ["JOIN"] },
+] as const
+const INSERT_FOLLOW_UP_KEYWORDS = ["VALUES", "SELECT", "DEFAULT VALUES"] as const
 
 function normalize(value: string) {
   return value.toLowerCase()
@@ -80,6 +110,14 @@ function inferSqlCasePreference(beforeCursor: string, token: string): SqlCasePre
 
 function formatSqlVocabulary(value: string, preference: SqlCasePreference) {
   return preference === "lower" ? value.toLowerCase() : value.toUpperCase()
+}
+
+function matchKeywordPrefix(keywords: readonly string[], token: string, preference: SqlCasePreference) {
+  if (!token) {
+    return [...keywords]
+  }
+
+  return keywords.filter((keyword) => formatSqlVocabulary(keyword, preference).startsWith(token))
 }
 
 function pushUnique(target: RankedItem[], item: RankedItem) {
@@ -272,6 +310,12 @@ function resolveReferencedRelations(
   return resolved
 }
 
+function resolveRelation(schema: SqlSchemaIndex, ref: { schema?: string; name: string }) {
+  return (
+    schema.findRelations(ref.schema ? `${ref.schema}.${ref.name}` : ref.name)[0] ?? schema.findRelations(ref.name)[0]
+  )
+}
+
 function expectsTableSuggestions(clause: SqlClause) {
   return clause === "from" || clause === "join" || clause === "into"
 }
@@ -326,6 +370,18 @@ function getPostRelationKeywordOptions(beforeCursor: string, clause: SqlClause) 
   return [...FROM_FOLLOWUP_KEYWORDS]
 }
 
+function getKeywordFollowUpOptions(beforeCursor: string) {
+  for (const entry of KEYWORD_FOLLOW_UP_PATTERNS) {
+    const match = beforeCursor.match(entry.pattern)
+    if (!match) {
+      continue
+    }
+    return [...entry.keywords]
+  }
+
+  return []
+}
+
 function shouldPreferFrom(beforeCursor: string, token: string) {
   const matchesSelectStar = /\bSELECT\s+\*\s+\w*$/i.test(beforeCursor) || /\bSELECT\s+\*\s*$/i.test(beforeCursor)
   if (!matchesSelectStar) {
@@ -370,8 +426,9 @@ export function getSqlAutocompleteResult(input: SqlAutocompleteInput): BufferAut
 
   const clause = findCurrentClause(statement.text, statement.cursorOffset)
   const span = findCompletionSpan(statement.text, statement.cursorOffset, statement.start)
+  const insertContext = getInsertContext(statement.text, statement.cursorOffset)
   const sqlCasePreference = inferSqlCasePreference(beforeCursor, span.token)
-  if (!shouldOpenImplicit(beforeCursor, span.token, span.mode)) {
+  if (!shouldOpenImplicit(beforeCursor, span.token, span.mode) && !insertContext) {
     return undefined
   }
 
@@ -388,6 +445,7 @@ export function getSqlAutocompleteResult(input: SqlAutocompleteInput): BufferAut
   }))
   const relations = resolveReferencedRelations(input.schema, statement.text, tempRelations)
   const postRelationKeywords = getPostRelationKeywordOptions(beforeCursor, clause)
+  const keywordFollowUps = getKeywordFollowUpOptions(beforeCursor)
   const items: RankedItem[] = []
 
   if (span.mode === "member" && span.scopeName) {
@@ -412,7 +470,27 @@ export function getSqlAutocompleteResult(input: SqlAutocompleteInput): BufferAut
     return undefined
   }
 
-  if (items.length === 0 && expectsTableSuggestions(clause)) {
+  if (items.length === 0 && insertContext?.mode === "columns") {
+    const target = resolveRelation(input.schema, insertContext.target)
+    if (target) {
+      addColumnItems(items, [target], 0)
+    }
+  }
+
+  if (items.length === 0 && insertContext?.mode === "keywords") {
+    addKeywordItems(
+      items,
+      matchKeywordPrefix(INSERT_FOLLOW_UP_KEYWORDS, span.token, sqlCasePreference),
+      0,
+      sqlCasePreference,
+    )
+  }
+
+  if (!insertContext && items.length === 0 && keywordFollowUps.length > 0) {
+    addKeywordItems(items, keywordFollowUps, 0, sqlCasePreference)
+  }
+
+  if (!insertContext && items.length === 0 && expectsTableSuggestions(clause)) {
     if (postRelationKeywords.length > 0) {
       addKeywordItems(items, postRelationKeywords, 0, sqlCasePreference)
     }
@@ -423,7 +501,7 @@ export function getSqlAutocompleteResult(input: SqlAutocompleteInput): BufferAut
     }
   }
 
-  if (items.length === 0 && clause === "select") {
+  if (!insertContext && items.length === 0 && clause === "select") {
     if (shouldPreferFrom(beforeCursor, span.token)) {
       addKeywordItems(items, ["FROM"], 0, sqlCasePreference)
     }
@@ -435,14 +513,14 @@ export function getSqlAutocompleteResult(input: SqlAutocompleteInput): BufferAut
     }
   }
 
-  if (items.length === 0 && ["where", "having", "on", "set"].includes(clause)) {
+  if (!insertContext && items.length === 0 && ["where", "having", "on", "set"].includes(clause)) {
     addColumnItems(items, relations, 0)
     addOperatorItems(items, input.dialect, 1, sqlCasePreference)
     addKeywordItems(items, EXPRESSION_KEYWORDS, 2, sqlCasePreference)
     addFunctionItems(items, input.dialect, 3, sqlCasePreference)
   }
 
-  if (items.length === 0 && (clause === "group" || clause === "order")) {
+  if (!insertContext && items.length === 0 && (clause === "group" || clause === "order")) {
     addColumnItems(items, relations, 0)
     if (clause === "order") {
       addKeywordItems(items, ORDER_DIRECTION_KEYWORDS, 1, sqlCasePreference)
@@ -450,12 +528,12 @@ export function getSqlAutocompleteResult(input: SqlAutocompleteInput): BufferAut
     addFunctionItems(items, input.dialect, 2, sqlCasePreference)
   }
 
-  if (items.length === 0 && expectsColumnSuggestions(clause)) {
+  if (!insertContext && items.length === 0 && expectsColumnSuggestions(clause)) {
     addColumnItems(items, relations, 0)
     addFunctionItems(items, input.dialect, 1, sqlCasePreference)
   }
 
-  if (items.length === 0) {
+  if (!insertContext && items.length === 0) {
     addKeywordItems(items, input.dialect.keywords, 0, sqlCasePreference)
     addFunctionItems(items, input.dialect, 1, sqlCasePreference)
     addRelationItems(items, tempRelations, 2)
@@ -463,6 +541,7 @@ export function getSqlAutocompleteResult(input: SqlAutocompleteInput): BufferAut
   }
 
   const filtered = sortItems(span.token, items)
+    .filter((item) => !insertContext?.usedColumns.includes(normalize(item.label)))
     .filter((item) => !isNoOpCompletion(statement.text, statement.cursorOffset, item))
     .slice(0, 50)
   if (filtered.length === 0) {

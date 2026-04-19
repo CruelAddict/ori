@@ -67,13 +67,19 @@ function getPopupLeft(anchor: SelectPopupAnchor, width: number) {
   return Math.max(0, anchor.containerWidth - width)
 }
 
-function getPopupWidth<T extends SelectPopupItem>(viewModel: SelectPopupViewModel<T>, availableWidth: number, maxLimit: number) {
+function getPopupWidth<T extends SelectPopupItem>(
+  viewModel: SelectPopupViewModel<T>,
+  availableWidth: number,
+  maxLimit: number,
+) {
   const widths = viewModel.items().map((item) => Bun.stringWidth(item.label) + Bun.stringWidth(item.detail ?? "") + 6)
   const contentWidth = widths.length > 0 ? Math.max(...widths) : MIN_WIDTH
   return Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, availableWidth, contentWidth, maxLimit))
 }
 
-export function createSelectPopup<T extends SelectPopupItem>(options: CreateSelectPopupOptions<T>): SelectPopupModel<T> {
+export function createSelectPopup<T extends SelectPopupItem>(
+  options: CreateSelectPopupOptions<T>,
+): SelectPopupModel<T> {
   const [anchor, setAnchor] = createSignal<SelectPopupAnchor | null>(null)
   const [items, setItemsValue] = createSignal<readonly T[]>([])
   const [selectedIndex, setSelectedIndex] = createSignal(0)
@@ -138,7 +144,7 @@ export function createSelectPopup<T extends SelectPopupItem>(options: CreateSele
 
 export function SelectPopup<T extends SelectPopupItem>(props: SelectPopupProps<T>) {
   const { theme } = useTheme()
-  let scrollRef: ScrollBoxRenderable | undefined
+  const [scrollRef, setScrollRef] = createSignal<ScrollBoxRenderable | undefined>()
   const bindings: KeyBinding[] = [
     {
       pattern: "escape",
@@ -185,34 +191,51 @@ export function SelectPopup<T extends SelectPopupItem>(props: SelectPopupProps<T
     const width = getPopupWidth(viewModel, availableWidth, maxWidth)
     const left = getPopupLeft(anchor, width)
     const height = Math.min(rowCount(), maxHeight)
+    const popupHeight = height + 2
     const belowTop = anchor.y + 1
     const belowSpace = anchor.containerHeight - belowTop
-    const top = belowSpace >= height ? belowTop : Math.max(0, anchor.y - height)
+    const top = belowSpace >= popupHeight ? belowTop : Math.max(0, anchor.y - popupHeight)
 
     return {
       left,
       top,
       width,
       height,
+      popupHeight,
     }
   })
 
   createEffect(() => {
+    if (layout()) {
+      return
+    }
+    setScrollRef(undefined)
+  })
+
+  createEffect(() => {
     const viewModel = props.viewModel()
-    if (!viewModel || !scrollRef) {
+    const nextLayout = layout()
+    const node = scrollRef()
+    if (!viewModel || !nextLayout || !node) {
       return
     }
 
-    const viewportHeight = rowCount()
-    const scrollTop = scrollRef.scrollTop
+    const items = viewModel.items()
+    const viewportHeight = nextLayout.height
+    const maxScrollTop = Math.max(0, items.length - viewportHeight)
+    if (node.scrollTop > maxScrollTop) {
+      node.scrollTo({ x: node.scrollLeft, y: maxScrollTop })
+    }
+
+    const scrollTop = node.scrollTop
     const scrollBottom = scrollTop + viewportHeight
     const selectedIndex = viewModel.selectedIndex()
     if (selectedIndex < scrollTop) {
-      scrollRef.scrollBy(selectedIndex - scrollTop)
+      node.scrollBy(selectedIndex - scrollTop)
       return
     }
     if (selectedIndex + 1 > scrollBottom) {
-      scrollRef.scrollBy(selectedIndex + 1 - scrollBottom)
+      node.scrollBy(selectedIndex + 1 - scrollBottom)
     }
   })
 
@@ -228,7 +251,7 @@ export function SelectPopup<T extends SelectPopupItem>(props: SelectPopupProps<T
             top={nextLayout().top}
             left={nextLayout().left}
             width={nextLayout().width}
-            height={nextLayout().height + 2}
+            height={nextLayout().popupHeight}
             zIndex={30}
             border
             borderColor={theme().get("border")}
@@ -238,7 +261,7 @@ export function SelectPopup<T extends SelectPopupItem>(props: SelectPopupProps<T
               {() => (
                 <OriScrollbox
                   onReady={(node) => {
-                    scrollRef = node
+                    setScrollRef(node)
                   }}
                   height={nextLayout().height}
                   scrollbarOptions={{ visible: false }}

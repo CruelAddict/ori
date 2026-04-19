@@ -207,6 +207,10 @@ describe("sql autocomplete", () => {
       const result = complete("select * from |")
       expectIncludes(result, ["users", "orders", "books"])
     })
+
+    test("suggests INTO after INSERT space", () => {
+      expectOnly(complete("insert |"), ["into"])
+    })
   })
 
   describe("relations", () => {
@@ -277,6 +281,45 @@ describe("sql autocomplete", () => {
     test("formats functions in upper-case for upper-case prefixes", () => {
       const result = complete("SELECT CO|")
       expectIncludes(result, ["COUNT", "COALESCE"])
+    })
+
+    test("suggests only INTO after INSERT prefix", () => {
+      expectOnly(complete("insert in|"), ["into"])
+    })
+
+    test("suggests only INTO after upper-case INSERT prefix", () => {
+      expectOnly(complete("INSERT IN|"), ["INTO"])
+    })
+
+    test("suggests only FROM after DELETE prefix", () => {
+      expectOnly(complete("delete fr|"), ["from"])
+    })
+
+    test("suggests insert follow-up keywords after the target relation", () => {
+      const result = complete("insert into users |")
+      expectIncludes(result, ["values", "select", "default values"])
+      expectExcludes(result, ["users"])
+      expectExcludes(result, ["("])
+    })
+
+    test("stays closed at the end of the insert target relation without whitespace", () => {
+      expect(complete("insert into users|")).toBeUndefined()
+    })
+
+    test("does not fall back to relation names after an insert target relation", () => {
+      expect(complete("insert into users u|")).toBeUndefined()
+    })
+
+    test("suggests insert target columns inside the column list", () => {
+      const result = complete("insert into users (|")
+      expectIncludes(result, ["id", "email", "created_at"])
+      expectExcludes(result, ["users"])
+    })
+
+    test("skips already listed insert target columns", () => {
+      const result = complete("insert into users (id, |")
+      expectIncludes(result, ["email", "created_at"])
+      expectExcludes(result, ["id"])
     })
   })
 

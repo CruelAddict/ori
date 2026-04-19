@@ -111,14 +111,14 @@ function applyLineHighlights(buffer: BufferModel, lineId: string, nextSpans: Lin
   }
 
   const cachedSpans = buffer._lineHighlightSpans.get(lineId) ?? []
-  if (!force && spansEqual(cachedSpans, nextSpans)) {
-    return
-  }
-
   const typeId = ref.extmarks.getTypeId(SYNTAX_EXTMARK_TYPE) ?? ref.extmarks.registerType(SYNTAX_EXTMARK_TYPE)
   const currentSpans: Extmark[] = ref.extmarks
     .getAllForTypeId(typeId)
     .sort((a, b) => a.start - b.start || a.end - b.end || a.styleId! - b.styleId! || a.id - b.id)
+  if (!force && spansEqual(cachedSpans, nextSpans) && extmarksEqual(currentSpans, nextSpans)) {
+    return
+  }
+
   const diff = getSpanDiff(currentSpans, nextSpans)
 
   if (!force && !diff.changed) {
@@ -181,6 +181,18 @@ function spanEqual(a: LineSpan | Extmark, b: LineSpan | Extmark) {
 }
 
 function spansEqual(a: LineSpan[], b: LineSpan[]) {
+  if (a.length !== b.length) {
+    return false
+  }
+  for (let i = 0; i < a.length; i++) {
+    if (!spanEqual(a[i], b[i])) {
+      return false
+    }
+  }
+  return true
+}
+
+function extmarksEqual(a: Extmark[], b: LineSpan[]) {
   if (a.length !== b.length) {
     return false
   }

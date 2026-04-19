@@ -2,6 +2,8 @@ import { buildLineStarts } from "@utils/line-offsets"
 import { collectSqlStatements, getSqlStatementAtOffset } from "../sql-statement-detector"
 import type { SqlDialect } from "./dialect"
 
+/* LLM-generated, use tests as source of truth for expected behavior */
+
 export type SqlClause =
   | "select"
   | "from"
@@ -36,7 +38,13 @@ export type SqlTableRef = {
   alias?: string
 }
 
-const IDENTIFIER = '(?:"(?:[^"]|"")+"|[[^]]+]|`[^`]+`|[A-Za-z_][A-Za-z0-9_$]*)'
+export type SqlInsertContext = {
+  target: SqlTableRef
+  mode: "keywords" | "columns"
+  usedColumns: string[]
+}
+
+const IDENTIFIER = '(?:"(?:[^"]|"")+"|\\[[^\\]]+\\]|`[^`]+`|[A-Za-z_][A-Za-z0-9_$]*)'
 const TABLE_REF_PATTERN = new RegExp(
   `(?:\\bFROM\\b|\\bJOIN\\b|\\bUPDATE\\b|\\bINTO\\b)\\s+(?:(${IDENTIFIER})\\s*\\.\\s*)?(${IDENTIFIER})(?:\\s+(?:AS\\s+)?([A-Za-z_][A-Za-z0-9_$]*))?`,
   "gi",
@@ -504,6 +512,45 @@ export function extractCteNames(text: string) {
   }
 
   return names
+}
+
+export function getInsertContext(text: string, cursorOffset: number): SqlInsertContext | undefined {
+  const beforeCursor = maskSql(text.slice(0, cursorOffset))
+  const keywordMatch = beforeCursor.match(
+    new RegExp(`\\binsert\\s+into\\s+(?:(${IDENTIFIER})\\s*\\.\\s*)?(${IDENTIFIER})\\s+([A-Za-z_]*)$`, "i"),
+  )
+  if (keywordMatch?.[2]) {
+    return {
+      target: {
+        schema: normalizeIdentifier(keywordMatch[1]),
+        name: normalizeIdentifier(keywordMatch[2])!,
+      },
+      mode: "keywords",
+      usedColumns: [],
+    }
+  }
+
+  const columnMatch = beforeCursor.match(
+    new RegExp(`\\binsert\\s+into\\s+(?:(${IDENTIFIER})\\s*\\.\\s*)?(${IDENTIFIER})\\s*\\(([^()]*)$`, "i"),
+  )
+  if (!columnMatch?.[2]) {
+    return undefined
+  }
+
+  const segments = columnMatch[3].split(",")
+  const usedColumns = segments
+    .slice(0, Math.max(0, segments.length - 1))
+    .map((segment) => normalizeIdentifier(segment.trim()))
+    .filter((segment): segment is string => Boolean(segment))
+
+  return {
+    target: {
+      schema: normalizeIdentifier(columnMatch[1]),
+      name: normalizeIdentifier(columnMatch[2])!,
+    },
+    mode: "columns",
+    usedColumns,
+  }
 }
 
 export function findCompletionSpan(text: string, cursorOffset: number, statementStart = 0): SqlCompletionSpan {
