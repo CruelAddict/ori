@@ -95,8 +95,17 @@ export function handleTextAreaChange(buffer: BufferModel, index: LineIndex) {
   }
 
   const text = node.plainText
-  const origin = buffer._pendingChangeOrigin ?? "user"
-  buffer._pendingChangeOrigin = undefined
+  const pending = buffer._pendingChangeOrigin
+  const origin = pending?.origin ?? "user"
+  if (pending && pending.remainingEvents > 1) {
+    buffer._pendingChangeOrigin = {
+      origin: pending.origin,
+      remainingEvents: pending.remainingEvents - 1,
+    }
+  }
+  if (!pending || pending.remainingEvents <= 1) {
+    buffer._pendingChangeOrigin = undefined
+  }
   if (!line.rendered) {
     buffer._setLine(index, { ...line, text, rendered: true })
     return origin
@@ -149,8 +158,21 @@ export function replaceRangeInLine(
 
   const currentDisplayCol = ref.logicalCursor.col
   const targetDisplayCol = addDisplayColumn(displayColumn(currentDisplayCol), insertText.length - (end - start))
-  buffer._pendingChangeOrigin = origin
-  ref.replaceText(nextText)
+  buffer._pendingChangeOrigin = {
+    origin,
+    // Replacing a selection emits two content-change events in OpenTUI:
+    // one for deleting the selection and one for inserting the new text.
+    remainingEvents: origin === "autocomplete" ? 2 : 1,
+  }
+  if (origin === "autocomplete") {
+    // Selection-based replace keeps OpenTUI on its incremental edit path,
+    // which avoids clearing all extmarks for the line on accept.
+    ref.editorView.setSelection(start, end)
+    ref.insertText(insertText)
+  }
+  if (origin !== "autocomplete") {
+    ref.replaceText(nextText)
+  }
   queueMicrotask(() => {
     ref.editBuffer.setCursor(0, targetDisplayCol)
     ref.requestRender()

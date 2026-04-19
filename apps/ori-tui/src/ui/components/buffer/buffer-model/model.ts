@@ -30,6 +30,11 @@ export type BufferModelOptions = {
 
 export type BufferChangeOrigin = "user" | "autocomplete"
 
+type PendingBufferChange = {
+  origin: BufferChangeOrigin
+  remainingEvents: number
+}
+
 export type Line = {
   id: string
   text: string
@@ -122,7 +127,7 @@ export function createBufferModel(options: BufferModelOptions) {
     _syntaxStyle: undefined as SyntaxStyle | undefined,
     _widthMethod: undefined as WidthMethod | undefined,
     _nextLineId: 0,
-    _pendingChangeOrigin: undefined as BufferChangeOrigin | undefined,
+    _pendingChangeOrigin: undefined as PendingBufferChange | undefined,
 
     _debouncedPush: debounce(() => {
       const text = document.lines.map((line) => line.text).join("\n")
