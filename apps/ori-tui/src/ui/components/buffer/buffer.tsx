@@ -5,7 +5,8 @@ import {
   type ScrollPoint,
   scrollIntoView,
 } from "@ui/components/ori-scrollbox"
-import { SelectPopup, type SelectPopupAnchor } from "@ui/components/select-popup"
+import { SelectPopup } from "@ui/components/select-popup"
+import type { SelectPopupAnchor } from "@ui/components/select-popup-model"
 import { useLogger } from "@ui/providers/logger"
 import { useTheme } from "@ui/providers/theme"
 import { type KeyBinding, KeyScope } from "@ui/services/key-scopes"
@@ -341,6 +342,7 @@ export function Buffer(props: BufferProps) {
     {
       pattern: "up",
       handler: withCursor((ctx, event) => {
+        autocomplete.close()
         event.preventDefault()
         bufferModel.handleVerticalMove(ctx.line, -1)
       }),
@@ -348,6 +350,7 @@ export function Buffer(props: BufferProps) {
     {
       pattern: "down",
       handler: withCursor((ctx, event) => {
+        autocomplete.close()
         event.preventDefault()
         bufferModel.handleVerticalMove(ctx.line, 1)
       }),
@@ -355,6 +358,7 @@ export function Buffer(props: BufferProps) {
     {
       pattern: "left",
       handler: withCursor((ctx, event) => {
+        autocomplete.close()
         const atStart = ctx.displayCol === 0 && ctx.row === 0
         if (atStart) {
           event.preventDefault()
@@ -365,6 +369,7 @@ export function Buffer(props: BufferProps) {
     {
       pattern: ["alt+left", "meta+left", "alt+b", "meta+b"],
       handler: withCursor((ctx, event) => {
+        autocomplete.close()
         const atStart = ctx.displayCol === 0 && ctx.row === 0
         if (atStart) {
           event.preventDefault()
@@ -375,6 +380,7 @@ export function Buffer(props: BufferProps) {
     {
       pattern: "right",
       handler: withCursor((ctx, event) => {
+        autocomplete.close()
         const eolCol = bufferModel.getVisualEOLColumn(ctx.line)
         const atEnd = ctx.displayCol === eolCol && ctx.row === 0
         if (atEnd) {
@@ -386,6 +392,7 @@ export function Buffer(props: BufferProps) {
     {
       pattern: ["alt+right", "meta+right", "alt+f", "meta+f"],
       handler: withCursor((ctx, event) => {
+        autocomplete.close()
         const eolCol = bufferModel.getVisualEOLColumn(ctx.line)
         const atEnd = ctx.displayCol === eolCol && ctx.row === 0
         if (atEnd) {

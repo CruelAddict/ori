@@ -1,4 +1,4 @@
-import { createSelectPopup, type SelectPopupAnchor, type SelectPopupViewModel } from "@ui/components/select-popup"
+import { createSelectPopup, type SelectPopupAnchor, type SelectPopupViewModel } from "@ui/components/select-popup-model"
 import { type Accessor, createMemo, createSignal } from "solid-js"
 import type { DocCharOffset, DocCharRange } from "../buffer-model/coords"
 import type { BufferAutocompleteItem, BufferAutocompleteProvider } from "./types"
@@ -9,7 +9,7 @@ function isAutoAutocompleteAllowed(text: string, cursor: number) {
     return true
   }
 
-  return next === " " || next === "\t" || next === "\n" || next === "\r"
+  return next === " " || next === "\t" || next === "\n" || next === "\r" || next === ")" || next === "," || next === ";"
 }
 
 type CreateBufferAutocompleteOptions = {
@@ -92,7 +92,7 @@ export function createBufferAutocomplete(options: CreateBufferAutocompleteOption
 
     const prevStart = replace()?.start
     setReplace(result.replace)
-    popup.setItems(result.items)
+    popup.setItems(result.items, { selectedIndex: 0 })
     if (prevStart === result.replace.start && popup.anchor()) {
       return
     }

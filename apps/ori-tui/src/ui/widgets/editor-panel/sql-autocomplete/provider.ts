@@ -13,17 +13,28 @@ type CreateSqlAutocompleteProviderOptions = {
 export function createSqlAutocompleteProvider(
   options: CreateSqlAutocompleteProviderOptions,
 ): BufferAutocompleteProvider {
-  let cachedKey = ""
+  let cachedNodesById: SqlAutocompleteState["nodesById"] | undefined
+  let cachedRootIds: SqlAutocompleteState["rootIds"] | undefined
+  let cachedLoading: SqlAutocompleteState["loading"] | undefined
+  let cachedLoaded: SqlAutocompleteState["loaded"] | undefined
   let cachedIndex: ReturnType<typeof buildSqlSchemaIndex> | undefined
 
   const getIndex = () => {
     const state = options.getState()
-    const key = `${Object.keys(state.nodesById).length}:${state.rootIds.join(",")}:${state.loading ? 1 : 0}:${state.loaded ? 1 : 0}`
-    if (cachedIndex && cachedKey === key) {
+    if (
+      cachedIndex &&
+      cachedNodesById === state.nodesById &&
+      cachedRootIds === state.rootIds &&
+      cachedLoading === state.loading &&
+      cachedLoaded === state.loaded
+    ) {
       return cachedIndex
     }
 
-    cachedKey = key
+    cachedNodesById = state.nodesById
+    cachedRootIds = state.rootIds
+    cachedLoading = state.loading
+    cachedLoaded = state.loaded
     cachedIndex = buildSqlSchemaIndex(state)
     return cachedIndex
   }

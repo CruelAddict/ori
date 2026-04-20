@@ -3,6 +3,7 @@ import { type Node, NodeType } from "@adapters/ori/client"
 import { buildLineStarts } from "@utils/line-offsets"
 import { resolveSqlDialect } from "./sql-autocomplete/dialect"
 import { getCurrentSqlStatement } from "./sql-autocomplete/sql-context"
+import { createSqlAutocompleteProvider } from "./sql-autocomplete/provider"
 import { getSqlAutocompleteResult } from "./sql-autocomplete/sql-engine"
 import { buildSqlSchemaIndex, type SqlSchemaInput } from "./sql-autocomplete/sql-schema-index"
 import { collectSqlStatements } from "./sql-statement-detector"
@@ -281,6 +282,58 @@ describe("sql autocomplete", () => {
       expectExcludes(result, ["users", "orders"])
     })
 
+    test("suggests cte columns in the outer query scope", () => {
+      const result = complete("with recent as (select id, email from users) select em| from recent")
+      expectIncludes(result, ["email"])
+      expectExcludes(result, ["created_at"])
+    })
+
+    test("does not suggest a cte inside its own query body", () => {
+      const result = complete("with recent as (select * from re|) select * from recent")
+      expectExcludes(result, ["recent"])
+    })
+
+    test("keeps cte projections visible in the outer query without leaking source columns", () => {
+      const result = complete("with recent as (select email as www from authors) select w| from recent", {
+        ...catalog({ public: { authors: ["id", "email", "name"] } }),
+      })
+      expectIncludes(result, ["www"])
+      expectExcludes(result, ["email", "name"])
+    })
+
+    test("does not leak cte source columns into an outer select before FROM", () => {
+      const result = complete("with recent as (select email as www from authors) select w|", {
+        ...catalog({ public: { authors: ["id", "email", "name"] } }),
+      })
+      expectExcludes(result, ["email", "name", "www"])
+    })
+
+    test("suggests derived table columns after dot", () => {
+      const result = complete("select sub.| from (select email from users) sub")
+      expectIncludes(result, ["email"])
+      expectExcludes(result, ["created_at"])
+    })
+
+    test("suggests derived table aliases in select expressions", () => {
+      const result = complete("select s| from (select email from users) sub")
+      expectIncludes(result, ["sub"])
+    })
+
+    test("suggests quoted alias columns and preserves quoted insert text", () => {
+      const result = complete(
+        'select "u".| from users as "u"',
+        catalog({ public: { users: ["id", "EmailAddress"] }, analytics: { books: ["id", "title"] } }),
+      )
+      expectIncludes(result, ["id", "EmailAddress"])
+      expect(result?.items.find((item) => item.label === "EmailAddress")?.insertText).toBe('"EmailAddress"')
+    })
+
+    test("resolves 3-part relation names for column suggestions", () => {
+      const result = complete("select em| from warehouse.public.users")
+      expectIncludes(result, ["email"])
+      expectExcludes(result, ["status"])
+    })
+
     test("prefers FROM after SELECT star prefix", () => {
       expectOnly(complete("select * fr|"), ["from"])
     })
@@ -338,6 +391,16 @@ describe("sql autocomplete", () => {
       const result = complete("insert into users (id, |")
       expectIncludes(result, ["email", "created_at"])
       expectExcludes(result, ["id"])
+    })
+
+    test("suggests SET after UPDATE relation", () => {
+      expectOnly(complete("update users s|"), ["set"])
+    })
+
+    test("limits DELETE follow-up keywords to delete-specific options", () => {
+      const result = complete("delete from users |")
+      expectIncludes(result, ["where", "returning"])
+      expectExcludes(result, ["join", "group by", "order by", "union"])
     })
   })
 
@@ -406,6 +469,37 @@ describe("sql autocomplete", () => {
     test("offers duckdb-specific functions", () => {
       const result = complete("select date_d|", catalog(DEFAULT_CATALOG, "duckdb"))
       expectIncludes(result, ["date_diff"])
+    })
+  })
+
+  describe("provider cache", () => {
+    test("rebuilds schema index when introspection references change with same node counts", () => {
+      let state = catalog()
+      const provider = createSqlAutocompleteProvider({
+        getState: () => state,
+      })
+
+      const first = withCursor("select * from users where em|")
+      expectIncludes(
+        provider.getCompletions({ text: first.text, cursor: first.cursor }),
+        ["email"],
+      )
+
+      state = catalog({
+        public: {
+          users: ["id", "email_address", "created_at"],
+          orders: ["id", "user_id", "status"],
+        },
+        analytics: {
+          books: ["id", "title"],
+        },
+      })
+
+      const second = withCursor("select * from users where email_a|")
+      expectIncludes(
+        provider.getCompletions({ text: second.text, cursor: second.cursor }),
+        ["email_address"],
+      )
     })
   })
 })

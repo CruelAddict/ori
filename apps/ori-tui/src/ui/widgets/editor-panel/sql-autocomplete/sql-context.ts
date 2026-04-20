@@ -34,8 +34,21 @@ export type SqlCompletionSpan = {
 
 export type SqlTableRef = {
   name: string
+  database?: string
   schema?: string
   alias?: string
+}
+
+export type SqlNamedQuery = {
+  name: string
+  query: string
+  queryStart: number
+  queryEnd: number
+}
+
+export type SqlDerivedTable = {
+  alias: string
+  query: string
 }
 
 export type SqlInsertContext = {
@@ -46,10 +59,10 @@ export type SqlInsertContext = {
 
 const IDENTIFIER = '(?:"(?:[^"]|"")+"|\\[[^\\]]+\\]|`[^`]+`|[A-Za-z_][A-Za-z0-9_$]*)'
 const TABLE_REF_PATTERN = new RegExp(
-  `(?:\\bFROM\\b|\\bJOIN\\b|\\bUPDATE\\b|\\bINTO\\b)\\s+(?:(${IDENTIFIER})\\s*\\.\\s*)?(${IDENTIFIER})(?:\\s+(?:AS\\s+)?([A-Za-z_][A-Za-z0-9_$]*))?`,
+  `(?:\\bFROM\\b|\\bJOIN\\b|\\bUPDATE\\b|\\bINTO\\b)\\s+(?:(${IDENTIFIER})\\s*\\.\\s*)?(?:(${IDENTIFIER})\\s*\\.\\s*)?(${IDENTIFIER})(?:\\s+(?:AS\\s+)?(${IDENTIFIER}))?`,
   "gi",
 )
-const CTE_NAME_PATTERN = /([A-Za-z_][A-Za-z0-9_$]*)\s+AS\s*\(/gi
+const IDENTIFIER_START = new RegExp(`^${IDENTIFIER}`)
 const RESERVED_WORDS = new Set([
   "select",
   "from",
@@ -176,7 +189,7 @@ function scanState(text: string) {
   return state
 }
 
-function maskSql(text: string) {
+export function maskSql(text: string, keepDoubleQuotes = false) {
   let masked = ""
   let state: ParseState = "normal"
   let tag = ""
@@ -205,7 +218,7 @@ function maskSql(text: string) {
       }
       if (ch === '"') {
         state = "double-quote"
-        masked += " "
+        masked += keepDoubleQuotes ? ch : " "
         continue
       }
 
@@ -259,16 +272,16 @@ function maskSql(text: string) {
 
     if (state === "double-quote") {
       if (ch === '"' && next === '"') {
-        masked += "  "
+        masked += keepDoubleQuotes ? '""' : "  "
         i += 1
         continue
       }
       if (ch === '"') {
         state = "normal"
-        masked += " "
+        masked += keepDoubleQuotes ? ch : " "
         continue
       }
-      masked += ch === "\n" ? "\n" : " "
+      masked += keepDoubleQuotes ? ch : ch === "\n" ? "\n" : " "
       continue
     }
 
@@ -351,6 +364,74 @@ export function normalizeIdentifier(value: string | undefined) {
   return value
 }
 
+function skipWhitespace(text: string, index: number) {
+  let i = index
+  while (i < text.length && /\s/.test(text[i] ?? "")) {
+    i += 1
+  }
+  return i
+}
+
+function readIdentifier(text: string, index: number) {
+  const value = text.slice(index).match(IDENTIFIER_START)?.[0]
+  if (!value) {
+    return undefined
+  }
+
+  return {
+    value,
+    end: index + value.length,
+  }
+}
+
+function findMatchingParen(text: string, openIndex: number) {
+  if (text[openIndex] !== "(") {
+    return undefined
+  }
+
+  let depth = 0
+  for (let i = openIndex; i < text.length; i += 1) {
+    const ch = text[i]
+    if (ch === "(") {
+      depth += 1
+      continue
+    }
+    if (ch !== ")") {
+      continue
+    }
+    depth -= 1
+    if (depth === 0) {
+      return i
+    }
+  }
+}
+
+function maskNestedContents(text: string, keepDoubleQuotes = false) {
+  const masked = maskSql(text, keepDoubleQuotes)
+  let next = ""
+  let depth = 0
+
+  for (const ch of masked) {
+    if (ch === "(") {
+      depth += 1
+      next += ch
+      continue
+    }
+    if (ch === ")") {
+      depth = Math.max(0, depth - 1)
+      next += ch
+      continue
+    }
+    if (depth === 0) {
+      next += ch
+      continue
+    }
+    next += ch === "\n" ? "\n" : " "
+  }
+
+  return next
+}
+
 export function findCurrentClause(text: string, cursorOffset: number): SqlClause {
   const masked = maskSql(text.slice(0, cursorOffset))
   const clauses: SqlClause[] = ["unknown"]
@@ -431,20 +512,23 @@ export function findCurrentClause(text: string, cursorOffset: number): SqlClause
 
 export function extractTableRefs(text: string): SqlTableRef[] {
   const refs: SqlTableRef[] = []
-  const masked = maskSql(text)
+  const masked = maskNestedContents(text, true)
 
   for (const match of masked.matchAll(TABLE_REF_PATTERN)) {
-    const schema = normalizeIdentifier(match[1])
-    const name = normalizeIdentifier(match[2])
-    const alias = match[3]
+    const first = normalizeIdentifier(match[1])
+    const second = normalizeIdentifier(match[2])
+    const name = normalizeIdentifier(match[3])
+    const alias = normalizeIdentifier(match[4])
     if (!name) {
       continue
     }
+    const database = second ? first : undefined
+    const schema = second ?? first
     if (alias && RESERVED_WORDS.has(alias.toLowerCase())) {
-      refs.push({ name, schema })
+      refs.push({ name, database, schema })
       continue
     }
-    refs.push({ name, schema, alias })
+    refs.push({ name, database, schema, alias })
   }
 
   return refs
@@ -461,51 +545,118 @@ export function buildAliasMap(refs: SqlTableRef[]) {
   return aliases
 }
 
-export function extractCteNames(text: string) {
-  const masked = maskSql(text)
+export function extractCteQueries(text: string): SqlNamedQuery[] {
+  const masked = maskSql(text, true)
   const withIndex = masked.search(/\bwith\b/i)
   if (withIndex === -1) {
     return []
   }
 
-  const names: string[] = []
-  let depth = 0
-  let segment = ""
-
-  for (const ch of masked.slice(withIndex + 4)) {
-    if (ch === "(") {
-      depth += 1
-    }
-    if (ch === ")") {
-      depth = Math.max(0, depth - 1)
-    }
-    if (depth === 0 && /\bselect\b/i.test(segment.slice(-8) + ch)) {
-      break
-    }
-    segment += ch
+  const queries: SqlNamedQuery[] = []
+  let index = skipWhitespace(masked, withIndex + 4)
+  const recursiveMatch = masked.slice(index).match(/^recursive\b/i)
+  if (recursiveMatch?.[0]) {
+    index = skipWhitespace(masked, index + recursiveMatch[0].length)
   }
 
-  for (const match of segment.matchAll(CTE_NAME_PATTERN)) {
-    const name = match[1]
-    if (!name) {
+  while (index < masked.length) {
+    const identifier = readIdentifier(text, index)
+    const name = normalizeIdentifier(identifier?.value)
+    if (!identifier || !name) {
+      return queries
+    }
+
+    index = skipWhitespace(masked, identifier.end)
+    if (masked[index] === "(") {
+      const columnsEnd = findMatchingParen(masked, index)
+      if (columnsEnd === undefined) {
+        return queries
+      }
+      index = skipWhitespace(masked, columnsEnd + 1)
+    }
+
+    const asMatch = masked.slice(index).match(/^as\b/i)
+    if (!asMatch?.[0]) {
+      return queries
+    }
+
+    index = skipWhitespace(masked, index + asMatch[0].length)
+    if (masked[index] !== "(") {
+      return queries
+    }
+
+    const queryEnd = findMatchingParen(masked, index)
+    if (queryEnd === undefined) {
+      return queries
+    }
+
+    queries.push({
+      name,
+      query: text.slice(index + 1, queryEnd),
+      queryStart: index + 1,
+      queryEnd,
+    })
+
+    index = skipWhitespace(masked, queryEnd + 1)
+    if (masked[index] !== ",") {
+      return queries
+    }
+    index = skipWhitespace(masked, index + 1)
+  }
+
+  return queries
+}
+
+export function extractCteNames(text: string) {
+  return extractCteQueries(text).map((item) => item.name)
+}
+
+export function extractDerivedTables(text: string): SqlDerivedTable[] {
+  const masked = maskNestedContents(text, true)
+  const derived: SqlDerivedTable[] = []
+  const pattern = /\b(?:from|join)\b\s*\(/gi
+
+  for (const match of masked.matchAll(pattern)) {
+    const openIndex = match.index + match[0].length - 1
+    const closeIndex = findMatchingParen(masked, openIndex)
+    if (closeIndex === undefined) {
       continue
     }
-    names.push(name)
+
+    let aliasIndex = skipWhitespace(masked, closeIndex + 1)
+    const asMatch = masked.slice(aliasIndex).match(/^as\b/i)
+    if (asMatch?.[0]) {
+      aliasIndex = skipWhitespace(masked, aliasIndex + asMatch[0].length)
+    }
+
+    const alias = normalizeIdentifier(readIdentifier(text, aliasIndex)?.value)
+    if (!alias) {
+      continue
+    }
+
+    derived.push({
+      alias,
+      query: text.slice(openIndex + 1, closeIndex),
+    })
   }
 
-  return names
+  return derived
 }
 
 export function getInsertContext(text: string, cursorOffset: number): SqlInsertContext | undefined {
-  const beforeCursor = maskSql(text.slice(0, cursorOffset))
+  const beforeCursor = maskSql(text.slice(0, cursorOffset), true)
   const keywordMatch = beforeCursor.match(
-    new RegExp(`\\binsert\\s+into\\s+(?:(${IDENTIFIER})\\s*\\.\\s*)?(${IDENTIFIER})\\s+([A-Za-z_]*)$`, "i"),
+    new RegExp(
+      `\\binsert\\s+into\\s+(?:(${IDENTIFIER})\\s*\\.\\s*)?(?:(${IDENTIFIER})\\s*\\.\\s*)?(${IDENTIFIER})\\s+([A-Za-z_]*)$`,
+      "i",
+    ),
   )
-  if (keywordMatch?.[2]) {
+  if (keywordMatch?.[3]) {
     return {
       target: {
-        schema: normalizeIdentifier(keywordMatch[1]),
-        name: normalizeIdentifier(keywordMatch[2])!,
+        database: keywordMatch[2] ? normalizeIdentifier(keywordMatch[1]) : undefined,
+        schema: normalizeIdentifier(keywordMatch[2] ?? keywordMatch[1]),
+        name: normalizeIdentifier(keywordMatch[3])!,
       },
       mode: "keywords",
       usedColumns: [],
@@ -513,13 +664,16 @@ export function getInsertContext(text: string, cursorOffset: number): SqlInsertC
   }
 
   const columnMatch = beforeCursor.match(
-    new RegExp(`\\binsert\\s+into\\s+(?:(${IDENTIFIER})\\s*\\.\\s*)?(${IDENTIFIER})\\s*\\(([^()]*)$`, "i"),
+    new RegExp(
+      `\\binsert\\s+into\\s+(?:(${IDENTIFIER})\\s*\\.\\s*)?(?:(${IDENTIFIER})\\s*\\.\\s*)?(${IDENTIFIER})\\s*\\(([^()]*)$`,
+      "i",
+    ),
   )
-  if (!columnMatch?.[2]) {
+  if (!columnMatch?.[3]) {
     return undefined
   }
 
-  const segments = columnMatch[3].split(",")
+  const segments = columnMatch[4].split(",")
   const usedColumns = segments
     .slice(0, Math.max(0, segments.length - 1))
     .map((segment) => normalizeIdentifier(segment.trim()))
@@ -527,8 +681,9 @@ export function getInsertContext(text: string, cursorOffset: number): SqlInsertC
 
   return {
     target: {
-      schema: normalizeIdentifier(columnMatch[1]),
-      name: normalizeIdentifier(columnMatch[2])!,
+      database: columnMatch[2] ? normalizeIdentifier(columnMatch[1]) : undefined,
+      schema: normalizeIdentifier(columnMatch[2] ?? columnMatch[1]),
+      name: normalizeIdentifier(columnMatch[3])!,
     },
     mode: "columns",
     usedColumns,

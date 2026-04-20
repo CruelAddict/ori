@@ -1,6 +1,6 @@
 import type { MouseEvent, Renderable, ScrollBoxRenderable } from "@opentui/core"
 import { useTheme } from "@ui/providers/theme"
-import type { JSX } from "solid-js"
+import { splitProps, type JSX } from "solid-js"
 import { patchBrailleScrollbarThumbs } from "./ori-scrollbox-braille"
 import {
   needsCoupledOverflowPatch as getNeedsCoupledOverflowPatch,
@@ -89,52 +89,52 @@ export type ViewportRect = {
 
 export function OriScrollbox(props: OriScrollboxProps) {
   const { theme } = useTheme()
-  const {
-    onReady,
-    minHorizontalThumbWidth,
-    minVerticalThumbHeight,
-    scrollSpeed,
-    onSync,
-    onUserScroll,
-    children,
-    scrollX,
-    scrollY,
-    horizontalScrollbarOptions,
-    verticalScrollbarOptions,
-    ...scrollboxProps
-  } = props
+  const [local, scrollboxProps] = splitProps(props, [
+    "onReady",
+    "minHorizontalThumbWidth",
+    "minVerticalThumbHeight",
+    "scrollSpeed",
+    "onSync",
+    "onUserScroll",
+    "children",
+    "scrollX",
+    "scrollY",
+    "horizontalScrollbarOptions",
+    "verticalScrollbarOptions",
+  ])
 
-  const enabledScrollX = scrollX ?? true
-  const enabledScrollY = scrollY ?? true
+  const enabledScrollX = () => local.scrollX ?? true
+  const enabledScrollY = () => local.scrollY ?? true
 
-  const needsCoupledOverflowPatch = getNeedsCoupledOverflowPatch({
-    scrollX: enabledScrollX,
-    scrollY: enabledScrollY,
-    scrollbarOptions: scrollboxProps.scrollbarOptions,
-    horizontalScrollbarOptions,
-    verticalScrollbarOptions,
-  })
+  const needsCoupledOverflowPatch = () =>
+    getNeedsCoupledOverflowPatch({
+      scrollX: enabledScrollX(),
+      scrollY: enabledScrollY(),
+      scrollbarOptions: scrollboxProps.scrollbarOptions,
+      horizontalScrollbarOptions: local.horizontalScrollbarOptions,
+      verticalScrollbarOptions: local.verticalScrollbarOptions,
+    })
 
   const handleRef = (node: ScrollBoxRenderable | undefined) => {
-    onReady?.(node)
+    local.onReady?.(node)
     if (!node) return
 
     enforceStableScrollboxOverflowLayout(node)
     patchBrailleScrollbarThumbs(node)
 
-    if (typeof minHorizontalThumbWidth === "number") {
-      enforceScrollbarMinThumbSize(node, "horizontal", minHorizontalThumbWidth)
+    if (typeof local.minHorizontalThumbWidth === "number") {
+      enforceScrollbarMinThumbSize(node, "horizontal", local.minHorizontalThumbWidth)
     }
 
-    if (typeof minVerticalThumbHeight === "number") {
-      enforceScrollbarMinThumbSize(node, "vertical", minVerticalThumbHeight)
+    if (typeof local.minVerticalThumbHeight === "number") {
+      enforceScrollbarMinThumbSize(node, "vertical", local.minVerticalThumbHeight)
     }
 
-    if (needsCoupledOverflowPatch) {
+    if (needsCoupledOverflowPatch()) {
       installCoupledOverflowPatch(node)
     }
 
-    const needsEventSyncPatch = Boolean(scrollSpeed) || Boolean(onSync) || Boolean(onUserScroll)
+    const needsEventSyncPatch = Boolean(local.scrollSpeed) || Boolean(local.onSync) || Boolean(local.onUserScroll)
 
     if (!needsEventSyncPatch) {
       return
@@ -145,16 +145,16 @@ export function OriScrollbox(props: OriScrollboxProps) {
     // @ts-expect-error onMouseEvent is protected in typings
     const originalOnMouseEvent = node.onMouseEvent?.bind(node)
     const handleMouseEvent =
-      scrollSpeed && originalOnMouseEvent
-        ? createScrollSpeedHandler(originalOnMouseEvent, scrollSpeed)
+      local.scrollSpeed && originalOnMouseEvent
+        ? createScrollSpeedHandler(originalOnMouseEvent, local.scrollSpeed)
         : originalOnMouseEvent
 
-    installScrollbarUserScrollPatch(node, onUserScroll, onSync)
+    installScrollbarUserScrollPatch(node, local.onUserScroll, local.onSync)
 
     // @ts-expect-error onUpdate is protected in typings
     node.onUpdate = (deltaTime: number) => {
       originalOnUpdate?.(deltaTime)
-      onSync?.()
+      local.onSync?.()
     }
 
     // @ts-expect-error onMouseEvent is protected in typings
@@ -170,7 +170,7 @@ export function OriScrollbox(props: OriScrollboxProps) {
           y: newTop - prevTop,
         }
         if (delta.x !== 0 || delta.y !== 0) {
-          onUserScroll?.({
+          local.onUserScroll?.({
             event,
             delta,
             scrollLeft: newLeft,
@@ -178,18 +178,18 @@ export function OriScrollbox(props: OriScrollboxProps) {
           })
         }
       }
-      onSync?.()
+      local.onSync?.()
     }
 
-    process.nextTick(() => onSync?.())
+    process.nextTick(() => local.onSync?.())
   }
 
   return (
     <scrollbox
       {...scrollboxProps}
       ref={handleRef}
-      scrollX={enabledScrollX}
-      scrollY={enabledScrollY}
+      scrollX={enabledScrollX()}
+      scrollY={enabledScrollY()}
       horizontalScrollbarOptions={mergeScrollbarOptions(
         {
           flexShrink: 0,
@@ -199,7 +199,7 @@ export function OriScrollbox(props: OriScrollboxProps) {
             backgroundColor: theme().get("scrollbar_background"),
           },
         },
-        horizontalScrollbarOptions,
+        local.horizontalScrollbarOptions,
       )}
       verticalScrollbarOptions={mergeScrollbarOptions(
         {
@@ -210,10 +210,10 @@ export function OriScrollbox(props: OriScrollboxProps) {
             backgroundColor: theme().get("scrollbar_background"),
           },
         },
-        verticalScrollbarOptions,
+        local.verticalScrollbarOptions,
       )}
     >
-      {children}
+      {local.children}
     </scrollbox>
   )
 }

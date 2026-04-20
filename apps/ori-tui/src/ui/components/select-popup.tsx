@@ -1,41 +1,9 @@
 import type { ScrollBoxRenderable } from "@opentui/core"
 import { OriScrollbox } from "@ui/components/ori-scrollbox"
+import type { SelectPopupAnchor, SelectPopupItem, SelectPopupViewModel } from "@ui/components/select-popup-model"
 import { useTheme } from "@ui/providers/theme"
 import { type KeyBinding, KeyScope } from "@ui/services/key-scopes"
 import { type Accessor, createEffect, createMemo, createSignal, For, Show } from "solid-js"
-
-export type SelectPopupAnchor = {
-  x: number
-  y: number
-  containerWidth: number
-  containerHeight: number
-}
-
-export type SelectPopupItem = {
-  id: string
-  label: string
-  detail?: string
-}
-
-export type SelectPopupViewModel<T extends SelectPopupItem = SelectPopupItem> = {
-  anchor: Accessor<SelectPopupAnchor | null>
-  items: Accessor<readonly T[]>
-  selectedIndex: Accessor<number>
-  close: () => void
-  move: (delta: -1 | 1) => void
-  hover: (index: number) => void
-  select: () => boolean
-}
-
-export type SelectPopupModel<T extends SelectPopupItem = SelectPopupItem> = SelectPopupViewModel<T> & {
-  setAnchor: (anchor: SelectPopupAnchor | null) => void
-  setItems: (items: readonly T[]) => void
-}
-
-type CreateSelectPopupOptions<T extends SelectPopupItem> = {
-  onSelect: (item: T) => boolean
-  onClose?: () => void
-}
 
 type SelectPopupProps<T extends SelectPopupItem = SelectPopupItem> = {
   viewModel: Accessor<SelectPopupViewModel<T> | undefined>
@@ -45,20 +13,6 @@ const MAX_VISIBLE_ROWS = 8
 const MIN_WIDTH = 24
 const MAX_WIDTH = 64
 
-function getSelectedIndex<T extends SelectPopupItem>(current: readonly T[], currentIndex: number, next: readonly T[]) {
-  const selected = current[currentIndex]
-  if (!selected) {
-    return 0
-  }
-
-  const index = next.findIndex((item) => item.id === selected.id)
-  if (index >= 0) {
-    return index
-  }
-
-  return Math.min(currentIndex, Math.max(0, next.length - 1))
-}
-
 function getPopupLeft(anchor: SelectPopupAnchor, width: number) {
   if (anchor.x + width <= anchor.containerWidth) {
     return anchor.x
@@ -67,79 +21,10 @@ function getPopupLeft(anchor: SelectPopupAnchor, width: number) {
   return Math.max(0, anchor.containerWidth - width)
 }
 
-function getPopupWidth<T extends SelectPopupItem>(
-  viewModel: SelectPopupViewModel<T>,
-  availableWidth: number,
-  maxLimit: number,
-) {
+function getPopupWidth<T extends SelectPopupItem>(viewModel: SelectPopupViewModel<T>, availableWidth: number, maxLimit: number) {
   const widths = viewModel.items().map((item) => Bun.stringWidth(item.label) + Bun.stringWidth(item.detail ?? "") + 6)
   const contentWidth = widths.length > 0 ? Math.max(...widths) : MIN_WIDTH
   return Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, availableWidth, contentWidth, maxLimit))
-}
-
-export function createSelectPopup<T extends SelectPopupItem>(
-  options: CreateSelectPopupOptions<T>,
-): SelectPopupModel<T> {
-  const [anchor, setAnchor] = createSignal<SelectPopupAnchor | null>(null)
-  const [items, setItemsValue] = createSignal<readonly T[]>([])
-  const [selectedIndex, setSelectedIndex] = createSignal(0)
-
-  const close = () => {
-    setAnchor(null)
-    setItemsValue([])
-    setSelectedIndex(0)
-    options.onClose?.()
-  }
-
-  const setItems = (next: readonly T[]) => {
-    setSelectedIndex((currentIndex) => getSelectedIndex(items(), currentIndex, next))
-    setItemsValue(next)
-  }
-
-  const move = (delta: -1 | 1) => {
-    const size = items().length
-    if (size === 0) {
-      return
-    }
-
-    setSelectedIndex((currentIndex) => (currentIndex + delta + size) % size)
-  }
-
-  const hover = (index: number) => {
-    const size = items().length
-    if (index < 0 || index >= size || selectedIndex() === index) {
-      return
-    }
-
-    setSelectedIndex(index)
-  }
-
-  const select = () => {
-    const item = items()[selectedIndex()]
-    if (!item) {
-      return false
-    }
-
-    const applied = options.onSelect(item)
-    if (!applied) {
-      return false
-    }
-
-    close()
-    return true
-  }
-
-  return {
-    anchor,
-    items,
-    selectedIndex,
-    setAnchor,
-    setItems,
-    close,
-    move,
-    hover,
-    select,
-  }
 }
 
 export function SelectPopup<T extends SelectPopupItem>(props: SelectPopupProps<T>) {

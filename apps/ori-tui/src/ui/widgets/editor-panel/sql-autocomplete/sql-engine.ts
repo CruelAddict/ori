@@ -3,7 +3,8 @@ import { docCharRange } from "@ui/components/buffer/buffer-model/coords"
 import type { SqlDialect } from "./dialect"
 import {
   buildAliasMap,
-  extractCteNames,
+  extractCteQueries,
+  extractDerivedTables,
   extractTableRefs,
   findCompletionSpan,
   findCurrentClause,
@@ -11,7 +12,10 @@ import {
   getInsertContext,
   getTempTableNames,
   isInsideSuppressedRegion,
+  maskSql,
+  normalizeIdentifier,
   type SqlClause,
+  type SqlTableRef,
 } from "./sql-context"
 import type { SqlRelation, SqlSchemaIndex } from "./sql-schema-index"
 
@@ -30,6 +34,23 @@ type SqlAutocompleteInput = {
 
 type TempRelation = SqlRelation & {
   source: "temp"
+}
+
+type InlineRelation = {
+  id: string
+  name: string
+  kind: "cte" | "subquery"
+  fullName: string
+  columns: SqlRelation["columns"]
+  source: "cte" | "derived"
+}
+
+type CompletionRelation = SqlRelation | TempRelation | InlineRelation
+
+type QueryScope = {
+  text: string
+  start: number
+  visibleCtes: readonly SqlNamedQuery[]
 }
 
 type SqlCasePreference = "lower" | "upper"
@@ -86,6 +107,217 @@ const KEYWORD_FOLLOW_UP_PATTERNS = [
   { pattern: /\b(?:left|right|inner|outer|full|cross)\s+([A-Za-z_]*)$/i, keywords: ["JOIN"] },
 ] as const
 const INSERT_FOLLOW_UP_KEYWORDS = ["VALUES", "SELECT", "DEFAULT VALUES"] as const
+const SIMPLE_IDENTIFIER = /^[a-z_][a-z0-9_$]*$/
+
+function formatSqlIdentifier(value: string) {
+  if (SIMPLE_IDENTIFIER.test(value)) {
+    return value
+  }
+
+  return `"${value.replaceAll('"', '""')}"`
+}
+
+function buildRelationLookupNames(ref: { database?: string; schema?: string; name: string }) {
+  const names: string[] = []
+  if (ref.database && ref.schema) {
+    names.push(`${ref.database}.${ref.schema}.${ref.name}`)
+  }
+  if (ref.schema) {
+    names.push(`${ref.schema}.${ref.name}`)
+  }
+  names.push(ref.name)
+  return names
+}
+
+function pushUniqueColumns(target: SqlRelation["columns"], columns: readonly SqlRelation["columns"][number][]) {
+  for (const column of columns) {
+    if (target.some((item) => normalize(item.name) === normalize(column.name))) {
+      continue
+    }
+    target.push(column)
+  }
+}
+
+function splitTopLevelSqlList(text: string) {
+  const masked = maskSql(text)
+  const parts: string[] = []
+  let depth = 0
+  let start = 0
+
+  for (let i = 0; i < masked.length; i += 1) {
+    const ch = masked[i]
+    if (ch === "(") {
+      depth += 1
+      continue
+    }
+    if (ch === ")") {
+      depth = Math.max(0, depth - 1)
+      continue
+    }
+    if (depth === 0 && ch === ",") {
+      parts.push(text.slice(start, i))
+      start = i + 1
+    }
+  }
+
+  parts.push(text.slice(start))
+  return parts
+}
+
+function findTopLevelKeyword(text: string, keyword: string, from = 0) {
+  const masked = maskSql(text)
+  const needle = keyword.toLowerCase()
+  let depth = 0
+  let token = ""
+  let tokenStart = -1
+
+  for (let i = from; i < masked.length; i += 1) {
+    const ch = masked[i] ?? ""
+    if (ch === "(") {
+      if (depth === 0 && token && token.toLowerCase() === needle) {
+        return tokenStart
+      }
+      depth += 1
+      token = ""
+      tokenStart = -1
+      continue
+    }
+    if (ch === ")") {
+      if (depth === 0 && token && token.toLowerCase() === needle) {
+        return tokenStart
+      }
+      depth = Math.max(0, depth - 1)
+      token = ""
+      tokenStart = -1
+      continue
+    }
+    if (depth > 0) {
+      continue
+    }
+
+    const isWord = /[A-Za-z_]/.test(ch) || (token && /[A-Za-z0-9_$]/.test(ch))
+    if (isWord) {
+      if (!token) {
+        tokenStart = i
+      }
+      token += ch
+      continue
+    }
+    if (!token) {
+      continue
+    }
+    if (token.toLowerCase() === needle) {
+      return tokenStart
+    }
+    token = ""
+    tokenStart = -1
+  }
+
+  if (token && token.toLowerCase() === needle) {
+    return tokenStart
+  }
+}
+
+function findMatchingParen(masked: string, openIndex: number) {
+  if (masked[openIndex] !== "(") {
+    return undefined
+  }
+
+  let depth = 0
+  for (let i = openIndex; i < masked.length; i += 1) {
+    const ch = masked[i]
+    if (ch === "(") {
+      depth += 1
+      continue
+    }
+    if (ch !== ")") {
+      continue
+    }
+    depth -= 1
+    if (depth === 0) {
+      return i
+    }
+  }
+}
+
+function getNestedQueryScope(text: string, cursorOffset: number) {
+  const masked = maskSql(text, true)
+  const stack: number[] = []
+
+  for (let i = 0; i < Math.min(cursorOffset, masked.length); i += 1) {
+    const ch = masked[i]
+    if (ch === "(") {
+      stack.push(i)
+      continue
+    }
+    if (ch === ")") {
+      stack.pop()
+    }
+  }
+
+  for (let i = stack.length - 1; i >= 0; i -= 1) {
+    const openIndex = stack[i]
+    const start = openIndex + 1
+    const relativeCursor = cursorOffset - start
+    if (relativeCursor < 0) {
+      continue
+    }
+
+    const beforeCursor = text.slice(start, cursorOffset)
+    if (findTopLevelKeyword(beforeCursor, "select") === undefined && findTopLevelKeyword(beforeCursor, "with") === undefined) {
+      continue
+    }
+
+    const end = findMatchingParen(masked, openIndex) ?? text.length
+    const inner = text.slice(start, end)
+    const nested = getNestedQueryScope(inner, relativeCursor)
+    return {
+      text: nested.text,
+      start: start + nested.start,
+    }
+  }
+
+  return {
+    text,
+    start: 0,
+  }
+}
+
+function getActiveQueryScope(statementText: string, cursorOffset: number): QueryScope {
+  const ctes = extractCteQueries(statementText)
+
+  for (let i = 0; i < ctes.length; i += 1) {
+    const cte = ctes[i]
+    if (cursorOffset < cte.queryStart || cursorOffset > cte.queryEnd) {
+      continue
+    }
+
+    const nested = getNestedQueryScope(cte.query, cursorOffset - cte.queryStart)
+    return {
+      text: nested.text,
+      start: cte.queryStart + nested.start,
+      visibleCtes: ctes.slice(0, i),
+    }
+  }
+
+  const last = ctes.at(-1)
+  if (!last || cursorOffset < last.queryEnd + 1) {
+    const nested = getNestedQueryScope(statementText, cursorOffset)
+    return {
+      text: nested.text,
+      start: nested.start,
+      visibleCtes: [],
+    }
+  }
+
+  const start = last.queryEnd + 1
+  const nested = getNestedQueryScope(statementText.slice(start), cursorOffset - start)
+  return {
+    text: nested.text,
+    start: start + nested.start,
+    visibleCtes: ctes,
+  }
+}
 
 function normalize(value: string) {
   return value.toLowerCase()
@@ -182,36 +414,167 @@ function sortItems(query: string, items: RankedItem[]) {
     }))
 }
 
-function relationDetail(relation: SqlRelation | TempRelation) {
-  const parts: string[] = [relation.kind]
-  if ("source" in relation && relation.source === "temp") {
-    parts.push("temp")
+function createInlineRelation(
+  name: string,
+  kind: InlineRelation["kind"],
+  source: InlineRelation["source"],
+  columns: SqlRelation["columns"],
+): InlineRelation {
+  return {
+    id: `${source}:${name}`,
+    name,
+    kind,
+    fullName: name,
+    columns,
+    source,
   }
-  if (relation.schema) {
+}
+
+function resolveSchemaRelation(schema: SqlSchemaIndex, ref: { database?: string; schema?: string; name: string }) {
+  for (const name of buildRelationLookupNames(ref)) {
+    const relation = schema.findRelations(name)[0]
+    if (relation) {
+      return relation
+    }
+  }
+}
+
+function extractProjectionAlias(expression: string) {
+  const asMatch = expression.match(
+    /\s+as\s+((?:"(?:[^"]|"")+"|\[[^\]]+\]|`[^`]+`|[A-Za-z_][A-Za-z0-9_$]*))\s*$/i,
+  )
+  if (asMatch?.[1]) {
+    return normalizeIdentifier(asMatch[1])
+  }
+
+  const nameMatch = expression.match(
+    /(?:^|\.)\s*((?:"(?:[^"]|"")+"|\[[^\]]+\]|`[^`]+`|[A-Za-z_][A-Za-z0-9_$]*))\s*$/,
+  )
+  return normalizeIdentifier(nameMatch?.[1])
+}
+
+function resolveScopedColumns(scopeName: string, relations: readonly CompletionRelation[]) {
+  return relations.find((relation) => normalize(relation.name) === normalize(scopeName))?.columns ?? []
+}
+
+function inferQueryColumns(
+  queryText: string,
+  schema: SqlSchemaIndex,
+  tempRelations: readonly TempRelation[],
+  parentCtes: ReadonlyMap<string, InlineRelation>,
+  cache: Map<string, SqlRelation["columns"]>,
+  active: Set<string>,
+): SqlRelation["columns"] {
+  const key = queryText.trim()
+  const cached = cache.get(key)
+  if (cached) {
+    return cached
+  }
+  if (active.has(key)) {
+    return []
+  }
+
+  active.add(key)
+  const cteRelations = buildCteRelationMap(extractCteQueries(queryText), schema, tempRelations, parentCtes, cache, active)
+  const relations = resolveReferencedRelations(schema, queryText, tempRelations, cteRelations, cache, active)
+  const selectIndex = findTopLevelKeyword(queryText, "select")
+  if (selectIndex === undefined) {
+    active.delete(key)
+    cache.set(key, [])
+    return []
+  }
+
+  const fromIndex = findTopLevelKeyword(queryText, "from", selectIndex + 6)
+  const selectList = queryText.slice(selectIndex + 6, fromIndex ?? queryText.length)
+  const columns: SqlRelation["columns"] = []
+
+  for (const rawPart of splitTopLevelSqlList(selectList)) {
+    const part = rawPart.trim()
+    if (!part) {
+      continue
+    }
+    if (part === "*") {
+      for (const relation of relations) {
+        pushUniqueColumns(columns, relation.columns)
+      }
+      continue
+    }
+
+    const starMatch = part.match(/^(?:"(?:[^"]|"")+"|\[[^\]]+\]|`[^`]+`|[A-Za-z_][A-Za-z0-9_$]*)\s*\.\s*\*$/)
+    if (starMatch?.[0]) {
+      const scopeName = normalizeIdentifier(part.replace(/\s*\.\s*\*$/, ""))
+      if (scopeName) {
+        pushUniqueColumns(columns, resolveScopedColumns(scopeName, relations))
+      }
+      continue
+    }
+
+    const name = extractProjectionAlias(part)
+    if (!name) {
+      continue
+    }
+
+    pushUniqueColumns(columns, [
+      {
+        id: `projection:${key}:${name}`,
+        name,
+      },
+    ])
+  }
+
+  active.delete(key)
+  cache.set(key, columns)
+  return columns
+}
+
+function buildCteRelationMap(
+  queries: readonly SqlNamedQuery[],
+  schema: SqlSchemaIndex,
+  tempRelations: readonly TempRelation[],
+  parentCtes: ReadonlyMap<string, InlineRelation>,
+  cache: Map<string, SqlRelation["columns"]>,
+  active: Set<string>,
+) {
+  const ctes = new Map(parentCtes)
+
+  for (const cte of queries) {
+    const columns = inferQueryColumns(cte.query, schema, tempRelations, ctes, cache, active)
+    ctes.set(normalize(cte.name), createInlineRelation(cte.name, "cte", "cte", columns))
+  }
+
+  return ctes
+}
+
+function relationDetail(relation: CompletionRelation) {
+  const parts: string[] = [relation.kind]
+  if ("source" in relation) {
+    parts.push(relation.source)
+  }
+  if ("schema" in relation && relation.schema) {
     parts.push(relation.schema)
   }
   return parts.join(" ")
 }
 
-function addRelationItems(target: RankedItem[], relations: readonly (SqlRelation | TempRelation)[], sortGroup: number) {
+function addRelationItems(target: RankedItem[], relations: readonly CompletionRelation[], sortGroup: number) {
   for (const relation of relations) {
     pushUnique(target, {
       id: relation.id,
       label: relation.name,
-      insertText: relation.name,
+      insertText: formatSqlIdentifier(relation.name),
       detail: relationDetail(relation),
       sortGroup,
     })
   }
 }
 
-function addColumnItems(target: RankedItem[], relations: readonly SqlRelation[], sortGroup: number) {
+function addColumnItems(target: RankedItem[], relations: readonly CompletionRelation[], sortGroup: number) {
   for (const relation of relations) {
     for (const column of relation.columns) {
       pushUnique(target, {
         id: column.id,
         label: column.name,
-        insertText: column.name,
+        insertText: formatSqlIdentifier(column.name),
         detail: [relation.name, column.dataType].filter(Boolean).join(" "),
         sortGroup,
       })
@@ -277,43 +640,70 @@ function addCteItems(target: RankedItem[], ctes: readonly string[], sortGroup: n
     pushUnique(target, {
       id: `cte:${cte}`,
       label: cte,
-      insertText: cte,
+      insertText: formatSqlIdentifier(cte),
       detail: "cte",
       sortGroup,
     })
   }
 }
 
+function resolveNamedRelation(
+  schema: SqlSchemaIndex,
+  ref: SqlTableRef,
+  tempRelations: readonly TempRelation[],
+  cteRelations: ReadonlyMap<string, InlineRelation>,
+) {
+  const cte = cteRelations.get(normalize(ref.name))
+  if (cte) {
+    return cte
+  }
+
+  const relation = resolveSchemaRelation(schema, ref)
+  if (relation) {
+    return relation
+  }
+
+  return tempRelations.find((item) => normalize(item.name) === normalize(ref.name))
+}
+
 function resolveReferencedRelations(
   schema: SqlSchemaIndex,
   statementText: string,
   tempRelations: readonly TempRelation[],
+  cteRelations: ReadonlyMap<string, InlineRelation>,
+  cache: Map<string, SqlRelation["columns"]>,
+  active: Set<string>,
 ) {
-  const resolved: SqlRelation[] = []
+  const resolved: CompletionRelation[] = []
 
   for (const ref of extractTableRefs(statementText)) {
-    const lookupName = ref.schema ? `${ref.schema}.${ref.name}` : ref.name
-    const relation = schema.findRelations(lookupName)[0] ?? schema.findRelations(ref.name)[0]
+    const relation = resolveNamedRelation(schema, ref, tempRelations, cteRelations)
     if (relation) {
       if (resolved.some((item) => item.id === relation.id)) {
         continue
       }
       resolved.push(relation)
+    }
+  }
+
+  for (const derived of extractDerivedTables(statementText)) {
+    const relation = createInlineRelation(
+      derived.alias,
+      "subquery",
+      "derived",
+      inferQueryColumns(derived.query, schema, tempRelations, cteRelations, cache, active),
+    )
+    if (resolved.some((item) => item.id === relation.id)) {
       continue
     }
-
-    const temp = tempRelations.find((item) => normalize(item.name) === normalize(ref.name))
-    if (!temp) {
-    }
+    resolved.push(relation)
   }
 
   return resolved
 }
 
-function resolveRelation(schema: SqlSchemaIndex, ref: { schema?: string; name: string }) {
-  return (
-    schema.findRelations(ref.schema ? `${ref.schema}.${ref.name}` : ref.name)[0] ?? schema.findRelations(ref.name)[0]
-  )
+function resolveRelation(schema: SqlSchemaIndex, ref: { database?: string; schema?: string; name: string }) {
+  return resolveSchemaRelation(schema, ref)
 }
 
 function expectsTableSuggestions(clause: SqlClause) {
@@ -349,7 +739,7 @@ function hasStructuralTrigger(beforeCursor: string) {
   return STRUCTURAL_KEYWORDS.has(previous)
 }
 
-function getPostRelationKeywordOptions(beforeCursor: string, clause: SqlClause) {
+function getPostRelationKeywordOptions(beforeCursor: string, clause: SqlClause, dialect: SqlDialect) {
   if (clause !== "from" && clause !== "join") {
     return []
   }
@@ -364,10 +754,31 @@ function getPostRelationKeywordOptions(beforeCursor: string, clause: SqlClause) 
     return []
   }
 
+  if (clause === "from" && /\bdelete\s+from\s+/i.test(beforeCursor)) {
+    const keywords = ["WHERE"]
+    if (dialect.keywords.includes("RETURNING")) {
+      keywords.push("RETURNING")
+    }
+    return keywords
+  }
+
   if (clause === "join") {
     return [...JOIN_FOLLOWUP_KEYWORDS]
   }
   return [...FROM_FOLLOWUP_KEYWORDS]
+}
+
+function getUpdateSetKeywordOptions(beforeCursor: string) {
+  const patterns = [
+    new RegExp(`\\bUPDATE\\s+${QUALIFIED_IDENTIFIER}\\s+(\\w*)$`, "i"),
+    new RegExp(`\\bUPDATE\\s+${QUALIFIED_IDENTIFIER}\\s+AS\\s+${IDENTIFIER}\\s+(\\w*)$`, "i"),
+    new RegExp(`\\bUPDATE\\s+${QUALIFIED_IDENTIFIER}\\s+${IDENTIFIER}\\s+(\\w*)$`, "i"),
+  ]
+  if (!patterns.some((pattern) => pattern.test(beforeCursor))) {
+    return []
+  }
+
+  return matchKeywordPrefix(["SET"], beforeCursor.match(/(\w*)$/)?.[1] ?? "", inferSqlCasePreference(beforeCursor, ""))
 }
 
 function getKeywordFollowUpOptions(beforeCursor: string) {
@@ -427,14 +838,21 @@ export function getSqlAutocompleteResult(input: SqlAutocompleteInput): BufferAut
   const clause = findCurrentClause(statement.text, statement.cursorOffset)
   const span = findCompletionSpan(statement.text, statement.cursorOffset, statement.start)
   const insertContext = getInsertContext(statement.text, statement.cursorOffset)
+  const scope = getActiveQueryScope(statement.text, statement.cursorOffset)
   const sqlCasePreference = inferSqlCasePreference(beforeCursor, span.token)
-  if (!shouldOpenImplicit(beforeCursor, span.token, span.mode) && !insertContext) {
+  const postRelationKeywords = getPostRelationKeywordOptions(beforeCursor, clause, input.dialect)
+  const updateSetKeywords = getUpdateSetKeywordOptions(beforeCursor)
+  if (
+    !shouldOpenImplicit(beforeCursor, span.token, span.mode) &&
+    !insertContext &&
+    postRelationKeywords.length === 0 &&
+    updateSetKeywords.length === 0
+  ) {
     return undefined
   }
 
-  const refs = extractTableRefs(statement.text)
+  const refs = extractTableRefs(scope.text)
   const aliases = buildAliasMap(refs)
-  const ctes = extractCteNames(statement.text)
   const tempRelations = getTempTableNames(input.text, input.cursorOffset, input.dialect).map((name) => ({
     id: `temp:${name}`,
     name,
@@ -443,25 +861,39 @@ export function getSqlAutocompleteResult(input: SqlAutocompleteInput): BufferAut
     columns: [],
     source: "temp" as const,
   }))
-  const relations = resolveReferencedRelations(input.schema, statement.text, tempRelations)
-  const postRelationKeywords = getPostRelationKeywordOptions(beforeCursor, clause)
+  const projectionCache = new Map<string, SqlRelation["columns"]>()
+  const activeQueries = new Set<string>()
+  const cteRelations = buildCteRelationMap(
+    scope.visibleCtes,
+    input.schema,
+    tempRelations,
+    new Map(),
+    projectionCache,
+    activeQueries,
+  )
+  const ctes = Array.from(cteRelations.values()).map((item) => item.name)
+  const relations = resolveReferencedRelations(
+    input.schema,
+    scope.text,
+    tempRelations,
+    cteRelations,
+    projectionCache,
+    activeQueries,
+  )
   const keywordFollowUps = getKeywordFollowUpOptions(beforeCursor)
   const items: RankedItem[] = []
 
   if (span.mode === "member" && span.scopeName) {
     const alias = aliases.get(span.scopeName.toLowerCase())
-    let scopedRelation = alias
-      ? (input.schema.findRelations(alias.schema ? `${alias.schema}.${alias.name}` : alias.name)[0] ??
-        input.schema.findRelations(alias.name)[0])
-      : undefined
+    let scopedRelation = alias ? resolveNamedRelation(input.schema, alias, tempRelations, cteRelations) : undefined
     if (!scopedRelation) {
-      scopedRelation = input.schema.findRelations(span.scopeName)[0]
+      scopedRelation = relations.find((relation) => normalize(relation.name) === normalize(span.scopeName))
     }
     if (scopedRelation) {
       addColumnItems(items, [scopedRelation], 0)
     }
 
-    if (items.length === 0 && input.dialect.supportsSchemas) {
+    if (items.length === 0 && input.dialect.supportsSchemas && expectsTableSuggestions(clause)) {
       addRelationItems(items, input.schema.findRelationsInSchema(span.scopeName), 0)
     }
   }
@@ -484,6 +916,10 @@ export function getSqlAutocompleteResult(input: SqlAutocompleteInput): BufferAut
       0,
       sqlCasePreference,
     )
+  }
+
+  if (!insertContext && items.length === 0 && updateSetKeywords.length > 0) {
+    addKeywordItems(items, updateSetKeywords, 0, sqlCasePreference)
   }
 
   if (!insertContext && items.length === 0 && keywordFollowUps.length > 0) {
@@ -509,28 +945,40 @@ export function getSqlAutocompleteResult(input: SqlAutocompleteInput): BufferAut
     if (items.length === 0) {
       addKeywordItems(items, SELECT_CLAUSE_KEYWORDS, 0, sqlCasePreference)
       addColumnItems(items, relations, 1)
-      addFunctionItems(items, input.dialect, 2, sqlCasePreference)
+      if (span.token) {
+        addRelationItems(items, relations, 2)
+      }
+      addFunctionItems(items, input.dialect, 3, sqlCasePreference)
     }
   }
 
   if (!insertContext && items.length === 0 && ["where", "having", "on", "set"].includes(clause)) {
     addColumnItems(items, relations, 0)
-    addOperatorItems(items, input.dialect, 1, sqlCasePreference)
-    addKeywordItems(items, EXPRESSION_KEYWORDS, 2, sqlCasePreference)
-    addFunctionItems(items, input.dialect, 3, sqlCasePreference)
+    if (span.token) {
+      addRelationItems(items, relations, 1)
+    }
+    addOperatorItems(items, input.dialect, 2, sqlCasePreference)
+    addKeywordItems(items, EXPRESSION_KEYWORDS, 3, sqlCasePreference)
+    addFunctionItems(items, input.dialect, 4, sqlCasePreference)
   }
 
   if (!insertContext && items.length === 0 && (clause === "group" || clause === "order")) {
     addColumnItems(items, relations, 0)
-    if (clause === "order") {
-      addKeywordItems(items, ORDER_DIRECTION_KEYWORDS, 1, sqlCasePreference)
+    if (span.token) {
+      addRelationItems(items, relations, 1)
     }
-    addFunctionItems(items, input.dialect, 2, sqlCasePreference)
+    if (clause === "order") {
+      addKeywordItems(items, ORDER_DIRECTION_KEYWORDS, 2, sqlCasePreference)
+    }
+    addFunctionItems(items, input.dialect, 3, sqlCasePreference)
   }
 
   if (!insertContext && items.length === 0 && expectsColumnSuggestions(clause)) {
     addColumnItems(items, relations, 0)
-    addFunctionItems(items, input.dialect, 1, sqlCasePreference)
+    if (span.token) {
+      addRelationItems(items, relations, 1)
+    }
+    addFunctionItems(items, input.dialect, 2, sqlCasePreference)
   }
 
   if (!insertContext && items.length === 0) {
