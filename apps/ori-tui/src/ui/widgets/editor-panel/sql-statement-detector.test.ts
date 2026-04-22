@@ -35,8 +35,42 @@ describe("sql statement detector", () => {
     expect(resolution.query.endLine).toBe(1)
   })
 
+  test("resolves the only query on the current line even when the cursor is after its semicolon", () => {
+    const sql = withCursor("SELECT * FROM authors;|\nWITH asd AS (SELECT email iii FROM authors)\nSELECT iii FROM asd\nGROUP BY iii\nLIMIT 10;")
+    const resolution = resolveSqlQueryAtOffset(sql.text, buildLineStarts(sql.text), sql.cursor)
+
+    expect(resolution.kind).toBe("query")
+    if (resolution.kind !== "query") {
+      return
+    }
+    expect(sql.text.slice(resolution.query.start, resolution.query.end)).toBe("SELECT * FROM authors;")
+    expect(resolution.query.startLine).toBe(0)
+    expect(resolution.query.endLine).toBe(0)
+  })
+
+  test("returns none when the current line is outside every query", () => {
+    const sql = withCursor("SELECT 1;\n|\nSELECT 2;")
+    const resolution = resolveSqlQueryAtOffset(sql.text, buildLineStarts(sql.text), sql.cursor)
+
+    expect(resolution).toEqual({ kind: "none" })
+  })
+
   test("returns ambiguous when two queries share the cursor line", () => {
     const sql = withCursor("SELECT 1; SEL|ECT 2;\nSELECT 3;")
+    const resolution = resolveSqlQueryAtOffset(sql.text, buildLineStarts(sql.text), sql.cursor)
+
+    expect(resolution.kind).toBe("ambiguous")
+    if (resolution.kind !== "ambiguous") {
+      return
+    }
+    expect(resolution.queries.map((query) => sql.text.slice(query.start, query.end))).toEqual([
+      "SELECT 1;",
+      "SELECT 2;",
+    ])
+  })
+
+  test("returns ambiguous anywhere on a line that contains multiple queries", () => {
+    const sql = withCursor("SELECT 1; SELECT 2|;\nSELECT 3;")
     const resolution = resolveSqlQueryAtOffset(sql.text, buildLineStarts(sql.text), sql.cursor)
 
     expect(resolution.kind).toBe("ambiguous")

@@ -391,25 +391,14 @@ export function resolveSqlQueryAtOffset(text: string, lineStarts: number[], offs
 
   const line = getCursorLine(text, lineStarts, offset)
   const lineQueries = queries.filter((query) => query.startLine <= line && line <= query.endLine)
+  if (!lineQueries.length) {
+    return { kind: "none" }
+  }
   if (lineQueries.length > 1) {
     return { kind: "ambiguous", queries: lineQueries }
   }
 
-  const span = findSpanAtOffset(
-    text,
-    queries.map((query) => ({ start: query.start, end: query.end })),
-    offset,
-  )
-  if (!span) {
-    return { kind: "none" }
-  }
-
-  const query = queries.find((item) => item.start === span.start && item.end === span.end)
-  if (!query) {
-    return { kind: "none" }
-  }
-
-  return { kind: "query", query }
+  return { kind: "query", query: lineQueries[0]! }
 }
 
 export function getSqlStatementAtOffset(text: string, lineStarts: number[], offset: number): SqlStatement | undefined {
