@@ -52,7 +52,17 @@ export function SelectPopup<T extends SelectPopupItem>(props: SelectPopupProps<T
       handler: () => props.viewModel()?.move(-1),
     },
     {
+      pattern: "ctrl+p",
+      preventDefault: true,
+      handler: () => props.viewModel()?.move(-1),
+    },
+    {
       pattern: "down",
+      preventDefault: true,
+      handler: () => props.viewModel()?.move(1),
+    },
+    {
+      pattern: "ctrl+n",
       preventDefault: true,
       handler: () => props.viewModel()?.move(1),
     },
