@@ -599,6 +599,7 @@ export function Buffer(props: BufferProps) {
                         </text>
                       </box>
                       <textarea
+                        flexGrow={1}
                         backgroundColor={lineBg(indexAccessor())}
                         focusedBackgroundColor={lineBg(indexAccessor())}
                         ref={(renderable: TextareaRenderable | undefined) => {
@@ -631,11 +632,6 @@ export function Buffer(props: BufferProps) {
                           const origin = bufferModel.handleTextAreaChange(lineIndex(indexAccessor())) ?? "user"
                           queueMicrotask(() => origin === "user" && autocomplete.refresh())
                         }}
-                      />
-                      <box
-                        flexGrow={1}
-                        backgroundColor={lineBg(indexAccessor())}
-                        onMouseDown={(event: MouseEvent) => handleLineMouseDown(indexAccessor(), event)}
                       />
                     </box>
                   )
