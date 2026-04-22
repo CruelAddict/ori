@@ -95,8 +95,25 @@ const EXPRESSION_KEYWORDS = [
   "FALSE",
 ] as const
 const ORDER_DIRECTION_KEYWORDS = ["ASC", "DESC"] as const
+const GROUP_FOLLOWUP_KEYWORDS = ["HAVING", "ORDER BY", "LIMIT", "UNION"] as const
+const ORDER_FOLLOWUP_KEYWORDS = ["LIMIT", "OFFSET", "UNION"] as const
 const FROM_FOLLOWUP_KEYWORDS = ["WHERE", "JOIN", "GROUP BY", "ORDER BY", "LIMIT", "UNION"] as const
 const JOIN_FOLLOWUP_KEYWORDS = ["ON", "USING"] as const
+const PROJECTION_ALIAS_RESERVED_WORDS = new Set([
+  ...STRUCTURAL_KEYWORDS,
+  ...SELECT_CLAUSE_KEYWORDS.map((keyword) => keyword.toLowerCase()),
+  ...EXPRESSION_KEYWORDS.map((keyword) => keyword.toLowerCase()),
+  ...ORDER_DIRECTION_KEYWORDS.map((keyword) => keyword.toLowerCase()),
+  "all",
+  "asc",
+  "by",
+  "desc",
+  "group",
+  "limit",
+  "offset",
+  "order",
+  "union",
+])
 const IDENTIFIER = '(?:"(?:[^"]|"")+"|\\[[^\\]]+\\]|`[^`]+`|[A-Za-z_][A-Za-z0-9_$]*)'
 const QUALIFIED_IDENTIFIER = `${IDENTIFIER}(?:\\s*\\.\\s*${IDENTIFIER}){0,2}`
 const KEYWORD_FOLLOW_UP_PATTERNS = [
@@ -447,6 +464,15 @@ function extractProjectionAlias(expression: string) {
     return normalizeIdentifier(asMatch[1])
   }
 
+  const implicitMatch = expression.match(new RegExp(`^([\\s\\S]*\\S)\\s+(${IDENTIFIER})\\s*$`, "i"))
+  if (implicitMatch?.[2]) {
+    const raw = implicitMatch[2]
+    const name = normalizeIdentifier(raw)
+    if (name && (raw !== name || !PROJECTION_ALIAS_RESERVED_WORDS.has(name.toLowerCase()))) {
+      return name
+    }
+  }
+
   const nameMatch = expression.match(
     /(?:^|\.)\s*((?:"(?:[^"]|"")+"|\[[^\]]+\]|`[^`]+`|[A-Za-z_][A-Za-z0-9_$]*))\s*$/,
   )
@@ -647,6 +673,14 @@ function addCteItems(target: RankedItem[], ctes: readonly string[], sortGroup: n
   }
 }
 
+function findUniquePrefixMatch<T extends { name: string }>(items: readonly T[], value: string) {
+  const matches = items.filter((item) => normalize(item.name).startsWith(normalize(value)))
+  if (matches.length !== 1) {
+    return undefined
+  }
+  return matches[0]
+}
+
 function resolveNamedRelation(
   schema: SqlSchemaIndex,
   ref: SqlTableRef,
@@ -658,12 +692,22 @@ function resolveNamedRelation(
     return cte
   }
 
+  const prefixedCte = findUniquePrefixMatch(Array.from(cteRelations.values()), ref.name)
+  if (prefixedCte) {
+    return prefixedCte
+  }
+
   const relation = resolveSchemaRelation(schema, ref)
   if (relation) {
     return relation
   }
 
-  return tempRelations.find((item) => normalize(item.name) === normalize(ref.name))
+  const tempRelation = tempRelations.find((item) => normalize(item.name) === normalize(ref.name))
+  if (tempRelation) {
+    return tempRelation
+  }
+
+  return findUniquePrefixMatch(tempRelations, ref.name)
 }
 
 function resolveReferencedRelations(
@@ -793,6 +837,29 @@ function getKeywordFollowUpOptions(beforeCursor: string) {
   return []
 }
 
+function getClauseFollowUpOptions(beforeCursor: string, clause: SqlClause) {
+  const token = beforeCursor.match(/(\w*)$/)?.[1] ?? ""
+  const tail = beforeCursor.slice(0, beforeCursor.length - token.length).trimEnd()
+
+  if (clause === "group") {
+    const body = tail.match(/\bgroup\s+by\s+([\s\S]*)$/i)?.[1]?.trimEnd()
+    if (!body || body.endsWith(",")) {
+      return []
+    }
+    return [...GROUP_FOLLOWUP_KEYWORDS]
+  }
+
+  if (clause === "order") {
+    const body = tail.match(/\border\s+by\s+([\s\S]*)$/i)?.[1]?.trimEnd()
+    if (!body || body.endsWith(",")) {
+      return []
+    }
+    return [...ORDER_FOLLOWUP_KEYWORDS]
+  }
+
+  return []
+}
+
 function shouldPreferFrom(beforeCursor: string, token: string) {
   const matchesSelectStar = /\bSELECT\s+\*\s+\w*$/i.test(beforeCursor) || /\bSELECT\s+\*\s*$/i.test(beforeCursor)
   if (!matchesSelectStar) {
@@ -881,6 +948,7 @@ export function getSqlAutocompleteResult(input: SqlAutocompleteInput): BufferAut
     activeQueries,
   )
   const keywordFollowUps = getKeywordFollowUpOptions(beforeCursor)
+  const clauseFollowUps = getClauseFollowUpOptions(beforeCursor, clause)
   const items: RankedItem[] = []
 
   if (span.mode === "member" && span.scopeName) {
@@ -943,7 +1011,7 @@ export function getSqlAutocompleteResult(input: SqlAutocompleteInput): BufferAut
     }
 
     if (items.length === 0) {
-      addKeywordItems(items, SELECT_CLAUSE_KEYWORDS, 0, sqlCasePreference)
+      addKeywordItems(items, matchKeywordPrefix(SELECT_CLAUSE_KEYWORDS, span.token, sqlCasePreference), 0, sqlCasePreference)
       addColumnItems(items, relations, 1)
       if (span.token) {
         addRelationItems(items, relations, 2)
@@ -970,7 +1038,8 @@ export function getSqlAutocompleteResult(input: SqlAutocompleteInput): BufferAut
     if (clause === "order") {
       addKeywordItems(items, ORDER_DIRECTION_KEYWORDS, 2, sqlCasePreference)
     }
-    addFunctionItems(items, input.dialect, 3, sqlCasePreference)
+    addKeywordItems(items, clauseFollowUps, 3, sqlCasePreference)
+    addFunctionItems(items, input.dialect, 4, sqlCasePreference)
   }
 
   if (!insertContext && items.length === 0 && expectsColumnSuggestions(clause)) {

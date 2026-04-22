@@ -301,6 +301,22 @@ describe("sql autocomplete", () => {
       expectExcludes(result, ["email", "name"])
     })
 
+    test("keeps implicit cte projection aliases visible in the outer query", () => {
+      const result = complete("with recent as (select email iii from authors) select ii| from recent", {
+        ...catalog({ public: { authors: ["id", "email", "name"] } }),
+      })
+      expectIncludes(result, ["iii"])
+      expectExcludes(result, ["email", "name"])
+    })
+
+    test("keeps implicit cte projection aliases visible before an incomplete outer FROM relation", () => {
+      const result = complete("with recent as (select email iii from authors) select ii| from re", {
+        ...catalog({ public: { authors: ["id", "email", "name"] } }),
+      })
+      expectIncludes(result, ["iii"])
+      expect(labels(result)[0]).toBe("iii")
+    })
+
     test("does not leak cte source columns into an outer select before FROM", () => {
       const result = complete("with recent as (select email as www from authors) select w|", {
         ...catalog({ public: { authors: ["id", "email", "name"] } }),
@@ -401,6 +417,27 @@ describe("sql autocomplete", () => {
       const result = complete("delete from users |")
       expectIncludes(result, ["where", "returning"])
       expectExcludes(result, ["join", "group by", "order by", "union"])
+    })
+
+    test("suggests LIMIT after grouped expressions", () => {
+      const result = complete("with recent as (select email iii from authors) select iii from recent group by iii li|", {
+        ...catalog({ public: { authors: ["id", "email", "name"] } }),
+      })
+      expectIncludes(result, ["limit"])
+      const current = labels(result)
+      expect(current.indexOf("limit")).toBeLessThan(current.indexOf("nullif"))
+    })
+
+    test("stays closed after LIMIT when the next token must be numeric", () => {
+      expect(complete("with asd as (select email as www from authors) select www from asd limit |", {
+        ...catalog({ public: { authors: ["id", "email", "name"] } }),
+      })).toBeUndefined()
+    })
+
+    test("stays closed after a LIMIT value", () => {
+      expect(complete("with asd as (select email as www from authors) select www from asd limit 10|", {
+        ...catalog({ public: { authors: ["id", "email", "name"] } }),
+      })).toBeUndefined()
     })
   })
 

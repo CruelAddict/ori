@@ -12,6 +12,8 @@ export type SqlClause =
   | "group"
   | "order"
   | "having"
+  | "limit"
+  | "offset"
   | "set"
   | "on"
   | "into"
@@ -458,6 +460,12 @@ export function findCurrentClause(text: string, cursorOffset: number): SqlClause
     }
     if (current === "having") {
       clauses[depth] = "having"
+    }
+    if (current === "limit") {
+      clauses[depth] = "limit"
+    }
+    if (current === "offset") {
+      clauses[depth] = "offset"
     }
     if (current === "set") {
       clauses[depth] = "set"
