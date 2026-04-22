@@ -23,6 +23,7 @@ import type { SqlRelation, SqlSchemaIndex } from "./sql-schema-index"
 
 type RankedItem = BufferAutocompleteItem & {
   sortGroup: number
+  keywordPriority: number
 }
 
 type SqlAutocompleteInput = {
@@ -99,6 +100,7 @@ const GROUP_FOLLOWUP_KEYWORDS = ["HAVING", "ORDER BY", "LIMIT", "UNION"] as cons
 const ORDER_FOLLOWUP_KEYWORDS = ["LIMIT", "OFFSET", "UNION"] as const
 const FROM_FOLLOWUP_KEYWORDS = ["WHERE", "JOIN", "GROUP BY", "ORDER BY", "LIMIT", "UNION"] as const
 const JOIN_FOLLOWUP_KEYWORDS = ["ON", "USING"] as const
+const FREQUENT_KEYWORD_PRIORITIES = new Set(["select", "from", "where", "join", "insert into"])
 const PROJECTION_ALIAS_RESERVED_WORDS = new Set([
   ...STRUCTURAL_KEYWORDS,
   ...SELECT_CLAUSE_KEYWORDS.map((keyword) => keyword.toLowerCase()),
@@ -418,6 +420,9 @@ function sortItems(query: string, items: RankedItem[]) {
       if (a.match.tier !== b.match.tier) {
         return a.match.tier - b.match.tier
       }
+      if (a.item.keywordPriority !== b.item.keywordPriority) {
+        return b.item.keywordPriority - a.item.keywordPriority
+      }
       if (a.match.score !== b.match.score) {
         return a.match.score - b.match.score
       }
@@ -590,6 +595,7 @@ function addRelationItems(target: RankedItem[], relations: readonly CompletionRe
       insertText: formatSqlIdentifier(relation.name),
       detail: relationDetail(relation),
       sortGroup,
+      keywordPriority: 0,
     })
   }
 }
@@ -603,6 +609,7 @@ function addColumnItems(target: RankedItem[], relations: readonly CompletionRela
         insertText: formatSqlIdentifier(column.name),
         detail: [relation.name, column.dataType].filter(Boolean).join(" "),
         sortGroup,
+        keywordPriority: 0,
       })
     }
   }
@@ -621,6 +628,7 @@ function addKeywordItems(
       label: formatted,
       insertText: formatted,
       sortGroup,
+      keywordPriority: FREQUENT_KEYWORD_PRIORITIES.has(normalize(keyword)) ? 1 : 0,
     })
   }
 }
@@ -639,6 +647,7 @@ function addFunctionItems(
       insertText: `${formatted}()`,
       detail: "function",
       sortGroup,
+      keywordPriority: 0,
     })
   }
 }
@@ -657,6 +666,7 @@ function addOperatorItems(
       insertText: formatted,
       detail: "operator",
       sortGroup,
+      keywordPriority: 0,
     })
   }
 }
@@ -669,6 +679,7 @@ function addCteItems(target: RankedItem[], ctes: readonly string[], sortGroup: n
       insertText: formatSqlIdentifier(cte),
       detail: "cte",
       sortGroup,
+      keywordPriority: 0,
     })
   }
 }

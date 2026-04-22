@@ -354,6 +354,18 @@ describe("sql autocomplete", () => {
       expectOnly(complete("select * fr|"), ["from"])
     })
 
+    test("prefers frequent SELECT over shorter SET for a shared prefix", () => {
+      const result = complete("se|")
+      const current = labels(result)
+      expect(current.indexOf("select")).toBeLessThan(current.indexOf("set"))
+    })
+
+    test("prefers frequent WHERE over WHEN for a shared prefix", () => {
+      const result = complete("wh|")
+      const current = labels(result)
+      expect(current.indexOf("where")).toBeLessThan(current.indexOf("when"))
+    })
+
     test("ranks operator keyword before similarly matching function", () => {
       const result = complete("select * from users where is n|")
       const current = labels(result)
