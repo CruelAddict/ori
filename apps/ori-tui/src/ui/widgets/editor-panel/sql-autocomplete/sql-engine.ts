@@ -24,6 +24,7 @@ import type { SqlRelation, SqlSchemaIndex } from "./sql-schema-index"
 type RankedItem = BufferAutocompleteItem & {
   sortGroup: number
   keywordPriority: number
+  matchMode?: "fuzzy" | "prefix"
 }
 
 type SqlAutocompleteInput = {
@@ -100,6 +101,8 @@ const GROUP_FOLLOWUP_KEYWORDS = ["HAVING", "ORDER BY", "LIMIT", "UNION"] as cons
 const ON_FOLLOWUP_KEYWORDS = ["WHERE", "JOIN", "GROUP BY", "ORDER BY", "LIMIT", "UNION"] as const
 const ORDER_FOLLOWUP_KEYWORDS = ["LIMIT", "OFFSET", "UNION"] as const
 const FROM_FOLLOWUP_KEYWORDS = ["WHERE", "JOIN", "GROUP BY", "ORDER BY", "LIMIT", "UNION"] as const
+const WHERE_FOLLOWUP_KEYWORDS = ["GROUP BY", "ORDER BY", "LIMIT", "UNION"] as const
+const HAVING_FOLLOWUP_KEYWORDS = ["ORDER BY", "LIMIT", "UNION"] as const
 const JOIN_FOLLOWUP_KEYWORDS = ["ON", "USING"] as const
 const FREQUENT_KEYWORD_PRIORITIES = new Set(["select", "from", "where", "join", "insert into"])
 const PROJECTION_ALIAS_RESERVED_WORDS = new Set([
@@ -410,9 +413,32 @@ function scoreMatch(query: string, value: string) {
   return { tier: 2, score: firstIndex * 10 + target.length }
 }
 
+function scorePrefixMatch(query: string, value: string) {
+  if (!query) {
+    return { tier: 0, score: 0 }
+  }
+
+  const q = normalize(query)
+  const target = normalize(value)
+  if (target === q) {
+    return { tier: 0, score: target.length }
+  }
+  if (target.startsWith(q)) {
+    return { tier: 1, score: target.length }
+  }
+  return null
+}
+
+function scoreItem(query: string, item: RankedItem) {
+  if (item.matchMode === "prefix") {
+    return scorePrefixMatch(query, item.label)
+  }
+  return scoreMatch(query, item.label)
+}
+
 function sortItems(query: string, items: RankedItem[]) {
   return items
-    .map((item) => ({ item, match: scoreMatch(query, item.label) }))
+    .map((item) => ({ item, match: scoreItem(query, item) }))
     .filter((entry): entry is { item: RankedItem; match: { tier: number; score: number } } => Boolean(entry.match))
     .sort((a, b) => {
       if (a.item.sortGroup !== b.item.sortGroup) {
@@ -652,6 +678,7 @@ function addKeywordItems(
       insertText: formatted,
       sortGroup,
       keywordPriority: FREQUENT_KEYWORD_PRIORITIES.has(normalize(keyword)) ? 1 : 0,
+      matchMode: keyword.includes(" ") ? "prefix" : undefined,
     })
   }
 }
@@ -671,6 +698,7 @@ function addFunctionItems(
       detail: "function",
       sortGroup,
       keywordPriority: 0,
+      matchMode: "prefix",
     })
   }
 }
@@ -682,6 +710,10 @@ function addOperatorItems(
   casePreference: SqlCasePreference,
 ) {
   for (const operator of dialect.operators) {
+    if (operator.includes(" ")) {
+      continue
+    }
+
     const formatted = formatSqlVocabulary(operator, casePreference)
     pushUnique(target, {
       id: `operator:${operator}`,
@@ -692,6 +724,16 @@ function addOperatorItems(
       keywordPriority: 0,
     })
   }
+}
+
+function isExpressionComplete(body: string | undefined) {
+  if (!body) {
+    return false
+  }
+  if (/[,(]$/.test(body)) {
+    return false
+  }
+  return !/(?:=|<>|!=|<=|>=|<|>|\+|-|\*|\/|%|\b(?:and|or|not|like|ilike|in|is|between|when|then)\b)$/i.test(body)
 }
 
 function addCteItems(target: RankedItem[], ctes: readonly string[], sortGroup: number) {
@@ -800,23 +842,6 @@ function expectsColumnSuggestions(clause: SqlClause) {
   )
 }
 
-function hasStructuralTrigger(beforeCursor: string) {
-  const last = beforeCursor.at(-1)
-  if (last !== " " && last !== "\t" && last !== "\n") {
-    return false
-  }
-
-  const previous = beforeCursor
-    .slice(0, -1)
-    .match(/([A-Za-z_][A-Za-z0-9_$]*)\s*$/)?.[1]
-    ?.toLowerCase()
-  if (!previous) {
-    return false
-  }
-
-  return STRUCTURAL_KEYWORDS.has(previous)
-}
-
 function getPostRelationKeywordOptions(beforeCursor: string, clause: SqlClause, dialect: SqlDialect) {
   if (clause !== "from" && clause !== "join") {
     return []
@@ -891,15 +916,25 @@ function getClauseFollowUpOptions(beforeCursor: string, clause: SqlClause) {
     return [...ORDER_FOLLOWUP_KEYWORDS]
   }
 
+  if (clause === "where") {
+    const body = tail.match(/\bwhere\s+([\s\S]*)$/i)?.[1]?.trimEnd()
+    if (!isExpressionComplete(body)) {
+      return []
+    }
+    return [...WHERE_FOLLOWUP_KEYWORDS]
+  }
+
+  if (clause === "having") {
+    const body = tail.match(/\bhaving\s+([\s\S]*)$/i)?.[1]?.trimEnd()
+    if (!isExpressionComplete(body)) {
+      return []
+    }
+    return [...HAVING_FOLLOWUP_KEYWORDS]
+  }
+
   if (clause === "on") {
     const body = tail.match(/\bon\s+([\s\S]*)$/i)?.[1]?.trimEnd()
-    if (!body) {
-      return []
-    }
-    if (/[,(]$/.test(body)) {
-      return []
-    }
-    if (/(?:=|<>|!=|<=|>=|<|>|\+|-|\*|\/|%|\b(?:and|or|not|like|ilike|in|is|between|when|then)\b)$/i.test(body)) {
+    if (!isExpressionComplete(body)) {
       return []
     }
     return [...ON_FOLLOWUP_KEYWORDS]
@@ -924,7 +959,7 @@ function shouldOpenImplicit(beforeCursor: string, token: string, mode: "word" | 
   if (token.length > 0) {
     return true
   }
-  return hasStructuralTrigger(beforeCursor)
+  return /\b(?:from|join)\s+$/i.test(beforeCursor)
 }
 
 function isNoOpCompletion(statementText: string, cursorOffset: number, item: BufferAutocompleteItem) {
@@ -957,12 +992,7 @@ export function getSqlAutocompleteResult(input: SqlAutocompleteInput): BufferAut
   const sqlCasePreference = inferSqlCasePreference(beforeCursor, span.token)
   const postRelationKeywords = getPostRelationKeywordOptions(beforeCursor, clause, input.dialect)
   const updateSetKeywords = getUpdateSetKeywordOptions(beforeCursor)
-  if (
-    !shouldOpenImplicit(beforeCursor, span.token, span.mode) &&
-    !insertContext &&
-    postRelationKeywords.length === 0 &&
-    updateSetKeywords.length === 0
-  ) {
+  if (!shouldOpenImplicit(beforeCursor, span.token, span.mode)) {
     return undefined
   }
 

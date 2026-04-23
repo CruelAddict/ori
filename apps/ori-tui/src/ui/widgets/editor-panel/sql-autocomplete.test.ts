@@ -209,8 +209,8 @@ describe("sql autocomplete", () => {
       expectIncludes(result, ["users", "orders", "books"])
     })
 
-    test("suggests INTO after INSERT space", () => {
-      expectOnly(complete("insert |"), ["into"])
+    test("stays closed after INSERT space", () => {
+      expect(complete("insert |")).toBeUndefined()
     })
   })
 
@@ -301,9 +301,9 @@ describe("sql autocomplete", () => {
       expectExcludes(result, ["users"])
     })
 
-    test("suggests inner query columns inside a nested WHERE clause", () => {
-      const result = complete("select * from users where exists (select 1 from orders where |)")
-      expectIncludes(result, ["id", "user_id", "status"])
+    test("suggests inner query columns inside a nested WHERE clause once typing starts", () => {
+      const result = complete("select * from users where exists (select 1 from orders where u|)")
+      expectIncludes(result, ["user_id"])
       expectExcludes(result, ["users", "orders"])
     })
 
@@ -414,10 +414,9 @@ describe("sql autocomplete", () => {
       expect(current.indexOf("where")).toBeLessThan(current.indexOf("when"))
     })
 
-    test("ranks operator keyword before similarly matching function", () => {
-      const result = complete("select * from users where is n|")
-      const current = labels(result)
-      expect(current.indexOf("is null")).toBeLessThan(current.indexOf("nullif"))
+    test("does not suggest multi-word operators from trailing word fragments", () => {
+      const result = complete("select * from users where email is not n|")
+      expectExcludes(result, ["is null", "is not null"])
     })
 
     test("formats functions in lower-case for lower-case prefixes", () => {
@@ -442,11 +441,14 @@ describe("sql autocomplete", () => {
       expectOnly(complete("delete fr|"), ["from"])
     })
 
-    test("suggests insert follow-up keywords after the target relation", () => {
-      const result = complete("insert into users |")
-      expectIncludes(result, ["values", "select", "default values"])
+    test("stays closed after the insert target relation without a typed prefix", () => {
+      expect(complete("insert into users |")).toBeUndefined()
+    })
+
+    test("suggests insert follow-up keywords once typing starts", () => {
+      const result = complete("insert into users v|")
+      expectIncludes(result, ["values"])
       expectExcludes(result, ["users"])
-      expectExcludes(result, ["("])
     })
 
     test("stays closed at the end of the insert target relation without whitespace", () => {
@@ -457,15 +459,19 @@ describe("sql autocomplete", () => {
       expect(complete("insert into users u|")).toBeUndefined()
     })
 
-    test("suggests insert target columns inside the column list", () => {
-      const result = complete("insert into users (|")
-      expectIncludes(result, ["id", "email", "created_at"])
-      expectExcludes(result, ["users"])
+    test("stays closed at the start of the insert target column list", () => {
+      expect(complete("insert into users (|")).toBeUndefined()
     })
 
-    test("skips already listed insert target columns", () => {
-      const result = complete("insert into users (id, |")
-      expectIncludes(result, ["email", "created_at"])
+    test("suggests insert target columns once typing starts", () => {
+      const result = complete("insert into users (e|")
+      expectIncludes(result, ["email"])
+      expectExcludes(result, ["users", "id"])
+    })
+
+    test("skips already listed insert target columns when typing the next one", () => {
+      const result = complete("insert into users (id, e|")
+      expectIncludes(result, ["email"])
       expectExcludes(result, ["id"])
     })
 
@@ -473,10 +479,28 @@ describe("sql autocomplete", () => {
       expectOnly(complete("update users s|"), ["set"])
     })
 
-    test("limits DELETE follow-up keywords to delete-specific options", () => {
-      const result = complete("delete from users |")
-      expectIncludes(result, ["where", "returning"])
-      expectExcludes(result, ["join", "group by", "order by", "union"])
+    test("stays closed after DELETE target relation without a typed prefix", () => {
+      expect(complete("delete from users |")).toBeUndefined()
+    })
+
+    test("limits DELETE follow-up keywords to delete-specific options once typing starts", () => {
+      expectOnly(complete("delete from users w|"), ["where"])
+    })
+
+    test("suggests GROUP BY after a completed WHERE expression", () => {
+      const result = complete("select * from authors a join books b on a.id = b.author_id where a.email is not null grou|", {
+        ...catalog({ public: { authors: ["id", "email"], books: ["id", "author_id", "title"] } }),
+      })
+      expectIncludes(result, ["group by"])
+    })
+
+    test("suggests only BY after the second word of GROUP BY starts", () => {
+      expectOnly(
+        complete("select * from authors a join books b on a.id = b.author_id where a.email is not null group b|", {
+          ...catalog({ public: { authors: ["id", "email"], books: ["id", "author_id", "title"] } }),
+        }),
+        ["by"],
+      )
     })
 
     test("suggests LIMIT after grouped expressions", () => {
@@ -484,8 +508,7 @@ describe("sql autocomplete", () => {
         ...catalog({ public: { authors: ["id", "email", "name"] } }),
       })
       expectIncludes(result, ["limit"])
-      const current = labels(result)
-      expect(current.indexOf("limit")).toBeLessThan(current.indexOf("nullif"))
+      expectExcludes(result, ["nullif"])
     })
 
     test("stays closed after LIMIT when the next token must be numeric", () => {
@@ -498,6 +521,22 @@ describe("sql autocomplete", () => {
       expect(complete("with asd as (select email as www from authors) select www from asd limit 10|", {
         ...catalog({ public: { authors: ["id", "email", "name"] } }),
       })).toBeUndefined()
+    })
+
+    test("stays closed after a completed FROM relation without a typed prefix", () => {
+      expect(
+        complete("with asd as (select email as www from authors) select www from asd |", {
+          ...catalog({ public: { authors: ["id", "email", "name"] } }),
+        }),
+      ).toBeUndefined()
+    })
+
+    test("stays closed after a completed WHERE expression without a typed prefix", () => {
+      expect(
+        complete("select * from authors where email is not null |", {
+          ...catalog({ public: { authors: ["id", "email", "name"] } }),
+        }),
+      ).toBeUndefined()
     })
   })
 
@@ -528,7 +567,7 @@ describe("sql autocomplete", () => {
     test("does not use previous statement relations for column suggestions", () => {
       const result = complete("select * from users; select em|")
       expectExcludes(result, ["email"])
-      expect(result).not.toBeUndefined()
+      expect(result).toBeUndefined()
     })
 
     test("does not use next statement while typing in current one", () => {
@@ -562,6 +601,11 @@ describe("sql autocomplete", () => {
       const result = complete("select ifn|", catalog(DEFAULT_CATALOG, "sqlite"))
       expectIncludes(result, ["ifnull"])
       expectExcludes(result, ["jsonb_build_object"])
+    })
+
+    test("does not fuzzy match functions", () => {
+      const result = complete("select mn|")
+      expectExcludes(result, ["min"])
     })
 
     test("offers duckdb-specific functions", () => {
