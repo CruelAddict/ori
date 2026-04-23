@@ -239,6 +239,31 @@ describe("sql autocomplete", () => {
       expectOnly(complete("select * from users join orders o|"), ["on"])
     })
 
+    test("stays closed after a completed ON predicate and trailing space", () => {
+      expect(
+        complete(
+          "select * from authors a join books b on a.id = b.author_id |",
+          catalog({ public: { authors: ["id", "name"], books: ["id", "author_id", "title"] } }),
+        ),
+      ).toBeUndefined()
+    })
+
+    test("suggests WHERE before WHEN after a completed ON predicate", () => {
+      const result = complete(
+        "select * from authors a join books b on a.id = b.author_id w|",
+        catalog({ public: { authors: ["id", "name"], books: ["id", "author_id", "title"] } }),
+      )
+      expect(labels(result)[0]).toBe("where")
+    })
+
+    test("does not suggest WHERE before the ON predicate is complete", () => {
+      const result = complete(
+        "select * from authors a join books b on a.id = w|",
+        catalog({ public: { authors: ["id", "name"], books: ["id", "author_id", "title"] } }),
+      )
+      expectExcludes(result, ["where"])
+    })
+
     test("suggests relations in schema scope", () => {
       const result = complete("select * from analytics.bo|")
       expect(labels(result)[0]).toBe("books")
@@ -330,9 +355,24 @@ describe("sql autocomplete", () => {
       expectExcludes(result, ["created_at"])
     })
 
+    test("suggests cte columns inferred from an aliased star projection", () => {
+      const result = complete("with recent as (select u.* from users u) select recent.| from recent")
+      expectIncludes(result, ["id", "email", "created_at"])
+    })
+
+    test("suggests derived table columns inferred from an aliased star projection", () => {
+      const result = complete("select sub.| from (select u.* from users u) sub")
+      expectIncludes(result, ["id", "email", "created_at"])
+    })
+
     test("suggests derived table aliases in select expressions", () => {
       const result = complete("select s| from (select email from users) sub")
       expectIncludes(result, ["sub"])
+    })
+
+    test("shows a clean detail for derived tables", () => {
+      const result = complete("select s| from (select email from users) sub")
+      expect(result?.items.find((item) => item.label === "sub")?.detail).toBe("subquery")
     })
 
     test("suggests quoted alias columns and preserves quoted insert text", () => {
@@ -341,6 +381,14 @@ describe("sql autocomplete", () => {
         catalog({ public: { users: ["id", "EmailAddress"] }, analytics: { books: ["id", "title"] } }),
       )
       expectIncludes(result, ["id", "EmailAddress"])
+      expect(result?.items.find((item) => item.label === "EmailAddress")?.insertText).toBe('"EmailAddress"')
+    })
+
+    test("replaces the full quoted member prefix when completing a quoted column", () => {
+      const sql = 'select "u"."E| from users as "u"'
+      const result = complete(sql, catalog({ public: { users: ["id", "EmailAddress"] } }))
+      expectIncludes(result, ["EmailAddress"])
+      expect(replaceText(sql, result)).toBe('"E')
       expect(result?.items.find((item) => item.label === "EmailAddress")?.insertText).toBe('"EmailAddress"')
     })
 
@@ -467,6 +515,7 @@ describe("sql autocomplete", () => {
     test("suggests previous temp tables in FROM clause", () => {
       const result = complete("create temp table temp_users as select * from users; select * from temp_|")
       expectIncludes(result, ["temp_users"])
+      expect(result?.items.find((item) => item.label === "temp_users")?.detail).toBe("temp table")
     })
 
     test("does not look ahead for temp tables", () => {

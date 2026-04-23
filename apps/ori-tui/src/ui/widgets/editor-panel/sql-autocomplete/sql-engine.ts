@@ -97,6 +97,7 @@ const EXPRESSION_KEYWORDS = [
 ] as const
 const ORDER_DIRECTION_KEYWORDS = ["ASC", "DESC"] as const
 const GROUP_FOLLOWUP_KEYWORDS = ["HAVING", "ORDER BY", "LIMIT", "UNION"] as const
+const ON_FOLLOWUP_KEYWORDS = ["WHERE", "JOIN", "GROUP BY", "ORDER BY", "LIMIT", "UNION"] as const
 const ORDER_FOLLOWUP_KEYWORDS = ["LIMIT", "OFFSET", "UNION"] as const
 const FROM_FOLLOWUP_KEYWORDS = ["WHERE", "JOIN", "GROUP BY", "ORDER BY", "LIMIT", "UNION"] as const
 const JOIN_FOLLOWUP_KEYWORDS = ["ON", "USING"] as const
@@ -484,8 +485,21 @@ function extractProjectionAlias(expression: string) {
   return normalizeIdentifier(nameMatch?.[1])
 }
 
-function resolveScopedColumns(scopeName: string, relations: readonly CompletionRelation[]) {
-  return relations.find((relation) => normalize(relation.name) === normalize(scopeName))?.columns ?? []
+function resolveScopedRelation(
+  scopeName: string,
+  relations: readonly CompletionRelation[],
+  aliases: ReadonlyMap<string, SqlTableRef>,
+  schema: SqlSchemaIndex,
+  tempRelations: readonly TempRelation[],
+  cteRelations: ReadonlyMap<string, InlineRelation>,
+) {
+  const alias = aliases.get(scopeName.toLowerCase())
+  const scopedByAlias = alias ? resolveNamedRelation(schema, alias, tempRelations, cteRelations) : undefined
+  if (scopedByAlias) {
+    return scopedByAlias
+  }
+
+  return relations.find((relation) => normalize(relation.name) === normalize(scopeName))
 }
 
 function inferQueryColumns(
@@ -507,6 +521,8 @@ function inferQueryColumns(
 
   active.add(key)
   const cteRelations = buildCteRelationMap(extractCteQueries(queryText), schema, tempRelations, parentCtes, cache, active)
+  const refs = extractTableRefs(queryText)
+  const aliases = buildAliasMap(refs)
   const relations = resolveReferencedRelations(schema, queryText, tempRelations, cteRelations, cache, active)
   const selectIndex = findTopLevelKeyword(queryText, "select")
   if (selectIndex === undefined) {
@@ -535,7 +551,10 @@ function inferQueryColumns(
     if (starMatch?.[0]) {
       const scopeName = normalizeIdentifier(part.replace(/\s*\.\s*\*$/, ""))
       if (scopeName) {
-        pushUniqueColumns(columns, resolveScopedColumns(scopeName, relations))
+        const scopedRelation = resolveScopedRelation(scopeName, relations, aliases, schema, tempRelations, cteRelations)
+        if (scopedRelation) {
+          pushUniqueColumns(columns, scopedRelation.columns)
+        }
       }
       continue
     }
@@ -577,10 +596,14 @@ function buildCteRelationMap(
 }
 
 function relationDetail(relation: CompletionRelation) {
-  const parts: string[] = [relation.kind]
   if ("source" in relation) {
-    parts.push(relation.source)
+    if (relation.source === "temp") {
+      return `temp ${relation.kind}`
+    }
+    return relation.kind
   }
+
+  const parts: string[] = [relation.kind]
   if ("schema" in relation && relation.schema) {
     parts.push(relation.schema)
   }
@@ -868,6 +891,20 @@ function getClauseFollowUpOptions(beforeCursor: string, clause: SqlClause) {
     return [...ORDER_FOLLOWUP_KEYWORDS]
   }
 
+  if (clause === "on") {
+    const body = tail.match(/\bon\s+([\s\S]*)$/i)?.[1]?.trimEnd()
+    if (!body) {
+      return []
+    }
+    if (/[,(]$/.test(body)) {
+      return []
+    }
+    if (/(?:=|<>|!=|<=|>=|<|>|\+|-|\*|\/|%|\b(?:and|or|not|like|ilike|in|is|between|when|then)\b)$/i.test(body)) {
+      return []
+    }
+    return [...ON_FOLLOWUP_KEYWORDS]
+  }
+
   return []
 }
 
@@ -963,11 +1000,14 @@ export function getSqlAutocompleteResult(input: SqlAutocompleteInput): BufferAut
   const items: RankedItem[] = []
 
   if (span.mode === "member" && span.scopeName) {
-    const alias = aliases.get(span.scopeName.toLowerCase())
-    let scopedRelation = alias ? resolveNamedRelation(input.schema, alias, tempRelations, cteRelations) : undefined
-    if (!scopedRelation) {
-      scopedRelation = relations.find((relation) => normalize(relation.name) === normalize(span.scopeName))
-    }
+    const scopedRelation = resolveScopedRelation(
+      span.scopeName,
+      relations,
+      aliases,
+      input.schema,
+      tempRelations,
+      cteRelations,
+    )
     if (scopedRelation) {
       addColumnItems(items, [scopedRelation], 0)
     }
@@ -1036,9 +1076,10 @@ export function getSqlAutocompleteResult(input: SqlAutocompleteInput): BufferAut
     if (span.token) {
       addRelationItems(items, relations, 1)
     }
-    addOperatorItems(items, input.dialect, 2, sqlCasePreference)
-    addKeywordItems(items, EXPRESSION_KEYWORDS, 3, sqlCasePreference)
-    addFunctionItems(items, input.dialect, 4, sqlCasePreference)
+    addKeywordItems(items, clauseFollowUps, 2, sqlCasePreference)
+    addOperatorItems(items, input.dialect, 3, sqlCasePreference)
+    addKeywordItems(items, EXPRESSION_KEYWORDS, 4, sqlCasePreference)
+    addFunctionItems(items, input.dialect, 5, sqlCasePreference)
   }
 
   if (!insertContext && items.length === 0 && (clause === "group" || clause === "order")) {

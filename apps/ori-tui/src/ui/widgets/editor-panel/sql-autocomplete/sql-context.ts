@@ -60,6 +60,7 @@ export type SqlInsertContext = {
 }
 
 const IDENTIFIER = '(?:"(?:[^"]|"")+"|\\[[^\\]]+\\]|`[^`]+`|[A-Za-z_][A-Za-z0-9_$]*)'
+const PARTIAL_IDENTIFIER = '(?:"(?:[^"]|"")*"?|\\[[^\\]]*\\]?|`[^`]*`?|[A-Za-z_][A-Za-z0-9_$]*)'
 const TABLE_REF_PATTERN = new RegExp(
   `(?:\\bFROM\\b|\\bJOIN\\b|\\bUPDATE\\b|\\bINTO\\b)\\s+(?:(${IDENTIFIER})\\s*\\.\\s*)?(?:(${IDENTIFIER})\\s*\\.\\s*)?(${IDENTIFIER})(?:\\s+(?:AS\\s+)?(${IDENTIFIER}))?`,
   "gi",
@@ -362,6 +363,27 @@ export function normalizeIdentifier(value: string | undefined) {
   }
   if (value.startsWith("`") && value.endsWith("`")) {
     return value.slice(1, -1)
+  }
+  return value
+}
+
+function normalizeIdentifierPrefix(value: string | undefined) {
+  if (!value) {
+    return ""
+  }
+
+  const normalized = normalizeIdentifier(value)
+  if (normalized && normalized !== value) {
+    return normalized
+  }
+  if (value.startsWith('"')) {
+    return value.slice(1).replaceAll('""', '"')
+  }
+  if (value.startsWith("[")) {
+    return value.slice(1)
+  }
+  if (value.startsWith("`")) {
+    return value.slice(1)
   }
   return value
 }
@@ -700,15 +722,13 @@ export function getInsertContext(text: string, cursorOffset: number): SqlInsertC
 
 export function findCompletionSpan(text: string, cursorOffset: number, statementStart = 0): SqlCompletionSpan {
   const beforeCursor = text.slice(0, cursorOffset)
-  const memberMatch = beforeCursor.match(
-    /((?:"(?:[^"]|"")*"|\[[^\]]*\]|`[^`]*`|[A-Za-z_][A-Za-z0-9_$]*))\.([A-Za-z_][A-Za-z0-9_$]*)?$/,
-  )
+  const memberMatch = beforeCursor.match(new RegExp(`(${IDENTIFIER})\\s*\\.\\s*(${PARTIAL_IDENTIFIER})?$`))
   if (memberMatch) {
-    const token = memberMatch[2] ?? ""
+    const rawToken = memberMatch[2] ?? ""
     return {
-      replaceStart: statementStart + cursorOffset - token.length,
+      replaceStart: statementStart + cursorOffset - rawToken.length,
       replaceEnd: statementStart + cursorOffset,
-      token,
+      token: normalizeIdentifierPrefix(rawToken),
       scopeName: normalizeIdentifier(memberMatch[1]),
       mode: "member",
     }
