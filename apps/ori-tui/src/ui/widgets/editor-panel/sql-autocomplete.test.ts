@@ -209,6 +209,14 @@ describe("sql autocomplete", () => {
       expectIncludes(result, ["users", "orders", "books"])
     })
 
+    test("stays closed after FROM newline without a typed prefix", () => {
+      expect(complete("select * from\n|")).toBeUndefined()
+    })
+
+    test("stays closed after JOIN newline without a typed prefix", () => {
+      expect(complete("select * from users join\n|")).toBeUndefined()
+    })
+
     test("stays closed after INSERT space", () => {
       expect(complete("insert |")).toBeUndefined()
     })

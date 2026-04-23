@@ -19,7 +19,7 @@ import {
 } from "./sql-context"
 import type { SqlRelation, SqlSchemaIndex } from "./sql-schema-index"
 
-/* LLM-generated, use tests as source of truth for expected behavior */
+/* 100% LLM-generated, use tests as source of truth for expected behavior */
 
 type RankedItem = BufferAutocompleteItem & {
   sortGroup: number
@@ -959,7 +959,7 @@ function shouldOpenImplicit(beforeCursor: string, token: string, mode: "word" | 
   if (token.length > 0) {
     return true
   }
-  return /\b(?:from|join)\s+$/i.test(beforeCursor)
+  return /\b(?:from|join)[ \t]+$/i.test(beforeCursor)
 }
 
 function isNoOpCompletion(statementText: string, cursorOffset: number, item: BufferAutocompleteItem) {

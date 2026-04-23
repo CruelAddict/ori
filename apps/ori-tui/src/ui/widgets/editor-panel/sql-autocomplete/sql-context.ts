@@ -2,7 +2,7 @@ import { buildLineStarts } from "@utils/line-offsets"
 import { collectSqlStatements, getSqlStatementAtOffset } from "../sql-statement-detector"
 import type { SqlDialect } from "./dialect"
 
-/* LLM-generated, use tests as source of truth for expected behavior */
+/* 100% LLM-generated, use tests as source of truth for expected behavior */
 
 export type SqlClause =
   | "select"

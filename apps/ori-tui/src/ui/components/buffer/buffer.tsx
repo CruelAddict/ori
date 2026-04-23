@@ -313,6 +313,7 @@ export function Buffer(props: BufferProps) {
     {
       pattern: "return",
       handler: withCursor((ctx, event) => {
+        autocomplete.close()
         event.preventDefault()
         const point = getCursorPoint()
         if (!point) {
@@ -406,6 +407,7 @@ export function Buffer(props: BufferProps) {
       handler: withCursor((ctx, event) => {
         const atStart = ctx.displayCol === 0 && ctx.row === 0
         if (atStart) {
+          autocomplete.close()
           event.preventDefault()
           bufferModel.handleBackwardMerge(ctx.line)
         }
@@ -417,6 +419,7 @@ export function Buffer(props: BufferProps) {
         const eolCol = bufferModel.getVisualEOLColumn(ctx.line)
         const atEnd = ctx.displayCol === eolCol && ctx.row === 0
         if (atEnd) {
+          autocomplete.close()
           event.preventDefault()
           bufferModel.handleForwardMerge(ctx.line)
         }
@@ -427,6 +430,7 @@ export function Buffer(props: BufferProps) {
       handler: withCursor((ctx, event) => {
         const atStart = ctx.displayCol === 0 && ctx.row === 0
         if (atStart) {
+          autocomplete.close()
           event.preventDefault()
           bufferModel.handleBackwardMerge(ctx.line)
         }
@@ -437,6 +441,7 @@ export function Buffer(props: BufferProps) {
       handler: withCursor((ctx, event) => {
         const atStart = ctx.displayCol === 0 && ctx.row === 0
         if (atStart) {
+          autocomplete.close()
           event.preventDefault()
           bufferModel.handleBackwardMerge(ctx.line)
         }
@@ -448,6 +453,7 @@ export function Buffer(props: BufferProps) {
         const eolCol = bufferModel.getVisualEOLColumn(ctx.line)
         const atEnd = ctx.displayCol === eolCol && ctx.row === 0
         if (atEnd) {
+          autocomplete.close()
           event.preventDefault()
           bufferModel.handleForwardMerge(ctx.line)
         }
