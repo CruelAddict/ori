@@ -171,7 +171,7 @@ export function SelectPopup<T extends SelectPopupItem>(props: SelectPopupProps<T
                             paddingLeft={1}
                             paddingRight={1}
                             backgroundColor={selected() ? theme().get("primary") : theme().get("editor_background")}
-                            onMouseOver={() => props.viewModel()?.hover(index())}
+                            onMouseMove={() => props.viewModel()?.hover(index())}
                             onMouseDown={() => {
                               props.viewModel()?.hover(index())
                             }}
