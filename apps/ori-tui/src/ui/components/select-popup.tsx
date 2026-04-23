@@ -1,4 +1,4 @@
-import type { ScrollBoxRenderable } from "@opentui/core"
+import type { MouseEvent, ScrollBoxRenderable } from "@opentui/core"
 import { OriScrollbox } from "@ui/components/ori-scrollbox"
 import type { SelectPopupAnchor, SelectPopupItem, SelectPopupViewModel } from "@ui/components/select-popup-model"
 import { useTheme } from "@ui/providers/theme"
@@ -21,7 +21,11 @@ function getPopupLeft(anchor: SelectPopupAnchor, width: number) {
   return Math.max(0, anchor.containerWidth - width)
 }
 
-function getPopupWidth<T extends SelectPopupItem>(viewModel: SelectPopupViewModel<T>, availableWidth: number, maxLimit: number) {
+function getPopupWidth<T extends SelectPopupItem>(
+  viewModel: SelectPopupViewModel<T>,
+  availableWidth: number,
+  maxLimit: number,
+) {
   const widths = viewModel.items().map((item) => Bun.stringWidth(item.label) + Bun.stringWidth(item.detail ?? "") + 6)
   const contentWidth = widths.length > 0 ? Math.max(...widths) : MIN_WIDTH
   return Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, availableWidth, contentWidth, maxLimit))
@@ -172,10 +176,15 @@ export function SelectPopup<T extends SelectPopupItem>(props: SelectPopupProps<T
                             paddingRight={1}
                             backgroundColor={selected() ? theme().get("primary") : theme().get("editor_background")}
                             onMouseMove={() => props.viewModel()?.hover(index())}
-                            onMouseDown={() => {
+                            onMouseDown={(event: MouseEvent) => {
+                              event.preventDefault()
+                              event.stopPropagation()
                               props.viewModel()?.hover(index())
                             }}
-                            onMouseUp={() => props.viewModel()?.select()}
+                            onMouseUp={(event: MouseEvent) => {
+                              event.stopPropagation()
+                              props.viewModel()?.select()
+                            }}
                           >
                             <box flexGrow={1}>
                               <text fg={selected() ? theme().get("editor_background") : theme().get("text")}>
