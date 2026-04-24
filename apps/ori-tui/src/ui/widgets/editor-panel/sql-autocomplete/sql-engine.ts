@@ -944,12 +944,13 @@ function getClauseFollowUpOptions(beforeCursor: string, clause: SqlClause) {
 }
 
 function shouldPreferFrom(beforeCursor: string, token: string) {
+  const query = token.toLowerCase()
   const matchesSelectStar = /\bSELECT\s+\*\s+\w*$/i.test(beforeCursor) || /\bSELECT\s+\*\s*$/i.test(beforeCursor)
   if (!matchesSelectStar) {
-    return false
+    return query.length >= 2 && "from".startsWith(query)
   }
 
-  return !token || "from".startsWith(token.toLowerCase())
+  return !query || "from".startsWith(query)
 }
 
 function shouldOpenImplicit(beforeCursor: string, token: string, mode: "word" | "member") {

@@ -410,6 +410,18 @@ describe("sql autocomplete", () => {
       expectOnly(complete("select * fr|"), ["from"])
     })
 
+    test("prefers FROM after a select-list prefix", () => {
+      expectOnly(complete("select fro|"), ["from"])
+    })
+
+    test("prefers upper-case FROM after an upper-case select-list prefix", () => {
+      expectOnly(complete("SELECT FR|"), ["FROM"])
+    })
+
+    test("does not prefer FROM on a single-letter select-list prefix", () => {
+      expectExcludes(complete("select f|"), ["from"])
+    })
+
     test("prefers frequent SELECT over shorter SET for a shared prefix", () => {
       const result = complete("se|")
       const current = labels(result)
