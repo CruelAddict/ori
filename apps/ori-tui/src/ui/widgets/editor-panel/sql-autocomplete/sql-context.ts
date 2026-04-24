@@ -61,8 +61,10 @@ export type SqlInsertContext = {
 
 const IDENTIFIER = '(?:"(?:[^"]|"")+"|\\[[^\\]]+\\]|`[^`]+`|[A-Za-z_][A-Za-z0-9_$]*)'
 const PARTIAL_IDENTIFIER = '(?:"(?:[^"]|"")*"?|\\[[^\\]]*\\]?|`[^`]*`?|[A-Za-z_][A-Za-z0-9_$]*)'
+const ALIAS_IDENTIFIER =
+  '(?!(?:select|from|where|join|left|right|inner|outer|full|cross|group|order|by|set|on|limit|offset|values|returning|union)\\b)(?:"(?:[^"]|"")+"|\\[[^\\]]+\\]|`[^`]+`|[A-Za-z_][A-Za-z0-9_$]*)'
 const TABLE_REF_PATTERN = new RegExp(
-  `(?:\\bFROM\\b|\\bJOIN\\b|\\bUPDATE\\b|\\bINTO\\b)\\s+(?:(${IDENTIFIER})\\s*\\.\\s*)?(?:(${IDENTIFIER})\\s*\\.\\s*)?(${IDENTIFIER})(?:\\s+(?:AS\\s+)?(${IDENTIFIER}))?`,
+  `(?:\\bFROM\\b|\\bJOIN\\b|\\bUPDATE\\b|\\bINTO\\b)\\s+(?:(${IDENTIFIER})\\s*\\.\\s*)?(?:(${IDENTIFIER})\\s*\\.\\s*)?(${IDENTIFIER})(?:\\s+(?:AS\\s+)?(${ALIAS_IDENTIFIER}))?`,
   "gi",
 )
 const IDENTIFIER_START = new RegExp(`^${IDENTIFIER}`)

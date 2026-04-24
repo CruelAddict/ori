@@ -2,8 +2,8 @@ import { describe, expect, test } from "bun:test"
 import { type Node, NodeType } from "@adapters/ori/client"
 import { buildLineStarts } from "@utils/line-offsets"
 import { resolveSqlDialect } from "./sql-autocomplete/dialect"
-import { getCurrentSqlStatement } from "./sql-autocomplete/sql-context"
 import { createSqlAutocompleteProvider } from "./sql-autocomplete/provider"
+import { getCurrentSqlStatement } from "./sql-autocomplete/sql-context"
 import { getSqlAutocompleteResult } from "./sql-autocomplete/sql-engine"
 import { buildSqlSchemaIndex, type SqlSchemaInput } from "./sql-autocomplete/sql-schema-index"
 import { collectSqlStatements } from "./sql-statement-detector"
@@ -303,6 +303,37 @@ describe("sql autocomplete", () => {
       expectExcludes(result, ["users"])
     })
 
+    test("qualifies ambiguous columns in joins", () => {
+      const result = complete("select i| from users u join orders o on u.id = o.user_id")
+      expectIncludes(result, ["u.id", "o.id"])
+      expectExcludes(result, ["id"])
+    })
+
+    test("keeps unambiguous columns unqualified in joins", () => {
+      const result = complete("select em| from users u join orders o on u.id = o.user_id")
+      expectIncludes(result, ["email"])
+      expectExcludes(result, ["u.email"])
+      expect(result?.items.find((item) => item.label === "email")?.insertText).toBe("email")
+    })
+
+    test("suggests aliases before qualified column completion", () => {
+      const result = complete("select ma| from users u join users manager on u.id = manager.id")
+      expectIncludes(result, ["manager"])
+      expectExcludes(result, ["manager.id"])
+    })
+
+    test("qualifies ambiguous columns with table names without aliases", () => {
+      const result = complete("select i| from users join orders on users.id = orders.user_id")
+      expectIncludes(result, ["users.id", "orders.id"])
+      expectExcludes(result, ["id"])
+    })
+
+    test("keeps both aliases for ambiguous self-join columns", () => {
+      const result = complete("select i| from users u join users manager on u.id = manager.id")
+      expectIncludes(result, ["u.id", "manager.id"])
+      expectExcludes(result, ["id"])
+    })
+
     test("keeps WHERE suggestions inside parentheses without a nested query", () => {
       const result = complete("select * from users where (em|)")
       expectIncludes(result, ["email"])
@@ -508,9 +539,12 @@ describe("sql autocomplete", () => {
     })
 
     test("suggests GROUP BY after a completed WHERE expression", () => {
-      const result = complete("select * from authors a join books b on a.id = b.author_id where a.email is not null grou|", {
-        ...catalog({ public: { authors: ["id", "email"], books: ["id", "author_id", "title"] } }),
-      })
+      const result = complete(
+        "select * from authors a join books b on a.id = b.author_id where a.email is not null grou|",
+        {
+          ...catalog({ public: { authors: ["id", "email"], books: ["id", "author_id", "title"] } }),
+        },
+      )
       expectIncludes(result, ["group by"])
     })
 
@@ -524,23 +558,30 @@ describe("sql autocomplete", () => {
     })
 
     test("suggests LIMIT after grouped expressions", () => {
-      const result = complete("with recent as (select email iii from authors) select iii from recent group by iii li|", {
-        ...catalog({ public: { authors: ["id", "email", "name"] } }),
-      })
+      const result = complete(
+        "with recent as (select email iii from authors) select iii from recent group by iii li|",
+        {
+          ...catalog({ public: { authors: ["id", "email", "name"] } }),
+        },
+      )
       expectIncludes(result, ["limit"])
       expectExcludes(result, ["nullif"])
     })
 
     test("stays closed after LIMIT when the next token must be numeric", () => {
-      expect(complete("with asd as (select email as www from authors) select www from asd limit |", {
-        ...catalog({ public: { authors: ["id", "email", "name"] } }),
-      })).toBeUndefined()
+      expect(
+        complete("with asd as (select email as www from authors) select www from asd limit |", {
+          ...catalog({ public: { authors: ["id", "email", "name"] } }),
+        }),
+      ).toBeUndefined()
     })
 
     test("stays closed after a LIMIT value", () => {
-      expect(complete("with asd as (select email as www from authors) select www from asd limit 10|", {
-        ...catalog({ public: { authors: ["id", "email", "name"] } }),
-      })).toBeUndefined()
+      expect(
+        complete("with asd as (select email as www from authors) select www from asd limit 10|", {
+          ...catalog({ public: { authors: ["id", "email", "name"] } }),
+        }),
+      ).toBeUndefined()
     })
 
     test("stays closed after a completed FROM relation without a typed prefix", () => {
@@ -642,10 +683,7 @@ describe("sql autocomplete", () => {
       })
 
       const first = withCursor("select * from users where em|")
-      expectIncludes(
-        provider.getCompletions({ text: first.text, cursor: first.cursor }),
-        ["email"],
-      )
+      expectIncludes(provider.getCompletions({ text: first.text, cursor: first.cursor }), ["email"])
 
       state = catalog({
         public: {
@@ -658,10 +696,7 @@ describe("sql autocomplete", () => {
       })
 
       const second = withCursor("select * from users where email_a|")
-      expectIncludes(
-        provider.getCompletions({ text: second.text, cursor: second.cursor }),
-        ["email_address"],
-      )
+      expectIncludes(provider.getCompletions({ text: second.text, cursor: second.cursor }), ["email_address"])
     })
   })
 })
