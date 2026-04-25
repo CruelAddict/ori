@@ -686,6 +686,14 @@ describe("sql autocomplete", () => {
       expectIncludes(columnResult, ["nnnn"])
     })
 
+    test("suggests SELECT after UNION ALL inside recursive cte body", () => {
+      const result = complete(
+        "with recursive seq(nnnn) as (select 1 union all se| nnnn + 1 from seq where nnnn < 1000) select * from seq",
+      )
+
+      expectIncludes(result, ["select"])
+    })
+
     test("suggests recursive cte header columns in the outer query", () => {
       const result = complete(
         "with recursive seq(nnnn) as (select 1 union all select nnnn + 1 from seq where nnnn < 1000) select nnn| from seq",

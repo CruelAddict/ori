@@ -1093,6 +1093,10 @@ function getClauseFollowUpOptions(beforeCursor: string, clause: SqlClause) {
 function getSelectFollowUpOptions(beforeCursor: string) {
   const token = beforeCursor.match(/(\w*)$/)?.[1] ?? ""
   const tail = beforeCursor.slice(0, beforeCursor.length - token.length).trimEnd()
+  if (/\bunion(?:\s+all)?$/i.test(tail)) {
+    return matchKeywordPrefix(["SELECT"], token, inferSqlCasePreference(beforeCursor, token))
+  }
+
   const body = tail.match(/\bselect\s+([\s\S]*)$/i)?.[1]?.trimEnd()
   if (!isExpressionComplete(body)) {
     return []
