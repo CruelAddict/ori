@@ -10,7 +10,7 @@ import {
   lineIndex,
 } from "./coords"
 import type { BufferModel, Line } from "./model"
-import { displayColumnToLineCharOffset, getTabWidth } from "./text-metrics"
+import { applyRefTabWidth, lineDisplayColumnToCharOffset, lineDisplayWidth } from "./text-metrics"
 
 export function getLineRef(buffer: BufferModel, index: LineIndex) {
   const line = buffer.lines()[index]
@@ -29,22 +29,29 @@ export function setLineRef(buffer: BufferModel, lineId: string, ref: TextareaRen
   }
 
   buffer._lineRefs.set(lineId, ref)
+  applyRefTabWidth(ref, buffer.tabWidth)
   if (buffer._syntaxStyle) {
     ref.syntaxStyle = buffer._syntaxStyle
   }
-  if (!buffer._widthMethod && ref.ctx?.widthMethod) {
-    buffer._widthMethod = ref.ctx.widthMethod
+  if (!buffer.widthMethod && ref.ctx?.widthMethod) {
+    buffer.widthMethod = ref.ctx.widthMethod
   }
 
   buffer._reapplyLineHighlight(lineId)
 }
 
 export function getVisualEOLColumn(buffer: BufferModel, index: LineIndex): DisplayColumn {
-  const ref = getLineRef(buffer, index)
-  if (!ref) {
+  const line = buffer.lines()[index]
+  if (!line) {
     return displayColumn(0)
   }
-  return displayColumn(ref.editorView.getVisualEOL().logicalCol)
+
+  const ref = getLineRef(buffer, index)
+  if (ref) {
+    return displayColumn(ref.editorView.getVisualEOL().logicalCol)
+  }
+
+  return lineDisplayWidth(buffer, line.text)
 }
 
 export function focusLine(buffer: BufferModel, index: LineIndex, column: DisplayColumn) {
@@ -113,12 +120,7 @@ export function getCursorOffset(buffer: BufferModel): DocCharOffset | undefined 
   }
 
   const start = buffer.lineStarts()[cursor.line] ?? 0
-  const charIndex = displayColumnToLineCharOffset(
-    ref.plainText,
-    cursor.displayCol,
-    getTabWidth(ref),
-    buffer._widthMethod,
-  )
+  const charIndex = lineDisplayColumnToCharOffset(buffer, ref.plainText, cursor.displayCol)
   return docCharOffset(start + charIndex)
 }
 

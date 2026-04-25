@@ -4,23 +4,17 @@ import { buildLineStarts } from "@utils/line-offsets"
 import type { SyntaxHighlightResult } from "@utils/syntax-highlighter"
 import { type Accessor, createMemo, createSignal } from "solid-js"
 import { createStore } from "solid-js/store"
-import {
-  type DisplayColumn,
-  displayColumn,
-  type LineCharRange,
-  type LineIndex,
-  lineCharOffset,
-  lineIndex,
-} from "./coords"
+import { type DisplayColumn, displayColumn, type LineCharRange, type LineIndex, lineIndex } from "./coords"
 import * as edit from "./editing"
 import * as hl from "./highlighting"
 import * as nav from "./navigation"
-import { lineCharOffsetToDisplayColumn } from "./text-metrics"
+import { lineDisplayWidth } from "./text-metrics"
 
 const DEBOUNCE_DEFAULT_MS = 20
 
 export type BufferModelOptions = {
   initialText: string
+  tabWidth: number
   isFocused: Accessor<boolean>
   onTextChange: (text: string, info: { modified: boolean }) => void
   debounceMs?: number
@@ -80,6 +74,7 @@ export function createBufferModel(options: BufferModelOptions) {
     onTextChange: options.onTextChange,
     scheduleHighlight: options.scheduleHighlight,
     highlightResult: options.highlightResult,
+    tabWidth: options.tabWidth,
 
     // External resources
     setLineRef: (lineId: string, ref: TextareaRenderable | undefined) => nav.setLineRef(buffer, lineId, ref),
@@ -122,10 +117,10 @@ export function createBufferModel(options: BufferModelOptions) {
     clampFocus: (nextLines: Line[] = buffer.lines()) => nav.clampFocus(buffer, nextLines),
 
     _lineRefs: new Map<string, TextareaRenderable | undefined>(),
-    _lineHighlightSpans: new Map<string, hl.LineSpan[]>(),
+    _lineHighlightSpans: new Map<string, hl.DisplayLineSpan[]>(),
     _highlightRequestVersion: 0,
     _syntaxStyle: undefined as SyntaxStyle | undefined,
-    _widthMethod: undefined as WidthMethod | undefined,
+    widthMethod: undefined as WidthMethod | undefined,
     _nextLineId: 0,
     _pendingChangeOrigin: undefined as PendingBufferChange | undefined,
 
@@ -136,8 +131,17 @@ export function createBufferModel(options: BufferModelOptions) {
     _makeLine: (text: string, rendered: boolean) => makeLine(nextLineId(), text, rendered),
     _makeLinesFromText: (text: string, rendered: boolean) => makeLinesFromText(text, rendered, nextLineId),
     _getLineDisplayWidth: (index: LineIndex) => {
-      const text = lines()[index]?.text ?? ""
-      return lineCharOffsetToDisplayColumn(text, lineCharOffset(text.length), buffer._widthMethod)
+      const line = lines()[index]
+      if (!line) {
+        return displayColumn(0)
+      }
+
+      const ref = buffer._lineRefs.get(line.id)
+      if (ref) {
+        return displayColumn(ref.editorView.getVisualEOL().logicalCol)
+      }
+
+      return lineDisplayWidth(buffer, line.text)
     },
     _setLines: (nextLines: Line[]) => setDocument("lines", nextLines),
     _setLine: (index: number, line: Line) => setDocument("lines", index, line),

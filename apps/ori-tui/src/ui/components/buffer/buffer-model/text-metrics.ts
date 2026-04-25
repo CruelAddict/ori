@@ -1,24 +1,25 @@
 import { resolveRenderLib, type TextareaRenderable, type WidthMethod } from "@opentui/core"
-import { type DisplayColumn, displayColumn, type LineCharOffset, lineCharOffset } from "./coords"
+import {
+  type DisplayColumn,
+  displayColumn,
+  type LineCharOffset,
+  type LineCharRange,
+  type LineDisplayRange,
+  lineCharOffset,
+  lineDisplayRange,
+} from "./coords"
 
 const graphemeSegmenter = new Intl.Segmenter(undefined, { granularity: "grapheme" })
 
-export function getTabWidth(node: TextareaRenderable): number {
-  const renderLib = resolveRenderLib() as unknown as { textBufferGetTabWidth?: (ptr: unknown) => number }
-  const textBufferPtr = (node.editBuffer as unknown as { textBufferPtr?: unknown }).textBufferPtr
-  if (!textBufferPtr || typeof renderLib.textBufferGetTabWidth !== "function") {
-    return 4
-  }
-
-  const width = renderLib.textBufferGetTabWidth(textBufferPtr)
-  return width > 0 ? width : 4
+type MetricsSource = {
+  tabWidth: number
+  widthMethod: WidthMethod | undefined
 }
 
 function unicodeWidth(text: string, widthMethod: WidthMethod | undefined): number {
   if (!text) {
     return 0
   }
-
   const renderLib = resolveRenderLib()
   const encoded = renderLib.encodeUnicode(text, widthMethod ?? "unicode")
   if (!encoded) {
@@ -50,28 +51,52 @@ function graphemeWidth(
 }
 
 export function lineCharOffsetToDisplayColumn(
+  source: MetricsSource,
   text: string,
   offset: LineCharOffset,
-  widthMethod: WidthMethod | undefined,
 ): DisplayColumn {
   if (offset <= 0) {
     return displayColumn(0)
   }
 
   const end = Math.min(offset, text.length)
-  const prefix = text.slice(0, end)
-  if (!prefix) {
-    return displayColumn(0)
+  let displayCol = 0
+  for (const segment of graphemeSegmenter.segment(text)) {
+    if (segment.index >= end) {
+      return displayColumn(displayCol)
+    }
+    if (segment.index + segment.segment.length > end) {
+      return displayColumn(displayCol)
+    }
+
+    displayCol += graphemeWidth(segment.segment, displayCol, source.tabWidth, source.widthMethod)
   }
 
-  return displayColumn(unicodeWidth(prefix, widthMethod))
+  return displayColumn(displayCol)
 }
 
-export function displayColumnToLineCharOffset(
+export function lineCharRangeToDisplayRange(
+  source: MetricsSource,
+  text: string,
+  range: LineCharRange,
+): LineDisplayRange {
+  return lineDisplayRange(
+    lineCharOffsetToDisplayColumn(source, text, range.start),
+    lineCharOffsetToDisplayColumn(source, text, range.end),
+  )
+}
+
+export function lineDisplayWidth(
+  source: MetricsSource,
+  text: string,
+): DisplayColumn {
+  return lineCharOffsetToDisplayColumn(source, text, lineCharOffset(text.length))
+}
+
+export function lineDisplayColumnToCharOffset(
+  source: MetricsSource,
   text: string,
   targetCol: DisplayColumn,
-  tabWidth: number,
-  widthMethod: WidthMethod | undefined,
 ): LineCharOffset {
   if (targetCol <= 0) {
     return lineCharOffset(0)
@@ -82,7 +107,7 @@ export function displayColumnToLineCharOffset(
     if (targetCol <= displayCol) {
       return lineCharOffset(segment.index)
     }
-    const width = graphemeWidth(segment.segment, displayCol, tabWidth, widthMethod)
+    const width = graphemeWidth(segment.segment, displayCol, source.tabWidth, source.widthMethod)
     const nextCol = displayCol + width
     if (targetCol <= nextCol) {
       return lineCharOffset(segment.index + segment.segment.length)
@@ -91,4 +116,14 @@ export function displayColumnToLineCharOffset(
   }
 
   return lineCharOffset(text.length)
+}
+
+export function applyRefTabWidth(node: TextareaRenderable, tabWidth: number) {
+  const renderLib = resolveRenderLib() as unknown as { textBufferSetTabWidth?: (ptr: unknown, width: number) => void }
+  const textBufferPtr = (node.editBuffer as unknown as { textBufferPtr?: unknown }).textBufferPtr
+  if (!textBufferPtr || typeof renderLib.textBufferSetTabWidth !== "function") {
+    return
+  }
+
+  renderLib.textBufferSetTabWidth(textBufferPtr, tabWidth)
 }

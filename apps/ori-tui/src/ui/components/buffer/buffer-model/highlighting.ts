@@ -2,7 +2,7 @@ import type { Extmark } from "@opentui/core"
 import { offsetToLineCol } from "@utils/line-offsets"
 import type { SyntaxHighlightResult } from "@utils/syntax-highlighter"
 import { createEffect, on } from "solid-js"
-import { lineCharOffset, lineIndex } from "./coords"
+import { type LineCharOffset, lineCharOffset, lineIndex } from "./coords"
 import type { BufferModel } from "./model"
 import { getLineRef } from "./navigation"
 import { lineCharOffsetToDisplayColumn } from "./text-metrics"
@@ -11,6 +11,12 @@ const SYNTAX_EXTMARK_TYPE = "syntax-highlight"
 
 // Highlighted part of texts. Currently implemented with opentui extmarks
 export type LineSpan = {
+  start: LineCharOffset
+  end: LineCharOffset
+  styleId: number
+}
+
+export type DisplayLineSpan = {
   start: number
   end: number
   styleId: number
@@ -73,7 +79,6 @@ function buildHighlightSpansByLine(
   targetLines?: ReadonlySet<number>,
 ) {
   const spansByLine = new Map<number, LineSpan[]>()
-  const lines = buffer.lines()
   const starts = buffer.lineStarts()
 
   for (const span of highlight.spans) {
@@ -86,11 +91,10 @@ function buildHighlightSpansByLine(
       continue
     }
 
-    const lineText = lines[start.line]?.text ?? ""
     const spans = spansByLine.get(start.line) ?? []
     spans.push({
-      start: lineCharOffsetToDisplayColumn(lineText, lineCharOffset(start.col), buffer._widthMethod),
-      end: lineCharOffsetToDisplayColumn(lineText, lineCharOffset(end.col), buffer._widthMethod),
+      start: lineCharOffset(start.col),
+      end: lineCharOffset(end.col),
       styleId: span.styleId,
     })
     spansByLine.set(start.line, spans)
@@ -111,18 +115,23 @@ function applyLineHighlights(buffer: BufferModel, lineId: string, nextSpans: Lin
   }
 
   const cachedSpans = buffer._lineHighlightSpans.get(lineId) ?? []
+  const displaySpans = nextSpans.map((span) => ({
+    start: lineCharOffsetToDisplayColumn(buffer, ref.plainText, span.start),
+    end: lineCharOffsetToDisplayColumn(buffer, ref.plainText, span.end),
+    styleId: span.styleId,
+  }))
   const typeId = ref.extmarks.getTypeId(SYNTAX_EXTMARK_TYPE) ?? ref.extmarks.registerType(SYNTAX_EXTMARK_TYPE)
   const currentSpans: Extmark[] = ref.extmarks
     .getAllForTypeId(typeId)
     .sort((a, b) => a.start - b.start || a.end - b.end || a.styleId! - b.styleId! || a.id - b.id)
-  if (!force && spansEqual(cachedSpans, nextSpans) && extmarksEqual(currentSpans, nextSpans)) {
+  if (!force && spansEqual(cachedSpans, displaySpans) && extmarksEqual(currentSpans, displaySpans)) {
     return
   }
 
-  const diff = getSpanDiff(currentSpans, nextSpans)
+  const diff = getSpanDiff(currentSpans, displaySpans)
 
   if (!force && !diff.changed) {
-    buffer._lineHighlightSpans.set(lineId, nextSpans)
+    buffer._lineHighlightSpans.set(lineId, displaySpans)
     return
   }
 
@@ -142,11 +151,11 @@ function applyLineHighlights(buffer: BufferModel, lineId: string, nextSpans: Lin
     }
   }
 
-  buffer._lineHighlightSpans.set(lineId, nextSpans)
+  buffer._lineHighlightSpans.set(lineId, displaySpans)
   ref.requestRender()
 }
 
-function getSpanDiff(currentSpans: Extmark[], nextSpans: LineSpan[]) {
+function getSpanDiff(currentSpans: Extmark[], nextSpans: DisplayLineSpan[]) {
   const prefixMax = Math.min(currentSpans.length, nextSpans.length)
   let prefix = 0
   while (prefix < prefixMax) {
@@ -176,11 +185,11 @@ function getSpanDiff(currentSpans: Extmark[], nextSpans: LineSpan[]) {
   }
 }
 
-function spanEqual(a: LineSpan | Extmark, b: LineSpan | Extmark) {
+function spanEqual(a: DisplayLineSpan | Extmark, b: DisplayLineSpan | Extmark) {
   return a.start === b.start && a.end === b.end && a.styleId === b.styleId
 }
 
-function spansEqual(a: LineSpan[], b: LineSpan[]) {
+function spansEqual(a: DisplayLineSpan[], b: DisplayLineSpan[]) {
   if (a.length !== b.length) {
     return false
   }
@@ -192,7 +201,7 @@ function spansEqual(a: LineSpan[], b: LineSpan[]) {
   return true
 }
 
-function extmarksEqual(a: Extmark[], b: LineSpan[]) {
+function extmarksEqual(a: Extmark[], b: DisplayLineSpan[]) {
   if (a.length !== b.length) {
     return false
   }

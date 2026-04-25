@@ -28,9 +28,10 @@ import { createBufferAutocomplete } from "./autocomplete/controller"
 import type { BufferAutocompleteProvider } from "./autocomplete/types"
 import { createBufferModel } from "./buffer-model"
 import { type BufferCursor, type DocCharOffset, displayColumn, lineCharRange, lineIndex } from "./buffer-model/coords"
-import { displayColumnToLineCharOffset, getTabWidth } from "./buffer-model/text-metrics"
+import { lineDisplayColumnToCharOffset } from "./buffer-model/text-metrics"
 
 const DEBOUNCE_MS = 200
+const DEFAULT_TAB_WIDTH = 2
 const EMPTY_GUTTER_MARKERS = new Map<number, string>()
 
 export type BufferApi = {
@@ -48,6 +49,7 @@ export type BufferGutterContext = {
 
 export type BufferProps = {
   initialText: string
+  tabWidth?: number
   language?: string
   isFocused: Accessor<boolean>
   onTextChange: (text: string, info: { modified: boolean }) => void
@@ -69,8 +71,10 @@ export function Buffer(props: BufferProps) {
     logger,
   })
 
+  const tabWidth = Math.max(1, props.tabWidth ?? DEFAULT_TAB_WIDTH)
   const bufferModel = createBufferModel({
     initialText: props.initialText,
+    tabWidth,
     isFocused: props.isFocused,
     onTextChange: props.onTextChange,
     debounceMs: DEBOUNCE_MS,
@@ -160,12 +164,7 @@ export function Buffer(props: BufferProps) {
     const lineStart = bufferModel.lineStarts()[cursor.line] ?? 0
     const localOffset = replaceStart - lineStart
     const currentDisplayCol = ref.logicalCursor.col
-    const currentCharIndex = displayColumnToLineCharOffset(
-      ref.plainText,
-      displayColumn(currentDisplayCol),
-      getTabWidth(ref),
-      bufferModel._widthMethod,
-    )
+    const currentCharIndex = lineDisplayColumnToCharOffset(bufferModel, ref.plainText, displayColumn(currentDisplayCol))
     const displayCol = Math.max(0, currentDisplayCol - (currentCharIndex - localOffset))
     const info = ref.lineInfo
     const wrapRow = info.lineStartCols.findLastIndex((startCol) => startCol <= displayCol)

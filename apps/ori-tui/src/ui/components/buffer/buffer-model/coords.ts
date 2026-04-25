@@ -48,6 +48,12 @@ export type LineCharRange = {
   end: LineCharOffset
 }
 
+/** A line-local range in display-space columns. */
+export type LineDisplayRange = {
+  start: DisplayColumn
+  end: DisplayColumn
+}
+
 /** Current cursor location as exposed by the buffer model. */
 export type BufferCursor = {
   line: LineIndex
@@ -107,6 +113,13 @@ export function lineCharRange(start: number, end: number): LineCharRange {
   return {
     start: lineCharOffset(start),
     end: lineCharOffset(end),
+  }
+}
+
+export function lineDisplayRange(start: number, end: number): LineDisplayRange {
+  return {
+    start: displayColumn(start),
+    end: displayColumn(end),
   }
 }
 
