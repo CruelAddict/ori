@@ -191,6 +191,18 @@ describe("sql autocomplete", () => {
       expect(labels(result)[0]).toBe("SELECT")
     })
 
+    test("stays closed after a completed top-level SELECT keyword", () => {
+      expect(
+        complete(
+          "select|",
+          catalog({
+            public: { selectables: ["id"], users: ["id", "email", "created_at"] },
+            analytics: { books: ["id"] },
+          }),
+        ),
+      ).toBeUndefined()
+    })
+
     test("rounds mixed-case keyword prefix up to upper-case", () => {
       const result = complete("SeL|")
       expect(labels(result)[0]).toBe("SELECT")
@@ -228,6 +240,17 @@ describe("sql autocomplete", () => {
       expectIncludes(result, ["users"])
       expectExcludes(result, ["email"])
       expect(replaceText("select * from us|", result)).toBe("us")
+    })
+
+    test("suggests relations with a keyword-shaped prefix only in FROM clause", () => {
+      const result = complete(
+        "select * from sele|",
+        catalog({
+          public: { selectables: ["id"], users: ["id", "email", "created_at"] },
+          analytics: { books: ["id"] },
+        }),
+      )
+      expectIncludes(result, ["selectables"])
     })
 
     test("does not suggest an exact relation match as a no-op completion", () => {
@@ -301,6 +324,15 @@ describe("sql autocomplete", () => {
       const result = complete("select * from users where em|")
       expectIncludes(result, ["email"])
       expectExcludes(result, ["users"])
+    })
+
+    test("stays closed after a completed WHERE keyword", () => {
+      expect(
+        complete(
+          "select * from authors where|",
+          catalog({ public: { authors: ["id", "thirteen_month_weighted_average", "allocations_ad_hoc_tracking_"] } }),
+        ),
+      ).toBeUndefined()
     })
 
     test("qualifies ambiguous columns in joins", () => {

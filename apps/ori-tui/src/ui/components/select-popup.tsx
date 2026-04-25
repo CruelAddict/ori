@@ -12,6 +12,77 @@ type SelectPopupProps<T extends SelectPopupItem = SelectPopupItem> = {
 const MAX_VISIBLE_ROWS = 8
 const MIN_WIDTH = 24
 const MAX_WIDTH = 64
+const DETAIL_GAP = 2
+const ELLIPSIS = "…"
+const LABEL_SHARE = 0.7
+const ROW_PADDING = 2
+
+function truncateMiddleByWidth(value: string, limit: number) {
+  if (limit <= 0) {
+    return ""
+  }
+  if (Bun.stringWidth(value) <= limit) {
+    return value
+  }
+  if (limit === 1) {
+    return ELLIPSIS
+  }
+
+  const chars = Array.from(value)
+  const tail: string[] = []
+  let left = ""
+  let leftWidth = 0
+  let rightWidth = 0
+  let start = 0
+  let end = chars.length - 1
+  const budget = limit - Bun.stringWidth(ELLIPSIS)
+
+  while (start <= end) {
+    const pickLeft = leftWidth <= rightWidth
+    const index = pickLeft ? start : end
+    const ch = chars[index] ?? ""
+    const width = Bun.stringWidth(ch)
+    if (leftWidth + rightWidth + width > budget) {
+      break
+    }
+
+    if (pickLeft) {
+      left += ch
+      leftWidth += width
+      start += 1
+      continue
+    }
+
+    tail.unshift(ch)
+    rightWidth += width
+    end -= 1
+  }
+
+  return `${left}${ELLIPSIS}${tail.join("")}`
+}
+
+function formatSelectPopupItem(item: SelectPopupItem, rowWidth: number) {
+  const availableWidth = Math.max(1, rowWidth - ROW_PADDING)
+  if (!item.detail) {
+    return {
+      label: truncateMiddleByWidth(item.label, availableWidth),
+    }
+  }
+
+  const contentWidth = availableWidth - DETAIL_GAP
+  if (contentWidth < 6) {
+    return {
+      label: truncateMiddleByWidth(item.label, availableWidth),
+    }
+  }
+
+  const detailWidth = Math.min(Bun.stringWidth(item.detail), Math.max(1, Math.floor(contentWidth * (1 - LABEL_SHARE))))
+  const labelWidth = Math.max(1, contentWidth - detailWidth)
+  return {
+    label: truncateMiddleByWidth(item.label, labelWidth),
+    detail: truncateMiddleByWidth(item.detail, detailWidth),
+  }
+}
 
 function getPopupLeft(anchor: SelectPopupAnchor, width: number) {
   if (anchor.x + width <= anchor.containerWidth) {
@@ -169,11 +240,14 @@ export function SelectPopup<T extends SelectPopupItem>(props: SelectPopupProps<T
                     <For each={props.viewModel()?.items() ?? []}>
                       {(item, index) => {
                         const selected = () => props.viewModel()?.selectedIndex() === index()
+                        const content = () => formatSelectPopupItem(item, Math.max(1, nextLayout().width - 2))
                         return (
                           <box
                             flexDirection="row"
                             paddingLeft={1}
                             paddingRight={1}
+                            minWidth={0}
+                            overflow="hidden"
                             backgroundColor={selected() ? theme().get("primary") : theme().get("editor_background")}
                             onMouseMove={() => props.viewModel()?.hover(index())}
                             onMouseDown={(event: MouseEvent) => {
@@ -186,15 +260,25 @@ export function SelectPopup<T extends SelectPopupItem>(props: SelectPopupProps<T
                               props.viewModel()?.select()
                             }}
                           >
-                            <box flexGrow={1}>
+                            <box
+                              flexGrow={1}
+                              flexShrink={1}
+                              minWidth={0}
+                              overflow="hidden"
+                            >
                               <text fg={selected() ? theme().get("editor_background") : theme().get("text")}>
-                                {item.label}
+                                {content().label}
                               </text>
                             </box>
-                            <Show when={item.detail}>
-                              <box paddingLeft={2}>
+                            <Show when={content().detail}>
+                              <box
+                                paddingLeft={2}
+                                flexShrink={1}
+                                minWidth={0}
+                                overflow="hidden"
+                              >
                                 <text fg={selected() ? theme().get("editor_background") : theme().get("text_muted")}>
-                                  {item.detail}
+                                  {content().detail}
                                 </text>
                               </box>
                             </Show>

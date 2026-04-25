@@ -111,6 +111,24 @@ const WHERE_FOLLOWUP_KEYWORDS = ["GROUP BY", "ORDER BY", "LIMIT", "UNION"] as co
 const HAVING_FOLLOWUP_KEYWORDS = ["ORDER BY", "LIMIT", "UNION"] as const
 const JOIN_FOLLOWUP_KEYWORDS = ["ON", "USING"] as const
 const FREQUENT_KEYWORD_PRIORITIES = new Set(["select", "from", "where", "join", "insert into"])
+const EXACT_CLAUSE_KEYWORDS = new Set([
+  "delete",
+  "from",
+  "group",
+  "having",
+  "insert",
+  "into",
+  "join",
+  "limit",
+  "offset",
+  "on",
+  "order",
+  "select",
+  "set",
+  "update",
+  "where",
+  "with",
+])
 const PROJECTION_ALIAS_RESERVED_WORDS = new Set([
   ...STRUCTURAL_KEYWORDS,
   ...SELECT_CLAUSE_KEYWORDS.map((keyword) => keyword.toLowerCase()),
@@ -1076,6 +1094,14 @@ function shouldOpenImplicit(beforeCursor: string, token: string, mode: "word" | 
   return /\b(?:from|join)[ \t]+$/i.test(beforeCursor)
 }
 
+function shouldSuppressExactClauseKeyword(token: string, mode: "word" | "member") {
+  if (mode !== "word" || !token) {
+    return false
+  }
+
+  return EXACT_CLAUSE_KEYWORDS.has(normalize(token))
+}
+
 function isNoOpCompletion(statementText: string, cursorOffset: number, item: BufferAutocompleteItem) {
   const span = findCompletionSpan(statementText, cursorOffset)
   const current = statementText.slice(span.replaceStart, span.replaceEnd)
@@ -1107,6 +1133,9 @@ export function getSqlAutocompleteResult(input: SqlAutocompleteInput): BufferAut
   const postRelationKeywords = getPostRelationKeywordOptions(beforeCursor, clause, input.dialect)
   const updateSetKeywords = getUpdateSetKeywordOptions(beforeCursor)
   if (!shouldOpenImplicit(beforeCursor, span.token, span.mode)) {
+    return undefined
+  }
+  if (shouldSuppressExactClauseKeyword(span.token, span.mode)) {
     return undefined
   }
 
@@ -1263,8 +1292,6 @@ export function getSqlAutocompleteResult(input: SqlAutocompleteInput): BufferAut
   if (!insertContext && items.length === 0) {
     addKeywordItems(items, input.dialect.keywords, 0, sqlCasePreference)
     addFunctionItems(items, input.dialect, 1, sqlCasePreference)
-    addRelationItems(items, tempRelations, 2)
-    addRelationItems(items, input.schema.relations, 3)
   }
 
   const filtered = sortItems(span.token, items)

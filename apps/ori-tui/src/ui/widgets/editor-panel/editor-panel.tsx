@@ -31,12 +31,12 @@ export function EditorPanel(props: EditorPanelProps) {
       context.cursorOffset === undefined
         ? undefined
         : (() => {
-            const resolution = resolveSqlQueryAtOffset(context.text, context.lineStarts, context.cursorOffset)
-            if (resolution.kind !== "query") {
-              return undefined
-            }
-            return resolution.query
-          })()
+          const resolution = resolveSqlQueryAtOffset(context.text, context.lineStarts, context.cursorOffset)
+          if (resolution.kind !== "query") {
+            return undefined
+          }
+          return resolution.query
+        })()
     if (current) {
       markers.set(current.startLine, "󰻃 ")
     }
