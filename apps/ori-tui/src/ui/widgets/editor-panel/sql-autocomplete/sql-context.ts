@@ -46,6 +46,8 @@ export type SqlNamedQuery = {
   query: string
   queryStart: number
   queryEnd: number
+  columns: string[]
+  recursive: boolean
 }
 
 export type SqlDerivedTable = {
@@ -587,6 +589,7 @@ export function extractCteQueries(text: string): SqlNamedQuery[] {
   const queries: SqlNamedQuery[] = []
   let index = skipWhitespace(masked, withIndex + 4)
   const recursiveMatch = masked.slice(index).match(/^recursive\b/i)
+  const recursive = Boolean(recursiveMatch?.[0])
   if (recursiveMatch?.[0]) {
     index = skipWhitespace(masked, index + recursiveMatch[0].length)
   }
@@ -599,10 +602,18 @@ export function extractCteQueries(text: string): SqlNamedQuery[] {
     }
 
     index = skipWhitespace(masked, identifier.end)
+    const columns: string[] = []
     if (masked[index] === "(") {
       const columnsEnd = findMatchingParen(masked, index)
       if (columnsEnd === undefined) {
         return queries
+      }
+      for (const rawColumn of text.slice(index + 1, columnsEnd).split(",")) {
+        const column = normalizeIdentifier(rawColumn.trim())
+        if (!column) {
+          continue
+        }
+        columns.push(column)
       }
       index = skipWhitespace(masked, columnsEnd + 1)
     }
@@ -627,6 +638,8 @@ export function extractCteQueries(text: string): SqlNamedQuery[] {
       query: text.slice(index + 1, queryEnd),
       queryStart: index + 1,
       queryEnd,
+      columns,
+      recursive,
     })
 
     index = skipWhitespace(masked, queryEnd + 1)

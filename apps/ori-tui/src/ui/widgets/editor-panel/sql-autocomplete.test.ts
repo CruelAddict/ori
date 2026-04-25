@@ -519,9 +519,22 @@ describe("sql autocomplete", () => {
       expectIncludes(result, ["nullif"])
     })
 
+    test("suggests UNION after a select expression", () => {
+      const result = complete("select 1 uni|")
+      expectIncludes(result, ["union", "union all"])
+    })
+
     test("formats functions in lower-case for lower-case prefixes", () => {
       const result = complete("select co|")
       expectIncludes(result, ["count", "coalesce"])
+    })
+
+    test("places function autocomplete cursor inside parentheses", () => {
+      const result = complete("select pri|", catalog(DEFAULT_CATALOG, "sqlite"))
+      const item = result?.items.find((item) => item.label === "printf")
+
+      expect(item?.insertText).toBe("printf()")
+      expect(item?.cursorOffset).toBe("printf(".length)
     })
 
     test("formats functions in upper-case for upper-case prefixes", () => {
@@ -651,9 +664,33 @@ describe("sql autocomplete", () => {
   })
 
   describe("ctes and temp tables", () => {
+    test("suggests RECURSIVE after WITH", () => {
+      expectIncludes(complete("with rec|"), ["recursive"])
+      expectIncludes(complete("WITH REC|"), ["RECURSIVE"])
+    })
+
     test("suggests cte names inside the current statement", () => {
       const result = complete("with recent as (select * from users) select * from re|")
       expectIncludes(result, ["recent"])
+    })
+
+    test("suggests recursive cte name and header columns inside its body", () => {
+      const result = complete(
+        "with recursive seq(nnnn) as (select 1 union all select nnnn + 1 from se| where nnnn < 1000) select * from seq",
+      )
+      expectIncludes(result, ["seq"])
+
+      const columnResult = complete(
+        "with recursive seq(nnnn) as (select 1 union all select nnn| + 1 from seq where nnnn < 1000) select * from seq",
+      )
+      expectIncludes(columnResult, ["nnnn"])
+    })
+
+    test("suggests recursive cte header columns in the outer query", () => {
+      const result = complete(
+        "with recursive seq(nnnn) as (select 1 union all select nnnn + 1 from seq where nnnn < 1000) select nnn| from seq",
+      )
+      expectIncludes(result, ["nnnn"])
     })
 
     test("does not leak ctes from previous statements", () => {

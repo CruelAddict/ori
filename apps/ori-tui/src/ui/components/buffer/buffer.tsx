@@ -100,6 +100,7 @@ export function Buffer(props: BufferProps) {
         lineCharRange(start.col, end.col),
         item.insertText,
         "autocomplete",
+        { cursorOffset: item.cursorOffset },
       )
     },
   })

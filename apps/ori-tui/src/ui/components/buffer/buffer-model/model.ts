@@ -95,8 +95,13 @@ export function createBufferModel(options: BufferModelOptions) {
     handleEnter: (index: LineIndex) => edit.handleEnter(buffer, index),
     handleBackwardMerge: (index: LineIndex) => edit.handleBackwardMerge(buffer, index),
     handleForwardMerge: (index: LineIndex) => edit.handleForwardMerge(buffer, index),
-    replaceRangeInLine: (index: LineIndex, range: LineCharRange, text: string, origin: BufferChangeOrigin) =>
-      edit.replaceRangeInLine(buffer, index, range, text, origin),
+    replaceRangeInLine: (
+      index: LineIndex,
+      range: LineCharRange,
+      text: string,
+      origin: BufferChangeOrigin,
+      options?: { cursorOffset?: number },
+    ) => edit.replaceRangeInLine(buffer, index, range, text, origin, options),
     flush: () => edit.flush(buffer),
     dispose: () => edit.dispose(buffer),
 

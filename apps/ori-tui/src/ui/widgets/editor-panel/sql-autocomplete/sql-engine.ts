@@ -15,6 +15,7 @@ import {
   maskSql,
   normalizeIdentifier,
   type SqlClause,
+  type SqlNamedQuery,
   type SqlTableRef,
 } from "./sql-context"
 import type { SqlRelation, SqlSchemaIndex } from "./sql-schema-index"
@@ -153,6 +154,7 @@ const PROJECTION_ALIAS_RESERVED_WORDS = new Set([
 const IDENTIFIER = '(?:"(?:[^"]|"")+"|\\[[^\\]]+\\]|`[^`]+`|[A-Za-z_][A-Za-z0-9_$]*)'
 const QUALIFIED_IDENTIFIER = `${IDENTIFIER}(?:\\s*\\.\\s*${IDENTIFIER}){0,2}`
 const KEYWORD_FOLLOW_UP_PATTERNS = [
+  { pattern: /\bwith\s+([A-Za-z_]*)$/i, keywords: ["RECURSIVE"] },
   { pattern: /\binsert\s+([A-Za-z_]*)$/i, keywords: ["INTO"] },
   { pattern: /\bdelete\s+([A-Za-z_]*)$/i, keywords: ["FROM"] },
   { pattern: /\bgroup\s+([A-Za-z_]*)$/i, keywords: ["BY"] },
@@ -352,7 +354,7 @@ function getActiveQueryScope(statementText: string, cursorOffset: number): Query
     return {
       text: nested.text,
       start: cte.queryStart + nested.start,
-      visibleCtes: ctes.slice(0, i),
+      visibleCtes: cte.recursive ? [...ctes.slice(0, i), cte] : ctes.slice(0, i),
     }
   }
 
@@ -493,6 +495,7 @@ function sortItems(query: string, items: RankedItem[]) {
       label: entry.item.label,
       insertText: entry.item.insertText,
       detail: entry.item.detail,
+      cursorOffset: entry.item.cursorOffset,
     }))
 }
 
@@ -650,7 +653,13 @@ function buildCteRelationMap(
   const ctes = new Map(parentCtes)
 
   for (const cte of queries) {
-    const columns = inferQueryColumns(cte.query, schema, tempRelations, ctes, cache, active)
+    const columns =
+      cte.columns.length > 0
+        ? cte.columns.map((name) => ({
+            id: `cte:${cte.name}:${name}`,
+            name,
+          }))
+        : inferQueryColumns(cte.query, schema, tempRelations, ctes, cache, active)
     ctes.set(normalize(cte.name), createInlineRelation(cte.name, "cte", "cte", columns))
   }
 
@@ -793,6 +802,7 @@ function addFunctionItems(
       id: `function:${fn}`,
       label: formatted,
       insertText: `${formatted}()`,
+      cursorOffset: formatted.length + 1,
       detail: "function",
       sortGroup,
       keywordPriority: 0,
@@ -1080,6 +1090,17 @@ function getClauseFollowUpOptions(beforeCursor: string, clause: SqlClause) {
   return []
 }
 
+function getSelectFollowUpOptions(beforeCursor: string) {
+  const token = beforeCursor.match(/(\w*)$/)?.[1] ?? ""
+  const tail = beforeCursor.slice(0, beforeCursor.length - token.length).trimEnd()
+  const body = tail.match(/\bselect\s+([\s\S]*)$/i)?.[1]?.trimEnd()
+  if (!isExpressionComplete(body)) {
+    return []
+  }
+
+  return matchKeywordPrefix(["UNION", "UNION ALL"], token, inferSqlCasePreference(beforeCursor, token))
+}
+
 function shouldPreferFrom(beforeCursor: string, token: string) {
   const query = token.toLowerCase()
   const matchesSelectStar = /\bSELECT\s+\*\s+\w*$/i.test(beforeCursor) || /\bSELECT\s+\*\s*$/i.test(beforeCursor)
@@ -1193,6 +1214,7 @@ export function getSqlAutocompleteResult(input: SqlAutocompleteInput): BufferAut
   )
   const keywordFollowUps = getKeywordFollowUpOptions(beforeCursor)
   const clauseFollowUps = getClauseFollowUpOptions(beforeCursor, clause)
+  const selectFollowUps = clause === "select" ? getSelectFollowUpOptions(beforeCursor) : []
   const items: RankedItem[] = []
 
   if (span.mode === "member" && span.scopeName) {
@@ -1255,6 +1277,10 @@ export function getSqlAutocompleteResult(input: SqlAutocompleteInput): BufferAut
   if (!insertContext && items.length === 0 && clause === "select") {
     if (shouldPreferFrom(beforeCursor, span.token)) {
       addKeywordItems(items, ["FROM"], 0, sqlCasePreference)
+    }
+
+    if (items.length === 0 && selectFollowUps.length > 0) {
+      addKeywordItems(items, selectFollowUps, 0, sqlCasePreference)
     }
 
     if (items.length === 0) {

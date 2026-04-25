@@ -3,6 +3,7 @@ import type { DocCharOffset, DocCharRange } from "../buffer-model/coords"
 
 export type BufferAutocompleteItem = SelectPopupItem & {
   insertText: string
+  cursorOffset?: number
 }
 
 export type BufferAutocompleteRequest = {

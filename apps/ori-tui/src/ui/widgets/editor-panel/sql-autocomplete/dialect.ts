@@ -30,6 +30,7 @@ const BASE_KEYWORDS = [
   "ON",
   "AS",
   "WITH",
+  "RECURSIVE",
   "UNION",
   "UNION ALL",
   "INSERT INTO",
@@ -138,7 +139,7 @@ const DIALECTS: Record<SqlDialectId, SqlDialect> = {
   sqlite: createDialect("sqlite", {
     supportsSchemas: false,
     keywords: ["PRAGMA", "VACUUM", "GLOB", "RETURNING", "WITHOUT ROWID"],
-    functions: ["IFNULL", "TOTAL", "JULIANDAY", "STRFTIME", "DATETIME", "GROUP_CONCAT"],
+    functions: ["IFNULL", "TOTAL", "JULIANDAY", "STRFTIME", "DATETIME", "GROUP_CONCAT", "PRINTF", "HEX", "RANDOMBLOB"],
     operators: ["GLOB", "MATCH", "REGEXP"],
   }),
   duckdb: createDialect("duckdb", {

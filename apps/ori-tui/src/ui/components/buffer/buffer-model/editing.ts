@@ -9,13 +9,21 @@ import {
 import { reapplyLineHighlight } from "./highlighting"
 import type { BufferChangeOrigin, BufferModel, Line } from "./model"
 import { clampFocus, getLineRef, moveFocus } from "./navigation"
-import { lineCharOffsetToDisplayColumn, lineCharRangeToDisplayRange, lineDisplayColumnToCharOffset } from "./text-metrics"
+import {
+  lineCharOffsetToDisplayColumn,
+  lineCharRangeToDisplayRange,
+  lineDisplayColumnToCharOffset,
+} from "./text-metrics"
 
 type LineEdit = {
   nextLines: Line[]
   lineIdsToSync: string[]
   focusRow: LineIndex
   focusCol: DisplayColumn
+}
+
+type ReplaceRangeInLineOptions = {
+  cursorOffset?: number
 }
 
 function schedulePush(buffer: BufferModel) {
@@ -136,6 +144,7 @@ export function replaceRangeInLine(
   range: LineCharRange,
   insertText: string,
   origin: BufferChangeOrigin,
+  options: ReplaceRangeInLineOptions = {},
 ) {
   const line = buffer.lines()[index]
   const ref = getLineRef(buffer, index)
@@ -158,7 +167,8 @@ export function replaceRangeInLine(
   }
 
   const displayRange = lineCharRangeToDisplayRange(buffer, currentText, range)
-  const targetOffset = lineCharOffset(start + insertText.length)
+  const cursorOffset = options.cursorOffset ?? insertText.length
+  const targetOffset = lineCharOffset(start + cursorOffset)
   const targetDisplayCol = lineCharOffsetToDisplayColumn(buffer, nextText, targetOffset)
   buffer._pendingChangeOrigin = {
     origin,
