@@ -129,6 +129,12 @@ const EXACT_CLAUSE_KEYWORDS = new Set([
   "where",
   "with",
 ])
+const EXACT_COMPLETED_KEYWORDS = new Set([
+  ...EXACT_CLAUSE_KEYWORDS,
+  ...SELECT_CLAUSE_KEYWORDS.map((keyword) => keyword.toLowerCase()),
+  ...EXPRESSION_KEYWORDS.map((keyword) => keyword.toLowerCase()),
+  ...ORDER_DIRECTION_KEYWORDS.map((keyword) => keyword.toLowerCase()),
+])
 const PROJECTION_ALIAS_RESERVED_WORDS = new Set([
   ...STRUCTURAL_KEYWORDS,
   ...SELECT_CLAUSE_KEYWORDS.map((keyword) => keyword.toLowerCase()),
@@ -1094,12 +1100,20 @@ function shouldOpenImplicit(beforeCursor: string, token: string, mode: "word" | 
   return /\b(?:from|join)[ \t]+$/i.test(beforeCursor)
 }
 
-function shouldSuppressExactClauseKeyword(token: string, mode: "word" | "member") {
+function shouldSuppressExactKeyword(token: string, mode: "word" | "member", clause: SqlClause, dialect: SqlDialect) {
   if (mode !== "word" || !token) {
     return false
   }
 
-  return EXACT_CLAUSE_KEYWORDS.has(normalize(token))
+  const exact = normalize(token)
+  if (EXACT_CLAUSE_KEYWORDS.has(exact)) {
+    return true
+  }
+  if (!expectsColumnSuggestions(clause)) {
+    return false
+  }
+
+  return EXACT_COMPLETED_KEYWORDS.has(exact) || dialect.keywords.some((keyword) => normalize(keyword) === exact)
 }
 
 function isNoOpCompletion(statementText: string, cursorOffset: number, item: BufferAutocompleteItem) {
@@ -1135,7 +1149,7 @@ export function getSqlAutocompleteResult(input: SqlAutocompleteInput): BufferAut
   if (!shouldOpenImplicit(beforeCursor, span.token, span.mode)) {
     return undefined
   }
-  if (shouldSuppressExactClauseKeyword(span.token, span.mode)) {
+  if (shouldSuppressExactKeyword(span.token, span.mode, clause, input.dialect)) {
     return undefined
   }
 

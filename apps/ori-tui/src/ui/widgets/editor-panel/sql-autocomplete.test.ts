@@ -502,6 +502,23 @@ describe("sql autocomplete", () => {
       expectExcludes(result, ["is null", "is not null"])
     })
 
+    test("stays closed after a completed expression keyword", () => {
+      expect(complete("select null|")).toBeUndefined()
+    })
+
+    test("stays closed after a completed IS NOT NULL predicate", () => {
+      expect(
+        complete("select * from authors where email is not null|", {
+          ...catalog({ public: { authors: ["id", "email", "name"] } }),
+        }),
+      ).toBeUndefined()
+    })
+
+    test("suggests NULLIF after typing beyond the NULL keyword", () => {
+      const result = complete("select nulli|")
+      expectIncludes(result, ["nullif"])
+    })
+
     test("formats functions in lower-case for lower-case prefixes", () => {
       const result = complete("select co|")
       expectIncludes(result, ["count", "coalesce"])
