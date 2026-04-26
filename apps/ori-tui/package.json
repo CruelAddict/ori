@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "bun run --watch src/index.tsx",
     "build": "./build.ts",
+    "bench:autocomplete": "bun run bench/sql-autocomplete.ts",
     "lint": "bunx biome check --reporter summary",
     "lint:fix": "bunx biome check --write",
     "test": "bun test",
