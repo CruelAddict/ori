@@ -1,12 +1,20 @@
 import type { MouseEvent, ScrollBoxRenderable } from "@opentui/core"
 import { OriScrollbox } from "@ui/components/ori-scrollbox"
-import type { SelectPopupAnchor, SelectPopupItem, SelectPopupViewModel } from "@ui/components/select-popup-model"
+import type { SelectPopupItem, SelectPopupViewModel } from "@ui/components/select-popup-model"
 import { useTheme } from "@ui/providers/theme"
 import { type KeyBinding, KeyScope } from "@ui/services/key-scopes"
 import { type Accessor, createEffect, createMemo, createSignal, For, Show } from "solid-js"
 
 type SelectPopupProps<T extends SelectPopupItem = SelectPopupItem> = {
   viewModel: Accessor<SelectPopupViewModel<T> | undefined>
+}
+
+type SelectPopupLayout = {
+  left: number
+  top: number
+  width: number
+  height: number
+  popupHeight: number
 }
 
 const MAX_VISIBLE_ROWS = 8
@@ -84,14 +92,6 @@ function formatSelectPopupItem(item: SelectPopupItem, rowWidth: number) {
   }
 }
 
-function getPopupLeft(anchor: SelectPopupAnchor, width: number) {
-  if (anchor.x + width <= anchor.containerWidth) {
-    return anchor.x
-  }
-
-  return Math.max(0, anchor.containerWidth - width)
-}
-
 function getPopupWidth<T extends SelectPopupItem>(
   viewModel: SelectPopupViewModel<T>,
   availableWidth: number,
@@ -100,6 +100,41 @@ function getPopupWidth<T extends SelectPopupItem>(
   const widths = viewModel.items().map((item) => Bun.stringWidth(item.label) + Bun.stringWidth(item.detail ?? "") + 6)
   const contentWidth = widths.length > 0 ? Math.max(...widths) : MIN_WIDTH
   return Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, availableWidth, contentWidth, maxLimit))
+}
+
+function getPopupLayout(
+  anchor: { x: number; y: number; containerWidth: number; containerHeight: number },
+  width: number,
+  rowCount: number,
+): SelectPopupLayout | null {
+  const left = anchor.x + width <= anchor.containerWidth ? anchor.x : Math.max(0, anchor.containerWidth - width)
+  const rows = Math.max(0, rowCount)
+  const belowTop = anchor.y + 1
+  const belowRows = Math.max(0, anchor.containerHeight - belowTop - 2)
+  const aboveRows = Math.max(0, anchor.y - 2)
+  const belowHeight = Math.min(rows, belowRows)
+  const aboveHeight = Math.min(rows, aboveRows)
+  if (belowHeight <= 0 && aboveHeight <= 0) {
+    return null
+  }
+
+  if (belowHeight >= aboveHeight) {
+    return {
+      left,
+      top: belowTop,
+      width,
+      height: belowHeight,
+      popupHeight: belowHeight + 2,
+    }
+  }
+
+  return {
+    left,
+    top: anchor.y - aboveHeight - 2,
+    width,
+    height: aboveHeight,
+    popupHeight: aboveHeight + 2,
+  }
 }
 
 export function SelectPopup<T extends SelectPopupItem>(props: SelectPopupProps<T>) {
@@ -156,23 +191,9 @@ export function SelectPopup<T extends SelectPopupItem>(props: SelectPopupProps<T
     }
 
     const maxWidth = Math.max(MIN_WIDTH, anchor.containerWidth - 2)
-    const maxHeight = Math.max(1, anchor.containerHeight - 2)
     const availableWidth = Math.max(MIN_WIDTH, anchor.containerWidth)
     const width = getPopupWidth(viewModel, availableWidth, maxWidth)
-    const left = getPopupLeft(anchor, width)
-    const height = Math.min(rowCount(), maxHeight)
-    const popupHeight = height + 2
-    const belowTop = anchor.y + 1
-    const belowSpace = anchor.containerHeight - belowTop
-    const top = belowSpace >= popupHeight ? belowTop : Math.max(0, anchor.y - popupHeight)
-
-    return {
-      left,
-      top,
-      width,
-      height,
-      popupHeight,
-    }
+    return getPopupLayout(anchor, width, rowCount())
   })
 
   createEffect(() => {
