@@ -155,6 +155,7 @@ function collectStatementSpans(text: string): Span[] {
   let state: ParseState = { kind: "normal" }
   let leadingToken = getLeadingToken(text, { start: segmentStart, end: spanEnd })
   let allowWithContinuation = leadingToken?.token === "with"
+  let depth = 0
 
   let i = 0
   while (i < spanEnd) {
@@ -196,10 +197,21 @@ function collectStatementSpans(text: string): Span[] {
         segmentStart = i + 1
         leadingToken = getLeadingToken(text, { start: segmentStart, end: spanEnd })
         allowWithContinuation = leadingToken?.token === "with"
+        depth = 0
         i++
         continue
       }
-      if (ch === "\n") {
+      if (ch === "(") {
+        depth += 1
+        i++
+        continue
+      }
+      if (ch === ")") {
+        depth = Math.max(0, depth - 1)
+        i++
+        continue
+      }
+      if (ch === "\n" && depth === 0) {
         const nextStart = findLikelyKeywordAfterNewline(text, i + 1, spanEnd)
         if (nextStart !== undefined && hasNonWhitespace(text, segmentStart, nextStart)) {
           if (leadingToken?.token === "with" && allowWithContinuation) {

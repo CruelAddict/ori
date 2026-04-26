@@ -60,9 +60,12 @@ type QueryScope = {
   text: string
   start: number
   visibleCtes: readonly SqlNamedQuery[]
+  outerTexts: readonly string[]
 }
 
 type SqlCasePreference = "lower" | "upper"
+
+type ArbitraryIdentifierSlot = { kind: "after-as" } | { kind: "after-relation"; token: string }
 
 const STRUCTURAL_KEYWORDS = new Set([
   "from",
@@ -105,11 +108,11 @@ const EXPRESSION_KEYWORDS = [
 ] as const
 const ORDER_DIRECTION_KEYWORDS = ["ASC", "DESC"] as const
 const GROUP_FOLLOWUP_KEYWORDS = ["HAVING", "ORDER BY", "LIMIT", "UNION"] as const
-const ON_FOLLOWUP_KEYWORDS = ["WHERE", "JOIN", "GROUP BY", "ORDER BY", "LIMIT", "UNION"] as const
+const ON_FOLLOWUP_KEYWORDS = ["AND", "OR", "WHERE", "JOIN", "GROUP BY", "ORDER BY", "LIMIT", "UNION"] as const
 const ORDER_FOLLOWUP_KEYWORDS = ["LIMIT", "OFFSET", "UNION"] as const
 const FROM_FOLLOWUP_KEYWORDS = ["WHERE", "JOIN", "GROUP BY", "ORDER BY", "LIMIT", "UNION"] as const
-const WHERE_FOLLOWUP_KEYWORDS = ["GROUP BY", "ORDER BY", "LIMIT", "UNION"] as const
-const HAVING_FOLLOWUP_KEYWORDS = ["ORDER BY", "LIMIT", "UNION"] as const
+const WHERE_FOLLOWUP_KEYWORDS = ["AND", "OR", "GROUP BY", "ORDER BY", "LIMIT", "UNION"] as const
+const HAVING_FOLLOWUP_KEYWORDS = ["AND", "OR", "ORDER BY", "LIMIT", "UNION"] as const
 const JOIN_FOLLOWUP_KEYWORDS = ["ON", "USING"] as const
 const FREQUENT_KEYWORD_PRIORITIES = new Set(["select", "from", "where", "join", "insert into"])
 const EXACT_CLAUSE_KEYWORDS = new Set([
@@ -332,12 +335,14 @@ function getNestedQueryScope(text: string, cursorOffset: number) {
     return {
       text: nested.text,
       start: start + nested.start,
+      outerTexts: [text, ...nested.outerTexts],
     }
   }
 
   return {
     text,
     start: 0,
+    outerTexts: [],
   }
 }
 
@@ -355,6 +360,7 @@ function getActiveQueryScope(statementText: string, cursorOffset: number): Query
       text: nested.text,
       start: cte.queryStart + nested.start,
       visibleCtes: cte.recursive ? [...ctes.slice(0, i), cte] : ctes.slice(0, i),
+      outerTexts: nested.outerTexts,
     }
   }
 
@@ -365,6 +371,7 @@ function getActiveQueryScope(statementText: string, cursorOffset: number): Query
       text: nested.text,
       start: nested.start,
       visibleCtes: [],
+      outerTexts: nested.outerTexts,
     }
   }
 
@@ -374,6 +381,7 @@ function getActiveQueryScope(statementText: string, cursorOffset: number): Query
     text: nested.text,
     start: start + nested.start,
     visibleCtes: ctes,
+    outerTexts: nested.outerTexts,
   }
 }
 
@@ -396,6 +404,70 @@ function inferSqlCasePreference(beforeCursor: string, token: string): SqlCasePre
   }
 
   return lookback === lookback.toLowerCase() ? "lower" : "upper"
+}
+
+function currentLinePrefix(beforeCursor: string) {
+  return beforeCursor.slice(beforeCursor.lastIndexOf("\n") + 1)
+}
+
+function readAliasLikeToken(value: string) {
+  return value.match(/([A-Za-z_][A-Za-z0-9_$]*)$/)?.[1] ?? ""
+}
+
+function getArbitraryIdentifierSlot(beforeCursor: string): ArbitraryIdentifierSlot | undefined {
+  const line = currentLinePrefix(beforeCursor)
+  const token = readAliasLikeToken(line)
+  const relationPatterns = [
+    new RegExp(`\\bfrom\\s+${QUALIFIED_IDENTIFIER}\\s+([A-Za-z_][A-Za-z0-9_$]*)$`, "i"),
+    new RegExp(`\\bjoin\\s+${QUALIFIED_IDENTIFIER}\\s+([A-Za-z_][A-Za-z0-9_$]*)$`, "i"),
+    new RegExp(`\\bupdate\\s+${QUALIFIED_IDENTIFIER}\\s+([A-Za-z_][A-Za-z0-9_$]*)$`, "i"),
+    /^\s*\)\s+([A-Za-z_][A-Za-z0-9_$]*)$/i,
+  ]
+  const afterAsPatterns = [
+    new RegExp(`\\bfrom\\s+${QUALIFIED_IDENTIFIER}\\s+as(?:\\s+[A-Za-z_][A-Za-z0-9_$]*)?$`, "i"),
+    new RegExp(`\\bjoin\\s+${QUALIFIED_IDENTIFIER}\\s+as(?:\\s+[A-Za-z_][A-Za-z0-9_$]*)?$`, "i"),
+    new RegExp(`\\bupdate\\s+${QUALIFIED_IDENTIFIER}\\s+as(?:\\s+[A-Za-z_][A-Za-z0-9_$]*)?$`, "i"),
+    /^\s*\)\s+as(?:\s+[A-Za-z_][A-Za-z0-9_$]*)?$/i,
+    /\bwith\s+recursive\s+[A-Za-z_][A-Za-z0-9_$]*\s+as(?:\s+[A-Za-z_][A-Za-z0-9_$]*)?$/i,
+    /\bas(?:\s+[A-Za-z_][A-Za-z0-9_$]*)?$/i,
+  ]
+  if (afterAsPatterns.some((pattern) => pattern.test(line))) {
+    return { kind: "after-as" }
+  }
+  if (/\bdelete\s+from\s+/i.test(line)) {
+    return undefined
+  }
+  if (!token || !relationPatterns.some((pattern) => pattern.test(line))) {
+    return undefined
+  }
+  return { kind: "after-relation", token }
+}
+
+function isExistsQueryStartContext(beforeCursor: string, token: string) {
+  if (!token) {
+    return false
+  }
+
+  return new RegExp(`\\bexists\\s*\\(\\s*${token.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i").test(beforeCursor)
+}
+
+function shouldShowClauseFollowUpsOnly(
+  beforeCursor: string,
+  clause: SqlClause,
+  token: string,
+  keywords: readonly string[],
+) {
+  if (!token || !["where", "having", "on"].includes(clause)) {
+    return false
+  }
+  const tail = beforeCursor
+    .slice(0, beforeCursor.length - token.length)
+    .trimEnd()
+    .toLowerCase()
+  if (tail.endsWith("where") || tail.endsWith("having") || tail.endsWith("on")) {
+    return false
+  }
+  return keywords.some((keyword) => normalize(keyword).startsWith(normalize(token)))
 }
 
 function formatSqlVocabulary(value: string, preference: SqlCasePreference) {
@@ -515,6 +587,29 @@ function createInlineRelation(
   }
 }
 
+function resolveDerivedColumns(
+  derived: ReturnType<typeof extractDerivedTables>[number],
+  schema: SqlSchemaIndex,
+  tempRelations: readonly TempRelation[],
+  cteRelations: ReadonlyMap<string, InlineRelation>,
+  cache: Map<string, SqlRelation["columns"]>,
+  active: Set<string>,
+) {
+  const inferred = inferQueryColumns(derived.query, schema, tempRelations, cteRelations, cache, active)
+  if (derived.columns.length === 0) {
+    return inferred
+  }
+
+  const columns = derived.columns.map((name, index) => ({
+    id: inferred[index]?.id ?? `derived:${derived.alias}:${index}`,
+    name,
+    dataType: inferred[index]?.dataType,
+  }))
+
+  pushUniqueColumns(columns, inferred.slice(derived.columns.length))
+  return columns
+}
+
 function resolveSchemaRelation(schema: SqlSchemaIndex, ref: { database?: string; schema?: string; name: string }) {
   for (const name of buildRelationLookupNames(ref)) {
     const relation = schema.findRelations(name)[0]
@@ -550,7 +645,13 @@ function resolveScopedRelation(
   schema: SqlSchemaIndex,
   tempRelations: readonly TempRelation[],
   cteRelations: ReadonlyMap<string, InlineRelation>,
+  scopedRelations: readonly ScopedCompletionRelation[] = [],
 ) {
+  const scoped = scopedRelations.find((ref) => normalize(ref.qualifier) === normalize(scopeName))
+  if (scoped) {
+    return scoped.relation
+  }
+
   const alias = aliases.get(scopeName.toLowerCase())
   const scopedByAlias = alias ? resolveNamedRelation(schema, alias, tempRelations, cteRelations) : undefined
   if (scopedByAlias) {
@@ -709,6 +810,23 @@ function addColumnItems(target: RankedItem[], relations: readonly CompletionRela
   }
 }
 
+function addQueryColumnItems(
+  target: RankedItem[],
+  columns: readonly SqlRelation["columns"][number][],
+  sortGroup: number,
+) {
+  for (const column of columns) {
+    pushUnique(target, {
+      id: column.id,
+      label: column.name,
+      insertText: formatSqlIdentifier(column.name),
+      detail: "select-list",
+      sortGroup,
+      keywordPriority: 0,
+    })
+  }
+}
+
 function addScopedColumnItems(target: RankedItem[], refs: readonly ScopedCompletionRelation[], sortGroup: number) {
   const columns = new Map<
     string,
@@ -767,6 +885,7 @@ function addScopedRelationItems(target: RankedItem[], refs: readonly ScopedCompl
       detail: relationDetail(ref.relation),
       sortGroup,
       keywordPriority: 0,
+      matchMode: "prefix",
     })
   }
 }
@@ -785,7 +904,7 @@ function addKeywordItems(
       insertText: formatted,
       sortGroup,
       keywordPriority: FREQUENT_KEYWORD_PRIORITIES.has(normalize(keyword)) ? 1 : 0,
-      matchMode: keyword.includes(" ") ? "prefix" : undefined,
+      matchMode: "prefix",
     })
   }
 }
@@ -830,6 +949,7 @@ function addOperatorItems(
       detail: "operator",
       sortGroup,
       keywordPriority: 0,
+      matchMode: "prefix",
     })
   }
 }
@@ -853,6 +973,7 @@ function addCteItems(target: RankedItem[], ctes: readonly string[], sortGroup: n
       detail: "cte",
       sortGroup,
       keywordPriority: 0,
+      matchMode: "prefix",
     })
   }
 }
@@ -919,7 +1040,7 @@ function resolveReferencedRelations(
       derived.alias,
       "subquery",
       "derived",
-      inferQueryColumns(derived.query, schema, tempRelations, cteRelations, cache, active),
+      resolveDerivedColumns(derived, schema, tempRelations, cteRelations, cache, active),
     )
     if (resolved.some((item) => item.id === relation.id)) {
       continue
@@ -958,7 +1079,7 @@ function resolveScopedCompletionRelations(
       derived.alias,
       "subquery",
       "derived",
-      inferQueryColumns(derived.query, schema, tempRelations, cteRelations, cache, active),
+      resolveDerivedColumns(derived, schema, tempRelations, cteRelations, cache, active),
     )
     scoped.push({
       relation,
@@ -992,6 +1113,17 @@ function expectsColumnSuggestions(clause: SqlClause) {
 function getPostRelationKeywordOptions(beforeCursor: string, clause: SqlClause, dialect: SqlDialect) {
   if (clause !== "from" && clause !== "join") {
     return []
+  }
+
+  if (clause === "join") {
+    const usingPatterns = [
+      new RegExp(`\\bJOIN\\s+${QUALIFIED_IDENTIFIER}\\s+USING\\s*\\([^()]*\\)\\s+(\\w*)$`, "i"),
+      new RegExp(`\\bJOIN\\s+${QUALIFIED_IDENTIFIER}\\s+AS\\s+${IDENTIFIER}\\s+USING\\s*\\([^()]*\\)\\s+(\\w*)$`, "i"),
+      new RegExp(`\\bJOIN\\s+${QUALIFIED_IDENTIFIER}\\s+${IDENTIFIER}\\s+USING\\s*\\([^()]*\\)\\s+(\\w*)$`, "i"),
+    ]
+    if (usingPatterns.some((pattern) => pattern.test(beforeCursor))) {
+      return [...ON_FOLLOWUP_KEYWORDS]
+    }
   }
 
   const keyword = clause === "join" ? "JOIN" : "FROM"
@@ -1141,6 +1273,19 @@ function shouldSuppressExactKeyword(token: string, mode: "word" | "member", clau
   return EXACT_COMPLETED_KEYWORDS.has(exact) || dialect.keywords.some((keyword) => normalize(keyword) === exact)
 }
 
+function shouldSuppressExactScopedQualifier(
+  token: string,
+  mode: "word" | "member",
+  clause: SqlClause,
+  refs: readonly ScopedCompletionRelation[],
+) {
+  if (mode !== "word" || !token || !["select", "where", "having", "on", "set"].includes(clause)) {
+    return false
+  }
+
+  return refs.some((ref) => normalize(ref.qualifier) === normalize(token))
+}
+
 function isNoOpCompletion(statementText: string, cursorOffset: number, item: BufferAutocompleteItem) {
   const span = findCompletionSpan(statementText, cursorOffset)
   const current = statementText.slice(span.replaceStart, span.replaceEnd)
@@ -1169,12 +1314,36 @@ export function getSqlAutocompleteResult(input: SqlAutocompleteInput): BufferAut
   const insertContext = getInsertContext(statement.text, statement.cursorOffset)
   const scope = getActiveQueryScope(statement.text, statement.cursorOffset)
   const sqlCasePreference = inferSqlCasePreference(beforeCursor, span.token)
+  const keywordFollowUps = getKeywordFollowUpOptions(beforeCursor)
+  if (!insertContext && span.token && keywordFollowUps.length > 0) {
+    const items: RankedItem[] = []
+    addKeywordItems(items, keywordFollowUps, 0, sqlCasePreference)
+    const filtered = sortItems(span.token, items)
+      .filter((item) => !isNoOpCompletion(statement.text, statement.cursorOffset, item))
+      .slice(0, 50)
+    if (filtered.length === 0) {
+      return undefined
+    }
+    return {
+      replace: docCharRange(span.replaceStart, span.replaceEnd),
+      items: filtered,
+    }
+  }
   const postRelationKeywords = getPostRelationKeywordOptions(beforeCursor, clause, input.dialect)
   const updateSetKeywords = getUpdateSetKeywordOptions(beforeCursor)
-  if (!shouldOpenImplicit(beforeCursor, span.token, span.mode)) {
+  const arbitraryIdentifierSlot = span.mode === "word" ? getArbitraryIdentifierSlot(beforeCursor) : undefined
+  const arbitraryIdentifierKeywords = clause === "into" ? updateSetKeywords : postRelationKeywords
+  if (arbitraryIdentifierSlot?.kind === "after-as") {
     return undefined
   }
-  if (shouldSuppressExactKeyword(span.token, span.mode, clause, input.dialect)) {
+  if (
+    arbitraryIdentifierSlot?.kind === "after-relation" &&
+    (arbitraryIdentifierSlot.token.length < 2 ||
+      matchKeywordPrefix(arbitraryIdentifierKeywords, arbitraryIdentifierSlot.token, sqlCasePreference).length === 0)
+  ) {
+    return undefined
+  }
+  if (!shouldOpenImplicit(beforeCursor, span.token, span.mode)) {
     return undefined
   }
 
@@ -1216,9 +1385,44 @@ export function getSqlAutocompleteResult(input: SqlAutocompleteInput): BufferAut
     projectionCache,
     activeQueries,
   )
-  const keywordFollowUps = getKeywordFollowUpOptions(beforeCursor)
+  const outerScopedRelations = scope.outerTexts.flatMap((text) =>
+    resolveScopedCompletionRelations(
+      input.schema,
+      extractTableRefs(text).filter((ref) => Boolean(ref.alias)),
+      text,
+      tempRelations,
+      cteRelations,
+      projectionCache,
+      activeQueries,
+    ),
+  )
+  const allScopedRelations = [...scopedRelations]
+  for (const relation of outerScopedRelations) {
+    if (
+      allScopedRelations.some(
+        (item) =>
+          item.relation.id === relation.relation.id && normalize(item.qualifier) === normalize(relation.qualifier),
+      )
+    ) {
+      continue
+    }
+    allScopedRelations.push(relation)
+  }
+  if (shouldSuppressExactScopedQualifier(span.token, span.mode, clause, allScopedRelations)) {
+    return undefined
+  }
+  const queryColumns =
+    clause === "group" || clause === "order"
+      ? inferQueryColumns(scope.text, input.schema, tempRelations, cteRelations, projectionCache, activeQueries)
+      : []
+  const existsOpen = isExistsQueryStartContext(beforeCursor, span.token)
   const clauseFollowUps = getClauseFollowUpOptions(beforeCursor, clause)
   const selectFollowUps = clause === "select" ? getSelectFollowUpOptions(beforeCursor) : []
+  const clauseFollowUpsOnly = shouldShowClauseFollowUpsOnly(beforeCursor, clause, span.token, clauseFollowUps)
+  const exactClauseFollowUp = clauseFollowUps.some((keyword) => normalize(keyword) === normalize(span.token))
+  if (shouldSuppressExactKeyword(span.token, span.mode, clause, input.dialect) && !exactClauseFollowUp) {
+    return undefined
+  }
   const items: RankedItem[] = []
 
   if (span.mode === "member" && span.scopeName) {
@@ -1229,6 +1433,7 @@ export function getSqlAutocompleteResult(input: SqlAutocompleteInput): BufferAut
       input.schema,
       tempRelations,
       cteRelations,
+      allScopedRelations,
     )
     if (scopedRelation) {
       addColumnItems(items, [scopedRelation], 0)
@@ -1263,8 +1468,8 @@ export function getSqlAutocompleteResult(input: SqlAutocompleteInput): BufferAut
     addKeywordItems(items, updateSetKeywords, 0, sqlCasePreference)
   }
 
-  if (!insertContext && items.length === 0 && keywordFollowUps.length > 0) {
-    addKeywordItems(items, keywordFollowUps, 0, sqlCasePreference)
+  if (!insertContext && items.length === 0 && existsOpen) {
+    addKeywordItems(items, ["SELECT", "WITH"], 0, sqlCasePreference)
   }
 
   if (!insertContext && items.length === 0 && expectsTableSuggestions(clause)) {
@@ -1295,7 +1500,7 @@ export function getSqlAutocompleteResult(input: SqlAutocompleteInput): BufferAut
         sqlCasePreference,
       )
       if (span.token) {
-        addScopedRelationItems(items, scopedRelations, 1)
+        addScopedRelationItems(items, allScopedRelations, 1)
       }
       addScopedColumnItems(items, scopedRelations, 2)
       addFunctionItems(items, input.dialect, 3, sqlCasePreference)
@@ -1303,8 +1508,20 @@ export function getSqlAutocompleteResult(input: SqlAutocompleteInput): BufferAut
   }
 
   if (!insertContext && items.length === 0 && ["where", "having", "on", "set"].includes(clause)) {
+    if (clauseFollowUpsOnly) {
+      addKeywordItems(items, clauseFollowUps, 0, sqlCasePreference)
+    }
+    if (items.length > 0) {
+      return {
+        replace: docCharRange(span.replaceStart, span.replaceEnd),
+        items: sortItems(span.token, items)
+          .filter((item) => !insertContext?.usedColumns.includes(normalize(item.label)))
+          .filter((item) => !isNoOpCompletion(statement.text, statement.cursorOffset, item))
+          .slice(0, 50),
+      }
+    }
     if (span.token) {
-      addScopedRelationItems(items, scopedRelations, 0)
+      addScopedRelationItems(items, allScopedRelations, 0)
     }
     addScopedColumnItems(items, scopedRelations, 1)
     addKeywordItems(items, clauseFollowUps, 2, sqlCasePreference)
@@ -1314,20 +1531,21 @@ export function getSqlAutocompleteResult(input: SqlAutocompleteInput): BufferAut
   }
 
   if (!insertContext && items.length === 0 && (clause === "group" || clause === "order")) {
+    addQueryColumnItems(items, queryColumns, 0)
     if (span.token) {
-      addScopedRelationItems(items, scopedRelations, 0)
+      addScopedRelationItems(items, allScopedRelations, 1)
     }
-    addScopedColumnItems(items, scopedRelations, 1)
+    addScopedColumnItems(items, scopedRelations, 2)
     if (clause === "order") {
-      addKeywordItems(items, ORDER_DIRECTION_KEYWORDS, 2, sqlCasePreference)
+      addKeywordItems(items, ORDER_DIRECTION_KEYWORDS, 3, sqlCasePreference)
     }
-    addKeywordItems(items, clauseFollowUps, 3, sqlCasePreference)
-    addFunctionItems(items, input.dialect, 4, sqlCasePreference)
+    addKeywordItems(items, clauseFollowUps, 4, sqlCasePreference)
+    addFunctionItems(items, input.dialect, 5, sqlCasePreference)
   }
 
   if (!insertContext && items.length === 0 && expectsColumnSuggestions(clause)) {
     if (span.token) {
-      addScopedRelationItems(items, scopedRelations, 0)
+      addScopedRelationItems(items, allScopedRelations, 0)
     }
     addScopedColumnItems(items, scopedRelations, 1)
     addFunctionItems(items, input.dialect, 2, sqlCasePreference)

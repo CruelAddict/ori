@@ -140,8 +140,20 @@ export function buildSqlSchemaIndex(input: SqlSchemaInput): SqlSchemaIndex {
       (node): node is Extract<Node, { type: "table" | "view" }> =>
         node.type === NodeType.TABLE || node.type === NodeType.VIEW,
     )
-    .map((node) => createRelation(node, input, parentById))
-    .sort((a, b) => a.fullName.localeCompare(b.fullName))
+    .map((node) => {
+      const schemaNode = findAncestor(parentById, input.nodesById, node.id, NodeType.SCHEMA)
+      return {
+        relation: createRelation(node, input, parentById),
+        schemaIsDefault: Boolean(schemaNode?.attributes.isDefault),
+      }
+    })
+    .sort((a, b) => {
+      if (a.schemaIsDefault !== b.schemaIsDefault) {
+        return a.schemaIsDefault ? -1 : 1
+      }
+      return a.relation.fullName.localeCompare(b.relation.fullName)
+    })
+    .map((entry) => entry.relation)
 
   for (const relation of relations) {
     pushLookup(relationLookup, relation.name, relation)

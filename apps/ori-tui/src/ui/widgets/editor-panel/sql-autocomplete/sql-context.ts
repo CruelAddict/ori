@@ -53,6 +53,7 @@ export type SqlNamedQuery = {
 export type SqlDerivedTable = {
   alias: string
   query: string
+  columns: string[]
 }
 
 export type SqlInsertContext = {
@@ -63,12 +64,6 @@ export type SqlInsertContext = {
 
 const IDENTIFIER = '(?:"(?:[^"]|"")+"|\\[[^\\]]+\\]|`[^`]+`|[A-Za-z_][A-Za-z0-9_$]*)'
 const PARTIAL_IDENTIFIER = '(?:"(?:[^"]|"")*"?|\\[[^\\]]*\\]?|`[^`]*`?|[A-Za-z_][A-Za-z0-9_$]*)'
-const ALIAS_IDENTIFIER =
-  '(?!(?:select|from|where|join|left|right|inner|outer|full|cross|group|order|by|set|on|limit|offset|values|returning|union)\\b)(?:"(?:[^"]|"")+"|\\[[^\\]]+\\]|`[^`]+`|[A-Za-z_][A-Za-z0-9_$]*)'
-const TABLE_REF_PATTERN = new RegExp(
-  `(?:\\bFROM\\b|\\bJOIN\\b|\\bUPDATE\\b|\\bINTO\\b)\\s+(?:(${IDENTIFIER})\\s*\\.\\s*)?(?:(${IDENTIFIER})\\s*\\.\\s*)?(${IDENTIFIER})(?:\\s+(?:AS\\s+)?(${ALIAS_IDENTIFIER}))?`,
-  "gi",
-)
 const IDENTIFIER_START = new RegExp(`^${IDENTIFIER}`)
 const RESERVED_WORDS = new Set([
   "select",
@@ -548,21 +543,148 @@ export function extractTableRefs(text: string): SqlTableRef[] {
   const refs: SqlTableRef[] = []
   const masked = maskNestedContents(text, true)
 
-  for (const match of masked.matchAll(TABLE_REF_PATTERN)) {
-    const first = normalizeIdentifier(match[1])
-    const second = normalizeIdentifier(match[2])
-    const name = normalizeIdentifier(match[3])
-    const alias = normalizeIdentifier(match[4])
+  let i = 0
+  let prev = ""
+  let clause: "" | "from" | "join" | "update" | "into" = ""
+  let expectRef = false
+
+  const parseRef = (index: number) => {
+    const first = readIdentifier(text, index)
+    if (!first) {
+      return undefined
+    }
+
+    let end = first.end
+    const parts = [first.value]
+
+    for (;;) {
+      const dot = skipWhitespace(masked, end)
+      if (masked[dot] !== ".") {
+        break
+      }
+      const next = readIdentifier(text, skipWhitespace(masked, dot + 1))
+      if (!next) {
+        break
+      }
+      parts.push(next.value)
+      end = next.end
+      if (parts.length === 3) {
+        break
+      }
+    }
+
+    const aliasStart = skipWhitespace(masked, end)
+    const asMatch = masked.slice(aliasStart).match(/^as\b/i)?.[0]
+    const aliasToken = readIdentifier(text, skipWhitespace(masked, aliasStart + (asMatch?.length ?? 0)))
+    const alias = normalizeIdentifier(aliasToken?.value)
+    if (alias && !RESERVED_WORDS.has(alias.toLowerCase())) {
+      end = aliasToken!.end
+    }
+
+    const names = parts.map((part) => normalizeIdentifier(part))
+    const name = names.at(-1)
     if (!name) {
+      return undefined
+    }
+
+    const database = names.length === 3 ? names[0] : undefined
+    const schema = names.length >= 2 ? names[names.length - 2] : undefined
+    return {
+      end,
+      ref: {
+        name,
+        database,
+        schema,
+        alias: alias && !RESERVED_WORDS.has(alias.toLowerCase()) ? alias : undefined,
+      },
+    }
+  }
+
+  const readWord = (index: number) => {
+    const match = masked.slice(index).match(/^[A-Za-z_][A-Za-z0-9_$]*/)?.[0]
+    if (!match) {
+      return undefined
+    }
+    return {
+      value: match.toLowerCase(),
+      end: index + match.length,
+    }
+  }
+
+  for (; i < masked.length; ) {
+    i = skipWhitespace(masked, i)
+    if (i >= masked.length) {
+      break
+    }
+
+    if (expectRef) {
+      const parsed = parseRef(i)
+      if (parsed) {
+        refs.push(parsed.ref)
+        i = parsed.end
+        expectRef = false
+        continue
+      }
+      expectRef = false
+    }
+
+    if (clause === "from" && masked[i] === ",") {
+      expectRef = true
+      i += 1
       continue
     }
-    const database = second ? first : undefined
-    const schema = second ?? first
-    if (alias && RESERVED_WORDS.has(alias.toLowerCase())) {
-      refs.push({ name, database, schema })
+
+    const word = readWord(i)
+    if (!word) {
+      i += 1
       continue
     }
-    refs.push({ name, database, schema, alias })
+
+    i = word.end
+    if (word.value === "insert") {
+      prev = word.value
+      continue
+    }
+
+    if (word.value === "from") {
+      clause = "from"
+      expectRef = true
+      prev = word.value
+      continue
+    }
+
+    if (word.value === "join") {
+      clause = "join"
+      expectRef = true
+      prev = word.value
+      continue
+    }
+
+    if (word.value === "update") {
+      clause = "update"
+      expectRef = true
+      prev = word.value
+      continue
+    }
+
+    if (word.value === "into" && prev === "insert") {
+      clause = "into"
+      expectRef = true
+      prev = word.value
+      continue
+    }
+
+    if (
+      ["where", "group", "order", "having", "limit", "offset", "union", "set", "returning", "values"].includes(
+        word.value,
+      )
+    ) {
+      clause = ""
+      prev = word.value
+      continue
+    }
+
+    prev = word.value
   }
 
   return refs
@@ -624,6 +746,10 @@ export function extractCteQueries(text: string): SqlNamedQuery[] {
     }
 
     index = skipWhitespace(masked, index + asMatch[0].length)
+    const materializedMatch = masked.slice(index).match(/^(?:not\s+)?materialized\b/i)?.[0]
+    if (materializedMatch) {
+      index = skipWhitespace(masked, index + materializedMatch.length)
+    }
     if (masked[index] !== "(") {
       return queries
     }
@@ -674,14 +800,31 @@ export function extractDerivedTables(text: string): SqlDerivedTable[] {
       aliasIndex = skipWhitespace(masked, aliasIndex + asMatch[0].length)
     }
 
-    const alias = normalizeIdentifier(readIdentifier(text, aliasIndex)?.value)
-    if (!alias) {
+    const aliasToken = readIdentifier(text, aliasIndex)
+    const alias = normalizeIdentifier(aliasToken?.value)
+    if (!alias || !aliasToken) {
       continue
+    }
+
+    const columnsIndex = skipWhitespace(masked, aliasToken.end)
+    const columns: string[] = []
+    if (masked[columnsIndex] === "(") {
+      const columnsEnd = findMatchingParen(masked, columnsIndex)
+      if (columnsEnd !== undefined) {
+        for (const rawColumn of text.slice(columnsIndex + 1, columnsEnd).split(",")) {
+          const column = normalizeIdentifier(rawColumn.trim())
+          if (!column) {
+            continue
+          }
+          columns.push(column)
+        }
+      }
     }
 
     derived.push({
       alias,
       query: text.slice(openIndex + 1, closeIndex),
+      columns,
     })
   }
 

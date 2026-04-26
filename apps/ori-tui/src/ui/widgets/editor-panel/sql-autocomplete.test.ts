@@ -258,16 +258,29 @@ describe("sql autocomplete", () => {
       expectExcludes(result, ["users"])
     })
 
+    test("waits for a second character before suggesting follow-up keywords after relations", () => {
+      expect(complete("select * from users w|")).toBeUndefined()
+    })
+
     test("matches trigger-case from the last keyword on lower-case lookback", () => {
-      expectOnly(complete("select * from users w|"), ["where"])
+      expectOnly(complete("select * from users wh|"), ["where"])
     })
 
     test("matches trigger-case from the last keyword on upper-case lookback", () => {
-      expectOnly(complete("SELECT * FROM users W|"), ["WHERE"])
+      expectOnly(complete("SELECT * FROM users WH|"), ["WHERE"])
     })
 
-    test("suggests ON after a completed JOIN relation", () => {
-      expectOnly(complete("select * from users join orders o|"), ["on"])
+    test("stays closed while typing a one-letter join alias", () => {
+      expect(complete("select * from users join orders o|")).toBeUndefined()
+    })
+
+    test("stays closed after AS on the same line", () => {
+      expect(complete("select * from users forecast_rollup as|")).toBeUndefined()
+      expect(complete("select * from users forecast_rollup as a|")).toBeUndefined()
+    })
+
+    test("resets alias suppression after a newline", () => {
+      expectOnly(complete("select * from users as\nwh|"), ["where"])
     })
 
     test("stays closed after a completed ON predicate and trailing space", () => {
@@ -310,6 +323,11 @@ describe("sql autocomplete", () => {
       const result = complete("select * from users where email in (select email from |)")
       expectIncludes(result, ["users", "orders", "books"])
       expectExcludes(result, ["email"])
+    })
+
+    test("suggests alias columns for comma joins", () => {
+      const result = complete("select o.| from users u, orders o")
+      expectIncludes(result, ["id", "user_id", "status"])
     })
   })
 
@@ -376,6 +394,19 @@ describe("sql autocomplete", () => {
       const result = complete("select * from users where exists (select 1 from orders where u|)")
       expectIncludes(result, ["user_id"])
       expectExcludes(result, ["users", "orders"])
+    })
+
+    test("suggests outer alias columns inside correlated subqueries", () => {
+      const result = complete("select * from users u where exists (select 1 from orders o where o.user_id = u.|)")
+      expectIncludes(result, ["id", "email", "created_at"])
+    })
+
+    test("stays closed on an exact scoped alias token until dot completion starts", () => {
+      expect(
+        complete(
+          "with allocation_rollup as (select id as allocation_id from users), forecast_rollup as (select id as forecast_id from orders) select * from allocation_rollup ar join forecast_rollup fr on ar.allocation_id = fr|",
+        ),
+      ).toBeUndefined()
     })
 
     test("suggests cte columns in the outer query scope", () => {
@@ -469,6 +500,20 @@ describe("sql autocomplete", () => {
       expectExcludes(result, ["status"])
     })
 
+    test("prefers default schema relations for unqualified names", () => {
+      const result = complete(
+        "select em| from users",
+        catalog({ public: { users: ["id", "email"] }, analytics: { users: ["id", "event_name"] } }),
+      )
+      expectIncludes(result, ["email"])
+      expectExcludes(result, ["event_name"])
+    })
+
+    test("suggests select-list aliases in ORDER BY", () => {
+      const result = complete("select email as user_email from users order by user_|")
+      expectIncludes(result, ["user_email"])
+    })
+
     test("prefers FROM after SELECT star prefix", () => {
       expectOnly(complete("select * fr|"), ["from"])
     })
@@ -489,6 +534,10 @@ describe("sql autocomplete", () => {
       const result = complete("se|")
       const current = labels(result)
       expect(current.indexOf("select")).toBeLessThan(current.indexOf("set"))
+    })
+
+    test("does not fuzzy match keywords", () => {
+      expectExcludes(complete("slt|"), ["select"])
     })
 
     test("prefers frequent WHERE over WHEN for a shared prefix", () => {
@@ -588,8 +637,9 @@ describe("sql autocomplete", () => {
       expectExcludes(result, ["id"])
     })
 
-    test("suggests SET after UPDATE relation", () => {
-      expectOnly(complete("update users s|"), ["set"])
+    test("suggests SET after UPDATE relation once two characters are typed", () => {
+      expect(complete("update users s|")).toBeUndefined()
+      expectOnly(complete("update users se|"), ["set"])
     })
 
     test("stays closed after DELETE target relation without a typed prefix", () => {
@@ -674,6 +724,11 @@ describe("sql autocomplete", () => {
       expectIncludes(result, ["recent"])
     })
 
+    test("supports materialized ctes", () => {
+      const result = complete("with recent as materialized (select email from users) select em| from recent")
+      expectIncludes(result, ["email"])
+    })
+
     test("suggests recursive cte name and header columns inside its body", () => {
       const result = complete(
         "with recursive seq(nnnn) as (select 1 union all select nnnn + 1 from se| where nnnn < 1000) select * from seq",
@@ -706,6 +761,11 @@ describe("sql autocomplete", () => {
       expectExcludes(result, ["recent"])
     })
 
+    test("keeps flush-left with queries in the same statement", () => {
+      const result = complete("WITH recent AS (\nSELECT email FROM users\n)\nSELECT em| FROM recent")
+      expectIncludes(result, ["email"])
+    })
+
     test("suggests previous temp tables in FROM clause", () => {
       const result = complete("create temp table temp_users as select * from users; select * from temp_|")
       expectIncludes(result, ["temp_users"])
@@ -715,6 +775,37 @@ describe("sql autocomplete", () => {
     test("does not look ahead for temp tables", () => {
       const result = complete("select * from temp_|; create temp table temp_users as select * from users")
       expectExcludes(result, ["temp_users"])
+    })
+  })
+
+  describe("reported regressions", () => {
+    test("suggests WHERE after a completed USING join clause", () => {
+      expectOnly(complete("select * from users join orders using (id) w|"), ["where"])
+    })
+
+    test("uses explicit derived table column alias lists", () => {
+      const result = complete("select s.u| from (select email, id from users) as s(user_email, user_id)")
+      expectIncludes(result, ["user_email", "user_id"])
+      expectExcludes(result, ["email", "id"])
+    })
+
+    test("stays closed on an empty EXISTS body", () => {
+      expect(complete("select * from users where exists (|")).toBeUndefined()
+      expect(complete("select * from users where exists (\n|")).toBeUndefined()
+      expect(complete("select * from users where exists (\n\n|")).toBeUndefined()
+    })
+
+    test("opens with SELECT and WITH inside EXISTS once typing starts", () => {
+      expectIncludes(complete("select * from users where exists (se|"), ["select"])
+      expectIncludes(complete("select * from users where exists (\nse|"), ["select"])
+      expectIncludes(complete("select * from users where exists (SE|"), ["SELECT"])
+      expectIncludes(complete("select * from users where exists (wi|"), ["with"])
+    })
+
+    test("keeps completed predicates on keyword follow-ups", () => {
+      const result = complete("select * from users u where exists (select 1 from orders o where o.user_id = u.id) or|")
+      expectIncludes(result, ["order by"])
+      expectExcludes(result, ["users", "orders", "id", "user_id"])
     })
   })
 
