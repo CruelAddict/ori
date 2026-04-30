@@ -1,4 +1,4 @@
-import { Buffer, type BufferApi, type BufferContext, type BufferGutterContext } from "@ui/components/buffer"
+import { Buffer, type BufferApi, type BufferContext } from "@ui/components/buffer"
 import { useTheme } from "@ui/providers/theme"
 import { type KeyBinding, KeyScope } from "@ui/services/key-scopes"
 import { useStatusline } from "@ui/widgets/statusline/statusline-context"
@@ -25,7 +25,7 @@ export function EditorPanel(props: EditorPanelProps) {
   })
 
   const baseGutterMarkers = createMemo(() => {
-    const analysis = pane.sqlEditorAssist.analysis()
+    const analysis = pane.sqlEditorBackgroundWorker.analysis()
     if (!analysis || analysis.queries.length < 2) {
       return EMPTY_MARKERS
     }
@@ -34,7 +34,7 @@ export function EditorPanel(props: EditorPanelProps) {
   })
 
   const activeMarkerLine = createMemo(() => {
-    const analysis = pane.sqlEditorAssist.analysis()
+    const analysis = pane.sqlEditorBackgroundWorker.analysis()
     if (!analysis || !hasCursor()) {
       return -1
     }
@@ -46,10 +46,7 @@ export function EditorPanel(props: EditorPanelProps) {
   const gutterMarkers = createMemo(() => {
     const markers = baseGutterMarkers()
     const activeLine = activeMarkerLine()
-    if (markers === EMPTY_MARKERS) {
-      return markers
-    }
-    if (activeLine < 0) {
+    if (markers.size === 0 || activeLine < 0) {
       return markers
     }
 
@@ -60,11 +57,7 @@ export function EditorPanel(props: EditorPanelProps) {
 
   const handleContextChange = (context: BufferContext) => {
     setBufferContext(context)
-    pane.sqlEditorAssist.requestAnalysis(context.text, context.documentVersion)
-  }
-
-  const buildGutterMarkers = (_context: BufferGutterContext) => {
-    return gutterMarkers()
+    pane.sqlEditorBackgroundWorker.requestAnalysis(context.text, context.documentVersion)
   }
 
   const handleTextChange = (text: string, info: { modified: boolean }) => {
@@ -114,7 +107,7 @@ export function EditorPanel(props: EditorPanelProps) {
             bufferApi = api
           }}
           onContextChange={handleContextChange}
-          buildGutterMarkers={buildGutterMarkers}
+          gutterMarkers={gutterMarkers}
           autocomplete={pane.autocomplete}
         />
       </box>

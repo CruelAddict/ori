@@ -47,11 +47,7 @@ export function getVisualEOLColumn(buffer: BufferModel, index: LineIndex): Displ
   }
 
   const ref = getLineRef(buffer, index)
-  if (ref) {
-    return displayColumn(ref.editorView.getVisualEOL().logicalCol)
-  }
-
-  return lineDisplayWidth(buffer, line.text)
+  return lineDisplayWidth(buffer, ref?.plainText ?? line.text)
 }
 
 export function focusLine(buffer: BufferModel, index: LineIndex, column: DisplayColumn) {
@@ -103,8 +99,8 @@ export function getCursorContext(buffer: BufferModel): BufferCursor | undefined 
   if (!node) {
     return undefined
   }
-  const cursor = node.logicalCursor
-  return { line: lineIndex(index), displayCol: displayColumn(cursor.col), row: cursor.row }
+  const cursor = node.visualCursor
+  return { line: lineIndex(index), displayCol: displayColumn(cursor.logicalCol), row: cursor.visualRow }
 }
 
 export function getCursorOffset(buffer: BufferModel): DocCharOffset | undefined {

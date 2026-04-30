@@ -29,9 +29,6 @@ export type SqlEditorWorkerRequest =
 
 export type SqlEditorWorkerResponse =
   | {
-      type: "ready"
-    }
-  | {
       id: number
       type: "analyze"
       result: SqlDocumentAnalysis & { version: number }

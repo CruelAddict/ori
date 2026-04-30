@@ -12,7 +12,7 @@ import { useTheme } from "@ui/providers/theme"
 import { type KeyBinding, KeyScope } from "@ui/services/key-scopes"
 import { offsetToLineCol } from "@utils/line-offsets"
 import { syntaxHighlighter } from "@utils/syntax-highlighter"
-import { type Accessor, createEffect, createMemo, createSignal, For, onCleanup, onMount, Show, untrack } from "solid-js"
+import { type Accessor, createEffect, createSignal, For, onCleanup, onMount, Show, untrack } from "solid-js"
 import { createBufferAutocomplete } from "./autocomplete/controller"
 import type { BufferAutocompleteProvider } from "./autocomplete/types"
 import { createBufferModel } from "./buffer-model"
@@ -29,14 +29,11 @@ export type BufferApi = {
   getCursorOffset: () => DocCharOffset | undefined
 }
 
-export type BufferGutterContext = {
+export type BufferContext = {
   text: string
   lineStarts: number[]
   focusedRow: number
   cursorOffset: DocCharOffset | undefined
-}
-
-export type BufferContext = BufferGutterContext & {
   documentVersion: number
 }
 
@@ -49,7 +46,7 @@ export type BufferProps = {
   onUnfocus?: () => void
   registerApi?: (api: BufferApi) => void
   focusSelf: () => void
-  buildGutterMarkers?: (context: BufferGutterContext) => ReadonlyMap<number, string>
+  gutterMarkers?: Accessor<ReadonlyMap<number, string>>
   onContextChange?: (context: BufferContext) => void
   autocomplete?: BufferAutocompleteProvider
 }
@@ -144,19 +141,7 @@ export function Buffer(props: BufferProps) {
     queueMicrotask(flushInitialContextChange)
   }
 
-  const gutterMarkers = createMemo(() => {
-    const build = props.buildGutterMarkers
-    if (!build) {
-      return EMPTY_GUTTER_MARKERS
-    }
-
-    return build({
-      text: bufferModel.fullText(),
-      lineStarts: bufferModel.lineStarts(),
-      focusedRow: bufferModel.focusedRow(),
-      cursorOffset: cursorOffset(),
-    })
-  })
+  const gutterMarkers = () => props.gutterMarkers?.() ?? EMPTY_GUTTER_MARKERS
 
   createEffect(() => {
     const context = {
@@ -388,25 +373,25 @@ export function Buffer(props: BufferProps) {
     },
     {
       pattern: "up",
-      handler: withCursor((ctx, event) => {
+      handler: withCursor((_ctx, event) => {
         autocomplete.close()
         event.preventDefault()
-        bufferModel.handleVerticalMove(ctx.line, -1)
+        bufferModel.moveCursorByVisualRows(-1)
       }),
     },
     {
       pattern: "down",
-      handler: withCursor((ctx, event) => {
+      handler: withCursor((_ctx, event) => {
         autocomplete.close()
         event.preventDefault()
-        bufferModel.handleVerticalMove(ctx.line, 1)
+        bufferModel.moveCursorByVisualRows(1)
       }),
     },
     {
       pattern: "left",
       handler: withCursor((ctx, event) => {
         autocomplete.close()
-        const atStart = ctx.displayCol === 0 && ctx.row === 0
+        const atStart = ctx.displayCol === 0
         if (atStart) {
           event.preventDefault()
           bufferModel.handleHorizontalJump(ctx.line, true)
@@ -417,7 +402,7 @@ export function Buffer(props: BufferProps) {
       pattern: ["alt+left", "meta+left", "alt+b", "meta+b"],
       handler: withCursor((ctx, event) => {
         autocomplete.close()
-        const atStart = ctx.displayCol === 0 && ctx.row === 0
+        const atStart = ctx.displayCol === 0
         if (atStart) {
           event.preventDefault()
           bufferModel.handleHorizontalJump(ctx.line, true)
@@ -429,7 +414,7 @@ export function Buffer(props: BufferProps) {
       handler: withCursor((ctx, event) => {
         autocomplete.close()
         const eolCol = bufferModel.getVisualEOLColumn(ctx.line)
-        const atEnd = ctx.displayCol === eolCol && ctx.row === 0
+        const atEnd = ctx.displayCol === eolCol
         if (atEnd) {
           event.preventDefault()
           bufferModel.handleHorizontalJump(ctx.line, false)
@@ -441,7 +426,7 @@ export function Buffer(props: BufferProps) {
       handler: withCursor((ctx, event) => {
         autocomplete.close()
         const eolCol = bufferModel.getVisualEOLColumn(ctx.line)
-        const atEnd = ctx.displayCol === eolCol && ctx.row === 0
+        const atEnd = ctx.displayCol === eolCol
         if (atEnd) {
           event.preventDefault()
           bufferModel.handleHorizontalJump(ctx.line, false)
@@ -451,7 +436,7 @@ export function Buffer(props: BufferProps) {
     {
       pattern: "backspace",
       handler: withCursor((ctx, event) => {
-        const atStart = ctx.displayCol === 0 && ctx.row === 0
+        const atStart = ctx.displayCol === 0
         if (atStart) {
           autocomplete.close()
           event.preventDefault()
@@ -463,7 +448,7 @@ export function Buffer(props: BufferProps) {
       pattern: "delete",
       handler: withCursor((ctx, event) => {
         const eolCol = bufferModel.getVisualEOLColumn(ctx.line)
-        const atEnd = ctx.displayCol === eolCol && ctx.row === 0
+        const atEnd = ctx.displayCol === eolCol
         if (atEnd) {
           autocomplete.close()
           event.preventDefault()
@@ -474,7 +459,7 @@ export function Buffer(props: BufferProps) {
     {
       pattern: "ctrl+h",
       handler: withCursor((ctx, event) => {
-        const atStart = ctx.displayCol === 0 && ctx.row === 0
+        const atStart = ctx.displayCol === 0
         if (atStart) {
           autocomplete.close()
           event.preventDefault()
@@ -485,7 +470,7 @@ export function Buffer(props: BufferProps) {
     {
       pattern: "ctrl+w",
       handler: withCursor((ctx, event) => {
-        const atStart = ctx.displayCol === 0 && ctx.row === 0
+        const atStart = ctx.displayCol === 0
         if (atStart) {
           autocomplete.close()
           event.preventDefault()
@@ -497,7 +482,7 @@ export function Buffer(props: BufferProps) {
       pattern: "ctrl+d",
       handler: withCursor((ctx, event) => {
         const eolCol = bufferModel.getVisualEOLColumn(ctx.line)
-        const atEnd = ctx.displayCol === eolCol && ctx.row === 0
+        const atEnd = ctx.displayCol === eolCol
         if (atEnd) {
           autocomplete.close()
           event.preventDefault()
@@ -668,6 +653,7 @@ export function Buffer(props: BufferProps) {
                         focusedTextColor={palette().get("editor_text")}
                         cursorColor={palette().get("editor_cursor")}
                         syntaxStyle={highlighter.highlightResult().syntaxStyle}
+                        wrapMode="char"
                         selectable={true}
                         keyBindings={[]}
                         onMouseDown={(event: MouseEvent) => {

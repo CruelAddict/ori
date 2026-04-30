@@ -145,11 +145,7 @@ export function createBufferModel(options: BufferModelOptions) {
       }
 
       const ref = buffer._lineRefs.get(line.id)
-      if (ref) {
-        return displayColumn(ref.editorView.getVisualEOL().logicalCol)
-      }
-
-      return lineDisplayWidth(buffer, line.text)
+      return lineDisplayWidth(buffer, ref?.plainText ?? line.text)
     },
     _setLines: (nextLines: Line[]) => setDocument("lines", nextLines),
     _setLine: (index: number, line: Line) => setDocument("lines", index, line),

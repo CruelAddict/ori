@@ -1,5 +1,5 @@
 import type { Resource } from "@model/resource"
-import { createSqlEditorAssist } from "@ui/widgets/editor-panel/sql-editor-assist"
+import { createSqlEditorBackgroundWorker } from "@ui/widgets/editor-panel/sql-editor-background-worker"
 import { createVM as createEditorVM } from "@ui/widgets/editor-panel/view-model/create-vm"
 import { createVM as createExplorerVM } from "@ui/widgets/explorer/view-model/create-vm"
 import { createVM as createResultsVM } from "@ui/widgets/results-panel/view-model/create-vm"
@@ -98,7 +98,7 @@ export function createVM(options: CreateVMOptions) {
     ...paneFocusFuncs("explorer"),
   })
 
-  const sqlEditorAssist = createSqlEditorAssist({
+  const sqlEditorBackgroundWorker = createSqlEditorBackgroundWorker({
     getState: options.introspection.getState,
     logger: options.logger,
   })
@@ -106,8 +106,8 @@ export function createVM(options: CreateVMOptions) {
   const editorPane = createEditorVM({
     query: options.query,
     resourceName: options.resourceName,
-    autocomplete: sqlEditorAssist.autocomplete,
-    sqlEditorAssist,
+    autocomplete: sqlEditorBackgroundWorker.autocomplete,
+    sqlEditorBackgroundWorker,
     ...paneFocusFuncs("editor"),
     unfocus: focusPreviousVisiblePane,
   })

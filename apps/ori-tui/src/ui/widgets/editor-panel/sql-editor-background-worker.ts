@@ -8,19 +8,21 @@ export type SqlEditorAnalysis = SqlDocumentAnalysis & {
   version: number
 }
 
-export type SqlEditorAssist = {
+export type SqlEditorBackgroundWorker = {
   autocomplete: BufferAutocompleteProvider
   analysis: Accessor<SqlEditorAnalysis | undefined>
   requestAnalysis: (text: string, version: number) => void
   dispose: () => void
 }
 
-type CreateSqlEditorAssistOptions = {
+type CreateSqlEditorBackgroundWorkerOptions = {
   getState: () => SqlEditorSchemaState
   logger?: Logger
 }
 
-export function createSqlEditorAssist(options: CreateSqlEditorAssistOptions): SqlEditorAssist {
+export function createSqlEditorBackgroundWorker(
+  options: CreateSqlEditorBackgroundWorkerOptions,
+): SqlEditorBackgroundWorker {
   const [analysis, setAnalysis] = createSignal<SqlEditorAnalysis>()
   const workerPath = import.meta.url === "file:///$bunfs/root/src/index.js"
     ? "/$bunfs/root/src/ui/widgets/editor-panel/sql-editor.worker.js"
@@ -72,10 +74,6 @@ export function createSqlEditorAssist(options: CreateSqlEditorAssistOptions): Sq
 
   worker.onmessage = (event: MessageEvent<SqlEditorWorkerResponse>) => {
     const message = event.data
-    if (message.type === "ready") {
-      return
-    }
-
     const handler = pending.get(message.id)
     if (!handler) {
       return
@@ -94,14 +92,14 @@ export function createSqlEditorAssist(options: CreateSqlEditorAssistOptions): Sq
         lineno: event.lineno,
         colno: event.colno,
       },
-      "sql-editor-assist: worker error",
+      "sql-editor-background-worker: worker error",
     )
     workerAlive = false
     clearPending()
   }
 
   worker.onmessageerror = (event) => {
-    options.logger?.error({ workerPath, data: event.data }, "sql-editor-assist: worker messageerror")
+    options.logger?.error({ workerPath, data: event.data }, "sql-editor-background-worker: worker messageerror")
   }
 
   const requestAnalysis = (text: string, version: number) => {

@@ -5,7 +5,7 @@ export type {
   BufferAutocompleteResult,
   BufferAutocompleteState,
 } from "./autocomplete/types"
-export { Buffer, type BufferApi, type BufferContext, type BufferGutterContext, type BufferProps } from "./buffer"
+export { Buffer, type BufferApi, type BufferContext, type BufferProps } from "./buffer"
 export type {
   BufferCursor,
   DisplayColumn,

@@ -4,7 +4,7 @@ import { getScriptFilePath, readScript, writeScript } from "@usecase/script/stor
 import { buildLineStarts } from "@utils/line-offsets"
 import type { Accessor } from "solid-js"
 import { createMemo, createSignal, onCleanup, onMount } from "solid-js"
-import type { SqlEditorAssist } from "../sql-editor-assist"
+import type { SqlEditorBackgroundWorker } from "../sql-editor-background-worker"
 import { resolveSqlQueryAtOffset } from "../sql-statement-detector"
 
 type Query = Pick<
@@ -18,7 +18,7 @@ export type EditorPaneViewModel = {
   isExecuting: Accessor<boolean>
   filePath: Accessor<string>
   autocomplete: BufferAutocompleteProvider
-  sqlEditorAssist: SqlEditorAssist
+  sqlEditorBackgroundWorker: SqlEditorBackgroundWorker
   onQueryChange: (text: string) => void
   executeQuery: (cursorOffset?: number) => Promise<void>
   cancelQuery: () => Promise<void>
@@ -32,7 +32,7 @@ type CreateVMOptions = {
   query: Query
   resourceName: Accessor<string>
   autocomplete: BufferAutocompleteProvider
-  sqlEditorAssist: SqlEditorAssist
+  sqlEditorBackgroundWorker: SqlEditorBackgroundWorker
   isFocused: Accessor<boolean>
   focusSelf: () => void
   unfocus: () => void
@@ -49,7 +49,7 @@ export function createVM(options: CreateVMOptions): EditorPaneViewModel {
 
   onCleanup(() => {
     unsubscribe()
-    options.sqlEditorAssist.dispose()
+    options.sqlEditorBackgroundWorker.dispose()
   })
 
   const queryText = createMemo(() => queryTextState())
@@ -117,7 +117,7 @@ export function createVM(options: CreateVMOptions): EditorPaneViewModel {
     isExecuting,
     filePath,
     autocomplete: options.autocomplete,
-    sqlEditorAssist: options.sqlEditorAssist,
+    sqlEditorBackgroundWorker: options.sqlEditorBackgroundWorker,
     onQueryChange,
     executeQuery,
     cancelQuery,

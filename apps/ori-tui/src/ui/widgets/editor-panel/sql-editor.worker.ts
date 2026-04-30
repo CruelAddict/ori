@@ -79,7 +79,3 @@ workerScope.onmessage = (event: MessageEvent<SqlEditorWorkerRequest>) => {
     result,
   })
 }
-
-queueMicrotask(() => {
-  postMessageSafe({ type: "ready" })
-})
