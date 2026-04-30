@@ -1,4 +1,5 @@
 import { type Node, NodeType } from "@adapters/ori/client"
+import { docCharOffset } from "@ui/components/buffer/buffer-model/coords"
 import { createSqlAutocompleteProvider } from "@ui/widgets/editor-panel/sql-autocomplete/provider"
 import type { SqlSchemaInput } from "@ui/widgets/editor-panel/sql-autocomplete/sql-schema-index"
 
@@ -593,9 +594,13 @@ function cases() {
   ] satisfies BenchCase[]
 }
 
-function sample(provider: ReturnType<typeof createSqlAutocompleteProvider>, query: ReturnType<typeof withCursor>, name: string) {
+async function sample(provider: ReturnType<typeof createSqlAutocompleteProvider>, query: ReturnType<typeof withCursor>, name: string) {
   const start = Bun.nanoseconds()
-  const result = provider.getCompletions({ text: query.text, cursor: query.cursor })
+  const result = await provider.getCompletions({
+    text: query.text,
+    cursor: docCharOffset(query.cursor),
+    signal: new AbortController().signal,
+  })
   const end = Bun.nanoseconds()
 
   if (!result || result.items.length === 0) {
@@ -608,24 +613,24 @@ function sample(provider: ReturnType<typeof createSqlAutocompleteProvider>, quer
   }
 }
 
-function runBenchCase(state: SqlSchemaInput, benchCase: BenchCase): BenchResult {
+async function runBenchCase(state: SqlSchemaInput, benchCase: BenchCase): Promise<BenchResult> {
   const query = withCursor(benchCase.sql)
   const cold: number[] = []
 
   for (const _ of Array.from({ length: COLD_RUNS }, (_, i) => i)) {
     const provider = createSqlAutocompleteProvider({ getState: () => state })
-    cold.push(sample(provider, query, benchCase.name).ms)
+    cold.push((await sample(provider, query, benchCase.name)).ms)
   }
 
   const provider = createSqlAutocompleteProvider({ getState: () => state })
   for (const _ of Array.from({ length: WARM_UP_RUNS }, (_, i) => i)) {
-    sample(provider, query, benchCase.name)
+    await sample(provider, query, benchCase.name)
   }
 
   const warm: number[] = []
   let items = 0
   for (const _ of Array.from({ length: WARM_RUNS }, (_, i) => i)) {
-    const result = sample(provider, query, benchCase.name)
+    const result = await sample(provider, query, benchCase.name)
     warm.push(result.ms)
     items = result.items
   }
@@ -671,12 +676,12 @@ function printResults(results: readonly BenchResult[], warehouse: WarehouseState
   console.log(`Total runtime: ${formatMs(totalMs)}`)
 }
 
-function main() {
+async function main() {
   const warehouse = buildWarehouseState()
   const start = Bun.nanoseconds()
-  const results = cases().map((value) => runBenchCase(warehouse.state, value))
+  const results = await Promise.all(cases().map((value) => runBenchCase(warehouse.state, value)))
   const totalMs = Number(Bun.nanoseconds() - start) / 1_000_000
   printResults(results, warehouse, totalMs)
 }
 
-main()
+await main()

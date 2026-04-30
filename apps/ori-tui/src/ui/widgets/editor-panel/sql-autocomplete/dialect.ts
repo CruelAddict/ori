@@ -1,4 +1,4 @@
-import { type Node, NodeType } from "@adapters/ori/client"
+import { type Node, NodeType } from "../../../../adapters/ori/client"
 
 export type SqlDialectId = "generic" | "postgres" | "sqlite" | "duckdb"
 
@@ -183,6 +183,6 @@ function getEngineNode(nodesById: Record<string, Node>, rootIds: string[]) {
 
 export function resolveSqlDialect(nodesById: Record<string, Node>, rootIds: string[]): SqlDialect {
   const node = getEngineNode(nodesById, rootIds)
-  const id = normalizeEngine(node?.attributes.engine)
+  const id = normalizeEngine(node?.attributes?.engine)
   return DIALECTS[id]
 }

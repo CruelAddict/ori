@@ -1,4 +1,4 @@
-import { type Node, NodeType } from "@adapters/ori/client"
+import { type Node, NodeType } from "../../../../adapters/ori/client"
 
 export type SqlSchemaInput = {
   nodesById: Record<string, Node>
@@ -32,6 +32,10 @@ export type SqlSchemaIndex = {
   versionKey: string
   findRelations: (name: string) => SqlRelation[]
   findRelationsInSchema: (schemaName: string) => SqlRelation[]
+}
+
+export function getSqlSchemaInputVersionKey(input: SqlSchemaInput) {
+  return `${Object.keys(input.nodesById).length}:${input.rootIds.join(",")}:${input.loading ? 1 : 0}:${input.loaded ? 1 : 0}`
 }
 
 type Lookup = Map<string, SqlRelation[]>
@@ -102,6 +106,18 @@ function findAncestor(
   }
 }
 
+function isDefaultSchema(node: Node | undefined) {
+  if (!node?.attributes) {
+    return false
+  }
+
+  if (!("isDefault" in node.attributes)) {
+    return false
+  }
+
+  return Boolean(node.attributes.isDefault)
+}
+
 function createRelation(
   node: Extract<Node, { type: "table" | "view" }>,
   input: SqlSchemaInput,
@@ -109,13 +125,13 @@ function createRelation(
 ): SqlRelation {
   const databaseNode = findAncestor(parentById, input.nodesById, node.id, NodeType.DATABASE)
   const schemaNode = findAncestor(parentById, input.nodesById, node.id, NodeType.SCHEMA)
-  const columns = (node.edges.columns?.items ?? [])
+  const columns = (node.edges?.columns?.items ?? [])
     .map((id) => input.nodesById[id])
     .filter((column): column is Extract<Node, { type: "column" }> => Boolean(column) && column.type === NodeType.COLUMN)
     .map((column) => ({
       id: column.id,
       name: column.name,
-      dataType: column.attributes.dataType,
+      dataType: column.attributes?.dataType,
     }))
 
   const database = databaseNode?.name
@@ -144,7 +160,7 @@ export function buildSqlSchemaIndex(input: SqlSchemaInput): SqlSchemaIndex {
       const schemaNode = findAncestor(parentById, input.nodesById, node.id, NodeType.SCHEMA)
       return {
         relation: createRelation(node, input, parentById),
-        schemaIsDefault: Boolean(schemaNode?.attributes.isDefault),
+        schemaIsDefault: isDefaultSchema(schemaNode),
       }
     })
     .sort((a, b) => {
@@ -166,7 +182,7 @@ export function buildSqlSchemaIndex(input: SqlSchemaInput): SqlSchemaIndex {
     relations,
     loading: input.loading,
     loaded: input.loaded,
-    versionKey: `${Object.keys(input.nodesById).length}:${input.rootIds.join(",")}:${input.loading ? 1 : 0}:${input.loaded ? 1 : 0}`,
+    versionKey: getSqlSchemaInputVersionKey(input),
     findRelations: (name: string) => relationLookup.get(name.toLowerCase()) ?? [],
     findRelationsInSchema: (schemaName: string) => schemaLookup.get(schemaName.toLowerCase()) ?? [],
   }

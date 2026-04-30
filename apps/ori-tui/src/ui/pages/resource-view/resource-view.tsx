@@ -50,6 +50,7 @@ export function ResourceViewPage(props: ResourceViewPageProps) {
     resource,
     query,
     introspection,
+    logger,
   })
   const { theme } = useTheme()
   const palette = theme
@@ -57,7 +58,6 @@ export function ResourceViewPage(props: ResourceViewPageProps) {
 
   createEffect(
     on(scopeEnabled, (active) => {
-      // a hack to make textarea in the editor receive focus
       vm.actions.setActive(active)
       if (!active) {
         return

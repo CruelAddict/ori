@@ -21,7 +21,11 @@ const words = [
 
 export function createDemoAutocompleteProvider(): BufferAutocompleteProvider {
   return {
-    getCompletions: ({ text, cursor }) => {
+    getCompletions: async ({ text, cursor, signal }) => {
+      if (signal.aborted) {
+        return undefined
+      }
+
       const prefix = text
         .slice(0, cursor)
         .match(/[A-Za-z]+$/)?.[0]

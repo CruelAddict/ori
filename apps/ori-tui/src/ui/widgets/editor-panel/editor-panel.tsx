@@ -1,10 +1,11 @@
-import { Buffer, type BufferApi, type BufferGutterContext } from "@ui/components/buffer"
+import { Buffer, type BufferApi, type BufferContext, type BufferGutterContext } from "@ui/components/buffer"
 import { useTheme } from "@ui/providers/theme"
 import { type KeyBinding, KeyScope } from "@ui/services/key-scopes"
 import { useStatusline } from "@ui/widgets/statusline/statusline-context"
-import { onMount } from "solid-js"
-import { collectSqlQueries, resolveSqlQueryAtOffset } from "./sql-statement-detector"
+import { createMemo, createSignal, onMount } from "solid-js"
 import type { EditorPaneViewModel } from "./view-model/create-vm"
+
+const EMPTY_MARKERS = new Map<number, string>()
 
 export type EditorPanelProps = {
   viewModel: EditorPaneViewModel
@@ -15,38 +16,55 @@ export function EditorPanel(props: EditorPanelProps) {
   const statusline = useStatusline()
   const { theme } = useTheme()
   let bufferApi: BufferApi | undefined
+  const [bufferContext, setBufferContext] = createSignal<BufferContext>()
+  const cursorLine = createMemo(() => bufferContext()?.focusedRow ?? -1)
+  const hasCursor = createMemo(() => bufferContext()?.cursorOffset !== undefined)
 
   onMount(() => {
     statusline.fileOpenedInBuffer(pane.filePath())
   })
 
-  const buildGutterMarkers = (context: BufferGutterContext) => {
-    const queries = collectSqlQueries(context.text, context.lineStarts)
-    if (queries.length < 2) {
-      return new Map<number, string>()
+  const baseGutterMarkers = createMemo(() => {
+    const analysis = pane.sqlEditorAssist.analysis()
+    if (!analysis || analysis.queries.length < 2) {
+      return EMPTY_MARKERS
     }
 
-    const markers = new Map<number, string>()
-    const current =
-      context.cursorOffset === undefined
-        ? undefined
-        : (() => {
-          const resolution = resolveSqlQueryAtOffset(context.text, context.lineStarts, context.cursorOffset)
-          if (resolution.kind !== "query") {
-            return undefined
-          }
-          return resolution.query
-        })()
-    if (current) {
-      markers.set(current.startLine, "󰻃 ")
+    return new Map(analysis.queries.map((query) => [query.startLine, "• "]))
+  })
+
+  const activeMarkerLine = createMemo(() => {
+    const analysis = pane.sqlEditorAssist.analysis()
+    if (!analysis || !hasCursor()) {
+      return -1
     }
-    for (const query of queries) {
-      if (query.startLine === current?.startLine) {
-        continue
-      }
-      markers.set(query.startLine, "• ")
+
+    const line = cursorLine()
+    return analysis.queryStartLineByLine[line] ?? -1
+  })
+
+  const gutterMarkers = createMemo(() => {
+    const markers = baseGutterMarkers()
+    const activeLine = activeMarkerLine()
+    if (markers === EMPTY_MARKERS) {
+      return markers
     }
-    return markers
+    if (activeLine < 0) {
+      return markers
+    }
+
+    const next = new Map(markers)
+    next.set(activeLine, "󰻃 ")
+    return next
+  })
+
+  const handleContextChange = (context: BufferContext) => {
+    setBufferContext(context)
+    pane.sqlEditorAssist.requestAnalysis(context.text, context.documentVersion)
+  }
+
+  const buildGutterMarkers = (_context: BufferGutterContext) => {
+    return gutterMarkers()
   }
 
   const handleTextChange = (text: string, info: { modified: boolean }) => {
@@ -95,6 +113,7 @@ export function EditorPanel(props: EditorPanelProps) {
           registerApi={(api) => {
             bufferApi = api
           }}
+          onContextChange={handleContextChange}
           buildGutterMarkers={buildGutterMarkers}
           autocomplete={pane.autocomplete}
         />

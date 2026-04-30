@@ -40,7 +40,11 @@ export function createSqlAutocompleteProvider(
   }
 
   return {
-    getCompletions: ({ text, cursor }) => {
+    getCompletions: async ({ text, cursor, signal }) => {
+      if (signal.aborted) {
+        return undefined
+      }
+
       const state = options.getState()
       return getSqlAutocompleteResult({
         text,

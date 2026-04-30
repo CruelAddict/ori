@@ -1,4 +1,4 @@
-import { buildLineStarts } from "@utils/line-offsets"
+import { buildLineStarts } from "../../../../utils/line-offsets"
 import { collectSqlStatements, getSqlStatementAtOffset } from "../sql-statement-detector"
 import type { SqlDialect } from "./dialect"
 

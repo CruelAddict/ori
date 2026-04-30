@@ -12,18 +12,7 @@ import { useTheme } from "@ui/providers/theme"
 import { type KeyBinding, KeyScope } from "@ui/services/key-scopes"
 import { offsetToLineCol } from "@utils/line-offsets"
 import { syntaxHighlighter } from "@utils/syntax-highlighter"
-import {
-  type Accessor,
-  createEffect,
-  createMemo,
-  createSignal,
-  For,
-  on,
-  onCleanup,
-  onMount,
-  Show,
-  untrack,
-} from "solid-js"
+import { type Accessor, createEffect, createMemo, createSignal, For, onCleanup, onMount, Show, untrack } from "solid-js"
 import { createBufferAutocomplete } from "./autocomplete/controller"
 import type { BufferAutocompleteProvider } from "./autocomplete/types"
 import { createBufferModel } from "./buffer-model"
@@ -47,6 +36,10 @@ export type BufferGutterContext = {
   cursorOffset: DocCharOffset | undefined
 }
 
+export type BufferContext = BufferGutterContext & {
+  documentVersion: number
+}
+
 export type BufferProps = {
   initialText: string
   tabWidth?: number
@@ -57,6 +50,7 @@ export type BufferProps = {
   registerApi?: (api: BufferApi) => void
   focusSelf: () => void
   buildGutterMarkers?: (context: BufferGutterContext) => ReadonlyMap<number, string>
+  onContextChange?: (context: BufferContext) => void
   autocomplete?: BufferAutocompleteProvider
 }
 
@@ -109,7 +103,46 @@ export function Buffer(props: BufferProps) {
   let containerRef: BoxRenderable | undefined
   const lineRenderables = new Map<string, BoxRenderable>()
   let previousCursorForFollow: BufferCursor | null = null
+  let previousFocusState = props.isFocused()
+  let pendingInitialContext: BufferContext | undefined
+  let initialContextFlushQueued = false
+  let initialContextPending = true
+  let disposed = false
   const [cursorOffset, setCursorOffset] = createSignal<DocCharOffset | undefined>(bufferModel.getCursorOffset())
+
+  const flushInitialContextChange = () => {
+    initialContextFlushQueued = false
+    if (disposed) {
+      return
+    }
+    const context = pendingInitialContext
+    if (!context) {
+      return
+    }
+
+    pendingInitialContext = undefined
+    initialContextPending = false
+    props.onContextChange?.(context)
+  }
+
+  const scheduleContextChange = (context: BufferContext) => {
+    if (!props.onContextChange) {
+      return
+    }
+
+    if (!initialContextPending) {
+      props.onContextChange(context)
+      return
+    }
+
+    pendingInitialContext = context
+    if (initialContextFlushQueued) {
+      return
+    }
+
+    initialContextFlushQueued = true
+    queueMicrotask(flushInitialContextChange)
+  }
 
   const gutterMarkers = createMemo(() => {
     const build = props.buildGutterMarkers
@@ -123,6 +156,17 @@ export function Buffer(props: BufferProps) {
       focusedRow: bufferModel.focusedRow(),
       cursorOffset: cursorOffset(),
     })
+  })
+
+  createEffect(() => {
+    const context = {
+      text: bufferModel.fullText(),
+      lineStarts: bufferModel.lineStarts(),
+      focusedRow: bufferModel.focusedRow(),
+      cursorOffset: cursorOffset(),
+      documentVersion: bufferModel.documentVersion(),
+    } satisfies BufferContext
+    scheduleContextChange(context)
   })
 
   const getCursorPoint = (): ScrollPoint | null => {
@@ -242,6 +286,8 @@ export function Buffer(props: BufferProps) {
   })
 
   onCleanup(() => {
+    disposed = true
+    pendingInitialContext = undefined
     autocomplete.close()
     bufferModel.dispose()
     highlighter.dispose()
@@ -461,19 +507,22 @@ export function Buffer(props: BufferProps) {
     },
   ]
 
-  createEffect(
-    on(props.isFocused, (isFocused) => {
-      bufferModel.handleFocusChange(isFocused)
-      if (!isFocused) {
-        previousCursorForFollow = null
-        autocomplete.close()
-        return
-      }
-      queueMicrotask(() => {
-        scrollToCursor()
-      })
-    }),
-  )
+  createEffect(() => {
+    const isFocused = props.isFocused()
+    if (isFocused === previousFocusState) {
+      return
+    }
+    previousFocusState = isFocused
+    bufferModel.handleFocusChange(isFocused)
+    if (!isFocused) {
+      previousCursorForFollow = null
+      autocomplete.close()
+      return
+    }
+    queueMicrotask(() => {
+      scrollToCursor()
+    })
+  })
 
   createEffect(() => {
     if (!props.isFocused()) {
@@ -636,7 +685,11 @@ export function Buffer(props: BufferProps) {
                         initialValue={initialText}
                         onContentChange={() => {
                           const origin = bufferModel.handleTextAreaChange(lineIndex(indexAccessor())) ?? "user"
-                          queueMicrotask(() => origin === "user" && autocomplete.refresh())
+                          if (origin === "user") {
+                            queueMicrotask(() => {
+                              autocomplete.refresh()
+                            })
+                          }
                         }}
                       />
                     </box>

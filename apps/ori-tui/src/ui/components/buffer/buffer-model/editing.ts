@@ -27,6 +27,7 @@ type ReplaceRangeInLineOptions = {
 }
 
 function schedulePush(buffer: BufferModel) {
+  buffer.bumpDocumentVersion()
   buffer._requestHighlights()
   buffer._debouncedPush()
 }

@@ -1,4 +1,4 @@
-import { TextAttributes, type MouseEvent } from "@opentui/core"
+import { type MouseEvent, TextAttributes } from "@opentui/core"
 import { useTheme } from "@ui/providers/theme"
 import { type Accessor, createMemo, createSignal } from "solid-js"
 import type { ExplorerRowSegment } from "./explorer-row-renderable.ts"
@@ -128,9 +128,17 @@ export function ExplorerRow(props: ExplorerRowProps) {
     return parts
   }
 
-  const rowSegments = createMemo(() => isSearchMode() ? searchModeSegments() : treeModeSegments())
+  const rowSegments = createMemo(() => (isSearchMode() ? searchModeSegments() : treeModeSegments()))
 
   const rowWidth = createMemo(() => rowSegments().reduce((sum, part) => sum + part.text.length, 0))
+  const safeRowWidth = createMemo(() => {
+    const width = rowWidth()
+    if (!Number.isFinite(width)) {
+      return 1
+    }
+
+    return Math.max(1, width)
+  })
 
   return (
     <box
@@ -148,7 +156,7 @@ export function ExplorerRow(props: ExplorerRowProps) {
     >
       <explorer_row
         segments={rowSegments()}
-        width={rowWidth()}
+        width={safeRowWidth()}
         fg={fg()}
         bg={bg()}
         defaultFg={fg()}
@@ -157,7 +165,6 @@ export function ExplorerRow(props: ExplorerRowProps) {
     </box>
   )
 }
-
 
 function getRowGlyph(row: RowSnapshot, isSearchMode: boolean) {
   if (isSearchMode) return "·"

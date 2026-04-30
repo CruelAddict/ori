@@ -1,4 +1,4 @@
-import type { SelectPopupItem } from "@ui/components/select-popup"
+import type { SelectPopupItem } from "@ui/components/select-popup-model"
 import type { DocCharOffset, DocCharRange } from "../buffer-model/coords"
 
 export type BufferAutocompleteItem = SelectPopupItem & {
@@ -9,6 +9,7 @@ export type BufferAutocompleteItem = SelectPopupItem & {
 export type BufferAutocompleteRequest = {
   text: string
   cursor: DocCharOffset
+  signal: AbortSignal
 }
 
 export type BufferAutocompleteResult = {
@@ -17,7 +18,7 @@ export type BufferAutocompleteResult = {
 }
 
 export type BufferAutocompleteProvider = {
-  getCompletions: (request: BufferAutocompleteRequest) => BufferAutocompleteResult | undefined
+  getCompletions: (request: BufferAutocompleteRequest) => Promise<BufferAutocompleteResult | undefined>
 }
 
 export type BufferAutocompleteState = BufferAutocompleteResult & {

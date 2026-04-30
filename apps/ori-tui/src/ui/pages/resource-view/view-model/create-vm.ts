@@ -1,9 +1,10 @@
 import type { Resource } from "@model/resource"
-import { createSqlAutocompleteProvider } from "@ui/widgets/editor-panel/sql-autocomplete/provider"
+import { createSqlEditorAssist } from "@ui/widgets/editor-panel/sql-editor-assist"
 import { createVM as createEditorVM } from "@ui/widgets/editor-panel/view-model/create-vm"
 import { createVM as createExplorerVM } from "@ui/widgets/explorer/view-model/create-vm"
 import { createVM as createResultsVM } from "@ui/widgets/results-panel/view-model/create-vm"
 import type { ResourceIntrospectionUsecase } from "@usecase/introspection/usecase"
+import type { Logger } from "pino"
 import type { Accessor } from "solid-js"
 import { createEffect, createMemo, createSignal } from "solid-js"
 
@@ -14,6 +15,7 @@ type CreateVMOptions = {
   resource: Accessor<Resource | undefined>
   query: EditorDeps["query"]
   introspection: Pick<ResourceIntrospectionUsecase, "subscribe" | "getState" | "load" | "refresh" | "ensureNodes">
+  logger: Logger
 }
 
 export type Pane = "explorer" | "editor" | "results"
@@ -96,12 +98,16 @@ export function createVM(options: CreateVMOptions) {
     ...paneFocusFuncs("explorer"),
   })
 
+  const sqlEditorAssist = createSqlEditorAssist({
+    getState: options.introspection.getState,
+    logger: options.logger,
+  })
+
   const editorPane = createEditorVM({
     query: options.query,
     resourceName: options.resourceName,
-    autocomplete: createSqlAutocompleteProvider({
-      getState: options.introspection.getState,
-    }),
+    autocomplete: sqlEditorAssist.autocomplete,
+    sqlEditorAssist,
     ...paneFocusFuncs("editor"),
     unfocus: focusPreviousVisiblePane,
   })

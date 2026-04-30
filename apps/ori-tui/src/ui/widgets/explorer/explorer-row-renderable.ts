@@ -47,12 +47,13 @@ export class ExplorerRowRenderable extends Renderable {
 
   constructor(ctx: RenderContext, options: ExplorerRowRenderableOptions) {
     const { segments, fg, bg, width, defaultFg, ...renderableOptions } = options
+    const safeWidth = Number.isFinite(width) ? Math.max(1, width) : 1
     super(ctx, {
       height: 1,
       flexShrink: 0,
       buffered: true,
       ...renderableOptions,
-      width: Math.max(1, width),
+      width: safeWidth,
     })
     this.fallbackFg = parseColor(defaultFg)
     this.fallbackFg = normalizeColor(fg, this.fallbackFg) ?? this.fallbackFg

@@ -1,5 +1,5 @@
-import type { BufferAutocompleteItem, BufferAutocompleteResult } from "@ui/components/buffer"
-import { docCharRange } from "@ui/components/buffer/buffer-model/coords"
+import type { BufferAutocompleteItem, BufferAutocompleteResult } from "../../../components/buffer"
+import { docCharRange } from "../../../components/buffer/buffer-model/coords"
 import type { SqlDialect } from "./dialect"
 import {
   buildAliasMap,

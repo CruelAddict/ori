@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { type Node, NodeType } from "@adapters/ori/client"
+import { docCharOffset } from "@ui/components/buffer/buffer-model/coords"
 import { buildLineStarts } from "@utils/line-offsets"
 import { resolveSqlDialect } from "./sql-autocomplete/dialect"
 import { createSqlAutocompleteProvider } from "./sql-autocomplete/provider"
@@ -861,14 +862,21 @@ describe("sql autocomplete", () => {
   })
 
   describe("provider cache", () => {
-    test("rebuilds schema index when introspection references change with same node counts", () => {
+    test("rebuilds schema index when introspection references change with same node counts", async () => {
       let state = catalog()
       const provider = createSqlAutocompleteProvider({
         getState: () => state,
       })
 
       const first = withCursor("select * from users where em|")
-      expectIncludes(provider.getCompletions({ text: first.text, cursor: first.cursor }), ["email"])
+      expectIncludes(
+        await provider.getCompletions({
+          text: first.text,
+          cursor: docCharOffset(first.cursor),
+          signal: new AbortController().signal,
+        }),
+        ["email"],
+      )
 
       state = catalog({
         public: {
@@ -881,7 +889,14 @@ describe("sql autocomplete", () => {
       })
 
       const second = withCursor("select * from users where email_a|")
-      expectIncludes(provider.getCompletions({ text: second.text, cursor: second.cursor }), ["email_address"])
+      expectIncludes(
+        await provider.getCompletions({
+          text: second.text,
+          cursor: docCharOffset(second.cursor),
+          signal: new AbortController().signal,
+        }),
+        ["email_address"],
+      )
     })
   })
 })

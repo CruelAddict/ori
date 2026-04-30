@@ -34,6 +34,7 @@ const buildConfig: BunBuildConfig = {
   entrypoints: [
     "./src/index.tsx",
     "./node_modules/@opentui/core/parser.worker.js",
+    "./src/ui/widgets/editor-panel/sql-editor.worker.ts",
     "./src/assets/tree-sitter-sql.wasm",
     "./src/assets/highlights.scm",
   ],

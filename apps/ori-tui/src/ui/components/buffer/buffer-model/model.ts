@@ -50,6 +50,7 @@ export function createBufferModel(options: BufferModelOptions) {
     lines: [] as Line[],
   })
   const [contentModified, setContentModified] = createSignal(false)
+  const [documentVersion, setDocumentVersion] = createSignal(0)
   const [focusedRow, setFocusedRow] = createSignal<LineIndex>(lineIndex(0))
   const [navColumn, setNavColumn] = createSignal<DisplayColumn>(displayColumn(0))
   const lines = () => document.lines
@@ -90,6 +91,8 @@ export function createBufferModel(options: BufferModelOptions) {
     // Editing
     contentModified,
     setContentModified,
+    documentVersion,
+    bumpDocumentVersion: () => setDocumentVersion((value) => value + 1),
     setText: (text: string) => edit.setText(buffer, text),
     handleTextAreaChange: (index: LineIndex) => edit.handleTextAreaChange(buffer, index),
     handleEnter: (index: LineIndex) => edit.handleEnter(buffer, index),

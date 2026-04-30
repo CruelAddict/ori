@@ -1,4 +1,4 @@
-import { offsetToLine } from "@utils/line-offsets"
+import { offsetToLine } from "../../../utils/line-offsets"
 
 export type SqlStatement = {
   start: number
@@ -11,6 +11,11 @@ export type SqlQueryResolution =
   | { kind: "query"; query: SqlStatement }
   | { kind: "ambiguous"; queries: SqlStatement[] }
   | { kind: "none" }
+
+export type SqlDocumentAnalysis = {
+  queries: SqlStatement[]
+  queryStartLineByLine: number[]
+}
 
 type Span = { start: number; end: number }
 
@@ -122,6 +127,26 @@ function hasNonWhitespace(text: string, start: number, end: number): boolean {
     }
   }
   return false
+}
+
+function buildQueryStartLineByLine(queries: SqlStatement[], lineCount: number) {
+  const lines = Array.from({ length: lineCount }, () => -1)
+
+  for (const query of queries) {
+    for (let line = query.startLine; line <= query.endLine; line += 1) {
+      const current = lines[line]
+      if (current === -1) {
+        lines[line] = query.startLine
+        continue
+      }
+      if (current === query.startLine) {
+        continue
+      }
+      lines[line] = -2
+    }
+  }
+
+  return lines
 }
 
 function findLikelyKeywordAfterNewline(text: string, start: number, end: number): number | undefined {
@@ -375,6 +400,14 @@ export function collectSqlQueries(text: string, lineStarts: number[]): SqlStatem
     .map((span) => toSqlStatement(span, lineStarts))
 }
 
+export function analyzeSqlDocument(text: string, lineStarts: number[]): SqlDocumentAnalysis {
+  const queries = collectSqlQueries(text, lineStarts)
+  return {
+    queries,
+    queryStartLineByLine: buildQueryStartLineByLine(queries, lineStarts.length),
+  }
+}
+
 export function collectSqlStatements(text: string, lineStarts: number[]): SqlStatement[] {
   const result: SqlStatement[] = []
 
@@ -396,12 +429,14 @@ export function collectSqlStatements(text: string, lineStarts: number[]): SqlSta
 }
 
 export function resolveSqlQueryAtOffset(text: string, lineStarts: number[], offset: number): SqlQueryResolution {
-  const queries = collectSqlQueries(text, lineStarts)
+  return resolveSqlQueryAtLine(collectSqlQueries(text, lineStarts), getCursorLine(text, lineStarts, offset))
+}
+
+export function resolveSqlQueryAtLine(queries: SqlStatement[], line: number): SqlQueryResolution {
   if (!queries.length) {
     return { kind: "none" }
   }
 
-  const line = getCursorLine(text, lineStarts, offset)
   const lineQueries = queries.filter((query) => query.startLine <= line && line <= query.endLine)
   if (!lineQueries.length) {
     return { kind: "none" }
