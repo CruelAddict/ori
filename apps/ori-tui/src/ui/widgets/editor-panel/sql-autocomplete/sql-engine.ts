@@ -166,6 +166,12 @@ const KEYWORD_FOLLOW_UP_PATTERNS = [
 ] as const
 const INSERT_FOLLOW_UP_KEYWORDS = ["VALUES", "SELECT", "DEFAULT VALUES"] as const
 const SIMPLE_IDENTIFIER = /^[a-z_][a-z0-9_$]*$/
+const UNIQUE_RANKED_ITEM_KEYS = new WeakMap<RankedItem[], Set<string>>()
+const UNIQUE_COLUMN_KEYS = new WeakMap<SqlRelation["columns"], Set<string>>()
+
+function rankedItemKey(item: Pick<RankedItem, "label" | "detail" | "insertText">) {
+  return `${item.label}:${item.detail ?? ""}:${item.insertText}`
+}
 
 function formatSqlIdentifier(value: string) {
   if (SIMPLE_IDENTIFIER.test(value)) {
@@ -188,10 +194,18 @@ function buildRelationLookupNames(ref: { database?: string; schema?: string; nam
 }
 
 function pushUniqueColumns(target: SqlRelation["columns"], columns: readonly SqlRelation["columns"][number][]) {
+  let seen = UNIQUE_COLUMN_KEYS.get(target)
+  if (!seen) {
+    seen = new Set(target.map((item) => normalize(item.name)))
+    UNIQUE_COLUMN_KEYS.set(target, seen)
+  }
+
   for (const column of columns) {
-    if (target.some((item) => normalize(item.name) === normalize(column.name))) {
+    const key = normalize(column.name)
+    if (seen.has(key)) {
       continue
     }
+    seen.add(key)
     target.push(column)
   }
 }
@@ -483,10 +497,17 @@ function matchKeywordPrefix(keywords: readonly string[], token: string, preferen
 }
 
 function pushUnique(target: RankedItem[], item: RankedItem) {
-  const key = `${item.label}:${item.detail ?? ""}:${item.insertText}`
-  if (target.some((entry) => `${entry.label}:${entry.detail ?? ""}:${entry.insertText}` === key)) {
+  let seen = UNIQUE_RANKED_ITEM_KEYS.get(target)
+  if (!seen) {
+    seen = new Set(target.map((entry) => rankedItemKey(entry)))
+    UNIQUE_RANKED_ITEM_KEYS.set(target, seen)
+  }
+
+  const key = rankedItemKey(item)
+  if (seen.has(key)) {
     return
   }
+  seen.add(key)
   target.push(item)
 }
 

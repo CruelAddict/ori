@@ -679,7 +679,10 @@ function printResults(results: readonly BenchResult[], warehouse: WarehouseState
 async function main() {
   const warehouse = buildWarehouseState()
   const start = Bun.nanoseconds()
-  const results = await Promise.all(cases().map((value) => runBenchCase(warehouse.state, value)))
+  const results: BenchResult[] = []
+  for (const value of cases()) {
+    results.push(await runBenchCase(warehouse.state, value))
+  }
   const totalMs = Number(Bun.nanoseconds() - start) / 1_000_000
   printResults(results, warehouse, totalMs)
 }

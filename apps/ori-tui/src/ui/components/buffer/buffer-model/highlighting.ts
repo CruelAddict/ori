@@ -1,10 +1,8 @@
 import type { Extmark } from "@opentui/core"
-import { offsetToLineCol } from "@utils/line-offsets"
 import type { SyntaxHighlightResult } from "@utils/syntax-highlighter"
 import { createEffect, on } from "solid-js"
-import { type LineCharOffset, lineCharOffset, lineIndex } from "./coords"
+import { type LineCharOffset, lineCharOffset } from "./coords"
 import type { BufferModel } from "./model"
-import { getLineRef } from "./navigation"
 import { lineCharOffsetToDisplayColumn } from "./text-metrics"
 
 const SYNTAX_EXTMARK_TYPE = "syntax-highlight"
@@ -38,18 +36,30 @@ export function mountHighlighting(buffer: BufferModel) {
 
       const styleChanged = buffer._syntaxStyle !== highlight.syntaxStyle
       buffer._syntaxStyle = highlight.syntaxStyle
-      const spansByLine = buildHighlightSpansByLine(buffer, highlight)
-      for (let index = 0; index < buffer.lines().length; index++) {
-        const line = buffer.lines()[index]
+      const lines = buffer.lines()
+      const lineIndexById = new Map<string, number>()
+      const mountedLines = new Set<number>()
+      for (let index = 0; index < lines.length; index += 1) {
+        const line = lines[index]
         if (!line) {
           continue
         }
-        const ref = getLineRef(buffer, lineIndex(index))
-        if (styleChanged && ref) {
+        lineIndexById.set(line.id, index)
+        if (buffer._lineRefs.has(line.id)) {
+          mountedLines.add(index)
+        }
+      }
+      const spansByLine = buildHighlightSpansByLine(buffer, highlight, mountedLines)
+      for (const [lineId, ref] of buffer._lineRefs) {
+        const index = lineIndexById.get(lineId)
+        if (index === undefined) {
+          continue
+        }
+        if (styleChanged) {
           ref.syntaxStyle = highlight.syntaxStyle
         }
         const spans = spansByLine.get(index) ?? []
-        applyLineHighlights(buffer, line.id, spans, false)
+        applyLineHighlights(buffer, lineId, spans, false)
       }
     }),
   )
@@ -80,24 +90,29 @@ function buildHighlightSpansByLine(
 ) {
   const spansByLine = new Map<number, LineSpan[]>()
   const starts = buffer.lineStarts()
+  let line = 0
 
   for (const span of highlight.spans) {
-    const start = offsetToLineCol(span.start, starts)
-    const end = offsetToLineCol(span.end, starts)
-    if (start.line !== end.line) {
+    while (line + 1 < starts.length && span.start >= starts[line + 1]!) {
+      line += 1
+    }
+
+    const lineStart = starts[line] ?? 0
+    const nextStart = line + 1 < starts.length ? starts[line + 1]! : Number.POSITIVE_INFINITY
+    if (span.end > nextStart) {
       continue
     }
-    if (targetLines && !targetLines.has(start.line)) {
+    if (targetLines && !targetLines.has(line)) {
       continue
     }
 
-    const spans = spansByLine.get(start.line) ?? []
+    const spans = spansByLine.get(line) ?? []
     spans.push({
-      start: lineCharOffset(start.col),
-      end: lineCharOffset(end.col),
+      start: lineCharOffset(span.start - lineStart),
+      end: lineCharOffset(span.end - lineStart),
       styleId: span.styleId,
     })
-    spansByLine.set(start.line, spans)
+    spansByLine.set(line, spans)
   }
 
   for (const spans of spansByLine.values()) {

@@ -7,7 +7,7 @@ import type { Logger } from "pino"
 import { type Accessor, createEffect, createSignal, onCleanup } from "solid-js"
 import sqlHighlights from "../assets/highlights.scm" with { type: "file" }
 import sqlWasm from "../assets/tree-sitter-sql.wasm" with { type: "file" }
-import { collectSqlQueries, type SqlStatement } from "../ui/widgets/editor-panel/sql-statement-detector"
+import { collectSqlQueries } from "../ui/widgets/editor-panel/sql-statement-detector"
 
 type SyntaxThemePalette = {
   get(group: string): string
@@ -61,6 +61,21 @@ type SyntaxStyleBundle = {
 type HighlightRequest = {
   text: string
   version: number | string
+}
+
+type CachedSqlStatement = {
+  text: string
+  start: number
+  spans: SyntaxHighlightSpan[]
+}
+
+type SqlHighlightSnapshot = {
+  statements: CachedSqlStatement[]
+}
+
+type HighlightPassResult = {
+  spans: SyntaxHighlightSpan[]
+  snapshot?: SqlHighlightSnapshot
 }
 
 const FILETYPE_SQL = "sql"
@@ -195,67 +210,145 @@ async function highlightSqlText(text: string, styleIds: StyleIds, logger?: Logge
   return spans
 }
 
-function getSqlHighlightRuns(text: string, lineStarts: number[]): SqlStatement[] {
-  const queries = collectSqlQueries(text, lineStarts)
-  const first = queries[0]
-  if (!first) {
-    return []
-  }
-
-  const runs: SqlStatement[] = []
-  let current = first
-  for (const query of queries.slice(1)) {
-    if (current.endLine < query.startLine) {
-      runs.push(current)
-      current = query
-      continue
-    }
-
-    current = {
-      start: current.start,
-      end: query.end,
-      startLine: current.startLine,
-      endLine: Math.max(current.endLine, query.endLine),
-    }
-  }
-
-  runs.push(current)
-  return runs
+function collectSqlStatements(text: string) {
+  return collectSqlQueries(text, buildLineStarts(text)).map((statement) => ({
+    start: statement.start,
+    end: statement.end,
+    text: text.slice(statement.start, statement.end),
+  }))
 }
 
-async function collectSqlHighlights(text: string, styleIds: StyleIds, logger?: Logger): Promise<SyntaxHighlightSpan[]> {
-  const runs = getSqlHighlightRuns(text, buildLineStarts(text))
-  const first = runs[0]
-  if (!first) {
-    return []
-  }
-
+function flattenSqlStatements(statements: readonly CachedSqlStatement[]) {
   const spans: SyntaxHighlightSpan[] = []
-  for (const run of runs) {
-    const local = await highlightSqlText(text.slice(run.start, run.end), styleIds, logger)
-    for (const span of local) {
+  for (const statement of statements) {
+    for (const span of statement.spans) {
       spans.push({
-        start: span.start + run.start,
-        end: span.end + run.start,
+        start: span.start + statement.start,
+        end: span.end + statement.start,
         styleId: span.styleId,
       })
     }
   }
-
   return spans
+}
+
+function stableSqlPrefixCount(previous: readonly CachedSqlStatement[], next: ReturnType<typeof collectSqlStatements>) {
+  let count = 0
+  for (; count < previous.length && count < next.length; count += 1) {
+    if (previous[count]?.text !== next[count]?.text) {
+      break
+    }
+  }
+  return count
+}
+
+function stableSqlSuffixCount(
+  previous: readonly CachedSqlStatement[],
+  next: ReturnType<typeof collectSqlStatements>,
+  prefix: number,
+) {
+  let count = 0
+  for (; count < previous.length - prefix && count < next.length - prefix; count += 1) {
+    const previousIndex = previous.length - 1 - count
+    const nextIndex = next.length - 1 - count
+    if (previous[previousIndex]?.text !== next[nextIndex]?.text) {
+      break
+    }
+  }
+  return count
+}
+
+async function highlightSqlStatement(statementText: string, start: number, styleIds: StyleIds, logger?: Logger) {
+  return {
+    text: statementText,
+    start,
+    spans: await highlightSqlText(statementText, styleIds, logger),
+  } satisfies CachedSqlStatement
+}
+
+async function collectSqlHighlights(
+  text: string,
+  styleIds: StyleIds,
+  previous: SqlHighlightSnapshot | undefined,
+  logger?: Logger,
+): Promise<HighlightPassResult> {
+  const statements = collectSqlStatements(text)
+  if (statements.length === 0) {
+    return {
+      spans: [],
+      snapshot: { statements: [] },
+    }
+  }
+
+  if (!previous) {
+    const highlighted: CachedSqlStatement[] = []
+    for (const statement of statements) {
+      highlighted.push(await highlightSqlStatement(statement.text, statement.start, styleIds, logger))
+    }
+    return {
+      spans: flattenSqlStatements(highlighted),
+      snapshot: { statements: highlighted },
+    }
+  }
+
+  const prefix = stableSqlPrefixCount(previous.statements, statements)
+  const suffix = stableSqlSuffixCount(previous.statements, statements, prefix)
+  const highlighted: CachedSqlStatement[] = []
+
+  for (let index = 0; index < prefix; index += 1) {
+    const cached = previous.statements[index]
+    const statement = statements[index]
+    if (!cached || !statement) {
+      continue
+    }
+    highlighted.push({
+      text: statement.text,
+      start: statement.start,
+      spans: cached.spans,
+    })
+  }
+
+  for (let index = prefix; index < statements.length - suffix; index += 1) {
+    const statement = statements[index]
+    if (!statement) {
+      continue
+    }
+    highlighted.push(await highlightSqlStatement(statement.text, statement.start, styleIds, logger))
+  }
+
+  for (let offset = suffix; offset > 0; offset -= 1) {
+    const previousIndex = previous.statements.length - offset
+    const nextIndex = statements.length - offset
+    const cached = previous.statements[previousIndex]
+    const statement = statements[nextIndex]
+    if (!cached || !statement) {
+      continue
+    }
+    highlighted.push({
+      text: statement.text,
+      start: statement.start,
+      spans: cached.spans,
+    })
+  }
+
+  return {
+    spans: flattenSqlStatements(highlighted),
+    snapshot: { statements: highlighted },
+  }
 }
 
 async function collectHighlightsByLanguage(
   text: string,
   language: string,
   styleIds: StyleIds,
+  previous: SqlHighlightSnapshot | undefined,
   logger?: Logger,
-): Promise<SyntaxHighlightSpan[]> {
+): Promise<HighlightPassResult> {
   if (language === FILETYPE_SQL) {
-    return collectSqlHighlights(text, styleIds, logger)
+    return collectSqlHighlights(text, styleIds, previous, logger)
   }
   logger?.warn({ language }, "syntax-highlighter: unsupported language, returning no highlights")
-  return []
+  return { spans: [] }
 }
 
 export function syntaxHighlighter(params: { theme: Accessor<SyntaxThemePalette>; language: string; logger?: Logger }) {
@@ -264,6 +357,7 @@ export function syntaxHighlighter(params: { theme: Accessor<SyntaxThemePalette>;
   let currentStyle = buildSyntaxStyle(theme())
   let lastRequest: HighlightRequest | null = null
   let requestToken = 0
+  let sqlSnapshot: SqlHighlightSnapshot | undefined
 
   const [highlightResult, setHighlightResult] = createSignal<SyntaxHighlightResult>({
     version: 0,
@@ -274,19 +368,21 @@ export function syntaxHighlighter(params: { theme: Accessor<SyntaxThemePalette>;
   const runHighlight = async (request: HighlightRequest, style: SyntaxStyleBundle) => {
     const token = ++requestToken
     try {
-      const spans = await collectHighlightsByLanguage(request.text, language, style.styleIds, logger)
+      const result = await collectHighlightsByLanguage(request.text, language, style.styleIds, sqlSnapshot, logger)
       if (disposed || token !== requestToken) {
         return
       }
+      sqlSnapshot = result.snapshot
       setHighlightResult({
         version: request.version,
         syntaxStyle: style.syntaxStyle,
-        spans,
+        spans: result.spans,
       })
     } catch (err) {
       if (disposed || token !== requestToken) {
         return
       }
+      sqlSnapshot = undefined
       logger?.error({ err }, "syntax-highlighter: highlight parse failed")
       setHighlightResult({
         version: request.version,
@@ -313,6 +409,7 @@ export function syntaxHighlighter(params: { theme: Accessor<SyntaxThemePalette>;
     const nextStyle = buildSyntaxStyle(palette)
     const prevStyle = currentStyle
     currentStyle = nextStyle
+    sqlSnapshot = undefined
     prevStyle.syntaxStyle.destroy()
 
     if (lastRequest) {

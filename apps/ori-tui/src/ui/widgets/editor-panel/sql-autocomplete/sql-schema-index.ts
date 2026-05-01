@@ -60,8 +60,8 @@ function buildParentById(input: SqlSchemaInput) {
   const queue = [...input.rootIds]
   const seen = new Set(queue)
 
-  while (queue.length > 0) {
-    const id = queue.shift()
+  for (let index = 0; index < queue.length; index += 1) {
+    const id = queue[index]
     if (!id) {
       continue
     }

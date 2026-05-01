@@ -1,7 +1,12 @@
 import type { BufferAutocompleteProvider, BufferAutocompleteResult } from "@ui/components/buffer"
 import type { Logger } from "pino"
 import { type Accessor, createSignal } from "solid-js"
-import type { SqlEditorRequest, SqlEditorResponse, SqlEditorSchemaState, SqlStatementAnalysisResult } from "./sql-editor-protocol"
+import type {
+  SqlEditorRequest,
+  SqlEditorResponse,
+  SqlEditorSchemaState,
+  SqlStatementAnalysisResult,
+} from "./sql-editor-protocol"
 
 export type StatementAnalysis = {
   current: Accessor<SqlStatementAnalysisResult | undefined>
@@ -19,13 +24,23 @@ type CreateSqlEditorBgWorkerAdapterOptions = {
   logger?: Logger
 }
 
+type QueuedAutocomplete = {
+  text: string
+  cursor: number
+  signal: AbortSignal
+  resolve: (result: BufferAutocompleteResult | undefined) => void
+  onAbort: () => void
+  finished: boolean
+}
+
 export function createSqlEditorBgWorkerAdapter(
   options: CreateSqlEditorBgWorkerAdapterOptions,
 ): SqlEditorBgWorkerAdapter {
   const [statementAnalysisState, setStatementAnalysisState] = createSignal<SqlStatementAnalysisResult>()
-  const workerPath = import.meta.url === "file:///$bunfs/root/src/index.js"
-    ? "/$bunfs/root/src/ui/widgets/editor-panel/sql-editor.worker.js"
-    : new URL("./sql-editor.worker.ts", import.meta.url).href
+  const workerPath =
+    import.meta.url === "file:///$bunfs/root/src/index.js"
+      ? "/$bunfs/root/src/ui/widgets/editor-panel/sql-editor.worker.js"
+      : new URL("./sql-editor.worker.ts", import.meta.url).href
   const worker = new Worker(workerPath)
   const pending = new Map<number, (message: SqlEditorResponse | undefined) => void>()
   let nextId = 0
@@ -37,8 +52,15 @@ export function createSqlEditorBgWorkerAdapter(
   let cachedLoaded: SqlEditorSchemaState["loaded"] | undefined
   let latestAnalysisRequestId = -1
   let latestAnalysisVersion = -1
+  let activeAutocomplete: { id: number; request: QueuedAutocomplete } | undefined
+  let queuedAutocomplete: QueuedAutocomplete | undefined
 
   const clearPending = () => {
+    const queued = queuedAutocomplete
+    queuedAutocomplete = undefined
+    if (queued) {
+      finishAutocomplete(queued, undefined)
+    }
     for (const handler of pending.values()) {
       handler(undefined)
     }
@@ -47,6 +69,62 @@ export function createSqlEditorBgWorkerAdapter(
 
   const postRequest = (message: SqlEditorRequest) => {
     worker.postMessage(message)
+  }
+
+  const finishAutocomplete = (request: QueuedAutocomplete, result: BufferAutocompleteResult | undefined) => {
+    if (request.finished) {
+      return
+    }
+    request.finished = true
+    request.signal.removeEventListener("abort", request.onAbort)
+    request.resolve(result)
+  }
+
+  const scheduleQueuedAutocomplete = () => {
+    if (disposed || !workerAlive) {
+      const queued = queuedAutocomplete
+      queuedAutocomplete = undefined
+      if (queued) {
+        finishAutocomplete(queued, undefined)
+      }
+      return
+    }
+    if (activeAutocomplete || !queuedAutocomplete) {
+      return
+    }
+
+    const request = queuedAutocomplete
+    queuedAutocomplete = undefined
+    if (!request || request.signal.aborted || request.finished) {
+      if (request) {
+        finishAutocomplete(request, undefined)
+      }
+      return
+    }
+
+    const id = nextId
+    nextId += 1
+    activeAutocomplete = { id, request }
+    pending.set(id, (message) => {
+      if (activeAutocomplete?.id === id) {
+        activeAutocomplete = undefined
+      }
+
+      if (!message || message.type !== "autocomplete" || request.signal.aborted) {
+        finishAutocomplete(request, undefined)
+        scheduleQueuedAutocomplete()
+        return
+      }
+
+      finishAutocomplete(request, message.result)
+      scheduleQueuedAutocomplete()
+    })
+    postRequest({
+      id,
+      type: "autocomplete",
+      text: request.text,
+      cursor: request.cursor,
+    })
   }
 
   const ensureSchema = () => {
@@ -145,37 +223,33 @@ export function createSqlEditorBgWorkerAdapter(
       }
 
       ensureSchema()
-      const id = nextId
-      nextId += 1
       return new Promise<BufferAutocompleteResult | undefined>((resolve) => {
-        const onAbort = () => {
-          pending.delete(id)
-          resolve(undefined)
-        }
-        signal.addEventListener("abort", onAbort, { once: true })
-        pending.set(id, (message) => {
-          signal.removeEventListener("abort", onAbort)
-          if (!message) {
-            resolve(undefined)
-            return
-          }
-          if (message.type !== "autocomplete") {
-            resolve(undefined)
-            return
-          }
-          if (signal.aborted) {
-            resolve(undefined)
-            return
-          }
-
-          resolve(message.result)
-        })
-        postRequest({
-          id,
-          type: "autocomplete",
+        const request: QueuedAutocomplete = {
           text,
           cursor,
-        })
+          signal,
+          resolve,
+          onAbort: () => {
+            if (queuedAutocomplete === request) {
+              queuedAutocomplete = undefined
+            }
+            finishAutocomplete(request, undefined)
+          },
+          finished: false,
+        }
+        signal.addEventListener("abort", request.onAbort, { once: true })
+
+        if (activeAutocomplete) {
+          const previous = queuedAutocomplete
+          queuedAutocomplete = request
+          if (previous) {
+            finishAutocomplete(previous, undefined)
+          }
+          return
+        }
+
+        queuedAutocomplete = request
+        scheduleQueuedAutocomplete()
       })
     },
   }
