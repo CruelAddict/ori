@@ -25,7 +25,7 @@ export function EditorPanel(props: EditorPanelProps) {
   })
 
   const baseGutterMarkers = createMemo(() => {
-    const analysis = pane.sqlEditorBackgroundWorker.analysis()
+    const analysis = pane.statementAnalysis.current()
     if (!analysis || analysis.queries.length < 2) {
       return EMPTY_MARKERS
     }
@@ -34,7 +34,7 @@ export function EditorPanel(props: EditorPanelProps) {
   })
 
   const activeMarkerLine = createMemo(() => {
-    const analysis = pane.sqlEditorBackgroundWorker.analysis()
+    const analysis = pane.statementAnalysis.current()
     if (!analysis || !hasCursor()) {
       return -1
     }
@@ -57,7 +57,7 @@ export function EditorPanel(props: EditorPanelProps) {
 
   const handleContextChange = (context: BufferContext) => {
     setBufferContext(context)
-    pane.sqlEditorBackgroundWorker.requestAnalysis(context.text, context.documentVersion)
+    pane.statementAnalysis.analyze(context.text, context.documentVersion)
   }
 
   const handleTextChange = (text: string, info: { modified: boolean }) => {

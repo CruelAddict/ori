@@ -1,12 +1,12 @@
 import type { Resource } from "@model/resource"
-import { createSqlEditorBackgroundWorker } from "@ui/widgets/editor-panel/sql-editor-background-worker"
+import { createSqlEditorBgWorkerAdapter } from "@ui/widgets/editor-panel/sql-editor-bg-worker-adapter"
 import { createVM as createEditorVM } from "@ui/widgets/editor-panel/view-model/create-vm"
 import { createVM as createExplorerVM } from "@ui/widgets/explorer/view-model/create-vm"
 import { createVM as createResultsVM } from "@ui/widgets/results-panel/view-model/create-vm"
 import type { ResourceIntrospectionUsecase } from "@usecase/introspection/usecase"
 import type { Logger } from "pino"
 import type { Accessor } from "solid-js"
-import { createEffect, createMemo, createSignal } from "solid-js"
+import { createEffect, createMemo, createSignal, onCleanup } from "solid-js"
 
 type EditorDeps = Parameters<typeof createEditorVM>[0]
 
@@ -98,16 +98,20 @@ export function createVM(options: CreateVMOptions) {
     ...paneFocusFuncs("explorer"),
   })
 
-  const sqlEditorBackgroundWorker = createSqlEditorBackgroundWorker({
+  const sqlEditorBgWorker = createSqlEditorBgWorkerAdapter({
     getState: options.introspection.getState,
     logger: options.logger,
+  })
+
+  onCleanup(() => {
+    sqlEditorBgWorker.dispose()
   })
 
   const editorPane = createEditorVM({
     query: options.query,
     resourceName: options.resourceName,
-    autocomplete: sqlEditorBackgroundWorker.autocomplete,
-    sqlEditorBackgroundWorker,
+    autocomplete: sqlEditorBgWorker.autocomplete,
+    statementAnalysis: sqlEditorBgWorker.statementAnalysis,
     ...paneFocusFuncs("editor"),
     unfocus: focusPreviousVisiblePane,
   })

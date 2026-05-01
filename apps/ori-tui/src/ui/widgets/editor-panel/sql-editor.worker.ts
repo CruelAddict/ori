@@ -1,8 +1,8 @@
-import { buildLineStarts } from "../../../utils/line-offsets"
+import { buildLineStarts } from "@utils/line-offsets"
 import { resolveSqlDialect } from "./sql-autocomplete/dialect"
 import { getSqlAutocompleteResult } from "./sql-autocomplete/sql-engine"
-import { buildSqlSchemaIndex, type SqlSchemaInput } from "./sql-autocomplete/sql-schema-index"
-import type { SqlEditorSchemaState, SqlEditorWorkerRequest, SqlEditorWorkerResponse } from "./sql-editor-worker-types"
+import { buildSqlSchemaIndex } from "./sql-autocomplete/sql-schema-index"
+import type { SqlEditorRequest, SqlEditorResponse, SqlEditorSchemaState } from "./sql-editor-protocol"
 import { analyzeSqlDocument } from "./sql-statement-detector"
 
 const EMPTY_SCHEMA: SqlEditorSchemaState = {
@@ -12,13 +12,14 @@ const EMPTY_SCHEMA: SqlEditorSchemaState = {
   loaded: false,
 }
 
+const workerScope = globalThis as unknown as {
+  postMessage: (message: SqlEditorResponse) => void
+  onmessage: ((event: MessageEvent<SqlEditorRequest>) => void) | null
+}
+
 let schemaState: SqlEditorSchemaState = EMPTY_SCHEMA
 let schemaIndex = buildSqlSchemaIndex(EMPTY_SCHEMA)
 let dialect = resolveSqlDialect(EMPTY_SCHEMA.nodesById, EMPTY_SCHEMA.rootIds)
-const workerScope = globalThis as unknown as {
-  postMessage: (message: SqlEditorWorkerResponse) => void
-  onmessage: ((event: MessageEvent<SqlEditorWorkerRequest>) => void) | null
-}
 let lastAnalysis:
   | {
       text: string
@@ -27,27 +28,38 @@ let lastAnalysis:
     }
   | undefined
 
-function syncSchema(schema: SqlSchemaInput) {
+function syncSchema(schema: SqlEditorSchemaState) {
   schemaState = schema
   schemaIndex = buildSqlSchemaIndex(schemaState)
   dialect = resolveSqlDialect(schemaState.nodesById, schemaState.rootIds)
 }
 
-function getAnalysis(text: string, version: number) {
+function analyze(text: string, version: number) {
   if (lastAnalysis && lastAnalysis.version === version && lastAnalysis.text === text) {
-    return lastAnalysis.result
+    return {
+      ...lastAnalysis.result,
+      version,
+    }
   }
 
   const result = analyzeSqlDocument(text, buildLineStarts(text))
   lastAnalysis = { text, version, result }
-  return result
+  return {
+    ...result,
+    version,
+  }
 }
 
-function postMessageSafe(message: SqlEditorWorkerResponse) {
-  workerScope.postMessage(message)
+function autocomplete(text: string, cursor: number) {
+  return getSqlAutocompleteResult({
+    text,
+    cursorOffset: cursor,
+    dialect,
+    schema: schemaIndex,
+  })
 }
 
-workerScope.onmessage = (event: MessageEvent<SqlEditorWorkerRequest>) => {
+workerScope.onmessage = (event: MessageEvent<SqlEditorRequest>) => {
   const message = event.data
   if (message.type === "sync-schema") {
     syncSchema(message.schema)
@@ -55,27 +67,17 @@ workerScope.onmessage = (event: MessageEvent<SqlEditorWorkerRequest>) => {
   }
 
   if (message.type === "analyze") {
-    const result = getAnalysis(message.text, message.version)
-    postMessageSafe({
+    workerScope.postMessage({
       id: message.id,
       type: "analyze",
-      result: {
-        ...result,
-        version: message.version,
-      },
+      result: analyze(message.text, message.version),
     })
     return
   }
 
-  const result = getSqlAutocompleteResult({
-    text: message.text,
-    cursorOffset: message.cursor,
-    dialect,
-    schema: schemaIndex,
-  })
-  postMessageSafe({
+  workerScope.postMessage({
     id: message.id,
     type: "autocomplete",
-    result,
+    result: autocomplete(message.text, message.cursor),
   })
 }

@@ -9,7 +9,11 @@ export type SqlEditorSchemaState = {
   loaded: boolean
 }
 
-export type SqlEditorWorkerRequest =
+export type SqlStatementAnalysisResult = SqlDocumentAnalysis & {
+  version: number
+}
+
+export type SqlEditorRequest =
   | {
       type: "sync-schema"
       schema: SqlEditorSchemaState
@@ -27,11 +31,11 @@ export type SqlEditorWorkerRequest =
       cursor: number
     }
 
-export type SqlEditorWorkerResponse =
+export type SqlEditorResponse =
   | {
       id: number
       type: "analyze"
-      result: SqlDocumentAnalysis & { version: number }
+      result: SqlStatementAnalysisResult
     }
   | {
       id: number

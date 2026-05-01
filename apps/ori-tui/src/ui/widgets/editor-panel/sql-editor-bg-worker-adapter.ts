@@ -1,34 +1,33 @@
 import type { BufferAutocompleteProvider, BufferAutocompleteResult } from "@ui/components/buffer"
 import type { Logger } from "pino"
 import { type Accessor, createSignal } from "solid-js"
-import type { SqlEditorSchemaState, SqlEditorWorkerRequest, SqlEditorWorkerResponse } from "./sql-editor-worker-types"
-import type { SqlDocumentAnalysis } from "./sql-statement-detector"
+import type { SqlEditorRequest, SqlEditorResponse, SqlEditorSchemaState, SqlStatementAnalysisResult } from "./sql-editor-protocol"
 
-export type SqlEditorAnalysis = SqlDocumentAnalysis & {
-  version: number
+export type StatementAnalysis = {
+  current: Accessor<SqlStatementAnalysisResult | undefined>
+  analyze: (text: string, version: number) => void
 }
 
-export type SqlEditorBackgroundWorker = {
+export type SqlEditorBgWorkerAdapter = {
   autocomplete: BufferAutocompleteProvider
-  analysis: Accessor<SqlEditorAnalysis | undefined>
-  requestAnalysis: (text: string, version: number) => void
+  statementAnalysis: StatementAnalysis
   dispose: () => void
 }
 
-type CreateSqlEditorBackgroundWorkerOptions = {
+type CreateSqlEditorBgWorkerAdapterOptions = {
   getState: () => SqlEditorSchemaState
   logger?: Logger
 }
 
-export function createSqlEditorBackgroundWorker(
-  options: CreateSqlEditorBackgroundWorkerOptions,
-): SqlEditorBackgroundWorker {
-  const [analysis, setAnalysis] = createSignal<SqlEditorAnalysis>()
+export function createSqlEditorBgWorkerAdapter(
+  options: CreateSqlEditorBgWorkerAdapterOptions,
+): SqlEditorBgWorkerAdapter {
+  const [statementAnalysisState, setStatementAnalysisState] = createSignal<SqlStatementAnalysisResult>()
   const workerPath = import.meta.url === "file:///$bunfs/root/src/index.js"
     ? "/$bunfs/root/src/ui/widgets/editor-panel/sql-editor.worker.js"
     : new URL("./sql-editor.worker.ts", import.meta.url).href
   const worker = new Worker(workerPath)
-  const pending = new Map<number, (message: SqlEditorWorkerResponse | undefined) => void>()
+  const pending = new Map<number, (message: SqlEditorResponse | undefined) => void>()
   let nextId = 0
   let disposed = false
   let workerAlive = true
@@ -44,6 +43,10 @@ export function createSqlEditorBackgroundWorker(
       handler(undefined)
     }
     pending.clear()
+  }
+
+  const postRequest = (message: SqlEditorRequest) => {
+    worker.postMessage(message)
   }
 
   const ensureSchema = () => {
@@ -65,14 +68,13 @@ export function createSqlEditorBackgroundWorker(
     cachedRootIds = schema.rootIds
     cachedLoading = schema.loading
     cachedLoaded = schema.loaded
-    const message: SqlEditorWorkerRequest = {
+    postRequest({
       type: "sync-schema",
       schema,
-    }
-    worker.postMessage(message)
+    })
   }
 
-  worker.onmessage = (event: MessageEvent<SqlEditorWorkerResponse>) => {
+  worker.onmessage = (event: MessageEvent<SqlEditorResponse>) => {
     const message = event.data
     const handler = pending.get(message.id)
     if (!handler) {
@@ -92,17 +94,17 @@ export function createSqlEditorBackgroundWorker(
         lineno: event.lineno,
         colno: event.colno,
       },
-      "sql-editor-background-worker: worker error",
+      "sql-editor-bg-worker-adapter: worker error",
     )
     workerAlive = false
     clearPending()
   }
 
   worker.onmessageerror = (event) => {
-    options.logger?.error({ workerPath, data: event.data }, "sql-editor-background-worker: worker messageerror")
+    options.logger?.error({ workerPath, data: event.data }, "sql-editor-bg-worker-adapter: worker messageerror")
   }
 
-  const requestAnalysis = (text: string, version: number) => {
+  const analyze = (text: string, version: number) => {
     if (disposed || !workerAlive || version === latestAnalysisVersion) {
       return
     }
@@ -122,15 +124,14 @@ export function createSqlEditorBackgroundWorker(
         return
       }
 
-      setAnalysis(message.result)
+      setStatementAnalysisState(message.result)
     })
-    const payload: SqlEditorWorkerRequest = {
+    postRequest({
       id,
       type: "analyze",
       text,
       version,
-    }
-    worker.postMessage(payload)
+    })
   }
 
   const autocomplete: BufferAutocompleteProvider = {
@@ -169,15 +170,19 @@ export function createSqlEditorBackgroundWorker(
 
           resolve(message.result)
         })
-        const payload: SqlEditorWorkerRequest = {
+        postRequest({
           id,
           type: "autocomplete",
           text,
           cursor,
-        }
-        worker.postMessage(payload)
+        })
       })
     },
+  }
+
+  const statementAnalysis: StatementAnalysis = {
+    current: statementAnalysisState,
+    analyze,
   }
 
   const dispose = () => {
@@ -193,8 +198,7 @@ export function createSqlEditorBackgroundWorker(
 
   return {
     autocomplete,
-    analysis,
-    requestAnalysis,
+    statementAnalysis,
     dispose,
   }
 }
