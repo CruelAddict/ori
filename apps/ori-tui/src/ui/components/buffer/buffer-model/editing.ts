@@ -6,7 +6,7 @@ import {
   lineCharOffset,
   lineIndex,
 } from "./coords"
-import { reapplyLineHighlight } from "./highlighting"
+import { invalidateLineHighlight, reapplyLineHighlight } from "./highlighting"
 import type { BufferChangeOrigin, BufferModel, Line } from "./model"
 import { clampFocus, getLineRef, moveFocus } from "./navigation"
 import {
@@ -50,6 +50,7 @@ function syncRefTextWithDocumentState(buffer: BufferModel, lines: Line[], lineId
       }
 
       if (ref.plainText !== line.text) {
+        invalidateLineHighlight(buffer, id)
         ref.setText(line.text)
         reapplyLineHighlight(buffer, id)
       }
@@ -122,6 +123,7 @@ export function handleTextAreaChange(buffer: BufferModel, index: LineIndex) {
   if (text === line.text) {
     return origin
   }
+  invalidateLineHighlight(buffer, line.id)
   if (text.includes("\n")) {
     commitLineEdit(buffer, buildLineSplitEdit(buffer, buffer.lines(), index, text, displayColumn(cursor.col)))
     return origin
@@ -167,6 +169,7 @@ export function replaceRangeInLine(
     return true
   }
 
+  invalidateLineHighlight(buffer, line.id)
   const displayRange = lineCharRangeToDisplayRange(buffer, currentText, range)
   const cursorOffset = options.cursorOffset ?? insertText.length
   const targetOffset = lineCharOffset(start + cursorOffset)

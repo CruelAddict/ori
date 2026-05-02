@@ -82,6 +82,14 @@ export function reapplyLineHighlight(buffer: BufferModel, lineId: string) {
   applyLineHighlights(buffer, lineId, spans, true)
 }
 
+// Highlight spans are cached to skip expensive native extmark reads when the
+// highlighter returns the same spans again. Native textarea edits can still move
+// or clear extmarks without touching that cache, so edit paths invalidate the
+// affected line before applying current or future highlight results.
+export function invalidateLineHighlight(buffer: BufferModel, lineId: string) {
+  buffer._lineHighlightSpans.delete(lineId)
+}
+
 // Convert highlight result into per-line spans.
 function buildHighlightSpansByLine(
   buffer: BufferModel,
@@ -135,14 +143,16 @@ function applyLineHighlights(buffer: BufferModel, lineId: string, nextSpans: Lin
     end: lineCharOffsetToDisplayColumn(buffer, ref.plainText, span.end),
     styleId: span.styleId,
   }))
+  // Native text edits can clear/move extmarks without updating our cache; edit
+  // paths must invalidate the affected line before this cache-only fast path.
+  if (!force && spansEqual(cachedSpans, displaySpans)) {
+    return
+  }
+
   const typeId = ref.extmarks.getTypeId(SYNTAX_EXTMARK_TYPE) ?? ref.extmarks.registerType(SYNTAX_EXTMARK_TYPE)
   const currentSpans: Extmark[] = ref.extmarks
     .getAllForTypeId(typeId)
     .sort((a, b) => a.start - b.start || a.end - b.end || a.styleId! - b.styleId! || a.id - b.id)
-  if (!force && spansEqual(cachedSpans, displaySpans) && extmarksEqual(currentSpans, displaySpans)) {
-    return
-  }
-
   const diff = getSpanDiff(currentSpans, displaySpans)
 
   if (!force && !diff.changed) {
@@ -205,18 +215,6 @@ function spanEqual(a: DisplayLineSpan | Extmark, b: DisplayLineSpan | Extmark) {
 }
 
 function spansEqual(a: DisplayLineSpan[], b: DisplayLineSpan[]) {
-  if (a.length !== b.length) {
-    return false
-  }
-  for (let i = 0; i < a.length; i++) {
-    if (!spanEqual(a[i], b[i])) {
-      return false
-    }
-  }
-  return true
-}
-
-function extmarksEqual(a: Extmark[], b: DisplayLineSpan[]) {
   if (a.length !== b.length) {
     return false
   }

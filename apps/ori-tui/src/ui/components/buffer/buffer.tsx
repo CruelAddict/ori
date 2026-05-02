@@ -108,6 +108,15 @@ export function Buffer(props: BufferProps) {
   let disposed = false
   const [cursorOffset, setCursorOffset] = createSignal<DocCharOffset | undefined>(bufferModel.getCursorOffset())
 
+  const bufferMicrotask = (callback: () => void) => {
+    queueMicrotask(() => {
+      if (disposed) {
+        return
+      }
+      callback()
+    })
+  }
+
   const flushInitialContextChange = () => {
     initialContextFlushQueued = false
     if (disposed) {
@@ -314,7 +323,7 @@ export function Buffer(props: BufferProps) {
     props.focusSelf()
     event.target?.focus()
     bufferModel.setFocusedRow(lineIndex(index))
-    queueMicrotask(() => {
+    bufferMicrotask(() => {
       const ctx = bufferModel.getCursorContext()
       if (!ctx || ctx.line !== index) {
         return
@@ -511,7 +520,7 @@ export function Buffer(props: BufferProps) {
       autocomplete.close()
       return
     }
-    queueMicrotask(() => {
+    bufferMicrotask(() => {
       scrollToCursor()
     })
   })
@@ -530,7 +539,7 @@ export function Buffer(props: BufferProps) {
     }
     const movedDown = !!next && !!prev && (next.line > prev.line || (next.line === prev.line && next.row > prev.row))
     const expectedCursor = next
-    queueMicrotask(() => {
+    bufferMicrotask(() => {
       const currentCursor = bufferModel.getCursorContext()
       if (!expectedCursor || !currentCursor || !isSameCursor(expectedCursor, currentCursor)) {
         return
@@ -568,12 +577,12 @@ export function Buffer(props: BufferProps) {
             if (!node || !props.isFocused()) {
               return
             }
-            queueMicrotask(() => {
+            bufferMicrotask(() => {
               scrollToCursor()
             })
           }}
           onSync={() =>
-            queueMicrotask(() => {
+            bufferMicrotask(() => {
               scrollToCursor()
             })
           }
@@ -679,7 +688,7 @@ export function Buffer(props: BufferProps) {
                         onContentChange={() => {
                           const origin = bufferModel.handleTextAreaChange(lineIndex(indexAccessor())) ?? "user"
                           if (origin === "user") {
-                            queueMicrotask(() => {
+                            bufferMicrotask(() => {
                               autocomplete.refresh()
                             })
                           }

@@ -16,6 +16,16 @@ type MetricsSource = {
   widthMethod: WidthMethod | undefined
 }
 
+function isSingleWidthAsciiPrefix(text: string, end: number): boolean {
+  for (let i = 0; i < end; i += 1) {
+    const code = text.charCodeAt(i)
+    if (code < 32 || code > 126) {
+      return false
+    }
+  }
+  return true
+}
+
 function unicodeWidth(text: string, widthMethod: WidthMethod | undefined): number {
   if (!text) {
     return 0
@@ -60,6 +70,10 @@ export function lineCharOffsetToDisplayColumn(
   }
 
   const end = Math.min(offset, text.length)
+  if (isSingleWidthAsciiPrefix(text, end)) {
+    return displayColumn(end)
+  }
+
   let displayCol = 0
   for (const segment of graphemeSegmenter.segment(text)) {
     if (segment.index >= end) {
@@ -86,10 +100,7 @@ export function lineCharRangeToDisplayRange(
   )
 }
 
-export function lineDisplayWidth(
-  source: MetricsSource,
-  text: string,
-): DisplayColumn {
+export function lineDisplayWidth(source: MetricsSource, text: string): DisplayColumn {
   return lineCharOffsetToDisplayColumn(source, text, lineCharOffset(text.length))
 }
 
@@ -100,6 +111,10 @@ export function lineDisplayColumnToCharOffset(
 ): LineCharOffset {
   if (targetCol <= 0) {
     return lineCharOffset(0)
+  }
+
+  if (isSingleWidthAsciiPrefix(text, text.length)) {
+    return lineCharOffset(Math.min(targetCol, text.length))
   }
 
   let displayCol = 0
