@@ -171,11 +171,12 @@ export function replaceRangeInLine(
   const cursorOffset = options.cursorOffset ?? insertText.length
   const targetOffset = lineCharOffset(start + cursorOffset)
   const targetDisplayCol = lineCharOffsetToDisplayColumn(buffer, nextText, targetOffset)
+  const autocompleteEvents = displayRange.start === displayRange.end ? 1 : 2
   buffer._pendingChangeOrigin = {
     origin,
     // Replacing a selection emits two content-change events in OpenTUI:
     // one for deleting the selection and one for inserting the new text.
-    remainingEvents: origin === "autocomplete" ? 2 : 1,
+    remainingEvents: origin === "autocomplete" ? autocompleteEvents : 1,
   }
   if (origin === "autocomplete") {
     // Selection-based replace keeps OpenTUI on its incremental edit path,

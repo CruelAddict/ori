@@ -892,6 +892,17 @@ export function findCompletionSpan(text: string, cursorOffset: number, statement
     }
   }
 
+  const quotedWordMatch = beforeCursor.match(new RegExp(`(${PARTIAL_IDENTIFIER})$`))
+  const rawQuotedToken = quotedWordMatch?.[1] ?? ""
+  if (rawQuotedToken.startsWith('"') || rawQuotedToken.startsWith("[") || rawQuotedToken.startsWith("`")) {
+    return {
+      replaceStart: statementStart + cursorOffset - rawQuotedToken.length,
+      replaceEnd: statementStart + cursorOffset,
+      token: normalizeIdentifierPrefix(rawQuotedToken),
+      mode: "word",
+    }
+  }
+
   const wordMatch = beforeCursor.match(/[A-Za-z_][A-Za-z0-9_$]*$/)
   const token = wordMatch?.[0] ?? ""
   return {

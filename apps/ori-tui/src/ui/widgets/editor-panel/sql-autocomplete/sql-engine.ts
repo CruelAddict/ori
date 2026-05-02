@@ -349,7 +349,9 @@ function getNestedQueryScope(text: string, cursorOffset: number) {
     return {
       text: nested.text,
       start: start + nested.start,
-      outerTexts: [text, ...nested.outerTexts],
+      // Keep only the visible prefix before this nested query so we do not
+      // leak aliases declared later in the outer scope.
+      outerTexts: [text.slice(0, openIndex), ...nested.outerTexts],
     }
   }
 

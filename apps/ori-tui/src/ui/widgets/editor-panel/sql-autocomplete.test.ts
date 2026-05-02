@@ -243,6 +243,15 @@ describe("sql autocomplete", () => {
       expect(replaceText("select * from us|", result)).toBe("us")
     })
 
+    test("replaces the full quoted top-level prefix for quoted relations", () => {
+      const sql = 'select * from "us|'
+      const result = complete(sql, catalog({ public: { "user-profile": ["id", "email"] } }))
+
+      expectIncludes(result, ["user-profile"])
+      expect(replaceText(sql, result)).toBe('"us')
+      expect(result?.items.find((item) => item.label === "user-profile")?.insertText).toBe('"user-profile"')
+    })
+
     test("suggests relations with a keyword-shaped prefix only in FROM clause", () => {
       const result = complete(
         "select * from sele|",
@@ -400,6 +409,11 @@ describe("sql autocomplete", () => {
     test("suggests outer alias columns inside correlated subqueries", () => {
       const result = complete("select * from users u where exists (select 1 from orders o where o.user_id = u.|)")
       expectIncludes(result, ["id", "email", "created_at"])
+    })
+
+    test("does not leak aliases declared after a derived subquery", () => {
+      const result = complete("select * from (select u.|) s join users u on true")
+      expect(result).toBeUndefined()
     })
 
     test("stays closed on an exact scoped alias token until dot completion starts", () => {
