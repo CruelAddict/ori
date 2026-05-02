@@ -1,4 +1,4 @@
-import { batch, createSignal, type Accessor } from "solid-js"
+import { type Accessor, batch, createSignal } from "solid-js"
 
 export type SelectPopupAnchor = {
   x: number
@@ -10,7 +10,8 @@ export type SelectPopupAnchor = {
 export type SelectPopupItem = {
   id: string
   label: string
-  detail?: string
+  description?: string
+  meta?: string
 }
 
 export type SelectPopupViewModel<T extends SelectPopupItem = SelectPopupItem> = {
@@ -51,7 +52,9 @@ function getSelectedIndex<T extends SelectableItem>(current: readonly T[], curre
   return 0
 }
 
-export function createSelectPopup<T extends SelectPopupItem>(options: CreateSelectPopupOptions<T>): SelectPopupModel<T> {
+export function createSelectPopup<T extends SelectPopupItem>(
+  options: CreateSelectPopupOptions<T>,
+): SelectPopupModel<T> {
   const [anchor, setAnchor] = createSignal<SelectPopupAnchor | null>(null)
   const [items, setItemsValue] = createSignal<readonly T[]>([])
   const [selectedIndex, setSelectedIndex] = createSignal(0)
@@ -67,7 +70,9 @@ export function createSelectPopup<T extends SelectPopupItem>(options: CreateSele
     const current = items()
     const currentIndex = selectedIndex()
     const nextIndex =
-      typeof nextOptions?.selectedIndex === "number" && nextOptions.selectedIndex >= 0 && nextOptions.selectedIndex < next.length
+      typeof nextOptions?.selectedIndex === "number" &&
+      nextOptions.selectedIndex >= 0 &&
+      nextOptions.selectedIndex < next.length
         ? nextOptions.selectedIndex
         : getSelectedIndex(current, currentIndex, next)
 

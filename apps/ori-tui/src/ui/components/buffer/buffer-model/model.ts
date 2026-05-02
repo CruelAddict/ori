@@ -124,7 +124,7 @@ export function createBufferModel(options: BufferModelOptions) {
       nav.handleHorizontalJump(buffer, index, toPrevious),
     clampFocus: (nextLines: Line[] = buffer.lines()) => nav.clampFocus(buffer, nextLines),
 
-    _lineRefs: new Map<string, TextareaRenderable | undefined>(),
+    _lineRefs: new Map<string, TextareaRenderable>(),
     _lineHighlightSpans: new Map<string, hl.DisplayLineSpan[]>(),
     _highlightRequestVersion: 0,
     _syntaxStyle: undefined as SyntaxStyle | undefined,

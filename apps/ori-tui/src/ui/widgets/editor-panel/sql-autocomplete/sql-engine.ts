@@ -169,8 +169,8 @@ const SIMPLE_IDENTIFIER = /^[a-z_][a-z0-9_$]*$/
 const UNIQUE_RANKED_ITEM_KEYS = new WeakMap<RankedItem[], Set<string>>()
 const UNIQUE_COLUMN_KEYS = new WeakMap<SqlRelation["columns"], Set<string>>()
 
-function rankedItemKey(item: Pick<RankedItem, "label" | "detail" | "insertText">) {
-  return `${item.label}:${item.detail ?? ""}:${item.insertText}`
+function rankedItemKey(item: Pick<RankedItem, "label" | "description" | "meta" | "insertText">) {
+  return `${item.label}:${item.description ?? ""}:${item.meta ?? ""}:${item.insertText}`
 }
 
 function formatSqlIdentifier(value: string) {
@@ -312,7 +312,7 @@ function findMatchingParen(masked: string, openIndex: number) {
   }
 }
 
-function getNestedQueryScope(text: string, cursorOffset: number) {
+function getNestedQueryScope(text: string, cursorOffset: number): Pick<QueryScope, "text" | "start" | "outerTexts"> {
   const masked = maskSql(text, true)
   const stack: number[] = []
 
@@ -589,7 +589,8 @@ function sortItems(query: string, items: RankedItem[]) {
       id: entry.item.id,
       label: entry.item.label,
       insertText: entry.item.insertText,
-      detail: entry.item.detail,
+      description: entry.item.description,
+      meta: entry.item.meta,
       cursorOffset: entry.item.cursorOffset,
     }))
 }
@@ -811,7 +812,7 @@ function addRelationItems(target: RankedItem[], relations: readonly CompletionRe
       id: relation.id,
       label: relation.name,
       insertText: formatSqlIdentifier(relation.name),
-      detail: relationDetail(relation),
+      description: relationDetail(relation),
       sortGroup,
       keywordPriority: 0,
     })
@@ -825,7 +826,8 @@ function addColumnItems(target: RankedItem[], relations: readonly CompletionRela
         id: column.id,
         label: column.name,
         insertText: formatSqlIdentifier(column.name),
-        detail: [relation.name, column.dataType].filter(Boolean).join(" "),
+        description: relation.name,
+        meta: column.dataType,
         sortGroup,
         keywordPriority: 0,
       })
@@ -843,7 +845,7 @@ function addQueryColumnItems(
       id: column.id,
       label: column.name,
       insertText: formatSqlIdentifier(column.name),
-      detail: "select-list",
+      description: "select-list",
       sortGroup,
       keywordPriority: 0,
     })
@@ -876,7 +878,8 @@ function addScopedColumnItems(target: RankedItem[], refs: readonly ScopedComplet
         id: match.column.id,
         label: match.column.name,
         insertText: formatSqlIdentifier(match.column.name),
-        detail: [match.relation.name, match.column.dataType].filter(Boolean).join(" "),
+        description: match.relation.name,
+        meta: match.column.dataType,
         sortGroup,
         keywordPriority: 0,
       })
@@ -890,7 +893,8 @@ function addScopedColumnItems(target: RankedItem[], refs: readonly ScopedComplet
         id: `${match.column.id}:${match.qualifier}`,
         label: `${qualifier}.${column}`,
         insertText: `${qualifier}.${column}`,
-        detail: [match.relation.name, match.column.dataType].filter(Boolean).join(" "),
+        description: match.relation.name,
+        meta: match.column.dataType,
         sortGroup,
         keywordPriority: 0,
         matchText: match.column.name,
@@ -905,7 +909,7 @@ function addScopedRelationItems(target: RankedItem[], refs: readonly ScopedCompl
       id: `${ref.relation.id}:${ref.qualifier}`,
       label: ref.qualifier,
       insertText: formatSqlIdentifier(ref.qualifier),
-      detail: relationDetail(ref.relation),
+      description: relationDetail(ref.relation),
       sortGroup,
       keywordPriority: 0,
       matchMode: "prefix",
@@ -945,7 +949,7 @@ function addFunctionItems(
       label: formatted,
       insertText: `${formatted}()`,
       cursorOffset: formatted.length + 1,
-      detail: "function",
+      description: "function",
       sortGroup,
       keywordPriority: 0,
       matchMode: "prefix",
@@ -969,7 +973,7 @@ function addOperatorItems(
       id: `operator:${operator}`,
       label: formatted,
       insertText: formatted,
-      detail: "operator",
+      description: "operator",
       sortGroup,
       keywordPriority: 0,
       matchMode: "prefix",
@@ -993,7 +997,7 @@ function addCteItems(target: RankedItem[], ctes: readonly string[], sortGroup: n
       id: `cte:${cte}`,
       label: cte,
       insertText: formatSqlIdentifier(cte),
-      detail: "cte",
+      description: "cte",
       sortGroup,
       keywordPriority: 0,
       matchMode: "prefix",
@@ -1335,6 +1339,7 @@ export function getSqlAutocompleteResult(input: SqlAutocompleteInput): BufferAut
   const clause = findCurrentClause(statement.text, statement.cursorOffset)
   const span = findCompletionSpan(statement.text, statement.cursorOffset, statement.start)
   const insertContext = getInsertContext(statement.text, statement.cursorOffset)
+  const usedColumns = insertContext?.usedColumns ?? []
   const scope = getActiveQueryScope(statement.text, statement.cursorOffset)
   const sqlCasePreference = inferSqlCasePreference(beforeCursor, span.token)
   const keywordFollowUps = getKeywordFollowUpOptions(beforeCursor)
@@ -1535,14 +1540,14 @@ export function getSqlAutocompleteResult(input: SqlAutocompleteInput): BufferAut
       addKeywordItems(items, clauseFollowUps, 0, sqlCasePreference)
     }
     if (items.length > 0) {
-      return {
-        replace: docCharRange(span.replaceStart, span.replaceEnd),
-        items: sortItems(span.token, items)
-          .filter((item) => !insertContext?.usedColumns.includes(normalize(item.label)))
-          .filter((item) => !isNoOpCompletion(statement.text, statement.cursorOffset, item))
-          .slice(0, 50),
+        return {
+          replace: docCharRange(span.replaceStart, span.replaceEnd),
+          items: sortItems(span.token, items)
+            .filter((item) => !usedColumns.includes(normalize(item.label)))
+            .filter((item) => !isNoOpCompletion(statement.text, statement.cursorOffset, item))
+            .slice(0, 50),
+        }
       }
-    }
     if (span.token) {
       addScopedRelationItems(items, allScopedRelations, 0)
     }
@@ -1580,7 +1585,7 @@ export function getSqlAutocompleteResult(input: SqlAutocompleteInput): BufferAut
   }
 
   const filtered = sortItems(span.token, items)
-    .filter((item) => !insertContext?.usedColumns.includes(normalize(item.label)))
+    .filter((item) => !usedColumns.includes(normalize(item.label)))
     .filter((item) => !isNoOpCompletion(statement.text, statement.cursorOffset, item))
     .slice(0, 50)
   if (filtered.length === 0) {

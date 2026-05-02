@@ -1,5 +1,6 @@
 import type { MouseEvent, ScrollBoxRenderable } from "@opentui/core"
 import { OriScrollbox } from "@ui/components/ori-scrollbox"
+import { getPopupColumns, getPopupItemLayout, getRequiredPopupWidth } from "@ui/components/select-popup-layout"
 import type { SelectPopupItem, SelectPopupViewModel } from "@ui/components/select-popup-model"
 import { useTheme } from "@ui/providers/theme"
 import { type KeyBinding, KeyScope } from "@ui/services/key-scopes"
@@ -20,10 +21,7 @@ type SelectPopupLayout = {
 const MAX_VISIBLE_ROWS = 8
 const MIN_WIDTH = 24
 const MAX_WIDTH = 64
-const DETAIL_GAP = 2
 const ELLIPSIS = "…"
-const LABEL_SHARE = 0.7
-const ROW_PADDING = 2
 
 function truncateMiddleByWidth(value: string, limit: number) {
   if (limit <= 0) {
@@ -69,26 +67,21 @@ function truncateMiddleByWidth(value: string, limit: number) {
   return `${left}${ELLIPSIS}${tail.join("")}`
 }
 
-function formatSelectPopupItem(item: SelectPopupItem, rowWidth: number) {
-  const availableWidth = Math.max(1, rowWidth - ROW_PADDING)
-  if (!item.detail) {
-    return {
-      label: truncateMiddleByWidth(item.label, availableWidth),
-    }
-  }
-
-  const contentWidth = availableWidth - DETAIL_GAP
-  if (contentWidth < 6) {
-    return {
-      label: truncateMiddleByWidth(item.label, availableWidth),
-    }
-  }
-
-  const detailWidth = Math.min(Bun.stringWidth(item.detail), Math.max(1, Math.floor(contentWidth * (1 - LABEL_SHARE))))
-  const labelWidth = Math.max(1, contentWidth - detailWidth)
+function formatAlignedSelectPopupItem(
+  item: SelectPopupItem,
+  rowWidth: number,
+  columns: ReturnType<typeof getPopupColumns>,
+) {
+  const itemLayout = getPopupItemLayout(item, rowWidth, columns)
   return {
-    label: truncateMiddleByWidth(item.label, labelWidth),
-    detail: truncateMiddleByWidth(item.detail, detailWidth),
+    label: truncateMiddleByWidth(item.label, itemLayout.labelWidth),
+    description: item.description ? truncateMiddleByWidth(item.description, itemLayout.descriptionWidth) : undefined,
+    meta: item.meta ? truncateMiddleByWidth(item.meta, itemLayout.metaWidth) : undefined,
+    labelWidth: itemLayout.labelWidth,
+    descriptionWidth: itemLayout.descriptionWidth,
+    metaWidth: itemLayout.metaWidth,
+    descriptionCellWidth: itemLayout.descriptionCellWidth,
+    metaCellWidth: itemLayout.metaCellWidth,
   }
 }
 
@@ -97,8 +90,7 @@ function getPopupWidth<T extends SelectPopupItem>(
   availableWidth: number,
   maxLimit: number,
 ) {
-  const widths = viewModel.items().map((item) => Bun.stringWidth(item.label) + Bun.stringWidth(item.detail ?? "") + 6)
-  const contentWidth = widths.length > 0 ? Math.max(...widths) : MIN_WIDTH
+  const contentWidth = Math.max(MIN_WIDTH, getRequiredPopupWidth(viewModel.items()))
   return Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, availableWidth, contentWidth, maxLimit))
 }
 
@@ -196,6 +188,16 @@ export function SelectPopup<T extends SelectPopupItem>(props: SelectPopupProps<T
     return getPopupLayout(anchor, width, rowCount())
   })
 
+  const columns = createMemo(() => {
+    const viewModel = props.viewModel()
+    const nextLayout = layout()
+    if (!viewModel || !nextLayout) {
+      return null
+    }
+
+    return getPopupColumns(viewModel.items(), Math.max(1, nextLayout.width - 2))
+  })
+
   createEffect(() => {
     if (layout()) {
       return
@@ -261,7 +263,8 @@ export function SelectPopup<T extends SelectPopupItem>(props: SelectPopupProps<T
                     <For each={props.viewModel()?.items() ?? []}>
                       {(item, index) => {
                         const selected = () => props.viewModel()?.selectedIndex() === index()
-                        const content = () => formatSelectPopupItem(item, Math.max(1, nextLayout().width - 2))
+                        const content = () =>
+                          formatAlignedSelectPopupItem(item, Math.max(1, nextLayout().width - 2), columns())
                         return (
                           <box
                             flexDirection="row"
@@ -282,8 +285,9 @@ export function SelectPopup<T extends SelectPopupItem>(props: SelectPopupProps<T
                             }}
                           >
                             <box
-                              flexGrow={1}
+                              flexGrow={content().description || content().meta ? 0 : 1}
                               flexShrink={1}
+                              width={content().labelWidth}
                               minWidth={0}
                               overflow="hidden"
                             >
@@ -291,17 +295,39 @@ export function SelectPopup<T extends SelectPopupItem>(props: SelectPopupProps<T
                                 {content().label}
                               </text>
                             </box>
-                            <Show when={content().detail}>
+                            <Show when={content().description || content().meta}>
                               <box
-                                paddingLeft={2}
-                                flexShrink={1}
+                                flexGrow={1}
                                 minWidth={0}
-                                overflow="hidden"
-                              >
-                                <text fg={selected() ? theme().get("editor_background") : theme().get("text_muted")}>
-                                  {content().detail}
-                                </text>
-                              </box>
+                              />
+                              <Show when={content().meta && content().metaWidth}>
+                                <box
+                                  paddingLeft={2}
+                                  width={content().metaCellWidth || undefined}
+                                  justifyContent="flex-end"
+                                  flexShrink={0}
+                                  minWidth={0}
+                                  overflow="hidden"
+                                >
+                                  <text fg={selected() ? theme().get("editor_background") : theme().get("text_muted")}>
+                                    {content().meta}
+                                  </text>
+                                </box>
+                              </Show>
+                              <Show when={content().description && content().descriptionWidth}>
+                                <box
+                                  paddingLeft={2}
+                                  width={content().descriptionCellWidth || undefined}
+                                  justifyContent="flex-end"
+                                  flexShrink={0}
+                                  minWidth={0}
+                                  overflow="hidden"
+                                >
+                                  <text fg={selected() ? theme().get("editor_background") : theme().get("text_muted")}>
+                                    {content().description}
+                                  </text>
+                                </box>
+                              </Show>
                             </Show>
                           </box>
                         )

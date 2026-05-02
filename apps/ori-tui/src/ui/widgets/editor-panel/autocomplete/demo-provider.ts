@@ -40,7 +40,7 @@ export function createDemoAutocompleteProvider(): BufferAutocompleteProvider {
           id: word,
           label: word,
           insertText: word,
-          detail: `${word.length} chars`,
+          description: `${word.length} chars`,
         }))
       if (items.length === 0) {
         return undefined

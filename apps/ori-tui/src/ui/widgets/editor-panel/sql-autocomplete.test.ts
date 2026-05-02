@@ -352,6 +352,8 @@ describe("sql autocomplete", () => {
       const result = complete("select * from users where em|")
       expectIncludes(result, ["email"])
       expectExcludes(result, ["users"])
+      expect(result?.items.find((item) => item.label === "email")?.meta).toBe("text")
+      expect(result?.items.find((item) => item.label === "email")?.description).toBe("users")
     })
 
     test("stays closed after a completed WHERE keyword", () => {
@@ -489,7 +491,7 @@ describe("sql autocomplete", () => {
 
     test("shows a clean detail for derived tables", () => {
       const result = complete("select s| from (select email from users) sub")
-      expect(result?.items.find((item) => item.label === "sub")?.detail).toBe("subquery")
+      expect(result?.items.find((item) => item.label === "sub")?.description).toBe("subquery")
     })
 
     test("suggests quoted alias columns and preserves quoted insert text", () => {
@@ -791,7 +793,7 @@ describe("sql autocomplete", () => {
     test("suggests previous temp tables in FROM clause", () => {
       const result = complete("create temp table temp_users as select * from users; select * from temp_|")
       expectIncludes(result, ["temp_users"])
-      expect(result?.items.find((item) => item.label === "temp_users")?.detail).toBe("temp table")
+      expect(result?.items.find((item) => item.label === "temp_users")?.description).toBe("temp table")
     })
 
     test("does not look ahead for temp tables", () => {
