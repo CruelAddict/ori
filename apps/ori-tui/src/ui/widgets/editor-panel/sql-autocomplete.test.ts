@@ -776,6 +776,13 @@ describe("sql autocomplete", () => {
       expectExcludes(result, ["recent"])
     })
 
+    test("does not leak ctes from a sibling nested subquery", () => {
+      const result = complete(
+        "select * from users where exists (with recent as (select * from orders) select * from recent) and exists (select * from re|)",
+      )
+      expectExcludes(result, ["recent"])
+    })
+
     test("keeps flush-left with queries in the same statement", () => {
       const result = complete("WITH recent AS (\nSELECT email FROM users\n)\nSELECT em| FROM recent")
       expectIncludes(result, ["email"])

@@ -703,13 +703,14 @@ export function buildAliasMap(refs: SqlTableRef[]) {
 
 export function extractCteQueries(text: string): SqlNamedQuery[] {
   const masked = maskSql(text, true)
-  const withIndex = masked.search(/\bwith\b/i)
-  if (withIndex === -1) {
+  const withIndex = skipWhitespace(masked, 0)
+  const withMatch = masked.slice(withIndex).match(/^with\b/i)?.[0]
+  if (!withMatch) {
     return []
   }
 
   const queries: SqlNamedQuery[] = []
-  let index = skipWhitespace(masked, withIndex + 4)
+  let index = skipWhitespace(masked, withIndex + withMatch.length)
   const recursiveMatch = masked.slice(index).match(/^recursive\b/i)
   const recursive = Boolean(recursiveMatch?.[0])
   if (recursiveMatch?.[0]) {
