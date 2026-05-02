@@ -1,6 +1,7 @@
 import type { BoxRenderable, KeyEvent, MouseEvent, ScrollBoxRenderable, TextareaRenderable } from "@opentui/core"
 import {
   computeScrollIntoViewDelta,
+  hasDraggingSelectionInScrollbox,
   OriScrollbox,
   type ScrollPoint,
   scrollIntoView,
@@ -218,6 +219,9 @@ export function Buffer(props: BufferProps) {
     if (!props.isFocused()) {
       return
     }
+    if (hasDraggingSelectionInScrollbox(scrollRef)) {
+      return
+    }
     const point = getCursorPoint()
     if (!point) {
       return
@@ -238,6 +242,9 @@ export function Buffer(props: BufferProps) {
 
   const moveCursorIntoView = () => {
     if (!props.isFocused()) {
+      return
+    }
+    if (hasDraggingSelectionInScrollbox(scrollRef)) {
       return
     }
     const point = getCursorPoint()
