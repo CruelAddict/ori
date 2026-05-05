@@ -26,6 +26,7 @@ contract-ts-install:
 test:
 	@echo "Running tests..."
 	@$(MAKE) -C apps/ori-be test
+	bun test apps/ori-tui
 	@echo "Tests complete!"
 
 contract-check:

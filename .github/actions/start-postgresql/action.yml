@@ -1,0 +1,36 @@
+---
+name: "Setup PostgreSQL"
+
+inputs:
+  postgres-password:
+    default: "pgpass"
+  postgres-db:
+    default: "testdb"
+  postgres-user:
+    default: "testov_test_testovich"
+outputs:
+  port:
+    value: ${{ steps.container.outputs.port }}
+  host:
+    value: localhost
+runs:
+  using: "composite"
+  steps:
+    - name: Pull PG image
+      shell: bash
+      run: docker pull postgres:latest
+    - name: Start PG Container
+      id: container
+      shell: bash
+      run: |
+        CONTAINER_NAME="postgres"
+        docker run -d \
+          --name $CONTAINER_NAME \
+          --rm \
+          -p 5432:5432 \
+          -e POSTGRES_PASSWORD=${{ inputs.postgres-password }} \
+          -e POSTGRES_DB=${{ inputs.postgres-db }} \
+          -e POSTGRES_USER=${{ inputs.postgres-user }} \
+          postgres:latest
+        echo "port=5432" >> $GITHUB_OUTPUT
+        echo "Container $CONTAINER_NAME started"
