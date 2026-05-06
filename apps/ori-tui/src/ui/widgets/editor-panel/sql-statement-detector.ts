@@ -149,28 +149,63 @@ function buildQueryStartLineByLine(queries: SqlStatement[], lineCount: number) {
   return lines
 }
 
-function findLikelyKeywordAfterNewline(text: string, start: number, end: number): number | undefined {
+function findLikelyKeywordAfterNewline(text: string, start: number, end: number) {
   let i = start
-  let sawIndent = false
-  while (i < end && WHITESPACE_RE.test(text[i]!)) {
-    if (text[i] === "\n") {
+
+  for (;;) {
+    const lineStart = i
+    while (i < end && text[i] !== "\n" && text[i] !== " " && text[i] !== "\t" && text[i] !== "\r") {
+      i += 1
+    }
+
+    let tokenStart = lineStart
+    while (tokenStart < end && (text[tokenStart] === " " || text[tokenStart] === "\t" || text[tokenStart] === "\r")) {
+      tokenStart += 1
+    }
+    if (tokenStart >= end) {
       return undefined
     }
-    sawIndent = true
-    i++
+    if (text[tokenStart] === "\n") {
+      i = tokenStart + 1
+      continue
+    }
+
+    const lineBreak = text.indexOf("\n", tokenStart)
+    const lineEnd = lineBreak === -1 || lineBreak > end ? end : lineBreak
+    const line = text.slice(tokenStart, lineEnd).trim()
+    if (!line) {
+      if (lineBreak === -1 || lineBreak >= end) {
+        return undefined
+      }
+      i = lineBreak + 1
+      continue
+    }
+    if (/^go$/i.test(line) || line.startsWith("--")) {
+      if (lineBreak === -1 || lineBreak >= end) {
+        return undefined
+      }
+      i = lineBreak + 1
+      continue
+    }
+    if (tokenStart !== lineStart) {
+      return undefined
+    }
+
+    const tokenMatch = /^[A-Za-z_][A-Za-z0-9_$]*/.exec(text.slice(tokenStart, end))
+    if (!tokenMatch) {
+      return undefined
+    }
+
+    const token = tokenMatch[0]?.toLowerCase()
+    if (!token || !SQL_START_KEYWORDS.has(token)) {
+      return undefined
+    }
+
+    return {
+      gapStart: start,
+      nextStart: tokenStart,
+    }
   }
-  if (sawIndent || i >= end) {
-    return undefined
-  }
-  const tokenMatch = /^[A-Za-z_][A-Za-z0-9_$]*/.exec(text.slice(i, end))
-  if (!tokenMatch) {
-    return undefined
-  }
-  const token = tokenMatch[0]?.toLowerCase()
-  if (!token || !SQL_START_KEYWORDS.has(token)) {
-    return undefined
-  }
-  return i
 }
 
 function collectStatementSpans(text: string): Span[] {
@@ -237,21 +272,27 @@ function collectStatementSpans(text: string): Span[] {
         continue
       }
       if (ch === "\n" && depth === 0) {
-        const nextStart = findLikelyKeywordAfterNewline(text, i + 1, spanEnd)
-        if (nextStart !== undefined && hasNonWhitespace(text, segmentStart, nextStart)) {
+        const next = findLikelyKeywordAfterNewline(text, i + 1, spanEnd)
+        const canSplitAtNewline =
+          next !== undefined &&
+          hasNonWhitespace(text, segmentStart, next.gapStart) &&
+          leadingToken !== undefined &&
+          leadingToken.tokenStart < next.gapStart &&
+          SQL_START_KEYWORDS.has(leadingToken.token)
+        if (canSplitAtNewline && next) {
           if (leadingToken?.token === "with" && allowWithContinuation) {
             allowWithContinuation = false
             i++
             continue
           }
-          const trimmed = trimSpan(text, { start: segmentStart, end: nextStart })
+          const trimmed = trimSpan(text, { start: segmentStart, end: next.gapStart })
           if (trimmed) {
             segments.push(trimmed)
           }
-          segmentStart = nextStart
+          segmentStart = next.nextStart
           leadingToken = getLeadingToken(text, { start: segmentStart, end: spanEnd })
           allowWithContinuation = leadingToken?.token === "with"
-          i = nextStart
+          i = next.nextStart
           continue
         }
       }
@@ -342,6 +383,91 @@ function trimSpan(text: string, span: Span): Span | undefined {
   return { start, end }
 }
 
+function trimExecutablePrefix(text: string, span: Span) {
+  let start = span.start
+
+  for (;;) {
+    while (start < span.end && WHITESPACE_RE.test(text[start]!)) {
+      start += 1
+    }
+    if (start >= span.end) {
+      return start
+    }
+
+    const lineBreak = text.indexOf("\n", start)
+    const lineEnd = lineBreak === -1 || lineBreak > span.end ? span.end : lineBreak
+    const line = text.slice(start, lineEnd).trim()
+    if (!line) {
+      start = lineBreak === -1 || lineBreak >= span.end ? span.end : lineBreak + 1
+      continue
+    }
+    if (/^go$/i.test(line)) {
+      start = lineBreak === -1 || lineBreak >= span.end ? span.end : lineBreak + 1
+      continue
+    }
+    if (line.startsWith("--")) {
+      start = lineBreak === -1 || lineBreak >= span.end ? span.end : lineBreak + 1
+      continue
+    }
+
+    return start
+  }
+}
+
+function trimExecutableSuffix(text: string, span: Span, start: number) {
+  let end = span.end
+
+  for (;;) {
+    while (end > start && WHITESPACE_RE.test(text[end - 1]!)) {
+      end -= 1
+    }
+    if (end <= start) {
+      return end
+    }
+
+    let lineStart = end
+    while (lineStart > start && text[lineStart - 1] !== "\n") {
+      lineStart -= 1
+    }
+
+    const line = text.slice(lineStart, end).trim()
+    if (!line) {
+      end = lineStart
+      continue
+    }
+    if (/^go$/i.test(line)) {
+      end = lineStart
+      continue
+    }
+    if (line.startsWith("--")) {
+      end = lineStart
+      continue
+    }
+
+    return end
+  }
+}
+
+function trimExecutableSpan(text: string, span: Span): Span | undefined {
+  const start = trimExecutablePrefix(text, span)
+  if (start >= span.end) {
+    return undefined
+  }
+
+  const end = trimExecutableSuffix(text, span, start)
+  if (end <= start) {
+    return undefined
+  }
+
+  return { start, end }
+}
+
+function collectExecutableSpans(text: string) {
+  return collectStatementSpans(text)
+    .map((span) => trimExecutableSpan(text, span))
+    .filter((span): span is Span => !!span)
+}
+
 function toSqlStatement(span: Span, lineStarts: number[]): SqlStatement {
   return {
     start: span.start,
@@ -395,7 +521,7 @@ export function collectSqlQueries(text: string, lineStarts: number[]): SqlStatem
     return []
   }
 
-  return collectStatementSpans(text)
+  return collectExecutableSpans(text)
     .filter((span) => getLeadingToken(text, span))
     .map((span) => toSqlStatement(span, lineStarts))
 }
@@ -420,7 +546,7 @@ export function collectSqlStatements(text: string, lineStarts: number[]): SqlSta
     result.push({
       start: logical.start,
       end: logical.end,
-      startLine: offsetToLine(leadingToken.tokenStart, lineStarts),
+      startLine: offsetToLine(logical.start, lineStarts),
       endLine: offsetToLine(logical.end - 1, lineStarts),
     })
   }

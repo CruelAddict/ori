@@ -27,6 +27,7 @@ type BufferAutocompleteViewModel = {
   viewModel: Accessor<SelectPopupViewModel<BufferAutocompleteItem> | undefined>
   close: () => void
   refresh: () => void
+  syncAnchor: () => void
 }
 
 export function createBufferAutocomplete(options: CreateBufferAutocompleteOptions) {
@@ -158,6 +159,22 @@ export function createBufferAutocomplete(options: CreateBufferAutocompleteOption
     popup.close()
   }
 
+  const syncAnchor = () => {
+    const range = replace()
+    if (!range) {
+      return
+    }
+
+    cancelAnchorResolve()
+    const anchor = options.resolveAnchor(range.start)
+    if (anchor) {
+      popup.setAnchor(anchor)
+      return
+    }
+
+    popup.close()
+  }
+
   const viewModel = createMemo<SelectPopupViewModel<BufferAutocompleteItem> | undefined>(() => {
     if (!replace()) {
       return
@@ -173,5 +190,6 @@ export function createBufferAutocomplete(options: CreateBufferAutocompleteOption
     viewModel,
     close,
     refresh,
+    syncAnchor,
   } satisfies BufferAutocompleteViewModel
 }

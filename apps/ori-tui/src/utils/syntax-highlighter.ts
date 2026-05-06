@@ -7,7 +7,7 @@ import type { Logger } from "pino"
 import { type Accessor, createEffect, createSignal, onCleanup } from "solid-js"
 import sqlHighlights from "../assets/highlights.scm" with { type: "file" }
 import sqlWasm from "../assets/tree-sitter-sql.wasm" with { type: "file" }
-import { collectSqlQueries } from "../ui/widgets/editor-panel/sql-statement-detector"
+import { collectSqlQueries as collectSqlHighlightStatements } from "../ui/widgets/editor-panel/sql-statement-detector"
 
 type SyntaxThemePalette = {
   get(group: string): string
@@ -211,7 +211,7 @@ async function highlightSqlText(text: string, styleIds: StyleIds, logger?: Logge
 }
 
 function collectSqlStatements(text: string) {
-  return collectSqlQueries(text, buildLineStarts(text)).map((statement) => ({
+  return collectSqlHighlightStatements(text, buildLineStarts(text)).map((statement) => ({
     start: statement.start,
     end: statement.end,
     text: text.slice(statement.start, statement.end),
@@ -438,6 +438,7 @@ export function syntaxHighlighter(params: { theme: Accessor<SyntaxThemePalette>;
   return {
     scheduleHighlight,
     highlightResult,
+    highlightText: (text: string) => highlightSqlText(text, currentStyle.styleIds, logger),
     dispose,
   }
 }
