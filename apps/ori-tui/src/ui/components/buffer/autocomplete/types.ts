@@ -1,5 +1,5 @@
 import type { SelectPopupItem } from "@ui/components/select-popup-model"
-import type { DocCharOffset, DocCharRange } from "../buffer-model/coords"
+import type { DocCharOffset, DocCharRange } from "../coords"
 
 export type BufferAutocompleteItem = SelectPopupItem & {
   insertText: string

@@ -1,5 +1,5 @@
 import { type Node, NodeType } from "@adapters/ori/client"
-import { docCharOffset } from "@ui/components/buffer/buffer-model/coords"
+import { docCharOffset } from "@ui/components/buffer/coords"
 import { createSqlAutocompleteProvider } from "@ui/widgets/editor-panel/sql-autocomplete/provider"
 import type { SqlSchemaInput } from "@ui/widgets/editor-panel/sql-autocomplete/sql-schema-index"
 

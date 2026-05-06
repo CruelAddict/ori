@@ -1,6 +1,6 @@
 import type { TextareaRenderable } from "@opentui/core"
-import { type DocCharOffset, docCharOffset } from "./buffer-model/coords"
-import { applyRefTabWidth } from "./buffer-model/text-metrics"
+import { type DocCharOffset, docCharOffset } from "./coords"
+import { applyRefTabWidth } from "./text-metrics"
 
 export type BufferCursorState = {
   row: number

@@ -1,6 +1,6 @@
 import { createSelectPopup, type SelectPopupAnchor, type SelectPopupViewModel } from "@ui/components/select-popup-model"
 import { type Accessor, createMemo, createSignal } from "solid-js"
-import type { DocCharOffset, DocCharRange } from "../buffer-model/coords"
+import type { DocCharOffset, DocCharRange } from "../coords"
 import type { BufferAutocompleteItem, BufferAutocompleteProvider } from "./types"
 
 const AUTOCOMPLETE_COALESCE_MS = 8

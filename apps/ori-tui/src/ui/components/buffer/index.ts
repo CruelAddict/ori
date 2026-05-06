@@ -16,4 +16,4 @@ export type {
   LineCharRange,
   LineDisplayRange,
   LineIndex,
-} from "./buffer-model/coords"
+} from "./coords"

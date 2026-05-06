@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { type Node, NodeType } from "@adapters/ori/client"
-import { docCharOffset } from "@ui/components/buffer/buffer-model/coords"
+import { docCharOffset } from "@ui/components/buffer/coords"
 import { buildLineStarts } from "@utils/line-offsets"
 import { resolveSqlDialect } from "./sql-autocomplete/dialect"
 import { createSqlAutocompleteProvider } from "./sql-autocomplete/provider"

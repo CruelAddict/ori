@@ -3,8 +3,8 @@ import { offsetToLineCol } from "@utils/line-offsets"
 import type { SyntaxHighlightSpan } from "@utils/syntax-highlighter"
 import { collectSqlQueries, type SqlStatement } from "../../widgets/editor-panel/sql-statement-detector"
 import { shouldReuseChangedStatementSpans } from "./buffer-highlight-reuse"
-import { lineCharOffset } from "./buffer-model/coords"
-import { lineCharOffsetToDisplayColumn } from "./buffer-model/text-metrics"
+import { lineCharOffset } from "./coords"
+import { lineCharOffsetToDisplayColumn } from "./text-metrics"
 
 export type StatementEntry = SqlStatement & {
   id: string

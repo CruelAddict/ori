@@ -1,5 +1,5 @@
 import type { BufferAutocompleteProvider } from "@ui/components/buffer"
-import { docCharRange } from "@ui/components/buffer/buffer-model/coords"
+import { docCharRange } from "@ui/components/buffer/coords"
 
 const words = [
   "autocomplete",

@@ -1,5 +1,5 @@
 import type { BufferAutocompleteItem, BufferAutocompleteResult } from "../../../components/buffer"
-import { docCharRange } from "../../../components/buffer/buffer-model/coords"
+import { docCharRange } from "../../../components/buffer/coords"
 import type { SqlDialect } from "./dialect"
 import {
   buildAliasMap,
@@ -1540,14 +1540,14 @@ export function getSqlAutocompleteResult(input: SqlAutocompleteInput): BufferAut
       addKeywordItems(items, clauseFollowUps, 0, sqlCasePreference)
     }
     if (items.length > 0) {
-        return {
-          replace: docCharRange(span.replaceStart, span.replaceEnd),
-          items: sortItems(span.token, items)
-            .filter((item) => !usedColumns.includes(normalize(item.label)))
-            .filter((item) => !isNoOpCompletion(statement.text, statement.cursorOffset, item))
-            .slice(0, 50),
-        }
+      return {
+        replace: docCharRange(span.replaceStart, span.replaceEnd),
+        items: sortItems(span.token, items)
+          .filter((item) => !usedColumns.includes(normalize(item.label)))
+          .filter((item) => !isNoOpCompletion(statement.text, statement.cursorOffset, item))
+          .slice(0, 50),
       }
+    }
     if (span.token) {
       addScopedRelationItems(items, allScopedRelations, 0)
     }

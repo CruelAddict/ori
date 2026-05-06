@@ -17,9 +17,6 @@ import { syntaxHighlighter } from "@utils/syntax-highlighter"
 import { type Accessor, createEffect, createMemo, createSignal, onCleanup, onMount } from "solid-js"
 import { createBufferAutocomplete } from "./autocomplete/controller"
 import type { BufferAutocompleteProvider } from "./autocomplete/types"
-import type { DocCharOffset } from "./buffer-model/coords"
-import { docCharOffset, lineCharOffset } from "./buffer-model/coords"
-import { lineCharOffsetToDisplayColumn } from "./buffer-model/text-metrics"
 import { createBufferOpentuiAdapter } from "./buffer-opentui-adapter"
 import {
   addStatementHighlightSpanLines,
@@ -33,6 +30,9 @@ import {
   type StatementCache,
   type StatementEntry,
 } from "./buffer-statement-cache"
+import type { DocCharOffset } from "./coords"
+import { docCharOffset, lineCharOffset } from "./coords"
+import { lineCharOffsetToDisplayColumn } from "./text-metrics"
 
 const DEBOUNCE_MS = 200
 const DEFAULT_TAB_WIDTH = 2
