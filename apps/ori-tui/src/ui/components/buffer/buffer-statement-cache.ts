@@ -332,9 +332,9 @@ export function addStatementHighlightSpanLines(params: {
   starts: readonly number[]
   text: string
   tabWidth: number
-  hlRef: number
+  highlightGroupId: number
 }) {
-  const { ref, span, starts, text, tabWidth, hlRef } = params
+  const { ref, span, starts, text, tabWidth, highlightGroupId } = params
   if (span.end <= span.start) {
     return
   }
@@ -364,7 +364,7 @@ export function addStatementHighlightSpanLines(params: {
         lineCharOffset(endOffset),
       ),
       styleId: span.styleId,
-      hlRef,
+      hlRef: highlightGroupId,
     })
   }
 }

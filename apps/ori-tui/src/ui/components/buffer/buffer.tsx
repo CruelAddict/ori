@@ -48,8 +48,10 @@ type PendingChangeOrigin = {
   remainingEvents: number
 }
 
+type StatementHighlightGroupId = number
+
 type MaterializedHighlightEntry = {
-  hlRef: number
+  highlightGroupId: StatementHighlightGroupId
   version: number
 }
 
@@ -95,41 +97,66 @@ export function Buffer(props: BufferProps) {
   const [text, setTextState] = createSignal(props.initialText)
   const [contentModified, setContentModified] = createSignal(false)
   const [documentVersion, setDocumentVersion] = createSignal(0)
+  const lineStarts = createMemo(() => buildLineStarts(text()))
+
+  // In visual lines that take wrapping into account
   const [viewportHeight, setViewportHeight] = createSignal(1)
   const [scrollTop, setScrollTop] = createSignal(0)
   const [totalRows, setTotalRows] = createSignal(1)
+
+  // Last cursor position reported by OpenTUI
   const [cursorState, setCursorState] = createSignal({
     row: 0,
     offset: docCharOffset(0),
   })
-  const lineStarts = createMemo(() => buildLineStarts(text()))
   const cursorOffset = createMemo(() => cursorState().offset)
   const focusedRow = createMemo(() => cursorState().row)
 
   let scrollRef: ScrollBoxRenderable | undefined
-  let containerRef: BoxRenderable | undefined
+  let bufferRootRef: BoxRenderable | undefined
   let gutterRef: LineNumberRenderable | undefined
+
+  // So that the focus effect runs only on transitions
   let previousFocusState = props.isFocused()
+
+  // Abandon queued work after cleanup
   let disposed = false
+  // Sync with opentui coalescing
   let syncQueued = false
+
   let viewportWidth = 0
   let viewportRows = 0
+
+  // TODO: check if we really need that
+  // Workaround for multiple opentui callbacks on startup that we shouldn't handle
   let initialContextFlushQueued = false
   let initialContextPending = true
   let pendingInitialContext: BufferContext | undefined
+
+  // Autocomplete accept can emit selection and insertion as separate content
+  // events; keep its origin across both so the popup does not refresh itself
   let pendingChangeOrigin: PendingChangeOrigin | undefined
+  // setText is an external reset; its textarea event must report modified=false
   let pendingReset = false
   let statementId = 0
   let statementCache: StatementCache | undefined
+  // Previous split, used to reuse ids/spans when rebuilding statementCache
   let previousStatements: StatementEntry[] = []
-  let appliedHighlightVersion = -1
+  // Document version of current highlights
+  let highlightedDocumentVersion = -1
+  // TODO: we have a single document style, why do we have this var?
   let appliedHighlightStyle = highlighter.highlightResult().syntaxStyle
-  let materializedStatementRefs = new Map<string, MaterializedHighlightEntry>()
-  let statementHighlightRef = 1
-  let highlightEpoch = 0
-  let highlightQueued = false
-  let highlightRunning = false
+  // Visible statement id -> editBuffer highlight group id
+  let materializedStatementHighlights = new Map<string, MaterializedHighlightEntry>()
+  // Next editBuffer highlight group id for a newly visible statement
+  let statementHighlightGroupId = 1
+  // Increments when text reset/edit invalidates in-flight highlight work
+  let highlightUpdateVersion = 0
+  let isHighlightQueued = false
+  let isHighlightRunning = false
+  // Idle timer for offscreen highlight backfill
   let highlightBackfillTimer: ReturnType<typeof setTimeout> | undefined
+  // Next dirty statement index to try during idle backfill.
   let highlightBackfillCursor = 0
   let lastEditAt = performance.now()
 
@@ -166,6 +193,7 @@ export function Buffer(props: BufferProps) {
     },
   })
 
+  // coalesce parent onTextChange
   const debouncedPush = debounce(() => {
     props.onTextChange(text(), { modified: contentModified() })
   }, DEBOUNCE_MS)
@@ -176,10 +204,10 @@ export function Buffer(props: BufferProps) {
     return id
   }
 
-  const nextStatementHighlightRef = () => {
-    const ref = statementHighlightRef
-    statementHighlightRef += 1
-    return ref
+  const nextStatementHighlightGroupId = () => {
+    const id = statementHighlightGroupId
+    statementHighlightGroupId += 1
+    return id
   }
 
   const clearHighlightBackfillTimer = () => {
@@ -191,15 +219,15 @@ export function Buffer(props: BufferProps) {
     highlightBackfillTimer = undefined
   }
 
-  const scheduleHighlightDrain = () => {
-    if (disposed || highlightQueued) {
+  const scheduleHighlightUpdate = () => {
+    if (disposed || isHighlightQueued) {
       return
     }
 
-    highlightQueued = true
+    isHighlightQueued = true
     queueMicrotask(() => {
-      highlightQueued = false
-      runHighlightDrain()
+      isHighlightQueued = false
+      runHighlightUpdate()
     })
   }
 
@@ -306,6 +334,7 @@ export function Buffer(props: BufferProps) {
     gutterRef.setLineColors(colors)
   }
 
+  /** Preserves unchanged statement ids/spans while rebuilding the SQL cache. */
   const rebuildStatementCache = (nextText: string, nextLineStarts: number[], version: number) => {
     statementCache = buildStatementCache(
       nextText,
@@ -316,23 +345,23 @@ export function Buffer(props: BufferProps) {
       version,
     )
     previousStatements = statementCache.statements
-    scheduleHighlightDrain()
+    scheduleHighlightUpdate()
   }
 
   const clearRenderedHighlights = (requestRender: boolean) => {
     const ref = adapter.live()
-    const refs = materializedStatementRefs
-    materializedStatementRefs = new Map()
-    appliedHighlightVersion = -1
-    if (!ref || refs.size === 0) {
+    const highlights = materializedStatementHighlights
+    materializedStatementHighlights = new Map()
+    highlightedDocumentVersion = -1
+    if (!ref || highlights.size === 0) {
       if (requestRender) {
         ref?.requestRender()
       }
       return
     }
 
-    for (const entry of refs.values()) {
-      ref.editBuffer.removeHighlightsByRef(entry.hlRef)
+    for (const entry of highlights.values()) {
+      ref.editBuffer.removeHighlightsByRef(entry.highlightGroupId)
     }
     if (requestRender) {
       ref.requestRender()
@@ -340,12 +369,15 @@ export function Buffer(props: BufferProps) {
   }
 
   const invalidateMaterializedHighlights = () => {
-    if (materializedStatementRefs.size === 0) {
+    if (materializedStatementHighlights.size === 0) {
       return
     }
 
-    materializedStatementRefs = new Map(
-      [...materializedStatementRefs].map(([id, entry]) => [id, { hlRef: entry.hlRef, version: -1 }]),
+    materializedStatementHighlights = new Map(
+      [...materializedStatementHighlights].map(([id, entry]) => [
+        id,
+        { highlightGroupId: entry.highlightGroupId, version: -1 },
+      ]),
     )
   }
 
@@ -422,8 +454,13 @@ export function Buffer(props: BufferProps) {
     return buildStatementBatch(cache, text(), startIndex, endIndex)
   }
 
-  const runHighlightDrain = () => {
-    if (disposed || highlightRunning) {
+  /**
+   * Processes the next pending highlight update.
+   * Viewport-adjacent statements are handled first; offscreen statements wait
+   * until typing pauses.
+   */
+  const runHighlightUpdate = () => {
+    if (disposed || isHighlightRunning) {
       return
     }
 
@@ -444,7 +481,7 @@ export function Buffer(props: BufferProps) {
       if (highlightBackfillTimer === undefined) {
         highlightBackfillTimer = setTimeout(() => {
           highlightBackfillTimer = undefined
-          scheduleHighlightDrain()
+          scheduleHighlightUpdate()
         }, remainingQuietMs)
       }
       return
@@ -459,17 +496,22 @@ export function Buffer(props: BufferProps) {
     void runHighlightBatch(backfillBatch)
   }
 
+  /**
+   * Runs one async highlighter batch and stores returned highlight spans.
+   * The epoch guards document changes; the cache identity guards the statement
+   * indexes captured by the batch.
+   */
   const runHighlightBatch = async (batch: NonNullable<ReturnType<typeof buildStatementBatch>>) => {
-    const epoch = highlightEpoch
+    const updateVersion = highlightUpdateVersion
     const cache = statementCache
     if (!cache) {
       return
     }
 
-    highlightRunning = true
+    isHighlightRunning = true
     try {
       const spans = await highlighter.highlightText(batch.text)
-      if (disposed || epoch !== highlightEpoch || statementCache !== cache) {
+      if (disposed || updateVersion !== highlightUpdateVersion || statementCache !== cache) {
         return
       }
 
@@ -478,15 +520,20 @@ export function Buffer(props: BufferProps) {
       highlightBackfillCursor = Math.min(batch.endIndex + 1, Math.max(0, cache.statements.length - 1))
       queueSync()
     } catch (err) {
-      if (!disposed && epoch === highlightEpoch) {
+      if (!disposed && updateVersion === highlightUpdateVersion) {
         logger.error({ err }, "buffer: statement highlight failed")
       }
     } finally {
-      highlightRunning = false
-      scheduleHighlightDrain()
+      isHighlightRunning = false
+      scheduleHighlightUpdate()
     }
   }
 
+  /**
+   * Syncs visible highlight spans into OpenTUI's editBuffer.
+   * Cached spans are document offsets; editBuffer highlights are per-line ranges
+   * grouped by OpenTUI highlight group id.
+   */
   const syncRenderedHighlights = () => {
     const ref = adapter.live()
     if (!ref || !statementCache) {
@@ -510,27 +557,27 @@ export function Buffer(props: BufferProps) {
     const visibleIds = new Set(statements.map((statement) => statement.id))
     const starts = lineStarts()
     const value = text()
-    let changed = appliedHighlightVersion !== documentVersion()
+    let changed = highlightedDocumentVersion !== documentVersion()
 
-    for (const [id, entry] of materializedStatementRefs) {
+    for (const [id, entry] of materializedStatementHighlights) {
       if (visibleIds.has(id)) {
         continue
       }
 
-      ref.editBuffer.removeHighlightsByRef(entry.hlRef)
-      materializedStatementRefs.delete(id)
+      ref.editBuffer.removeHighlightsByRef(entry.highlightGroupId)
+      materializedStatementHighlights.delete(id)
       changed = true
     }
 
     for (const statement of statements) {
-      const current = materializedStatementRefs.get(statement.id)
+      const current = materializedStatementHighlights.get(statement.id)
       if (current?.version === statement.highlightVersion) {
         continue
       }
 
-      const hlRef = current?.hlRef ?? nextStatementHighlightRef()
+      const highlightGroupId = current?.highlightGroupId ?? nextStatementHighlightGroupId()
       if (current) {
-        ref.editBuffer.removeHighlightsByRef(hlRef)
+        ref.editBuffer.removeHighlightsByRef(highlightGroupId)
       }
 
       for (const span of statement.spans) {
@@ -540,12 +587,12 @@ export function Buffer(props: BufferProps) {
           starts,
           text: value,
           tabWidth,
-          hlRef,
+          highlightGroupId,
         })
       }
 
-      materializedStatementRefs.set(statement.id, {
-        hlRef,
+      materializedStatementHighlights.set(statement.id, {
+        highlightGroupId,
         version: statement.highlightVersion,
       })
       changed = true
@@ -555,10 +602,15 @@ export function Buffer(props: BufferProps) {
       return
     }
 
-    appliedHighlightVersion = documentVersion()
+    highlightedDocumentVersion = documentVersion()
     ref.requestRender()
   }
 
+  /**
+   * Applies a virtual scroll row to the textarea viewport.
+   * The textarea node stays viewport-sized; editorView moves to the rows that
+   * should be visible at scrollbox.scrollTop.
+   */
   const setEditorViewport = (top: number, nextHeight = adapter.live()?.height ?? 1, moveCursor = false) => {
     const ref = adapter.live()
     if (!ref) {
@@ -609,6 +661,7 @@ export function Buffer(props: BufferProps) {
     }
 
     const viewport = getViewportRect(scrollRef)
+    // Size changes affect wrapping; scroll-only syncs can reuse textarea layout.
     if (viewport.width !== viewportWidth || viewport.height !== viewportRows) {
       viewportWidth = viewport.width
       viewportRows = viewport.height
@@ -632,7 +685,7 @@ export function Buffer(props: BufferProps) {
     syncLineDecorations()
     syncLineNumberViewportHeight()
     syncRenderedHighlights()
-    scheduleHighlightDrain()
+    scheduleHighlightUpdate()
     autocomplete.syncAnchor()
   }
 
@@ -645,9 +698,13 @@ export function Buffer(props: BufferProps) {
     bufferMicrotask(syncLayout)
   }
 
+  /**
+   * Resolves autocomplete popup position from a document offset.
+   * lineInfo is required because wrapping, tabs, and wide chars are layout-time facts.
+   */
   function getAnchor(replaceStart: DocCharOffset): SelectPopupAnchor | null {
     const ref = adapter.live()
-    if (!containerRef || !ref) {
+    if (!bufferRootRef || !ref) {
       return null
     }
 
@@ -688,13 +745,14 @@ export function Buffer(props: BufferProps) {
     }
 
     return {
-      x: Math.max(0, ref.x + displayCol - (info.lineStartCols[visualRow] ?? 0) - containerRef.x - 1),
-      y: Math.max(0, ref.y + viewportRow - containerRef.y),
-      containerWidth: containerRef.width,
-      containerHeight: containerRef.height,
+      x: Math.max(0, ref.x + displayCol - (info.lineStartCols[visualRow] ?? 0) - bufferRootRef.x - 1),
+      y: Math.max(0, ref.y + viewportRow - bufferRootRef.y),
+      containerWidth: bufferRootRef.width,
+      containerHeight: bufferRootRef.height,
     }
   }
 
+  /** Applies autocomplete text through editorView so selection, cursor, and plainText stay in sync. */
   const replaceDocumentRange = (
     start: DocCharOffset,
     end: DocCharOffset,
@@ -729,10 +787,11 @@ export function Buffer(props: BufferProps) {
     props.onTextChange(text(), { modified: contentModified() })
   }
 
+  /** Applies the latest textarea text to Buffer state and refreshes derived document state */
   const applyTextChange = (nextText: string, modified: boolean) => {
     const version = documentVersion() + 1
     const starts = buildLineStarts(nextText)
-    highlightEpoch += 1
+    highlightUpdateVersion += 1
     highlightBackfillCursor = 0
     lastEditAt = performance.now()
     clearHighlightBackfillTimer()
@@ -748,10 +807,11 @@ export function Buffer(props: BufferProps) {
     adapter.live()?.focus()
   }
 
+  /** Replaces text from outside user input while keeping OpenTUI's buffer in sync. */
   const setText = (nextText: string) => {
     const ref = adapter.live()
     pendingReset = true
-    highlightEpoch += 1
+    highlightUpdateVersion += 1
     highlightBackfillCursor = 0
     lastEditAt = performance.now()
     clearHighlightBackfillTimer()
@@ -770,6 +830,7 @@ export function Buffer(props: BufferProps) {
     queueSync()
   }
 
+  /** Commits ref.plainText; pending flags only affect metadata and autocomplete refresh. */
   const handleContentChange = () => {
     const ref = adapter.live()
     if (!ref) {
@@ -826,7 +887,7 @@ export function Buffer(props: BufferProps) {
     pendingInitialContext = undefined
     debouncedPush.clear()
     autocomplete.close()
-    highlightEpoch += 1
+    highlightUpdateVersion += 1
     clearHighlightBackfillTimer()
     adapter.detach()
     clearRenderedHighlights(false)
@@ -885,7 +946,7 @@ export function Buffer(props: BufferProps) {
     >
       <box
         ref={(node) => {
-          containerRef = node
+          bufferRootRef = node
         }}
         position="relative"
         flexDirection="column"
@@ -934,6 +995,7 @@ export function Buffer(props: BufferProps) {
             backgroundColor={palette().get("editor_background")}
             width="100%"
           >
+            {/* A spacer that provides virtual height for the scrollbox */}
             <box
               height={scrollTop()}
               minHeight={scrollTop()}
@@ -1004,6 +1066,7 @@ export function Buffer(props: BufferProps) {
                 onContentChange={handleContentChange}
               />
             </line_number>
+            {/* Bottom spacer that provides virtual height for the scrollbox */}
             <box
               height={Math.max(0, totalRows() - scrollTop() - viewportHeight())}
               minHeight={Math.max(0, totalRows() - scrollTop() - viewportHeight())}
