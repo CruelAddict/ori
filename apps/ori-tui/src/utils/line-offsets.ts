@@ -14,7 +14,7 @@ export function buildLineStarts(text: string): number[] {
   return starts
 }
 
-export function offsetToLineCol(offset: number, starts: number[]): LineCol {
+export function offsetToLineCol(offset: number, starts: readonly number[]): LineCol {
   let low = 0
   let high = starts.length - 1
   while (low <= high) {

@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
-import { docCharOffset } from "./coords"
-import { resolveCursorDocOffset } from "./buffer-opentui-adapter"
+import type { LineInfo } from "@opentui/core"
+import { resolveCursorDocOffset, resolveViewportOffsetPoint } from "./buffer-opentui-adapter"
+import { containerX, containerY, docCharOffset } from "./coords"
 
 describe("buffer opentui adapter", () => {
   test("maps a single-line cursor directly into a document offset", () => {
@@ -41,5 +42,47 @@ describe("buffer opentui adapter", () => {
 
   test("clamps out-of-range rows to the last line", () => {
     expect(resolveCursorDocOffset("auth\n", 99, 2)).toBe(docCharOffset(5))
+  })
+
+  test("maps a later line viewport point without subtracting previous line width", () => {
+    const text = "select * from authors\nselect * fr"
+
+    expect(
+      resolveViewportOffsetPoint({
+        text,
+        offset: docCharOffset(text.lastIndexOf("fr")),
+        lineInfo: {
+          lineStartCols: [0, 22],
+          lineWidthCols: [21, 11],
+          lineWidthColsMax: 21,
+          lineSources: [0, 1],
+          lineWraps: [0, 0],
+        } satisfies LineInfo,
+        widthMethod: undefined,
+        tabWidth: 2,
+        scrollY: 0,
+        viewportHeight: 20,
+      }),
+    ).toEqual({ x: containerX(9), y: containerY(1) })
+  })
+
+  test("maps wrapped rows relative to their source line", () => {
+    expect(
+      resolveViewportOffsetPoint({
+        text: "ignored\nabcdefghijkl",
+        offset: docCharOffset("ignored\nabcdefghijkl".length),
+        lineInfo: {
+          lineStartCols: [22, 32],
+          lineWidthCols: [10, 2],
+          lineWidthColsMax: 10,
+          lineSources: [1, 1],
+          lineWraps: [0, 1],
+        } satisfies LineInfo,
+        widthMethod: undefined,
+        tabWidth: 2,
+        scrollY: 0,
+        viewportHeight: 20,
+      }),
+    ).toEqual({ x: containerX(2), y: containerY(1) })
   })
 })

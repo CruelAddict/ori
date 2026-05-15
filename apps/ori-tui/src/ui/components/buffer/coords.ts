@@ -30,6 +30,12 @@ export type ContainerX = Coord<"ContainerX">
 /** Y coordinate relative to a container. */
 export type ContainerY = Coord<"ContainerY">
 
+/** Width in container coordinate space. */
+export type ContainerWidth = Coord<"ContainerWidth">
+
+/** Height in container coordinate space. */
+export type ContainerHeight = Coord<"ContainerHeight">
+
 /** A line-local character position. */
 export type LineCharPosition = {
   line: LineIndex
@@ -93,6 +99,14 @@ export function containerX(value: number): ContainerX {
 
 export function containerY(value: number): ContainerY {
   return value as ContainerY
+}
+
+export function containerWidth(value: number): ContainerWidth {
+  return value as ContainerWidth
+}
+
+export function containerHeight(value: number): ContainerHeight {
+  return value as ContainerHeight
 }
 
 export function lineCharPosition(line: number, offset: number): LineCharPosition {

@@ -1,18 +1,16 @@
-import { BoxRenderable } from "@opentui/core"
-import { NodeType, type Node } from "@adapters/ori/client"
 import { describe, expect, test } from "bun:test"
-import { readFrameText } from "../../../test/opentui-test-tools"
+import { type Node, NodeType } from "@adapters/ori/client"
+import { BoxRenderable } from "@opentui/core"
 import type { MountedTuiApp } from "../../../test/opentui-harness"
-import { docCharOffset, type DocCharOffset } from "./coords"
-import { resolveCursorDocOffset } from "./buffer-opentui-adapter"
+import { readFrameText } from "../../../test/opentui-test-tools"
 import { createSqlEditorBgWorkerAdapter } from "../../widgets/editor-panel/sql-editor-bg-worker-adapter"
 import type { SqlEditorSchemaState } from "../../widgets/editor-panel/sql-editor-protocol"
 import { getBufferTextarea, mountBufferWithApi, mountText, moveCursor } from "./buffer.test-tools"
+import { resolveCursorDocOffset } from "./buffer-opentui-adapter"
+import { type DocCharOffset, docCharOffset, docCharRange } from "./coords"
 
 function popupBox(app: MountedTuiApp) {
-  return app.find(
-    (node): node is BoxRenderable => node instanceof BoxRenderable && node.zIndex === 30,
-  )
+  return app.find((node): node is BoxRenderable => node instanceof BoxRenderable && node.zIndex === 30)
 }
 
 function showsCompletion(app: MountedTuiApp, label: string) {
@@ -91,6 +89,37 @@ describe("buffer autocomplete integration", () => {
       expect(readFrameText(mounted.app)).toContain("authors")
     } finally {
       worker.dispose()
+      mounted.app.destroy()
+    }
+  })
+
+  test("positions popup under the replace range start on a later line", async () => {
+    const linePrefix = "select * "
+    const text = `select * from authors\n${linePrefix}fr`
+    const replaceStart = text.lastIndexOf("fr")
+    const mounted = await mountBufferWithApi({
+      width: 80,
+      height: 20,
+      autocomplete: {
+        getCompletions: async () => ({
+          replace: docCharRange(replaceStart, text.length),
+          items: [{ id: "keyword:from", label: "from", insertText: "from" }],
+        }),
+      },
+    })
+
+    try {
+      const textarea = getBufferTextarea(mounted.app)
+
+      await mountText(mounted, textarea, text)
+      await moveCursor(mounted.app, textarea, 1, -1)
+      await waitForCompletion(mounted.app, "from")
+
+      const popup = popupBox(mounted.app)
+
+      expect(popup).toBeDefined()
+      expect(popup?.x).toBe(textarea.x + linePrefix.length - 1)
+    } finally {
       mounted.app.destroy()
     }
   })

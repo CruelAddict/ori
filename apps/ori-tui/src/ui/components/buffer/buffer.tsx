@@ -12,7 +12,7 @@ import { useLogger } from "@ui/providers/logger"
 import { useTheme } from "@ui/providers/theme"
 import { type KeyBinding, KeyScope } from "@ui/services/key-scopes"
 import { debounce } from "@utils/debounce"
-import { buildLineStarts, offsetToLineCol } from "@utils/line-offsets"
+import { buildLineStarts } from "@utils/line-offsets"
 import { syntaxHighlighter } from "@utils/syntax-highlighter"
 import { type Accessor, createEffect, createMemo, createSignal, onCleanup, onMount } from "solid-js"
 import { createBufferAutocomplete } from "./autocomplete/controller"
@@ -25,14 +25,12 @@ import {
   buildStatementCache,
   collectVisibleStatementIndices,
   collectVisibleStatements,
-  getLineText,
   hasDirtyStatements,
   type StatementCache,
   type StatementEntry,
 } from "./buffer-statement-cache"
 import type { DocCharOffset } from "./coords"
-import { docCharOffset, lineCharOffset } from "./coords"
-import { lineCharOffsetToDisplayColumn } from "./text-metrics"
+import { containerHeight, containerWidth, containerX, containerY, docCharOffset } from "./coords"
 
 const DEBOUNCE_MS = 200
 const DEFAULT_TAB_WIDTH = 2
@@ -708,47 +706,16 @@ export function Buffer(props: BufferProps) {
       return null
     }
 
-    const currentOffset = cursorOffset()
-    const anchorOffset = currentOffset !== undefined && currentOffset >= replaceStart ? currentOffset : replaceStart
-    const anchorCursor = offsetToLineCol(anchorOffset, lineStarts())
-    const replaceCursor = offsetToLineCol(replaceStart, lineStarts())
-    const cursor = anchorCursor.line === replaceCursor.line ? anchorCursor : replaceCursor
-
-    const lineText = getLineText(text(), lineStarts(), cursor.line)
-    const displayCol = lineCharOffsetToDisplayColumn(
-      { tabWidth, widthMethod: ref.ctx?.widthMethod },
-      lineText,
-      lineCharOffset(cursor.col),
-    )
-    const info = ref.lineInfo
-    let visualRow = -1
-    for (let index = 0; index < info.lineSources.length; index += 1) {
-      if (info.lineSources[index] !== cursor.line) {
-        continue
-      }
-      const nextStartCol =
-        info.lineSources[index + 1] === cursor.line
-          ? (info.lineStartCols[index + 1] ?? Number.POSITIVE_INFINITY)
-          : Number.POSITIVE_INFINITY
-      if (displayCol < nextStartCol || nextStartCol === Number.POSITIVE_INFINITY) {
-        visualRow = index
-        break
-      }
-    }
-    if (visualRow < 0) {
-      return null
-    }
-
-    const viewportRow = visualRow - ref.scrollY
-    if (viewportRow < 0 || viewportRow >= ref.height) {
+    const point = adapter.resolveViewportPoint(replaceStart)
+    if (!point) {
       return null
     }
 
     return {
-      x: Math.max(0, ref.x + displayCol - (info.lineStartCols[visualRow] ?? 0) - bufferRootRef.x - 1),
-      y: Math.max(0, ref.y + viewportRow - bufferRootRef.y),
-      containerWidth: bufferRootRef.width,
-      containerHeight: bufferRootRef.height,
+      x: containerX(Math.max(0, ref.x + point.x - bufferRootRef.x - 1)),
+      y: containerY(Math.max(0, ref.y + point.y - bufferRootRef.y)),
+      containerWidth: containerWidth(bufferRootRef.width),
+      containerHeight: containerHeight(bufferRootRef.height),
     }
   }
 
@@ -812,7 +779,7 @@ export function Buffer(props: BufferProps) {
     appliedHighlightStyle = highlighter.highlightResult().syntaxStyle
     if (ref) {
       ref.setText(nextText)
-      adapter.setCursorDocOffset(0)
+      adapter.setCursorDocOffset(docCharOffset(0))
     }
     if (!ref) {
       applyTextChange(nextText, false)

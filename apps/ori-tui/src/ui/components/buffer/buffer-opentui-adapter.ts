@@ -1,11 +1,31 @@
-import type { TextareaRenderable } from "@opentui/core"
+import type { LineInfo, TextareaRenderable, WidthMethod } from "@opentui/core"
 import { buildLineStarts, offsetToLineCol } from "@utils/line-offsets"
-import { type DocCharOffset, docCharOffset } from "./coords"
-import { applyRefTabWidth } from "./text-metrics"
+import {
+  type ContainerX,
+  type ContainerY,
+  containerX,
+  containerY,
+  type DisplayColumn,
+  type DocCharOffset,
+  displayColumn,
+  docCharOffset,
+  type LineIndex,
+  lineCharOffset,
+  lineIndex,
+  type VisualRow,
+  visualColumn,
+  visualRow,
+} from "./coords"
+import { applyRefTabWidth, lineCharOffsetToDisplayColumn } from "./text-metrics"
 
 export type BufferCursorState = {
   row: number
   offset: DocCharOffset | undefined
+}
+
+export type BufferViewportPoint = {
+  x: ContainerX
+  y: ContainerY
 }
 
 type TextareaRuntimePatch = TextareaRenderable & {
@@ -36,6 +56,85 @@ export function resolveCursorDocOffset(text: string, row: number, col: number): 
   const next = starts[line + 1] ?? text.length
   const lineLength = Math.max(0, next - start - (next < text.length ? 1 : 0))
   return docCharOffset(start + Math.max(0, Math.min(col, lineLength)))
+}
+
+function getLineText(text: string, starts: readonly number[], line: LineIndex) {
+  const start = starts[line] ?? 0
+  const next = line + 1 < starts.length ? (starts[line + 1] ?? text.length) : text.length
+  const end = next > start && text[next - 1] === "\n" ? next - 1 : next
+  return text.slice(start, end)
+}
+
+function getVisualLineStartColumn(info: LineInfo, row: VisualRow, sourceLine: LineIndex): DisplayColumn {
+  let firstRow = row
+  for (let index = row - 1; index >= 0; index -= 1) {
+    if (info.lineSources[index] !== sourceLine) {
+      break
+    }
+    firstRow = visualRow(index)
+  }
+
+  const firstStart = info.lineStartCols[firstRow] ?? 0
+  const currentStart = info.lineStartCols[row] ?? firstStart
+  return displayColumn(Math.max(0, currentStart - firstStart))
+}
+
+function findVisualLine(info: LineInfo, sourceLine: LineIndex, displayCol: DisplayColumn) {
+  for (let index = 0; index < info.lineSources.length; index += 1) {
+    if (info.lineSources[index] !== sourceLine) {
+      continue
+    }
+
+    const row = visualRow(index)
+    const startColumn = getVisualLineStartColumn(info, row, sourceLine)
+    const nextIndex = index + 1
+    const nextStartColumn =
+      info.lineSources[nextIndex] === sourceLine
+        ? getVisualLineStartColumn(info, visualRow(nextIndex), sourceLine)
+        : undefined
+    if (nextStartColumn !== undefined && displayCol >= nextStartColumn) {
+      continue
+    }
+
+    return { row, startColumn }
+  }
+
+  return undefined
+}
+
+export function resolveViewportOffsetPoint(params: {
+  text: string
+  offset: DocCharOffset
+  lineInfo: LineInfo
+  widthMethod: WidthMethod | undefined
+  tabWidth: number
+  scrollY: number
+  viewportHeight: number
+}): BufferViewportPoint | null {
+  const starts = buildLineStarts(params.text)
+  const cursor = offsetToLineCol(params.offset, starts)
+  const sourceLine = lineIndex(cursor.line)
+  const lineText = getLineText(params.text, starts, sourceLine)
+  const displayCol = lineCharOffsetToDisplayColumn(
+    { tabWidth: params.tabWidth, widthMethod: params.widthMethod },
+    lineText,
+    lineCharOffset(cursor.col),
+  )
+  const line = findVisualLine(params.lineInfo, sourceLine, displayCol)
+  if (!line) {
+    return null
+  }
+
+  const viewportRow = line.row - visualRow(params.scrollY)
+  if (viewportRow < 0 || viewportRow >= params.viewportHeight) {
+    return null
+  }
+
+  const visualCol = visualColumn(Math.max(0, displayCol - line.startColumn))
+  return {
+    x: containerX(visualCol),
+    y: containerY(viewportRow),
+  }
 }
 
 function resolveCursorDocPosition(text: string, offset: DocCharOffset) {
@@ -195,12 +294,24 @@ export function createBufferOpentuiAdapter(options: CreateBufferOpentuiAdapterOp
     return true
   }
 
-  const replaceDocRange = (
-    start: DocCharOffset,
-    end: DocCharOffset,
-    insertText: string,
-    nextCursorOffset?: number,
-  ) => {
+  const resolveViewportPoint = (offset: DocCharOffset) => {
+    const ref = live()
+    if (!ref) {
+      return null
+    }
+
+    return resolveViewportOffsetPoint({
+      text: ref.plainText,
+      offset,
+      lineInfo: ref.lineInfo,
+      widthMethod: ref.ctx?.widthMethod,
+      tabWidth: options.tabWidth,
+      scrollY: ref.scrollY,
+      viewportHeight: ref.height,
+    })
+  }
+
+  const replaceDocRange = (start: DocCharOffset, end: DocCharOffset, insertText: string, nextCursorOffset?: number) => {
     const ref = live()
     if (!ref) {
       return false
@@ -231,6 +342,7 @@ export function createBufferOpentuiAdapter(options: CreateBufferOpentuiAdapterOp
     live,
     readCursorState,
     setCursorDocOffset,
+    resolveViewportPoint,
     replaceDocRange,
     totalVirtualRows,
     measureRows,
