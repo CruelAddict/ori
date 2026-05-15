@@ -24,11 +24,12 @@
     "typescript": "^5"
   },
   "dependencies": {
-    "@opentui/core": "0.1.92",
-    "@opentui/solid": "0.1.92",
+    "@opentui/core": "0.2.10",
+    "@opentui/solid": "0.2.10",
     "contract": "file:../../libs/contract/typescript",
     "fuzzysort": "^3.1.0",
     "pino": "^9.5.0",
-    "solid-js": "^1.9.9"
+    "solid-js": "1.9.12",
+    "web-tree-sitter": "0.25.10"
   }
 }
