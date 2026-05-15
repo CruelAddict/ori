@@ -759,24 +759,15 @@ export function Buffer(props: BufferProps) {
     insertText: string,
     nextCursorOffset?: number,
   ) => {
-    const ref = adapter.live()
-    if (!ref) {
-      return false
-    }
-
     pendingChangeOrigin = {
       origin: "autocomplete",
       remainingEvents: start === end ? 1 : 2,
     }
-    ref.editorView.setSelection(start, end)
-    ref.insertText(insertText)
+    const replaced = adapter.replaceDocRange(start, end, insertText, nextCursorOffset)
+    if (!replaced) {
+      return false
+    }
     bufferMicrotask(() => {
-      const live = adapter.live()
-      if (!live) {
-        return
-      }
-
-      live.cursorOffset = start + (nextCursorOffset ?? insertText.length)
       syncCursorStateFromEditor()
     })
     return true
@@ -821,7 +812,7 @@ export function Buffer(props: BufferProps) {
     appliedHighlightStyle = highlighter.highlightResult().syntaxStyle
     if (ref) {
       ref.setText(nextText)
-      ref.cursorOffset = 0
+      adapter.setCursorDocOffset(0)
     }
     if (!ref) {
       applyTextChange(nextText, false)

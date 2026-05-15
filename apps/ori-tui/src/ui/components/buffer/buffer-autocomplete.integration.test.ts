@@ -1,0 +1,203 @@
+import { BoxRenderable } from "@opentui/core"
+import { NodeType, type Node } from "@adapters/ori/client"
+import { describe, expect, test } from "bun:test"
+import { readFrameText } from "../../../test/opentui-test-tools"
+import type { MountedTuiApp } from "../../../test/opentui-harness"
+import { docCharOffset, type DocCharOffset } from "./coords"
+import { resolveCursorDocOffset } from "./buffer-opentui-adapter"
+import { createSqlEditorBgWorkerAdapter } from "../../widgets/editor-panel/sql-editor-bg-worker-adapter"
+import type { SqlEditorSchemaState } from "../../widgets/editor-panel/sql-editor-protocol"
+import { getBufferTextarea, mountBufferWithApi, mountText, moveCursor } from "./buffer.test-tools"
+
+function popupBox(app: MountedTuiApp) {
+  return app.find(
+    (node): node is BoxRenderable => node instanceof BoxRenderable && node.zIndex === 30,
+  )
+}
+
+function showsCompletion(app: MountedTuiApp, label: string) {
+  return Boolean(popupBox(app)) && readFrameText(app).includes(label)
+}
+
+async function waitForCompletion(app: MountedTuiApp, label: string, timeoutMs = 500) {
+  await app.waitFor(() => showsCompletion(app, label), timeoutMs)
+}
+
+function createWorkerProvider() {
+  const databaseId = "db"
+  const nodes: Node[] = [
+    {
+      id: databaseId,
+      name: "warehouse",
+      type: NodeType.DATABASE,
+      edges: { schemas: { items: ["schema:public"], truncated: false } },
+      attributes: { resource: "test", engine: "postgres", isDefault: true },
+    },
+    {
+      id: "schema:public",
+      name: "public",
+      type: NodeType.SCHEMA,
+      edges: { tables: { items: ["table:public.authors", "table:public.books"], truncated: false } },
+      attributes: { resource: "test", engine: "postgres", isDefault: true },
+    },
+    {
+      id: "table:public.authors",
+      name: "authors",
+      type: NodeType.TABLE,
+      edges: { columns: { items: [], truncated: false } },
+      attributes: { resource: "test", table: "authors", tableType: "table" },
+    },
+    {
+      id: "table:public.books",
+      name: "books",
+      type: NodeType.TABLE,
+      edges: { columns: { items: [], truncated: false } },
+      attributes: { resource: "test", table: "books", tableType: "table" },
+    },
+  ]
+  const state: SqlEditorSchemaState = {
+    rootIds: [databaseId],
+    nodesById: Object.fromEntries(nodes.map((node) => [node.id, node])),
+    loading: false,
+    loaded: true,
+  }
+
+  return createSqlEditorBgWorkerAdapter({
+    getState: () => state,
+  })
+}
+
+function endOffset(text: string): DocCharOffset {
+  return docCharOffset(text.length)
+}
+
+describe("buffer autocomplete integration", () => {
+  test("opens relations after typing prefix", async () => {
+    const worker = createWorkerProvider()
+    const mounted = await mountBufferWithApi({ width: 80, height: 20, autocomplete: worker.autocomplete })
+
+    try {
+      const textarea = getBufferTextarea(mounted.app)
+      const text = "\tfoo\n\tbar\nselect * from aut"
+      const nextText = "\tfoo\n\tbar\nselect * from auth"
+
+      await mountText(mounted, textarea, text)
+      await moveCursor(mounted.app, textarea, 2, -1)
+
+      await mounted.app.setup.mockInput.typeText("h")
+      await mounted.app.waitFor(() => textarea.plainText === nextText)
+
+      await waitForCompletion(mounted.app, "authors")
+      expect(readFrameText(mounted.app)).toContain("authors")
+    } finally {
+      worker.dispose()
+      mounted.app.destroy()
+    }
+  })
+
+  test("returns relations at cursor", async () => {
+    const worker = createWorkerProvider()
+
+    try {
+      const text = "\tfoo\n\tbar\nselect * from auth"
+      const result = await worker.autocomplete.getCompletions({
+        text,
+        cursor: endOffset(text),
+        signal: new AbortController().signal,
+      })
+
+      expect(result?.items.map((item) => item.label)).toContain("authors")
+    } finally {
+      worker.dispose()
+    }
+  })
+
+  test("maps cursor below earlier tabbed lines", async () => {
+    const mounted = await mountBufferWithApi({
+      width: 100,
+      height: 24,
+      autocomplete: { getCompletions: async () => undefined },
+    })
+
+    try {
+      const textarea = getBufferTextarea(mounted.app)
+      const prefix = "\tfoo\n\tbar\n"
+      const text = `${prefix}select * from auth`
+      const line = 2
+      const lineStart = prefix.length
+      const cursor = endOffset(text)
+      const tabsBeforeLine = 2
+      const tabsBeforeCursor = 2
+
+      await mountText(mounted, textarea, text)
+      textarea.gotoLine(line)
+      await mounted.app.waitFor(() => textarea.logicalCursor.row === line)
+      const afterGotoLine = { ...textarea.logicalCursor }
+      const eolAfterGotoLine = textarea.editBuffer.getEOL()
+      await moveCursor(mounted.app, textarea, line, -1)
+
+      const rebuilt = resolveCursorDocOffset(textarea.plainText, textarea.logicalCursor.row, textarea.logicalCursor.col)
+      const rebuiltLineStart = resolveCursorDocOffset(textarea.plainText, afterGotoLine.row, afterGotoLine.col)
+
+      expect(tabsBeforeLine).toBe(2)
+      expect(tabsBeforeCursor).toBe(2)
+      expect(afterGotoLine.offset).toBe(lineStart + tabsBeforeLine)
+      expect(rebuiltLineStart).toBe(docCharOffset(lineStart))
+      expect(eolAfterGotoLine.offset).toBe(cursor + tabsBeforeCursor)
+      expect(textarea.logicalCursor.offset).toBe(cursor + tabsBeforeCursor)
+      expect(rebuilt).toBe(cursor)
+    } finally {
+      mounted.app.destroy()
+    }
+  })
+
+  test("replaces the active identifier", async () => {
+    const worker = createWorkerProvider()
+    const mounted = await mountBufferWithApi({ width: 100, height: 24, autocomplete: worker.autocomplete })
+
+    try {
+      const textarea = getBufferTextarea(mounted.app)
+      const text = "\tfoo\n\tbar\nselect * from auth"
+      const expected = "\tfoo\n\tbar\nselect * from authors"
+
+      await mountText(mounted, textarea, text)
+      await moveCursor(mounted.app, textarea, 2, -1)
+      await waitForCompletion(mounted.app, "authors")
+
+      mounted.app.setup.mockInput.pressEnter()
+      await mounted.app.waitFor(() => textarea.plainText === expected)
+
+      expect(textarea.plainText).toBe(expected)
+    } finally {
+      worker.dispose()
+      mounted.app.destroy()
+    }
+  })
+
+  test("inserts a relation at the boundary", async () => {
+    const worker = createWorkerProvider()
+    const mounted = await mountBufferWithApi({ width: 100, height: 24, autocomplete: worker.autocomplete })
+
+    try {
+      const textarea = getBufferTextarea(mounted.app)
+      const text = "\tfoo\n\tbar\nselect * from "
+      const expectedLine = "select * from authors"
+      const expectedText = "\tfoo\n\tbar\nselect * from authors"
+
+      await mountText(mounted, textarea, text)
+      await moveCursor(mounted.app, textarea, 2, -1)
+      await waitForCompletion(mounted.app, "authors")
+
+      mounted.app.setup.mockInput.pressEnter()
+      await mounted.app.waitFor(
+        () => textarea.plainText === expectedText && textarea.logicalCursor.col === expectedLine.length,
+      )
+
+      expect(textarea.plainText).toBe(expectedText)
+      expect(textarea.logicalCursor.col).toBe(expectedLine.length)
+    } finally {
+      worker.dispose()
+      mounted.app.destroy()
+    }
+  })
+})

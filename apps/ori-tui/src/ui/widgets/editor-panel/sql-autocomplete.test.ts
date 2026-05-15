@@ -48,7 +48,7 @@ function catalog(shape: CatalogShape = DEFAULT_CATALOG, engine = "postgres"): Te
 
   for (const [schemaName, tables] of Object.entries(shape)) {
     const schemaId = `schema:${schemaName}`
-    ;(nodes[0] as Extract<Node, { type: "database" }>).edges.schemas.items.push(schemaId)
+      ; (nodes[0] as Extract<Node, { type: "database" }>).edges.schemas.items.push(schemaId)
     nodes.push({
       id: schemaId,
       name: schemaName,

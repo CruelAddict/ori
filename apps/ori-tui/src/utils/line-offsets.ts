@@ -1,4 +1,4 @@
-/** Raw line/column position in document character space. */
+/** Line/column position in document character space. */
 export type LineCol = {
   line: number
   col: number

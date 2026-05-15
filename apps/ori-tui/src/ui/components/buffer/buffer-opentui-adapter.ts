@@ -1,4 +1,5 @@
 import type { TextareaRenderable } from "@opentui/core"
+import { buildLineStarts, offsetToLineCol } from "@utils/line-offsets"
 import { type DocCharOffset, docCharOffset } from "./coords"
 import { applyRefTabWidth } from "./text-metrics"
 
@@ -26,6 +27,20 @@ type CreateBufferOpentuiAdapterOptions = {
   tabWidth: number
   onLineInfoChange: () => void
   onCursorSync: () => void
+}
+
+export function resolveCursorDocOffset(text: string, row: number, col: number): DocCharOffset {
+  const starts = buildLineStarts(text)
+  const line = Math.max(0, Math.min(row, starts.length - 1))
+  const start = starts[line] ?? 0
+  const next = starts[line + 1] ?? text.length
+  const lineLength = Math.max(0, next - start - (next < text.length ? 1 : 0))
+  return docCharOffset(start + Math.max(0, Math.min(col, lineLength)))
+}
+
+function resolveCursorDocPosition(text: string, offset: DocCharOffset) {
+  const cursor = Math.max(0, Math.min(offset, text.length))
+  return offsetToLineCol(cursor, buildLineStarts(text))
 }
 
 export function createBufferOpentuiAdapter(options: CreateBufferOpentuiAdapterOptions) {
@@ -128,7 +143,7 @@ export function createBufferOpentuiAdapter(options: CreateBufferOpentuiAdapterOp
     const cursor = ref.logicalCursor
     return {
       row: cursor.row,
-      offset: docCharOffset(cursor.offset),
+      offset: resolveCursorDocOffset(ref.plainText, cursor.row, cursor.col),
     } satisfies BufferCursorState
   }
 
@@ -168,11 +183,55 @@ export function createBufferOpentuiAdapter(options: CreateBufferOpentuiAdapterOp
     measuredRowCount = 1
   }
 
+  const setCursorDocOffset = (offset: DocCharOffset) => {
+    const ref = live()
+    if (!ref) {
+      return false
+    }
+
+    const next = resolveCursorDocPosition(ref.plainText, offset)
+    ref.editBuffer.setCursor(next.line, next.col)
+    ref.requestRender()
+    return true
+  }
+
+  const replaceDocRange = (
+    start: DocCharOffset,
+    end: DocCharOffset,
+    insertText: string,
+    nextCursorOffset?: number,
+  ) => {
+    const ref = live()
+    if (!ref) {
+      return false
+    }
+
+    const current = ref.plainText
+    const from = resolveCursorDocPosition(current, start)
+    const to = resolveCursorDocPosition(current, end)
+    ref.editBuffer.setCursor(from.line, from.col)
+    if (start !== end) {
+      ref.editBuffer.deleteRange(from.line, from.col, to.line, to.col)
+      ref.editBuffer.setCursor(from.line, from.col)
+    }
+    if (insertText) {
+      ref.insertText(insertText)
+    }
+
+    const finalOffset = docCharOffset(start + (nextCursorOffset ?? insertText.length))
+    const final = resolveCursorDocPosition(ref.plainText, finalOffset)
+    ref.editBuffer.setCursor(final.line, final.col)
+    ref.requestRender()
+    return true
+  }
+
   return {
     attach,
     detach,
     live,
     readCursorState,
+    setCursorDocOffset,
+    replaceDocRange,
     totalVirtualRows,
     measureRows,
     resetMeasuredRows,

@@ -51,6 +51,7 @@ const SQL_START_KEYWORDS = new Set(
     "analyze",
     "show",
     "describe",
+    "use",
     "pragma",
     "vacuum",
     "attach",

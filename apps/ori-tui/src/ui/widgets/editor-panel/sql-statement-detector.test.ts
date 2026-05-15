@@ -126,6 +126,24 @@ describe("sql statement detector", () => {
     expect(analysis.queryStartLineByLine).toEqual([0, -1, 2])
   })
 
+  test("splits USE batches from the preceding select", () => {
+    const sql = "select 1\nUSE db;"
+    const queries = collectSqlQueries(sql, buildLineStarts(sql)).map((query) => sql.slice(query.start, query.end))
+
+    expect(queries).toEqual(["select 1", "USE db;"])
+
+    const underSelect = withCursor("select 1|\nUSE db;")
+    const resolution = resolveSqlQueryAtOffset(underSelect.text, buildLineStarts(underSelect.text), underSelect.cursor)
+
+    expect(resolution.kind).toBe("query")
+    if (resolution.kind !== "query") {
+      return
+    }
+    expect(underSelect.text.slice(resolution.query.start, resolution.query.end)).toBe("select 1")
+    expect(resolution.query.startLine).toBe(0)
+    expect(resolution.query.endLine).toBe(0)
+  })
+
   test("strict statement collection skips malformed logical spans", () => {
     const sql = "as\nselect * from authors;\nselect * from books limit 10;"
     const parsed = collectSqlStatements(sql, buildLineStarts(sql))

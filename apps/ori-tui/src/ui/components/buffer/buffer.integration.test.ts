@@ -1,9 +1,9 @@
 import { ScrollBoxRenderable, TextareaRenderable } from "@opentui/core"
-import { createComponent } from "solid-js"
 import { describe, expect, test } from "bun:test"
-import { mountInTui, type MountedTuiApp } from "../../../test/opentui-harness"
+import type { MountedTuiApp } from "../../../test/opentui-harness"
+import { readFrameLineTokens, readFrameLines } from "../../../test/opentui-test-tools"
 import type { BufferContext } from "./buffer"
-import { Buffer } from "./buffer"
+import { getBufferScrollbox, getBufferTextarea, mountBuffer } from "./buffer.test-tools"
 
 type HighlightState = {
   plainText: string
@@ -34,38 +34,6 @@ type ScrollState = {
   thumbVisible: boolean
   totalVirtualLineCount: number
   textareaWidth: number
-}
-
-type MountBufferOptions = {
-  text: string
-  width: number
-  height: number
-  onContextChange?: (context: BufferContext) => void
-}
-
-const noop = () => { }
-
-function mountBuffer(options: MountBufferOptions) {
-  return mountInTui(
-    () =>
-      createComponent(Buffer, {
-        initialText: options.text,
-        language: "sql",
-        isFocused: () => true,
-        onTextChange: noop,
-        focusSelf: noop,
-        onContextChange: options.onContextChange,
-      }),
-    { width: options.width, height: options.height },
-  )
-}
-
-function requireNode<T>(value: T | undefined, message: string) {
-  if (!value) {
-    throw new Error(message)
-  }
-
-  return value
 }
 
 function getHighlightedLines(textarea: TextareaRenderable, limit = 8) {
@@ -125,28 +93,10 @@ function stripRenderedLineNumberPrefix(text: string) {
 }
 
 function readVisibleLines(app: MountedTuiApp) {
-  return app.setup.captureSpans().lines
-    .map((line) => line.spans.map((span) => span.text).join("").replace(/\s+$/, ""))
+  return readFrameLines(app)
+    .map((line) => line.replace(/\s+$/, ""))
     .filter((line) => line.trim().length > 0)
     .map(stripRenderedLineNumberPrefix)
-}
-
-function readRenderedLineTokens(app: MountedTuiApp, lineIndex: number) {
-  return app.setup.captureSpans().lines[lineIndex]?.spans.map((span) => span.text) ?? []
-}
-
-function getBufferTextarea(app: MountedTuiApp) {
-  return requireNode(
-    app.find((node): node is TextareaRenderable => node instanceof TextareaRenderable),
-    "Buffer textarea was not rendered",
-  )
-}
-
-function getBufferScrollbox(app: MountedTuiApp) {
-  return requireNode(
-    app.find((node): node is ScrollBoxRenderable => node instanceof ScrollBoxRenderable),
-    "Buffer scrollbox was not rendered",
-  )
 }
 
 function captureCursorState(
@@ -243,8 +193,8 @@ GO`
     const app = await mountBuffer({ text: sql, width: 120, height: 12 })
 
     try {
-      await app.waitFor(() => readRenderedLineTokens(app, keywordLineIndex).includes("procedure"))
-      const lineTokens = readRenderedLineTokens(app, keywordLineIndex)
+      await app.waitFor(() => readFrameLineTokens(app, keywordLineIndex).includes("procedure"))
+      const lineTokens = readFrameLineTokens(app, keywordLineIndex)
 
       // The keyword should stay intact even after the leading tab shifts display columns.
       expect(lineTokens).toContain("drop")
