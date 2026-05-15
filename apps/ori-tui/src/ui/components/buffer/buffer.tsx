@@ -12,7 +12,7 @@ import { useLogger } from "@ui/providers/logger"
 import { useTheme } from "@ui/providers/theme"
 import { type KeyBinding, KeyScope } from "@ui/services/key-scopes"
 import { debounce } from "@utils/debounce"
-import { buildLineStarts } from "@utils/line-offsets"
+import { buildLineStarts, offsetToLineCol } from "@utils/line-offsets"
 import { syntaxHighlighter } from "@utils/syntax-highlighter"
 import { type Accessor, createEffect, createMemo, createSignal, onCleanup, onMount } from "solid-js"
 import { createBufferAutocomplete } from "./autocomplete/controller"
@@ -719,15 +719,16 @@ export function Buffer(props: BufferProps) {
     }
   }
 
-  /** Applies autocomplete text through editorView so selection, cursor, and plainText stay in sync. */
+  /** Applies document text through editorView so selection, cursor, and plainText stay in sync. */
   const replaceDocumentRange = (
     start: DocCharOffset,
     end: DocCharOffset,
     insertText: string,
     nextCursorOffset?: number,
+    origin: PendingChangeOrigin["origin"] = "autocomplete",
   ) => {
     pendingChangeOrigin = {
-      origin: "autocomplete",
+      origin,
       remainingEvents: start === end ? 1 : 2,
     }
     const replaced = adapter.replaceDocRange(start, end, insertText, nextCursorOffset)
@@ -737,6 +738,38 @@ export function Buffer(props: BufferProps) {
     bufferMicrotask(() => {
       syncCursorStateFromEditor()
     })
+    return true
+  }
+
+  const deleteToLineStart = () => {
+    const currentOffset = cursorOffset()
+    if (currentOffset === undefined) {
+      return false
+    }
+
+    const current = text()
+    const offset = Number(currentOffset)
+    const starts = lineStarts()
+    const cursor = offsetToLineCol(offset, starts)
+    const lineStart = starts[cursor.line] ?? 0
+
+    if (cursor.col > 0) {
+      const nextText = current.slice(0, lineStart) + current.slice(offset)
+      return replaceDocumentRange(docCharOffset(0), docCharOffset(current.length), nextText, lineStart, "user")
+    }
+
+    if (cursor.line > 0) {
+      const nextCursorOffset = lineStart - 1
+      const nextText = current.slice(0, nextCursorOffset) + current.slice(lineStart)
+      return replaceDocumentRange(
+        docCharOffset(0),
+        docCharOffset(current.length),
+        nextText,
+        nextCursorOffset,
+        "user",
+      )
+    }
+
     return true
   }
 
@@ -826,6 +859,14 @@ export function Buffer(props: BufferProps) {
       handler: () => {
         flush()
         props.onUnfocus?.()
+      },
+      preventDefault: true,
+    },
+    {
+      // OpenTUI still corrupts EOF line/view state for ctrl+u on the final line.
+      pattern: "ctrl+u",
+      handler: () => {
+        deleteToLineStart()
       },
       preventDefault: true,
     },

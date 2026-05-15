@@ -319,4 +319,80 @@ GO`
       app.destroy()
     }
   })
+
+  // Working around opentui bug
+  test("keeps the final blank line stable after ctrl+e ctrl+u on the last line", async () => {
+    const text =
+      "select * from authors;\n\nselect * from books limit 10;\n\n\nselect * from authors a\njoin books b on a.id = b.author_id "
+    const expected =
+      "select * from authors;\n\nselect * from books limit 10;\n\n\nselect * from authors a\n"
+    const app = await mountBuffer({ text, width: 80, height: 20 })
+
+    try {
+      const textarea = getBufferTextarea(app)
+
+      textarea.gotoLine(6)
+      await app.waitFor(() => textarea.logicalCursor.row === 6)
+      textarea.gotoLineEnd()
+      await app.waitFor(() => textarea.logicalCursor.row === 6 && textarea.logicalCursor.col === 35)
+
+      app.setup.mockInput.pressKey("e", { ctrl: true })
+      await app.renderOnce()
+      app.setup.mockInput.pressKey("u", { ctrl: true })
+
+      await app.waitFor(() => textarea.plainText === expected)
+      await app.waitFor(() => textarea.logicalCursor.row === 6 && textarea.logicalCursor.col === 0)
+      await app.waitFor(() => textarea.visualCursor.logicalRow === 6 && textarea.visualCursor.logicalCol === 0)
+
+      expect(textarea.lineCount).toBe(7)
+      expect(textarea.virtualLineCount).toBe(7)
+      expect(textarea.lineInfo.lineSources).toEqual([0, 1, 2, 3, 4, 5, 6])
+      expect(textarea.cursorOffset).toBe(expected.length)
+      expect(readFrameLines(app).some((line) => line.trimStart().startsWith("7"))).toBe(true)
+
+      app.setup.mockInput.pressArrow("down")
+      await app.renderOnce()
+
+      expect(textarea.logicalCursor.row).toBe(6)
+      expect(textarea.logicalCursor.col).toBe(0)
+      expect(textarea.visualCursor.logicalRow).toBe(6)
+      expect(textarea.visualCursor.logicalCol).toBe(0)
+
+      app.setup.mockInput.pressArrow("right", { meta: true })
+      await app.renderOnce()
+
+      expect(textarea.logicalCursor.row).toBe(6)
+      expect(textarea.logicalCursor.col).toBe(0)
+      expect(textarea.cursorOffset).toBe(expected.length)
+    } finally {
+      app.destroy()
+    }
+  })
+
+  // Should be removed once we have fix for ctrl-u bug on last line in opentui core
+  test("preserves repeated ctrl+u behavior away from EOF", async () => {
+    const text = "Line 1\nLine 2\nLine 3\nLine 4"
+    const app = await mountBuffer({ text, width: 40, height: 12 })
+
+    try {
+      const textarea = getBufferTextarea(app)
+
+      textarea.gotoLine(2)
+      await app.waitFor(() => textarea.logicalCursor.row === 2)
+      textarea.gotoLineEnd()
+      await app.waitFor(() => textarea.logicalCursor.row === 2 && textarea.logicalCursor.col === 6)
+
+      app.setup.mockInput.pressKey("u", { ctrl: true })
+      await app.waitFor(() => textarea.plainText === "Line 1\nLine 2\n\nLine 4")
+      expect(textarea.logicalCursor.row).toBe(2)
+      expect(textarea.logicalCursor.col).toBe(0)
+
+      app.setup.mockInput.pressKey("u", { ctrl: true })
+      await app.waitFor(() => textarea.plainText === "Line 1\nLine 2\nLine 4")
+      expect(textarea.logicalCursor.row).toBe(1)
+      expect(textarea.logicalCursor.col).toBe(6)
+    } finally {
+      app.destroy()
+    }
+  })
 })
