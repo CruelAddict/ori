@@ -99,7 +99,6 @@ export function Buffer(props: BufferProps) {
 
   // In visual lines that take wrapping into account
   const [viewportHeight, setViewportHeight] = createSignal(1)
-  const [scrollTop, setScrollTop] = createSignal(0)
   const [totalRows, setTotalRows] = createSignal(1)
 
   // Last cursor position reported by OpenTUI
@@ -279,7 +278,6 @@ export function Buffer(props: BufferProps) {
   const syncScrollMetrics = (ref: TextareaRenderable, nextViewportHeight: number) => {
     const height = Math.max(1, nextViewportHeight)
     setViewportHeight(height)
-    setScrollTop(ref.scrollY)
     setTotalRows(getTotalRowsForViewport(ref, height))
   }
 
@@ -292,6 +290,7 @@ export function Buffer(props: BufferProps) {
     }
 
     scrollRef.scrollTo({ x: 0, y: top })
+    scrollRef.content.translateY = 0
   }
 
   const syncLineNumberViewportHeight = () => {
@@ -656,14 +655,16 @@ export function Buffer(props: BufferProps) {
 
     const viewport = getViewportRect(scrollRef)
     setViewportHeight(Math.max(1, viewport.height))
-    setScrollTop(scrollRef.scrollTop ?? 0)
     setEditorViewport(scrollRef.scrollTop ?? 0, viewport.height, true)
+    scrollRef.content.translateY = 0
   }
 
   const handleScrollboxSync = () => {
     if (!scrollRef) {
       return
     }
+
+    scrollRef.content.translateY = 0
 
     const viewport = getViewportRect(scrollRef)
     // Size changes affect wrapping; scroll-only syncs can reuse textarea layout.
@@ -768,13 +769,7 @@ export function Buffer(props: BufferProps) {
     if (cursor.line > 0) {
       const nextCursorOffset = lineStart - 1
       const nextText = current.slice(0, nextCursorOffset) + current.slice(lineStart)
-      return replaceDocumentRange(
-        docCharOffset(0),
-        docCharOffset(current.length),
-        nextText,
-        nextCursorOffset,
-        "user",
-      )
+      return replaceDocumentRange(docCharOffset(0), docCharOffset(current.length), nextText, nextCursorOffset, "user")
     }
 
     return true
@@ -997,21 +992,24 @@ export function Buffer(props: BufferProps) {
           minVerticalThumbHeight={2}
         >
           <box
+            position="relative"
             flexDirection="column"
             backgroundColor={palette().get("editor_background")}
             width="100%"
           >
-            {/* A spacer that provides virtual height for the scrollbox */}
             <box
-              height={scrollTop()}
-              minHeight={scrollTop()}
-              maxHeight={scrollTop()}
+              height={totalRows()}
+              minHeight={totalRows()}
+              maxHeight={totalRows()}
             />
             <line_number
               ref={(node: LineNumberRenderable | undefined) => {
                 gutterRef = node
                 queueSync()
               }}
+              position="absolute"
+              top={0}
+              left={0}
               width="100%"
               height={viewportHeight()}
               minHeight={viewportHeight()}
@@ -1072,12 +1070,6 @@ export function Buffer(props: BufferProps) {
                 onContentChange={handleContentChange}
               />
             </line_number>
-            {/* Bottom spacer that provides virtual height for the scrollbox */}
-            <box
-              height={Math.max(0, totalRows() - scrollTop() - viewportHeight())}
-              minHeight={Math.max(0, totalRows() - scrollTop() - viewportHeight())}
-              maxHeight={Math.max(0, totalRows() - scrollTop() - viewportHeight())}
-            />
           </box>
         </OriScrollbox>
         <SelectPopup viewModel={autocomplete.viewModel} />

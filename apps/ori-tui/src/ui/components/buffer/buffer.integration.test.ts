@@ -1,7 +1,7 @@
-import { ScrollBoxRenderable, TextareaRenderable } from "@opentui/core"
 import { describe, expect, test } from "bun:test"
+import { LineNumberRenderable, type ScrollBoxRenderable, type TextareaRenderable } from "@opentui/core"
 import type { MountedTuiApp } from "../../../test/opentui-harness"
-import { readFrameLineTokens, readFrameLines } from "../../../test/opentui-test-tools"
+import { findRequiredNode, readFrameLines, readFrameLineTokens } from "../../../test/opentui-test-tools"
 import type { BufferContext } from "./buffer"
 import { getBufferScrollbox, getBufferTextarea, mountBuffer } from "./buffer.test-tools"
 
@@ -97,6 +97,14 @@ function readVisibleLines(app: MountedTuiApp) {
     .map((line) => line.replace(/\s+$/, ""))
     .filter((line) => line.trim().length > 0)
     .map(stripRenderedLineNumberPrefix)
+}
+
+function getBufferLineNumber(app: MountedTuiApp) {
+  return findRequiredNode(
+    app,
+    (node): node is LineNumberRenderable => node instanceof LineNumberRenderable,
+    "Buffer line number was not rendered",
+  )
 }
 
 function captureCursorState(
@@ -225,7 +233,7 @@ GO`
   })
 
   test("keeps buffer context aligned with OpenTUI cursor after mouse clicks", async () => {
-    const text = Array.from({ length: 20 }, (_, i) => `line-${i}`).join("\n") + "\n"
+    const text = `${Array.from({ length: 20 }, (_, i) => `line-${i}`).join("\n")}\n`
     const clickColumnOffset = 2
     const initialClickRowOffset = 2
     const scrolledClickRowOffset = 1
@@ -320,6 +328,71 @@ GO`
     }
   })
 
+  test("keeps the rendered editor pinned to the viewport during burst enter spam", async () => {
+    const line =
+      'select author_id, book_id, created_at, updated_at from books where title like "very long wrapped title" and status = "published" order by created_at desc;'
+    const enterPressesBeforeScrollbar = 2
+    const burstEnterPresses = 16
+    const app = await mountBuffer({ text: `${line}\n`, width: 34, height: 8 })
+
+    try {
+      const textarea = getBufferTextarea(app)
+      const scrollbox = getBufferScrollbox(app)
+      const lineNumber = getBufferLineNumber(app)
+      const scrolledFrames = [] as Array<{
+        cursorVisualRow: number
+        frameCursorY: number
+        lineNumberScreenY: number
+        textareaScreenY: number
+        viewportScreenY: number
+        viewportHeight: number
+      }>
+
+      for (let i = 0; i < enterPressesBeforeScrollbar; i += 1) {
+        app.setup.mockInput.pressEnter()
+      }
+      await app.waitFor(() => scrollbox.verticalScrollBar.visible)
+
+      for (let i = 0; i < burstEnterPresses; i += 1) {
+        app.setup.mockInput.pressEnter()
+        await app.setup.renderOnce()
+        if (textarea.scrollY > 0) {
+          const frame = app.setup.captureSpans()
+          scrolledFrames.push({
+            cursorVisualRow: textarea.visualCursor.visualRow,
+            frameCursorY: frame.cursor[1] ?? -1,
+            lineNumberScreenY: lineNumber.screenY,
+            textareaScreenY: textarea.screenY,
+            viewportScreenY: scrollbox.viewport.screenY,
+            viewportHeight: scrollbox.viewport.height,
+          })
+        }
+        await app.setup.renderOnce()
+        if (textarea.scrollY > 0) {
+          const frame = app.setup.captureSpans()
+          scrolledFrames.push({
+            cursorVisualRow: textarea.visualCursor.visualRow,
+            frameCursorY: frame.cursor[1] ?? -1,
+            lineNumberScreenY: lineNumber.screenY,
+            textareaScreenY: textarea.screenY,
+            viewportScreenY: scrollbox.viewport.screenY,
+            viewportHeight: scrollbox.viewport.height,
+          })
+        }
+      }
+
+      expect(scrolledFrames.length).toBeGreaterThan(0)
+      for (const frame of scrolledFrames) {
+        expect(frame.lineNumberScreenY).toBe(frame.viewportScreenY)
+        expect(frame.textareaScreenY).toBe(frame.viewportScreenY)
+        expect(frame.frameCursorY).toBe(frame.textareaScreenY + frame.cursorVisualRow + 1)
+        expect(frame.frameCursorY).toBeLessThanOrEqual(frame.viewportScreenY + frame.viewportHeight)
+      }
+    } finally {
+      app.destroy()
+    }
+  })
+
   test("reclamps the viewport after a scrolled buffer shrinks", async () => {
     const enterPresses = 18
     const arrowUpPresses = 4
@@ -360,8 +433,7 @@ GO`
   test("keeps the final blank line stable after ctrl+e ctrl+u on the last line", async () => {
     const text =
       "select * from authors;\n\nselect * from books limit 10;\n\n\nselect * from authors a\njoin books b on a.id = b.author_id "
-    const expected =
-      "select * from authors;\n\nselect * from books limit 10;\n\n\nselect * from authors a\n"
+    const expected = "select * from authors;\n\nselect * from books limit 10;\n\n\nselect * from authors a\n"
     const app = await mountBuffer({ text, width: 80, height: 20 })
 
     try {
