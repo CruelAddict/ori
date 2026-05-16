@@ -638,7 +638,14 @@ export function Buffer(props: BufferProps) {
     }
 
     const viewport = getViewportRect(scrollRef)
-    syncScrollMetrics(ref, viewport.height)
+    const height = Math.max(1, viewport.height)
+    const maxTop = Math.max(0, getTotalRowsForViewport(ref, height) - height)
+    if (ref.scrollY > maxTop) {
+      setEditorViewport(maxTop, height)
+      return
+    }
+
+    syncScrollMetrics(ref, height)
     syncScrollboxTop(ref.scrollY)
   }
 

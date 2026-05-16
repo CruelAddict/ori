@@ -320,6 +320,42 @@ GO`
     }
   })
 
+  test("reclamps the viewport after a scrolled buffer shrinks", async () => {
+    const enterPresses = 18
+    const arrowUpPresses = 4
+    const backspacePresses = 4
+    const app = await mountBuffer({ text: "", width: 24, height: 8 })
+
+    try {
+      const textarea = getBufferTextarea(app)
+      const scrollbox = getBufferScrollbox(app)
+
+      for (let i = 0; i < enterPresses; i += 1) {
+        app.setup.mockInput.pressEnter()
+      }
+      await app.waitFor(() => textarea.logicalCursor.row === enterPresses)
+      await app.waitFor(() => textarea.scrollY > 0)
+
+      for (let i = 0; i < arrowUpPresses; i += 1) {
+        app.setup.mockInput.pressArrow("up")
+      }
+      await app.waitFor(() => textarea.logicalCursor.row === enterPresses - arrowUpPresses)
+
+      for (let i = 1; i <= backspacePresses; i += 1) {
+        app.setup.mockInput.pressBackspace()
+        await app.waitFor(() => textarea.logicalCursor.row === enterPresses - arrowUpPresses - i)
+
+        const state = captureScrollState(textarea, scrollbox)
+        const maxTop = Math.max(0, state.totalVirtualLineCount - state.editorHeight)
+        expectScrollStateAligned(state)
+        expect(state.editorScrollY).toBeLessThanOrEqual(maxTop)
+        expect(state.scrollboxTop).toBeLessThanOrEqual(maxTop)
+      }
+    } finally {
+      app.destroy()
+    }
+  })
+
   // Working around opentui bug
   test("keeps the final blank line stable after ctrl+e ctrl+u on the last line", async () => {
     const text =
