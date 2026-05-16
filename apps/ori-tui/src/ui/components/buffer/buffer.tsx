@@ -1044,8 +1044,8 @@ export function Buffer(props: BufferProps) {
                 initialValue={props.initialText}
                 textColor={palette().get("editor_text")}
                 focusedTextColor={palette().get("editor_text")}
-                backgroundColor={palette().get("editor_background")}
-                focusedBackgroundColor={palette().get("editor_background")}
+                backgroundColor="transparent"
+                focusedBackgroundColor="transparent"
                 cursorColor={palette().get("editor_cursor")}
                 wrapMode="char"
                 selectable={true}
