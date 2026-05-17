@@ -1,3 +1,4 @@
+export type { AnalysisHost, AnalysisSession, BufferAnalysis } from "./analysis"
 export type {
   BufferAutocompleteItem,
   BufferAutocompleteProvider,

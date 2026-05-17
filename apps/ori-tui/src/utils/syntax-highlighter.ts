@@ -9,7 +9,7 @@ import sqlHighlights from "../assets/highlights.scm" with { type: "file" }
 import sqlWasm from "../assets/tree-sitter-sql.wasm" with { type: "file" }
 import { collectSqlQueries as collectSqlHighlightStatements } from "../ui/widgets/editor-panel/sql-statement-detector"
 
-type SyntaxThemePalette = {
+export type SyntaxThemePalette = {
   get(group: string): string
 }
 

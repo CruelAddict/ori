@@ -1,8 +1,10 @@
-import { Buffer, type BufferApi, type BufferContext } from "@ui/components/buffer"
+import { Buffer, type BufferContext } from "@ui/components/buffer"
+import { useLogger } from "@ui/providers/logger"
 import { useTheme } from "@ui/providers/theme"
 import { type KeyBinding, KeyScope } from "@ui/services/key-scopes"
 import { useStatusline } from "@ui/widgets/statusline/statusline-context"
-import { createMemo, createSignal, onMount } from "solid-js"
+import { createMemo, createSignal, onCleanup, onMount } from "solid-js"
+import { createSqlSupport } from "./sql-support"
 import type { EditorPaneViewModel } from "./view-model/create-vm"
 
 const EMPTY_MARKERS = new Map<number, string>()
@@ -13,19 +15,28 @@ export type EditorPanelProps = {
 
 export function EditorPanel(props: EditorPanelProps) {
   const pane = props.viewModel
+  const logger = useLogger()
   const statusline = useStatusline()
   const { theme } = useTheme()
-  let bufferApi: BufferApi | undefined
   const [bufferContext, setBufferContext] = createSignal<BufferContext>()
   const cursorLine = createMemo(() => bufferContext()?.focusedRow ?? -1)
   const hasCursor = createMemo(() => bufferContext()?.cursorOffset !== undefined)
+  const support = createSqlSupport({
+    theme,
+    logger,
+    getSchemaState: pane.getSchemaState,
+  })
+
+  onCleanup(() => {
+    support.dispose()
+  })
 
   onMount(() => {
     statusline.fileOpenedInBuffer(pane.filePath())
   })
 
   const baseGutterMarkers = createMemo(() => {
-    const analysis = pane.statementAnalysis.current()
+    const analysis = support.snapshot()
     if (!analysis || analysis.queries.length < 2) {
       return EMPTY_MARKERS
     }
@@ -34,7 +45,7 @@ export function EditorPanel(props: EditorPanelProps) {
   })
 
   const activeMarkerLine = createMemo(() => {
-    const analysis = pane.statementAnalysis.current()
+    const analysis = support.snapshot()
     if (!analysis || !hasCursor()) {
       return -1
     }
@@ -57,7 +68,6 @@ export function EditorPanel(props: EditorPanelProps) {
 
   const handleContextChange = (context: BufferContext) => {
     setBufferContext(context)
-    pane.statementAnalysis.analyze(context.text, context.documentVersion)
   }
 
   const handleTextChange = (text: string, info: { modified: boolean }) => {
@@ -77,7 +87,8 @@ export function EditorPanel(props: EditorPanelProps) {
       mode: "leader",
       description: "Execute query",
       handler: () => {
-        void pane.executeQuery(bufferApi?.getCursorOffset())
+        const context = bufferContext()
+        void pane.executeQuery(context?.cursorOffset, support.snapshot())
       },
       preventDefault: true,
       commandPaletteSection: "Query",
@@ -98,17 +109,14 @@ export function EditorPanel(props: EditorPanelProps) {
       >
         <Buffer
           initialText={pane.queryText()}
-          language="sql"
           isFocused={pane.isFocused}
           onTextChange={handleTextChange}
           onUnfocus={handleUnfocus}
           focusSelf={pane.focusSelf}
-          registerApi={(api) => {
-            bufferApi = api
-          }}
           onContextChange={handleContextChange}
           gutterMarkers={gutterMarkers}
-          autocomplete={pane.autocomplete}
+          autocomplete={support.autocomplete}
+          analysis={support.analysis}
         />
       </box>
     </KeyScope>

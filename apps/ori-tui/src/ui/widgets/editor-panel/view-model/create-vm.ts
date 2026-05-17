@@ -1,11 +1,11 @@
-import type { BufferAutocompleteProvider } from "@ui/components/buffer"
 import type { QueryJob, QueryUsecase } from "@usecase/query/usecase"
 import { getScriptFilePath, readScript, writeScript } from "@usecase/script/storage"
 import { buildLineStarts } from "@utils/line-offsets"
 import type { Accessor } from "solid-js"
 import { createMemo, createSignal, onCleanup, onMount } from "solid-js"
-import type { StatementAnalysis } from "../sql-editor-bg-worker-adapter"
-import { resolveSqlQueryAtOffset } from "../sql-statement-detector"
+import { resolveSqlQueryAtOffset, type SqlAnalysisSnapshot } from "../sql-analysis"
+import type { SqlEditorSchemaState } from "../sql-editor-protocol"
+import { resolveSqlQueryAtOffset as resolveSqlQueryAtOffsetFallback } from "../sql-statement-detector"
 
 type Query = Pick<
   QueryUsecase,
@@ -17,10 +17,9 @@ export type EditorPaneViewModel = {
   currentJob: Accessor<QueryJob | undefined>
   isExecuting: Accessor<boolean>
   filePath: Accessor<string>
-  autocomplete: BufferAutocompleteProvider
-  statementAnalysis: StatementAnalysis
+  getSchemaState: () => SqlEditorSchemaState
   onQueryChange: (text: string) => void
-  executeQuery: (cursorOffset?: number) => Promise<void>
+  executeQuery: (cursorOffset?: number, snapshot?: SqlAnalysisSnapshot) => Promise<void>
   cancelQuery: () => Promise<void>
   saveQuery: () => boolean
   isFocused: Accessor<boolean>
@@ -31,8 +30,7 @@ export type EditorPaneViewModel = {
 type CreateVMOptions = {
   query: Query
   resourceName: Accessor<string>
-  autocomplete: BufferAutocompleteProvider
-  statementAnalysis: StatementAnalysis
+  getSchemaState: () => SqlEditorSchemaState
   isFocused: Accessor<boolean>
   focusSelf: () => void
   unfocus: () => void
@@ -59,7 +57,7 @@ export function createVM(options: CreateVMOptions): EditorPaneViewModel {
     options.query.setQueryText(text)
   }
 
-  const executeQuery = async (cursorOffset?: number) => {
+  const executeQuery = async (cursorOffset?: number, snapshot?: SqlAnalysisSnapshot) => {
     const text = queryText()
     if (!text.trim()) {
       return
@@ -70,7 +68,11 @@ export function createVM(options: CreateVMOptions): EditorPaneViewModel {
       return
     }
 
-    const resolution = resolveSqlQueryAtOffset(text, buildLineStarts(text), cursorOffset)
+    const lineStarts = buildLineStarts(text)
+    const resolution =
+      snapshot === undefined
+        ? resolveSqlQueryAtOffsetFallback(text, lineStarts, cursorOffset)
+        : resolveSqlQueryAtOffset(snapshot, lineStarts, text, cursorOffset)
     if (resolution.kind === "ambiguous") {
       options.query.failQuery(text, "cannot execute query when multiple queries share the cursor line")
       return
@@ -115,8 +117,7 @@ export function createVM(options: CreateVMOptions): EditorPaneViewModel {
     currentJob,
     isExecuting,
     filePath,
-    autocomplete: options.autocomplete,
-    statementAnalysis: options.statementAnalysis,
+    getSchemaState: options.getSchemaState,
     onQueryChange,
     executeQuery,
     cancelQuery,

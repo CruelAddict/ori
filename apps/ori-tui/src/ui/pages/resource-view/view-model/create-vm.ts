@@ -1,12 +1,10 @@
 import type { Resource } from "@model/resource"
-import { createSqlEditorBgWorkerAdapter } from "@ui/widgets/editor-panel/sql-editor-bg-worker-adapter"
 import { createVM as createEditorVM } from "@ui/widgets/editor-panel/view-model/create-vm"
 import { createVM as createExplorerVM } from "@ui/widgets/explorer/view-model/create-vm"
 import { createVM as createResultsVM } from "@ui/widgets/results-panel/view-model/create-vm"
 import type { ResourceIntrospectionUsecase } from "@usecase/introspection/usecase"
-import type { Logger } from "pino"
 import type { Accessor } from "solid-js"
-import { createEffect, createMemo, createSignal, onCleanup } from "solid-js"
+import { createEffect, createMemo, createSignal } from "solid-js"
 
 type EditorDeps = Parameters<typeof createEditorVM>[0]
 
@@ -15,7 +13,6 @@ type CreateVMOptions = {
   resource: Accessor<Resource | undefined>
   query: EditorDeps["query"]
   introspection: Pick<ResourceIntrospectionUsecase, "subscribe" | "getState" | "load" | "refresh" | "ensureNodes">
-  logger: Logger
 }
 
 export type Pane = "explorer" | "editor" | "results"
@@ -98,20 +95,10 @@ export function createVM(options: CreateVMOptions) {
     ...paneFocusFuncs("explorer"),
   })
 
-  const sqlEditorBgWorker = createSqlEditorBgWorkerAdapter({
-    getState: options.introspection.getState,
-    logger: options.logger,
-  })
-
-  onCleanup(() => {
-    sqlEditorBgWorker.dispose()
-  })
-
   const editorPane = createEditorVM({
     query: options.query,
     resourceName: options.resourceName,
-    autocomplete: sqlEditorBgWorker.autocomplete,
-    statementAnalysis: sqlEditorBgWorker.statementAnalysis,
+    getSchemaState: options.introspection.getState,
     ...paneFocusFuncs("editor"),
     unfocus: focusPreviousVisiblePane,
   })

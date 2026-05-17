@@ -50,7 +50,6 @@ export function ResourceViewPage(props: ResourceViewPageProps) {
     resource,
     query,
     introspection,
-    logger,
   })
   const { theme } = useTheme()
   const palette = theme

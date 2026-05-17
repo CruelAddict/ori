@@ -8,7 +8,6 @@ import { lineCharOffsetToDisplayColumn } from "./text-metrics"
 
 export type StatementEntry = SqlStatement & {
   id: string
-  text: string
   spans: SyntaxHighlightSpan[]
   dirty: boolean
   highlightVersion: number
@@ -29,7 +28,16 @@ export type StatementBatch = {
   text: string
 }
 
-function stablePrefixCount(previous: readonly StatementEntry[], next: readonly SqlStatement[], text: string) {
+function readStatementText(text: string, statement: SqlStatement) {
+  return text.slice(statement.start, statement.end)
+}
+
+function stablePrefixCount(
+  previous: readonly StatementEntry[],
+  previousText: string,
+  next: readonly SqlStatement[],
+  nextText: string,
+) {
   let count = 0
   for (; count < previous.length && count < next.length; count += 1) {
     const entry = previous[count]
@@ -37,7 +45,7 @@ function stablePrefixCount(previous: readonly StatementEntry[], next: readonly S
     if (!entry || !query) {
       break
     }
-    if (entry.text !== text.slice(query.start, query.end)) {
+    if (readStatementText(previousText, entry) !== readStatementText(nextText, query)) {
       break
     }
   }
@@ -46,9 +54,10 @@ function stablePrefixCount(previous: readonly StatementEntry[], next: readonly S
 
 function stableSuffixCount(
   previous: readonly StatementEntry[],
+  previousText: string,
   next: readonly SqlStatement[],
   prefix: number,
-  text: string,
+  nextText: string,
 ) {
   let count = 0
   for (; count < previous.length - prefix && count < next.length - prefix; count += 1) {
@@ -57,7 +66,7 @@ function stableSuffixCount(
     if (!entry || !query) {
       break
     }
-    if (entry.text !== text.slice(query.start, query.end)) {
+    if (readStatementText(previousText, entry) !== readStatementText(nextText, query)) {
       break
     }
   }
@@ -101,13 +110,14 @@ export function buildStatementCache(
   text: string,
   lineStarts: number[],
   previous: readonly StatementEntry[],
+  previousText: string,
   nextId: () => string,
   syntaxStyle: SyntaxStyle,
   version: number,
 ): StatementCache {
   const queries = collectSqlQueries(text, lineStarts)
-  const prefix = stablePrefixCount(previous, queries, text)
-  const suffix = stableSuffixCount(previous, queries, prefix, text)
+  const prefix = stablePrefixCount(previous, previousText, queries, text)
+  const suffix = stableSuffixCount(previous, previousText, queries, prefix, text)
   const statements = new Array<StatementEntry>(queries.length)
 
   for (let index = 0; index < prefix; index += 1) {
@@ -119,7 +129,6 @@ export function buildStatementCache(
     statements[index] = {
       ...query,
       id: entry.id,
-      text: text.slice(query.start, query.end),
       spans: shiftStatementSpans(entry.spans, query.start - entry.start),
       dirty: needsStatementHighlight(entry),
       highlightVersion: entry.highlightVersion,
@@ -136,14 +145,14 @@ export function buildStatementCache(
     }
     const previousEntry = previous[middlePreviousStart + (index - prefix)]
     const nextText = text.slice(query.start, query.end)
-    const reuseSpans = !!previousEntry && shouldReuseChangedStatementSpans(previousEntry.text, nextText)
+    const previousStatementText = previousEntry ? previousText.slice(previousEntry.start, previousEntry.end) : undefined
+    const reuseSpans = !!previousStatementText && shouldReuseChangedStatementSpans(previousStatementText, nextText)
     statements[index] = {
       ...query,
       id: previousEntry?.id ?? nextId(),
-      text: nextText,
       spans:
         reuseSpans && previousEntry ? shiftStatementSpans(previousEntry.spans, query.start - previousEntry.start) : [],
-      dirty: previousEntry?.text !== nextText || needsStatementHighlight(previousEntry),
+      dirty: previousStatementText !== nextText || needsStatementHighlight(previousEntry),
       highlightVersion: previousEntry
         ? reuseSpans
           ? previousEntry.highlightVersion
@@ -162,7 +171,6 @@ export function buildStatementCache(
     statements[index] = {
       ...query,
       id: entry.id,
-      text: text.slice(query.start, query.end),
       spans: shiftStatementSpans(entry.spans, query.start - entry.start),
       dirty: needsStatementHighlight(entry),
       highlightVersion: entry.highlightVersion,

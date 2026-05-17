@@ -1,9 +1,12 @@
 import { ScrollBoxRenderable, TextareaRenderable } from "@opentui/core"
-import { createComponent } from "solid-js"
+import { useLogger } from "@ui/providers/logger"
+import { useTheme } from "@ui/providers/theme"
+import { createSqlAnalysis } from "@ui/widgets/editor-panel/sql-analysis"
+import { createComponent, onCleanup } from "solid-js"
+import { type MountedTuiApp, mountInTui } from "../../../test/opentui-harness"
 import { findRequiredNode, requirePresent } from "../../../test/opentui-test-tools"
-import { mountInTui, type MountedTuiApp } from "../../../test/opentui-harness"
-import { Buffer, type BufferApi, type BufferContext } from "./buffer"
 import type { BufferAutocompleteProvider } from "./autocomplete/types"
+import { Buffer, type BufferApi, type BufferContext } from "./buffer"
 
 type MountBufferOptions = {
   text?: string
@@ -21,16 +24,29 @@ export type MountedBufferWithApi = {
 function renderBuffer(options: MountBufferOptions, registerApi?: (api: BufferApi) => void) {
   return mountInTui(
     () =>
-      createComponent(Buffer, {
-        initialText: options.text ?? "",
-        language: "sql",
-        isFocused: () => true,
-        onTextChange: () => { },
-        focusSelf: () => { },
-        onContextChange: options.onContextChange,
-        autocomplete: options.autocomplete,
-        registerApi,
-      }),
+      createComponent(() => {
+        const { theme } = useTheme()
+        const logger = useLogger()
+        const analysis = createSqlAnalysis({
+          theme,
+          logger,
+        })
+
+        onCleanup(() => {
+          analysis.dispose()
+        })
+
+        return createComponent(Buffer, {
+          initialText: options.text ?? "",
+          isFocused: () => true,
+          onTextChange: () => {},
+          focusSelf: () => {},
+          onContextChange: options.onContextChange,
+          autocomplete: options.autocomplete,
+          analysis: analysis.analysis,
+          registerApi,
+        })
+      }, {}),
     { width: options.width, height: options.height },
   )
 }
@@ -51,11 +67,7 @@ export async function mountBufferWithApi(options: MountBufferOptions): Promise<M
   }
 }
 
-export async function mountText(
-  mounted: MountedBufferWithApi,
-  textarea: TextareaRenderable,
-  text: string,
-) {
+export async function mountText(mounted: MountedBufferWithApi, textarea: TextareaRenderable, text: string) {
   mounted.api.setText(text)
   await mounted.app.waitFor(() => textarea.plainText === text)
 }
@@ -75,9 +87,7 @@ export async function moveCursor(app: MountedTuiApp, textarea: TextareaRenderabl
     textarea.editBuffer.setCursor(targetRow, targetCol)
     textarea.requestRender()
   }
-  await app.waitFor(
-    () => textarea.logicalCursor.row === targetRow && textarea.logicalCursor.col === targetCol,
-  )
+  await app.waitFor(() => textarea.logicalCursor.row === targetRow && textarea.logicalCursor.col === targetCol)
 }
 
 export function getBufferTextarea(app: MountedTuiApp) {

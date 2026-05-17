@@ -1,21 +1,9 @@
 import type { BufferAutocompleteProvider, BufferAutocompleteResult } from "@ui/components/buffer"
 import type { Logger } from "pino"
-import { type Accessor, createSignal } from "solid-js"
-import type {
-  SqlEditorRequest,
-  SqlEditorResponse,
-  SqlEditorSchemaState,
-  SqlStatementAnalysisResult,
-} from "./sql-editor-protocol"
-
-export type StatementAnalysis = {
-  current: Accessor<SqlStatementAnalysisResult | undefined>
-  analyze: (text: string, version: number) => void
-}
+import type { SqlEditorRequest, SqlEditorResponse, SqlEditorSchemaState } from "./sql-editor-protocol"
 
 export type SqlEditorBgWorkerAdapter = {
   autocomplete: BufferAutocompleteProvider
-  statementAnalysis: StatementAnalysis
   dispose: () => void
 }
 
@@ -36,7 +24,6 @@ type QueuedAutocomplete = {
 export function createSqlEditorBgWorkerAdapter(
   options: CreateSqlEditorBgWorkerAdapterOptions,
 ): SqlEditorBgWorkerAdapter {
-  const [statementAnalysisState, setStatementAnalysisState] = createSignal<SqlStatementAnalysisResult>()
   const workerPath =
     import.meta.url === "file:///$bunfs/root/src/index.js"
       ? "/$bunfs/root/src/ui/widgets/editor-panel/sql-editor.worker.js"
@@ -50,8 +37,6 @@ export function createSqlEditorBgWorkerAdapter(
   let cachedRootIds: SqlEditorSchemaState["rootIds"] | undefined
   let cachedLoading: SqlEditorSchemaState["loading"] | undefined
   let cachedLoaded: SqlEditorSchemaState["loaded"] | undefined
-  let latestAnalysisRequestId = -1
-  let latestAnalysisVersion = -1
   let activeAutocomplete: { id: number; request: QueuedAutocomplete } | undefined
   let queuedAutocomplete: QueuedAutocomplete | undefined
 
@@ -182,36 +167,6 @@ export function createSqlEditorBgWorkerAdapter(
     options.logger?.error({ workerPath, data: event.data }, "sql-editor-bg-worker-adapter: worker messageerror")
   }
 
-  const analyze = (text: string, version: number) => {
-    if (disposed || !workerAlive || version === latestAnalysisVersion) {
-      return
-    }
-
-    latestAnalysisVersion = version
-    const id = nextId
-    nextId += 1
-    latestAnalysisRequestId = id
-    pending.set(id, (message) => {
-      if (!message) {
-        return
-      }
-      if (message.type !== "analyze") {
-        return
-      }
-      if (message.id !== latestAnalysisRequestId) {
-        return
-      }
-
-      setStatementAnalysisState(message.result)
-    })
-    postRequest({
-      id,
-      type: "analyze",
-      text,
-      version,
-    })
-  }
-
   const autocomplete: BufferAutocompleteProvider = {
     getCompletions: ({ text, cursor, signal }) => {
       if (disposed || signal.aborted) {
@@ -254,11 +209,6 @@ export function createSqlEditorBgWorkerAdapter(
     },
   }
 
-  const statementAnalysis: StatementAnalysis = {
-    current: statementAnalysisState,
-    analyze,
-  }
-
   const dispose = () => {
     if (disposed) {
       return
@@ -272,7 +222,6 @@ export function createSqlEditorBgWorkerAdapter(
 
   return {
     autocomplete,
-    statementAnalysis,
     dispose,
   }
 }
