@@ -27,7 +27,31 @@ type ParseState =
   | { kind: "double-quote" }
   | { kind: "dollar-quote"; tag: string }
 
+type StatementRoot = "none" | "query" | "insert" | "create" | "other"
+
+type StatementContinuation =
+  | { kind: "with-consumer" }
+  | { kind: "insert-source" }
+  | { kind: "insert-default-values" }
+  | { kind: "query-root" }
+  | { kind: "create-as-query" }
+  | { kind: "explain-statement" }
+
+type CreateMode = "none" | "pending-kind" | "materialized" | "query-capable" | "other"
+
+type StatementScanState = {
+  root: StatementRoot
+  continuation: StatementContinuation | undefined
+  createMode: CreateMode
+  inQueryBody: boolean
+}
+
 const WHITESPACE_RE = /\s/
+
+const QUERY_START_KEYWORDS = new Set(["with", "select", "values"])
+const WITH_CONSUMER_KEYWORDS = new Set(["select", "values", "insert", "update", "delete"])
+const QUERY_COMPOUND_KEYWORDS = new Set(["union", "intersect", "except"])
+const CREATE_PREFIX_KEYWORDS = new Set(["temp", "temporary", "or", "replace", "if", "not", "exists"])
 
 const SQL_START_KEYWORDS = new Set(
   [
@@ -150,6 +174,220 @@ function buildQueryStartLineByLine(queries: SqlStatement[], lineCount: number) {
   return lines
 }
 
+function createStatementScanState(): StatementScanState {
+  return {
+    root: "none",
+    continuation: undefined,
+    createMode: "none",
+    inQueryBody: false,
+  }
+}
+
+function applyStatementRoot(state: StatementScanState, token: string) {
+  state.inQueryBody = false
+  state.createMode = "none"
+
+  if (token === "with") {
+    state.root = "other"
+    state.continuation = { kind: "with-consumer" }
+    return
+  }
+
+  if (token === "select" || token === "values") {
+    state.root = "query"
+    state.continuation = undefined
+    state.inQueryBody = true
+    return
+  }
+
+  if (token === "insert") {
+    state.root = "insert"
+    state.continuation = { kind: "insert-source" }
+    return
+  }
+
+  if (token === "create") {
+    state.root = "create"
+    state.continuation = undefined
+    state.createMode = "pending-kind"
+    return
+  }
+
+  if (token === "explain") {
+    state.root = "other"
+    state.continuation = { kind: "explain-statement" }
+    return
+  }
+
+  state.root = "other"
+  state.continuation = undefined
+}
+
+function advanceCreateMode(state: StatementScanState, token: string) {
+  if (state.root !== "create") {
+    return
+  }
+
+  if (state.createMode === "pending-kind") {
+    if (CREATE_PREFIX_KEYWORDS.has(token)) {
+      return
+    }
+    if (token === "materialized") {
+      state.createMode = "materialized"
+      return
+    }
+    if (token === "table" || token === "view") {
+      state.createMode = "query-capable"
+      return
+    }
+    state.createMode = "other"
+    return
+  }
+
+  if (state.createMode === "materialized") {
+    state.createMode = token === "view" ? "query-capable" : "other"
+    return
+  }
+
+  if (state.createMode !== "query-capable") {
+    return
+  }
+
+  if (token === "as") {
+    state.continuation = { kind: "create-as-query" }
+  }
+}
+
+function consumeStatementContinuation(state: StatementScanState, token: string) {
+  const continuation = state.continuation
+  if (!continuation) {
+    return false
+  }
+
+  if (continuation.kind === "insert-source") {
+    if (token === "default") {
+      state.continuation = { kind: "insert-default-values" }
+      return true
+    }
+    if (token === "with") {
+      state.continuation = { kind: "with-consumer" }
+      return true
+    }
+    if (token === "select") {
+      state.continuation = undefined
+      state.inQueryBody = true
+      return true
+    }
+    if (token === "values") {
+      state.continuation = undefined
+      return true
+    }
+    return false
+  }
+
+  if (continuation.kind === "insert-default-values") {
+    if (token !== "values") {
+      return false
+    }
+    state.continuation = undefined
+    return true
+  }
+
+  if (continuation.kind === "with-consumer") {
+    if (!WITH_CONSUMER_KEYWORDS.has(token)) {
+      return false
+    }
+    applyStatementRoot(state, token)
+    return true
+  }
+
+  if (continuation.kind === "query-root" || continuation.kind === "create-as-query") {
+    if (!QUERY_START_KEYWORDS.has(token)) {
+      return false
+    }
+    applyStatementRoot(state, token)
+    return true
+  }
+
+  if (continuation.kind === "explain-statement") {
+    if (token === "analyze") {
+      return true
+    }
+    if (!SQL_START_KEYWORDS.has(token)) {
+      return false
+    }
+    applyStatementRoot(state, token)
+    return true
+  }
+
+  return false
+}
+
+function updateStatementScanState(state: StatementScanState, token: string) {
+  if (state.root === "none") {
+    applyStatementRoot(state, token)
+    return
+  }
+
+  if (consumeStatementContinuation(state, token)) {
+    return
+  }
+
+  if (state.inQueryBody && QUERY_COMPOUND_KEYWORDS.has(token)) {
+    state.inQueryBody = false
+    state.continuation = { kind: "query-root" }
+    return
+  }
+
+  advanceCreateMode(state, token)
+}
+
+function shouldKeepStatementContinuation(state: StatementScanState, nextToken: string) {
+  const continuation = state.continuation
+  if (!continuation) {
+    return false
+  }
+
+  if (continuation.kind === "with-consumer") {
+    return WITH_CONSUMER_KEYWORDS.has(nextToken)
+  }
+
+  if (continuation.kind === "insert-source") {
+    return nextToken === "default" || nextToken === "with" || nextToken === "select" || nextToken === "values"
+  }
+
+  if (continuation.kind === "insert-default-values") {
+    return nextToken === "values"
+  }
+
+  if (continuation.kind === "query-root" || continuation.kind === "create-as-query") {
+    return QUERY_START_KEYWORDS.has(nextToken)
+  }
+
+  if (continuation.kind === "explain-statement") {
+    return nextToken === "analyze" || SQL_START_KEYWORDS.has(nextToken)
+  }
+
+  return false
+}
+
+function readWordToken(text: string, start: number) {
+  const first = text[start]
+  if (!first || !/[A-Za-z_]/.test(first)) {
+    return undefined
+  }
+
+  let end = start + 1
+  while (end < text.length && /[A-Za-z0-9_$]/.test(text[end]!)) {
+    end += 1
+  }
+
+  return {
+    token: text.slice(start, end).toLowerCase(),
+    end,
+  }
+}
+
 function findLikelyKeywordAfterNewline(text: string, start: number, end: number) {
   let i = start
 
@@ -205,8 +443,30 @@ function findLikelyKeywordAfterNewline(text: string, start: number, end: number)
     return {
       gapStart: start,
       nextStart: tokenStart,
+      token,
     }
   }
+}
+
+function findStandaloneGoLineEnd(text: string, start: number, end: number) {
+  if (start > 0 && text[start - 1] !== "\n") {
+    return undefined
+  }
+
+  let lineEnd = start
+  while (lineEnd < end && text[lineEnd] !== "\n") {
+    lineEnd += 1
+  }
+
+  if (!/^go$/i.test(text.slice(start, lineEnd).trim())) {
+    return undefined
+  }
+
+  if (lineEnd >= end) {
+    return lineEnd
+  }
+
+  return lineEnd + 1
 }
 
 function collectStatementSpans(text: string): Span[] {
@@ -215,7 +475,7 @@ function collectStatementSpans(text: string): Span[] {
   let segmentStart = 0
   let state: ParseState = { kind: "normal" }
   let leadingToken = getLeadingToken(text, { start: segmentStart, end: spanEnd })
-  let allowWithContinuation = leadingToken?.token === "with"
+  let statementState = createStatementScanState()
   let depth = 0
 
   let i = 0
@@ -224,6 +484,21 @@ function collectStatementSpans(text: string): Span[] {
     const next = text[i + 1]
 
     if (state.kind === "normal") {
+      if (depth === 0) {
+        const goLineEnd = findStandaloneGoLineEnd(text, i, spanEnd)
+        if (goLineEnd !== undefined) {
+          const trimmed = trimSpan(text, { start: segmentStart, end: i })
+          if (trimmed) {
+            segments.push(trimmed)
+          }
+          segmentStart = goLineEnd
+          leadingToken = getLeadingToken(text, { start: segmentStart, end: spanEnd })
+          statementState = createStatementScanState()
+          i = goLineEnd
+          continue
+        }
+      }
+
       if (ch === "-" && next === "-") {
         state = { kind: "line-comment" }
         i += 2
@@ -257,7 +532,7 @@ function collectStatementSpans(text: string): Span[] {
         }
         segmentStart = i + 1
         leadingToken = getLeadingToken(text, { start: segmentStart, end: spanEnd })
-        allowWithContinuation = leadingToken?.token === "with"
+        statementState = createStatementScanState()
         depth = 0
         i++
         continue
@@ -272,6 +547,14 @@ function collectStatementSpans(text: string): Span[] {
         i++
         continue
       }
+      if (depth === 0) {
+        const word = readWordToken(text, i)
+        if (word) {
+          updateStatementScanState(statementState, word.token)
+          i = word.end
+          continue
+        }
+      }
       if (ch === "\n" && depth === 0) {
         const next = findLikelyKeywordAfterNewline(text, i + 1, spanEnd)
         const canSplitAtNewline =
@@ -279,20 +562,16 @@ function collectStatementSpans(text: string): Span[] {
           hasNonWhitespace(text, segmentStart, next.gapStart) &&
           leadingToken !== undefined &&
           leadingToken.tokenStart < next.gapStart &&
-          SQL_START_KEYWORDS.has(leadingToken.token)
+          SQL_START_KEYWORDS.has(leadingToken.token) &&
+          !shouldKeepStatementContinuation(statementState, next.token)
         if (canSplitAtNewline && next) {
-          if (leadingToken?.token === "with" && allowWithContinuation) {
-            allowWithContinuation = false
-            i++
-            continue
-          }
           const trimmed = trimSpan(text, { start: segmentStart, end: next.gapStart })
           if (trimmed) {
             segments.push(trimmed)
           }
           segmentStart = next.nextStart
           leadingToken = getLeadingToken(text, { start: segmentStart, end: spanEnd })
-          allowWithContinuation = leadingToken?.token === "with"
+          statementState = createStatementScanState()
           i = next.nextStart
           continue
         }

@@ -111,6 +111,143 @@ describe("sql statement detector", () => {
     )
   })
 
+  test("splits standalone GO batches even when surrounding statements omit semicolons", () => {
+    const sql = `if exists (select 1)
+drop procedure old_proc
+GO
+ALTER TABLE link_table
+ADD PRIMARY KEY (
+  owner_id,
+  group_id
+)
+GO
+ALTER TABLE link_table
+ADD FOREIGN KEY (
+  group_id
+) REFERENCES group_table (
+  group_id
+)`
+    const queries = collectSqlQueries(sql, buildLineStarts(sql)).map((query) => sql.slice(query.start, query.end))
+
+    expect(queries).toEqual([
+      `if exists (select 1)
+drop procedure old_proc`,
+      `ALTER TABLE link_table
+ADD PRIMARY KEY (
+  owner_id,
+  group_id
+)`,
+      `ALTER TABLE link_table
+ADD FOREIGN KEY (
+  group_id
+) REFERENCES group_table (
+  group_id
+)`,
+    ])
+  })
+
+  test("splits consecutive multiline insert statements without semicolons", () => {
+    const sql = `INSERT INTO "Records"
+("Id","Code","Label")
+VALUES (1,N'alpha',N'one')
+INSERT INTO "Records"
+("Id","Code","Label")
+VALUES (2,N'beta',N'two')
+INSERT INTO "Records"
+("Id","Code","Label")
+VALUES (3,N'gamma',N'three' `
+    const queries = collectSqlQueries(sql, buildLineStarts(sql)).map((query) => sql.slice(query.start, query.end))
+
+    expect(queries).toEqual([
+      `INSERT INTO "Records"
+("Id","Code","Label")
+VALUES (1,N'alpha',N'one')`,
+      `INSERT INTO "Records"
+("Id","Code","Label")
+VALUES (2,N'beta',N'two')`,
+      `INSERT INTO "Records"
+("Id","Code","Label")
+VALUES (3,N'gamma',N'three'`,
+    ])
+  })
+
+  test("keeps insert source started by WITH in the same statement", () => {
+    const sql = `INSERT INTO records
+WITH src AS (SELECT 1 AS id)
+SELECT id FROM src
+INSERT INTO records
+VALUES (2)`
+    const queries = collectSqlQueries(sql, buildLineStarts(sql)).map((query) => sql.slice(query.start, query.end))
+
+    expect(queries).toEqual([
+      `INSERT INTO records
+WITH src AS (SELECT 1 AS id)
+SELECT id FROM src`,
+      `INSERT INTO records
+VALUES (2)`,
+    ])
+  })
+
+  test("keeps WITH plus INSERT SELECT in the same statement", () => {
+    const sql = `WITH src AS (SELECT 1 AS id)
+INSERT INTO records
+SELECT id FROM src
+SELECT 2`
+    const queries = collectSqlQueries(sql, buildLineStarts(sql)).map((query) => sql.slice(query.start, query.end))
+
+    expect(queries).toEqual([
+      `WITH src AS (SELECT 1 AS id)
+INSERT INTO records
+SELECT id FROM src`,
+      `SELECT 2`,
+    ])
+  })
+
+  test("keeps CREATE TABLE AS query bodies attached without semicolons", () => {
+    const sql = `CREATE TEMP TABLE recent AS
+WITH src AS (SELECT 1 AS id)
+SELECT id FROM src
+SELECT 2`
+    const queries = collectSqlQueries(sql, buildLineStarts(sql)).map((query) => sql.slice(query.start, query.end))
+
+    expect(queries).toEqual([
+      `CREATE TEMP TABLE recent AS
+WITH src AS (SELECT 1 AS id)
+SELECT id FROM src`,
+      `SELECT 2`,
+    ])
+  })
+
+  test("keeps EXPLAIN ANALYZE target statements attached without semicolons", () => {
+    const sql = `EXPLAIN
+ANALYZE
+SELECT * FROM users
+SELECT 2`
+    const queries = collectSqlQueries(sql, buildLineStarts(sql)).map((query) => sql.slice(query.start, query.end))
+
+    expect(queries).toEqual([
+      `EXPLAIN
+ANALYZE
+SELECT * FROM users`,
+      `SELECT 2`,
+    ])
+  })
+
+  test("keeps compound queries attached across flush-left SELECT lines", () => {
+    const sql = `SELECT 1
+UNION ALL
+SELECT 2
+SELECT 3`
+    const queries = collectSqlQueries(sql, buildLineStarts(sql)).map((query) => sql.slice(query.start, query.end))
+
+    expect(queries).toEqual([
+      `SELECT 1
+UNION ALL
+SELECT 2`,
+      `SELECT 3`,
+    ])
+  })
+
   test("treats standalone comments between executable queries as gaps", () => {
     const sql = "SELECT 1\n-- note\nSELECT 2"
     const queries = collectSqlQueries(sql, buildLineStarts(sql)).map((query) => sql.slice(query.start, query.end))

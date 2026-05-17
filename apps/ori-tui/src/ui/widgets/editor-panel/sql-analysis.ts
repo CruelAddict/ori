@@ -11,7 +11,7 @@ import {
   type StatementEntry,
 } from "@ui/components/buffer/buffer-statement-cache"
 import { offsetToLineCol } from "@utils/line-offsets"
-import { syntaxHighlighter } from "@utils/syntax-highlighter"
+import { syntaxHighlighter, type SyntaxHighlightSpan } from "@utils/syntax-highlighter"
 import type { Logger } from "pino"
 import { type Accessor, createSignal } from "solid-js"
 
@@ -302,9 +302,27 @@ export function createSqlAnalysis(params: { theme: Accessor<SyntaxThemePalette>;
 
         isHighlightRunning = true
         try {
-          const spans = await highlighter.highlightText(batch.text)
-          if (disposed || updateVersion !== highlightUpdateVersion || !statementCache) {
-            return
+          const spans = [] as SyntaxHighlightSpan[]
+          for (let index = batch.startIndex; index <= batch.endIndex; index += 1) {
+            const statement = statementCache.statements[index]
+            if (!statement) {
+              continue
+            }
+
+            const statementStart = statement.start - batch.startOffset
+            const statementEnd = statement.end - batch.startOffset
+            const statementSpans = await highlighter.highlightText(batch.text.slice(statementStart, statementEnd))
+            if (disposed || updateVersion !== highlightUpdateVersion || !statementCache) {
+              return
+            }
+
+            for (const span of statementSpans) {
+              spans.push({
+                start: span.start + statementStart,
+                end: span.end + statementStart,
+                styleId: span.styleId,
+              })
+            }
           }
 
           applyStatementBatch(statementCache, batch, spans)

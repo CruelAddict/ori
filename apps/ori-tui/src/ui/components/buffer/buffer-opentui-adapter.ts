@@ -43,6 +43,18 @@ type TextareaVirtualLinePatch = TextareaRenderable & {
   __oriVirtualLineCountPatch?: boolean
 }
 
+type EditBufferLargeTextPatch = TextareaRenderable["editBuffer"] & {
+  __oriLargeTextReadPatch?: boolean
+  lib?: {
+    editBufferGetText: (buffer: unknown, maxLength: number) => Uint8Array | null
+    decoder: TextDecoder
+  }
+  bufferPtr?: unknown
+}
+
+const EDIT_BUFFER_GET_TEXT_MAX_SIZE = 1024 * 1024
+const EDIT_BUFFER_GET_TEXT_MAX_SIZE_CAP = 64 * 1024 * 1024
+
 type CreateBufferOpentuiAdapterOptions = {
   tabWidth: number
   onLineInfoChange: () => void
@@ -142,6 +154,29 @@ function resolveCursorDocPosition(text: string, offset: DocCharOffset) {
   return offsetToLineCol(cursor, buildLineStarts(text))
 }
 
+function readFullEditBufferText(editBuffer: EditBufferLargeTextPatch, fallback: () => string) {
+  if (!editBuffer.lib || editBuffer.bufferPtr === undefined) {
+    return fallback()
+  }
+
+  let maxLength = EDIT_BUFFER_GET_TEXT_MAX_SIZE
+  let textBytes = editBuffer.lib.editBufferGetText(editBuffer.bufferPtr, maxLength)
+  if (!textBytes) {
+    return ""
+  }
+
+  while (textBytes.length === maxLength && maxLength < EDIT_BUFFER_GET_TEXT_MAX_SIZE_CAP) {
+    maxLength *= 2
+    const next = editBuffer.lib.editBufferGetText(editBuffer.bufferPtr, maxLength)
+    if (!next) {
+      break
+    }
+    textBytes = next
+  }
+
+  return editBuffer.lib.decoder.decode(textBytes)
+}
+
 export function createBufferOpentuiAdapter(options: CreateBufferOpentuiAdapterOptions) {
   let editorRef: TextareaRenderable | undefined
   let measuredRowVersion = -1
@@ -203,6 +238,17 @@ export function createBufferOpentuiAdapter(options: CreateBufferOpentuiAdapterOp
     patch.__oriRuntimeSyncPatch = true
   }
 
+  const patchLargeTextRead = (node: TextareaRenderable) => {
+    const editBuffer = node.editBuffer as EditBufferLargeTextPatch
+    if (editBuffer.__oriLargeTextReadPatch) {
+      return
+    }
+
+    const originalGetText = editBuffer.getText.bind(editBuffer)
+    editBuffer.getText = (() => readFullEditBufferText(editBuffer, originalGetText)) as typeof editBuffer.getText
+    editBuffer.__oriLargeTextReadPatch = true
+  }
+
   const attach = (node: TextareaRenderable | undefined) => {
     if (editorRef === node) {
       return
@@ -219,6 +265,7 @@ export function createBufferOpentuiAdapter(options: CreateBufferOpentuiAdapterOp
 
     patchVirtualLineCount(node)
     patchRuntimeSync(node)
+    patchLargeTextRead(node)
     applyRefTabWidth(node, options.tabWidth)
     node.on("line-info-change", options.onLineInfoChange)
   }
