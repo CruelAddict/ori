@@ -1,6 +1,10 @@
 import { describe, expect, test } from "bun:test"
 import type { LineInfo } from "@opentui/core"
-import { resolveCursorDocOffset, resolveViewportOffsetPoint } from "./buffer-opentui-adapter"
+import {
+  resolveCursorDocOffset,
+  resolveViewportOffsetPoint,
+  resolveVisualCursorDocOffset,
+} from "./buffer-opentui-adapter"
 import { containerX, containerY, docCharOffset } from "./coords"
 
 describe("buffer opentui adapter", () => {
@@ -84,5 +88,47 @@ describe("buffer opentui adapter", () => {
         viewportHeight: 20,
       }),
     ).toEqual({ x: containerX(2), y: containerY(1) })
+  })
+
+  test("maps a wrapped visual row back into a document offset", () => {
+    const text = "ignored\nabcdefghijklmnopqrstuvwxyz0123456789"
+
+    expect(
+      resolveVisualCursorDocOffset({
+        text,
+        visualRow: 1,
+        visualCol: 2,
+        lineInfo: {
+          lineStartCols: [22, 32],
+          lineWidthCols: [10, 10],
+          lineWidthColsMax: 10,
+          lineSources: [1, 1],
+          lineWraps: [0, 1],
+        } satisfies LineInfo,
+        widthMethod: undefined,
+        tabWidth: 2,
+      }),
+    ).toBe(docCharOffset("ignored\nabcdefghijkl".length))
+  })
+
+  test("clamps a wrapped visual column to the end of its visual row", () => {
+    const text = "ignored\nabcdefghijklmnopqrstuvwxyz0123456789"
+
+    expect(
+      resolveVisualCursorDocOffset({
+        text,
+        visualRow: 1,
+        visualCol: 12,
+        lineInfo: {
+          lineStartCols: [22, 32],
+          lineWidthCols: [10, 10],
+          lineWidthColsMax: 10,
+          lineSources: [1, 1],
+          lineWraps: [0, 1],
+        } satisfies LineInfo,
+        widthMethod: undefined,
+        tabWidth: 2,
+      }),
+    ).toBe(docCharOffset("ignored\nabcdefghijklmnopqrst".length))
   })
 })

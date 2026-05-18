@@ -16,7 +16,7 @@ import {
   visualColumn,
   visualRow,
 } from "./coords"
-import { applyRefTabWidth, lineCharOffsetToDisplayColumn } from "./text-metrics"
+import { applyRefTabWidth, lineCharOffsetToDisplayColumn, lineDisplayColumnToCharOffset } from "./text-metrics"
 
 export type BufferCursorState = {
   row: number
@@ -30,6 +30,7 @@ export type BufferViewportPoint = {
 
 type TextareaRuntimePatch = TextareaRenderable & {
   __oriRuntimeSyncPatch?: boolean
+  __oriOriginalSetViewport?: (x: number, y: number, width: number, height: number, moveCursor?: boolean) => void
   editorView: {
     moveUpVisual: () => void
     moveDownVisual: () => void
@@ -149,6 +150,39 @@ export function resolveViewportOffsetPoint(params: {
   }
 }
 
+export function resolveVisualCursorDocOffset(params: {
+  text: string
+  visualRow: number
+  visualCol: number
+  lineInfo: LineInfo
+  widthMethod: WidthMethod | undefined
+  tabWidth: number
+}): DocCharOffset | undefined {
+  if (params.lineInfo.lineSources.length === 0) {
+    return docCharOffset(0)
+  }
+
+  const row = Math.max(0, Math.min(params.visualRow, params.lineInfo.lineSources.length - 1))
+  const sourceLine = params.lineInfo.lineSources[row]
+  if (sourceLine === undefined) {
+    return undefined
+  }
+
+  const starts = buildLineStarts(params.text)
+  const line = lineIndex(sourceLine)
+  const lineText = getLineText(params.text, starts, line)
+  const startCol = getVisualLineStartColumn(params.lineInfo, visualRow(row), line)
+  const width = params.lineInfo.lineWidthCols[row] ?? 0
+  const targetCol = displayColumn(startCol + Math.max(0, Math.min(params.visualCol, width)))
+  const lineOffset = lineDisplayColumnToCharOffset(
+    { tabWidth: params.tabWidth, widthMethod: params.widthMethod },
+    lineText,
+    targetCol,
+  )
+
+  return docCharOffset((starts[line] ?? 0) + lineOffset)
+}
+
 function resolveCursorDocPosition(text: string, offset: DocCharOffset) {
   const cursor = Math.max(0, Math.min(offset, text.length))
   return offsetToLineCol(cursor, buildLineStarts(text))
@@ -184,6 +218,45 @@ export function createBufferOpentuiAdapter(options: CreateBufferOpentuiAdapterOp
   let measuredRowHeight = 0
   let measuredRowCount = 1
 
+  const applyViewportChange = (
+    ref: TextareaRenderable,
+    originalSetViewport: (x: number, y: number, width: number, height: number, moveCursor?: boolean) => void,
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+    moveCursor = false,
+  ) => {
+    if (!moveCursor) {
+      originalSetViewport(x, y, width, height, false)
+      return
+    }
+
+    const viewport = ref.editorView.getViewport()
+    const cursor = ref.visualCursor
+    const currentRow = viewport.offsetY + cursor.visualRow
+    const deltaY = y - viewport.offsetY
+    const maxRow = Math.max(0, ref.lineInfo.lineSources.length - 1)
+    const targetRow = Math.max(0, Math.min(currentRow + deltaY, maxRow))
+
+    if (targetRow !== currentRow) {
+      const nextOffset = resolveVisualCursorDocOffset({
+        text: ref.plainText,
+        visualRow: targetRow,
+        visualCol: cursor.visualCol,
+        lineInfo: ref.lineInfo,
+        widthMethod: ref.ctx?.widthMethod,
+        tabWidth: options.tabWidth,
+      })
+      if (nextOffset !== undefined) {
+        const next = resolveCursorDocPosition(ref.plainText, nextOffset)
+        ref.editBuffer.setCursor(next.line, next.col)
+      }
+    }
+
+    originalSetViewport(x, y, width, height, false)
+  }
+
   const live = () => {
     if (!editorRef || editorRef.isDestroyed) {
       return undefined
@@ -214,7 +287,7 @@ export function createBufferOpentuiAdapter(options: CreateBufferOpentuiAdapterOp
       return
     }
 
-    const wrap = <T extends keyof TextareaRuntimePatch["editorView"]>(key: T) => {
+    const wrap = <T extends Exclude<keyof TextareaRuntimePatch["editorView"], "setViewport">>(key: T) => {
       const original = patch.editorView[key].bind(patch.editorView)
       patch.editorView[key] = ((...args: Parameters<TextareaRuntimePatch["editorView"][T]>) => {
         const result = original(...args)
@@ -225,8 +298,14 @@ export function createBufferOpentuiAdapter(options: CreateBufferOpentuiAdapterOp
 
     wrap("moveUpVisual")
     wrap("moveDownVisual")
-    wrap("setViewport")
     wrap("setViewportSize")
+
+    const originalSetViewport = patch.editorView.setViewport.bind(patch.editorView)
+    patch.__oriOriginalSetViewport = originalSetViewport
+    patch.editorView.setViewport = ((x, y, width, height, moveCursor = false) => {
+      applyViewportChange(node, originalSetViewport, x, y, width, height, moveCursor)
+      options.onCursorSync()
+    }) as TextareaRuntimePatch["editorView"]["setViewport"]
 
     const originalOnSelectionChanged = patch.onSelectionChanged.bind(patch)
     patch.onSelectionChanged = ((selection: unknown) => {
@@ -341,6 +420,19 @@ export function createBufferOpentuiAdapter(options: CreateBufferOpentuiAdapterOp
     return true
   }
 
+  const setViewport = (x: number, y: number, width: number, height: number, moveCursor = false) => {
+    const ref = live()
+    if (!ref) {
+      return false
+    }
+
+    const patch = ref as TextareaRuntimePatch
+    const originalSetViewport = patch.__oriOriginalSetViewport ?? ref.editorView.setViewport.bind(ref.editorView)
+    applyViewportChange(ref, originalSetViewport, x, y, width, height, moveCursor)
+    options.onCursorSync()
+    return true
+  }
+
   const resolveViewportPoint = (offset: DocCharOffset) => {
     const ref = live()
     if (!ref) {
@@ -388,6 +480,7 @@ export function createBufferOpentuiAdapter(options: CreateBufferOpentuiAdapterOp
     detach,
     live,
     readCursorState,
+    setViewport,
     setCursorDocOffset,
     resolveViewportPoint,
     replaceDocRange,

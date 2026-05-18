@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test"
-import { LineNumberRenderable, type ScrollBoxRenderable, type TextareaRenderable } from "@opentui/core"
+import { LineNumberRenderable, type MouseEvent, type ScrollBoxRenderable, type TextareaRenderable } from "@opentui/core"
 import type { MountedTuiApp } from "../../../test/opentui-harness"
 import { findRequiredNode, readFrameLines, readFrameLineTokens } from "../../../test/opentui-test-tools"
 import type { BufferContext } from "./buffer"
-import { getBufferScrollbox, getBufferTextarea, mountBuffer } from "./buffer.test-tools"
+import { getBufferScrollbox, getBufferTextarea, mountBuffer, moveCursor } from "./buffer.test-tools"
 
 type HighlightState = {
   plainText: string
@@ -97,6 +97,19 @@ function readVisibleLines(app: MountedTuiApp) {
     .map((line) => line.replace(/\s+$/, ""))
     .filter((line) => line.trim().length > 0)
     .map(stripRenderedLineNumberPrefix)
+}
+
+function createWrappedScrollLockFixture() {
+  const fillerCount = 560
+  const blob = "151C2F00020000000D00"
+  const longLine = `INSERT "Categories"("CategoryID","CategoryName","Description","Picture") VALUES(1,'Beverages','Soft drinks, coffees, teas, beers, and ales',0x${blob.repeat(90)})`
+  const tail = Array.from({ length: 10 }, (_, i) => `tail-${i}`)
+
+  return {
+    text: `${Array.from({ length: fillerCount }, (_, i) => `line-${i}`).join("\n")}\n${longLine}\n${tail.join("\n")}`,
+    longLineRow: fillerCount,
+    tail,
+  }
 }
 
 function getBufferLineNumber(app: MountedTuiApp) {
@@ -424,6 +437,42 @@ GO`
         expect(state.editorScrollY).toBeLessThanOrEqual(maxTop)
         expect(state.scrollboxTop).toBeLessThanOrEqual(maxTop)
       }
+    } finally {
+      app.destroy()
+    }
+  })
+
+  test("uses visual rows for viewport clamping during scroll", async () => {
+    const fixture = createWrappedScrollLockFixture()
+    const app = await mountBuffer({ text: fixture.text, width: 48, height: 8 })
+
+    try {
+      const textarea = getBufferTextarea(app)
+      const scrollbox = getBufferScrollbox(app)
+      const scrollNode = scrollbox as unknown as { onMouseEvent: (event: MouseEvent) => void }
+      const scrollEvent = {
+        type: "scroll",
+        x: scrollbox.viewport.x + 1,
+        y: scrollbox.viewport.y + 1,
+        modifiers: { shift: false, alt: false, ctrl: false },
+        scroll: { direction: "down", delta: 1 },
+      } as unknown as MouseEvent
+
+      await moveCursor(app, textarea, fixture.longLineRow, 0)
+      await app.waitFor(() => textarea.logicalCursor.row === fixture.longLineRow)
+
+      for (let i = 0; i < 80; i += 1) {
+        scrollNode.onMouseEvent(scrollEvent)
+        await app.renderOnce()
+      }
+
+      const state = captureScrollState(textarea, scrollbox)
+      const visible = readVisibleLines(app)
+
+      expect(state.editorScrollY).toBe(state.scrollboxTop)
+      expect(state.editorScrollY).toBeGreaterThan(fixture.longLineRow)
+      expect(state.cursorLogicalRow).toBeGreaterThan(fixture.longLineRow)
+      expect(fixture.tail.some((entry) => visible.some((line) => line.includes(entry)))).toBe(true)
     } finally {
       app.destroy()
     }

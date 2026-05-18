@@ -277,7 +277,7 @@ export function Buffer(props: BufferProps) {
       return
     }
 
-    ref.editorView.setViewport(viewport.offsetX, nextTop, Math.max(1, ref.width), height, moveCursor)
+    adapter.setViewport(viewport.offsetX, nextTop, Math.max(1, ref.width), height, moveCursor)
     ref.requestRender()
     if (scrollRef && (scrollRef.scrollTop ?? 0) !== ref.scrollY) {
       scrollRef.scrollTo({ x: 0, y: ref.scrollY })
