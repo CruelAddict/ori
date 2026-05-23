@@ -18,6 +18,7 @@ export type EditorPaneViewModel = {
   isExecuting: Accessor<boolean>
   filePath: Accessor<string>
   getSchemaState: () => SqlEditorSchemaState
+  subscribeSchemaState: (listener: () => void) => () => void
   onQueryChange: (text: string) => void
   executeQuery: (cursorOffset?: number, snapshot?: SqlAnalysisSnapshot) => Promise<void>
   cancelQuery: () => Promise<void>
@@ -31,6 +32,7 @@ type CreateVMOptions = {
   query: Query
   resourceName: Accessor<string>
   getSchemaState: () => SqlEditorSchemaState
+  subscribeSchemaState: (listener: () => void) => () => void
   isFocused: Accessor<boolean>
   focusSelf: () => void
   unfocus: () => void
@@ -118,6 +120,7 @@ export function createVM(options: CreateVMOptions): EditorPaneViewModel {
     isExecuting,
     filePath,
     getSchemaState: options.getSchemaState,
+    subscribeSchemaState: options.subscribeSchemaState,
     onQueryChange,
     executeQuery,
     cancelQuery,

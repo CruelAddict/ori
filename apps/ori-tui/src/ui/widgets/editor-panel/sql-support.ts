@@ -23,6 +23,7 @@ export function createSqlSupport(options: {
   theme: Accessor<SyntaxThemePalette>
   logger: Logger
   getSchemaState: () => SqlEditorSchemaState
+  subscribeSchemaState: (listener: () => void) => () => void
 }): SqlSupport {
   const analysis = createSqlAnalysis({
     theme: options.theme,
@@ -30,6 +31,7 @@ export function createSqlSupport(options: {
   })
   const worker = createSqlEditorBgWorkerAdapter({
     getState: options.getSchemaState,
+    subscribeState: options.subscribeSchemaState,
     logger: options.logger,
   })
 

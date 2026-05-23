@@ -263,6 +263,16 @@ describe("sql autocomplete", () => {
       expectIncludes(result, ["selectables"])
     })
 
+    test("falls back to relation suggestions for exact sql keywords in FROM clause", () => {
+      const result = complete(
+        "select * from all|",
+        catalog({
+          public: { users: ["id", "email"], orders: ["id"], books: ["id"] },
+        }),
+      )
+      expectIncludes(result, ["users", "orders", "books"])
+    })
+
     test("does not suggest an exact relation match as a no-op completion", () => {
       const result = complete("select * from users|")
       expectExcludes(result, ["users"])

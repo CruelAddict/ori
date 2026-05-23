@@ -9,6 +9,7 @@ export type SqlEditorBgWorkerAdapter = {
 
 type CreateSqlEditorBgWorkerAdapterOptions = {
   getState: () => SqlEditorSchemaState
+  subscribeState?: (listener: () => void) => () => void
   logger?: Logger
 }
 
@@ -39,6 +40,12 @@ export function createSqlEditorBgWorkerAdapter(
   let cachedLoaded: SqlEditorSchemaState["loaded"] | undefined
   let activeAutocomplete: { id: number; request: QueuedAutocomplete } | undefined
   let queuedAutocomplete: QueuedAutocomplete | undefined
+  const unsubscribeState = options.subscribeState?.(() => {
+    cachedNodesById = undefined
+    cachedRootIds = undefined
+    cachedLoading = undefined
+    cachedLoaded = undefined
+  })
 
   const clearPending = () => {
     const queued = queuedAutocomplete
@@ -168,6 +175,7 @@ export function createSqlEditorBgWorkerAdapter(
   }
 
   const autocomplete: BufferAutocompleteProvider = {
+    subscribeState: options.subscribeState,
     getCompletions: ({ text, cursor, signal }) => {
       if (disposed || signal.aborted) {
         return Promise.resolve(undefined)
@@ -216,6 +224,7 @@ export function createSqlEditorBgWorkerAdapter(
 
     disposed = true
     workerAlive = false
+    unsubscribeState?.()
     clearPending()
     worker.terminate()
   }

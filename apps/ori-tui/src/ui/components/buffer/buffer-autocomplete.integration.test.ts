@@ -21,8 +21,7 @@ async function waitForCompletion(app: MountedTuiApp, label: string, timeoutMs = 
   await app.waitFor(() => showsCompletion(app, label), timeoutMs)
 }
 
-function createWorkerProvider() {
-  const databaseId = "db"
+function createSchemaState(databaseId = "db"): SqlEditorSchemaState {
   const nodes: Node[] = [
     {
       id: databaseId,
@@ -53,16 +52,48 @@ function createWorkerProvider() {
       attributes: { resource: "test", table: "books", tableType: "table" },
     },
   ]
-  const state: SqlEditorSchemaState = {
+  return {
     rootIds: [databaseId],
     nodesById: Object.fromEntries(nodes.map((node) => [node.id, node])),
     loading: false,
     loaded: true,
   }
+}
 
+function createWorkerProvider() {
+  const state = createSchemaState()
   return createSqlEditorBgWorkerAdapter({
     getState: () => state,
   })
+}
+
+function createMutableWorkerProvider() {
+  let state: SqlEditorSchemaState = {
+    rootIds: [],
+    nodesById: {},
+    loading: true,
+    loaded: false,
+  }
+  const listeners = new Set<() => void>()
+  const worker = createSqlEditorBgWorkerAdapter({
+    getState: () => state,
+    subscribeState: (listener) => {
+      listeners.add(listener)
+      return () => {
+        listeners.delete(listener)
+      }
+    },
+  })
+
+  return {
+    worker,
+    setState: (next: SqlEditorSchemaState) => {
+      state = next
+      for (const listener of listeners) {
+        listener()
+      }
+    },
+  }
 }
 
 function endOffset(text: string): DocCharOffset {
@@ -89,6 +120,32 @@ describe("buffer autocomplete integration", () => {
       expect(readFrameText(mounted.app)).toContain("authors")
     } finally {
       worker.dispose()
+      mounted.app.destroy()
+    }
+  })
+
+  test("reopens autocomplete when schema finishes loading after typing an exact sql keyword", async () => {
+    const databaseId = "db"
+    const provider = createMutableWorkerProvider()
+    const mounted = await mountBufferWithApi({ width: 80, height: 20, autocomplete: provider.worker.autocomplete })
+
+    try {
+      const textarea = getBufferTextarea(mounted.app)
+      const text = "select * from al"
+      const nextText = "select * from all"
+
+      await mountText(mounted, textarea, text)
+      await moveCursor(mounted.app, textarea, 0, -1)
+
+      await mounted.app.setup.mockInput.typeText("l")
+      await mounted.app.waitFor(() => textarea.plainText === nextText)
+
+      provider.setState(createSchemaState(databaseId))
+
+      await waitForCompletion(mounted.app, "authors")
+      expect(readFrameText(mounted.app)).toContain("books")
+    } finally {
+      provider.worker.dispose()
       mounted.app.destroy()
     }
   })

@@ -1,4 +1,5 @@
-import type { LineInfo, TextareaRenderable, WidthMethod } from "@opentui/core"
+import type { LineInfo, MouseEvent, TextareaRenderable, WidthMethod } from "@opentui/core"
+import { getViewportBandY } from "@ui/components/ori-scrollbox"
 import { buildLineStarts, offsetToLineCol } from "@utils/line-offsets"
 import {
   type ContainerX,
@@ -30,6 +31,7 @@ export type BufferViewportPoint = {
 
 type TextareaRuntimePatch = TextareaRenderable & {
   __oriRuntimeSyncPatch?: boolean
+  __oriScrollPassthroughPatch?: boolean
   __oriOriginalSetViewport?: (x: number, y: number, width: number, height: number, moveCursor?: boolean) => void
   editorView: {
     moveUpVisual: () => void
@@ -38,6 +40,8 @@ type TextareaRuntimePatch = TextareaRenderable & {
     setViewportSize: (width: number, height: number) => void
   }
   onSelectionChanged: (selection: unknown) => boolean
+  handleKeyPress: (key: { ctrl: boolean; meta: boolean; super: boolean; hyper: boolean; sequence?: string }) => boolean
+  insertText: (text: string) => void
 }
 
 type TextareaVirtualLinePatch = TextareaRenderable & {
@@ -58,12 +62,18 @@ const EDIT_BUFFER_GET_TEXT_MAX_SIZE_CAP = 64 * 1024 * 1024
 
 type CreateBufferOpentuiAdapterOptions = {
   tabWidth: number
+  getText: () => string
+  getLineStarts: () => readonly number[]
   onLineInfoChange: () => void
   onCursorSync: () => void
 }
 
-export function resolveCursorDocOffset(text: string, row: number, col: number): DocCharOffset {
-  const starts = buildLineStarts(text)
+export function resolveCursorDocOffset(
+  text: string,
+  row: number,
+  col: number,
+  starts = buildLineStarts(text),
+): DocCharOffset {
   const line = Math.max(0, Math.min(row, starts.length - 1))
   const start = starts[line] ?? 0
   const next = starts[line + 1] ?? text.length
@@ -118,13 +128,14 @@ function findVisualLine(info: LineInfo, sourceLine: LineIndex, displayCol: Displ
 export function resolveViewportOffsetPoint(params: {
   text: string
   offset: DocCharOffset
+  lineStarts?: readonly number[]
   lineInfo: LineInfo
   widthMethod: WidthMethod | undefined
   tabWidth: number
   scrollY: number
   viewportHeight: number
 }): BufferViewportPoint | null {
-  const starts = buildLineStarts(params.text)
+  const starts = params.lineStarts ?? buildLineStarts(params.text)
   const cursor = offsetToLineCol(params.offset, starts)
   const sourceLine = lineIndex(cursor.line)
   const lineText = getLineText(params.text, starts, sourceLine)
@@ -154,6 +165,7 @@ export function resolveVisualCursorDocOffset(params: {
   text: string
   visualRow: number
   visualCol: number
+  lineStarts?: readonly number[]
   lineInfo: LineInfo
   widthMethod: WidthMethod | undefined
   tabWidth: number
@@ -168,7 +180,7 @@ export function resolveVisualCursorDocOffset(params: {
     return undefined
   }
 
-  const starts = buildLineStarts(params.text)
+  const starts = params.lineStarts ?? buildLineStarts(params.text)
   const line = lineIndex(sourceLine)
   const lineText = getLineText(params.text, starts, line)
   const startCol = getVisualLineStartColumn(params.lineInfo, visualRow(row), line)
@@ -183,9 +195,9 @@ export function resolveVisualCursorDocOffset(params: {
   return docCharOffset((starts[line] ?? 0) + lineOffset)
 }
 
-function resolveCursorDocPosition(text: string, offset: DocCharOffset) {
+function resolveCursorDocPosition(text: string, offset: DocCharOffset, starts = buildLineStarts(text)) {
   const cursor = Math.max(0, Math.min(offset, text.length))
-  return offsetToLineCol(cursor, buildLineStarts(text))
+  return offsetToLineCol(cursor, starts)
 }
 
 function readFullEditBufferText(editBuffer: EditBufferLargeTextPatch, fallback: () => string) {
@@ -217,6 +229,41 @@ export function createBufferOpentuiAdapter(options: CreateBufferOpentuiAdapterOp
   let measuredRowWidth = 0
   let measuredRowHeight = 0
   let measuredRowCount = 1
+  let preservePreferredVisualCol = false
+  let preferredVisualCol: number | undefined
+  let manualScrollVisualCol: number | undefined
+  let manualScrollResetTimer: ReturnType<typeof setTimeout> | undefined
+
+  const preservePreferredVisualColThroughMicrotask = () => {
+    preservePreferredVisualCol = true
+    queueMicrotask(() => {
+      preservePreferredVisualCol = false
+    })
+  }
+
+  const clearManualScrollVisualCol = () => {
+    if (manualScrollResetTimer !== undefined) {
+      clearTimeout(manualScrollResetTimer)
+      manualScrollResetTimer = undefined
+    }
+    manualScrollVisualCol = undefined
+  }
+
+  const noteManualScroll = () => {
+    const ref = live()
+    if (!ref) {
+      return
+    }
+
+    manualScrollVisualCol ??= preferredVisualCol ?? ref.visualCursor.visualCol
+    if (manualScrollResetTimer !== undefined) {
+      clearTimeout(manualScrollResetTimer)
+    }
+    manualScrollResetTimer = setTimeout(() => {
+      manualScrollResetTimer = undefined
+      manualScrollVisualCol = undefined
+    }, 120)
+  }
 
   const applyViewportChange = (
     ref: TextareaRenderable,
@@ -227,34 +274,85 @@ export function createBufferOpentuiAdapter(options: CreateBufferOpentuiAdapterOp
     height: number,
     moveCursor = false,
   ) => {
+    const viewport = ref.editorView.getViewport()
+    const cursor = ref.visualCursor
+    const currentRow = viewport.offsetY + cursor.visualRow
+    const targetVisualCol = manualScrollVisualCol ?? preferredVisualCol ?? cursor.visualCol
+
     if (!moveCursor) {
       originalSetViewport(x, y, width, height, false)
       return
     }
 
-    const viewport = ref.editorView.getViewport()
-    const cursor = ref.visualCursor
-    const currentRow = viewport.offsetY + cursor.visualRow
-    const deltaY = y - viewport.offsetY
-    const maxRow = Math.max(0, ref.lineInfo.lineSources.length - 1)
-    const targetRow = Math.max(0, Math.min(currentRow + deltaY, maxRow))
+    originalSetViewport(x, y, width, height, false)
 
-    if (targetRow !== currentRow) {
-      const nextOffset = resolveVisualCursorDocOffset({
-        text: ref.plainText,
-        visualRow: targetRow,
-        visualCol: cursor.visualCol,
-        lineInfo: ref.lineInfo,
+    let nextViewport = ref.editorView.getViewport()
+    if (nextViewport.offsetY !== y) {
+      const info = ref.lineInfo
+      const proxyOffset = resolveVisualCursorDocOffset({
+        text: options.getText(),
+        visualRow: Math.max(0, Math.min(y + cursor.visualRow, info.lineSources.length - 1)),
+        visualCol: targetVisualCol,
+        lineStarts: options.getLineStarts(),
+        lineInfo: info,
         widthMethod: ref.ctx?.widthMethod,
         tabWidth: options.tabWidth,
       })
-      if (nextOffset !== undefined) {
-        const next = resolveCursorDocPosition(ref.plainText, nextOffset)
-        ref.editBuffer.setCursor(next.line, next.col)
+      if (proxyOffset !== undefined) {
+        const proxy = resolveCursorDocPosition(options.getText(), proxyOffset, options.getLineStarts())
+        if (ref.logicalCursor.row !== proxy.line || ref.logicalCursor.col !== proxy.col) {
+          ref.editBuffer.setCursor(proxy.line, proxy.col)
+        }
       }
+      originalSetViewport(x, y, width, height, false)
+      nextViewport = ref.editorView.getViewport()
     }
 
-    originalSetViewport(x, y, width, height, false)
+    const bandY = getViewportBandY({ height })
+    const nextVisualRow = currentRow - nextViewport.offsetY
+    const info = ref.lineInfo
+    const maxRow = Math.max(0, info.lineSources.length - 1)
+    const targetRow = Math.max(
+      0,
+      Math.min(
+        nextVisualRow < bandY.start
+          ? nextViewport.offsetY + bandY.start
+          : nextVisualRow > bandY.end
+            ? nextViewport.offsetY + bandY.end
+            : currentRow,
+        maxRow,
+      ),
+    )
+    const resolvedRow =
+      targetRow === currentRow && nextViewport.offsetY !== y
+        ? Math.max(0, Math.min(currentRow + (y - nextViewport.offsetY), maxRow))
+        : targetRow
+
+    if (resolvedRow === currentRow) {
+      return
+    }
+
+    const nextOffset = resolveVisualCursorDocOffset({
+      text: options.getText(),
+      visualRow: resolvedRow,
+      visualCol: targetVisualCol,
+      lineStarts: options.getLineStarts(),
+      lineInfo: info,
+      widthMethod: ref.ctx?.widthMethod,
+      tabWidth: options.tabWidth,
+    })
+    if (nextOffset === undefined) {
+      return
+    }
+
+    const next = resolveCursorDocPosition(options.getText(), nextOffset, options.getLineStarts())
+    if (ref.logicalCursor.row !== next.line || ref.logicalCursor.col !== next.col) {
+      ref.editBuffer.setCursor(next.line, next.col)
+      const cursorViewport = ref.editorView.getViewport()
+      if (cursorViewport.offsetY !== nextViewport.offsetY) {
+        originalSetViewport(x, nextViewport.offsetY, width, height, false)
+      }
+    }
   }
 
   const live = () => {
@@ -290,6 +388,9 @@ export function createBufferOpentuiAdapter(options: CreateBufferOpentuiAdapterOp
     const wrap = <T extends Exclude<keyof TextareaRuntimePatch["editorView"], "setViewport">>(key: T) => {
       const original = patch.editorView[key].bind(patch.editorView)
       patch.editorView[key] = ((...args: Parameters<TextareaRuntimePatch["editorView"][T]>) => {
+        if (key === "moveUpVisual" || key === "moveDownVisual") {
+          preservePreferredVisualColThroughMicrotask()
+        }
         const result = original(...args)
         options.onCursorSync()
         return result
@@ -303,8 +404,23 @@ export function createBufferOpentuiAdapter(options: CreateBufferOpentuiAdapterOp
     const originalSetViewport = patch.editorView.setViewport.bind(patch.editorView)
     patch.__oriOriginalSetViewport = originalSetViewport
     patch.editorView.setViewport = ((x, y, width, height, moveCursor = false) => {
-      applyViewportChange(node, originalSetViewport, x, y, width, height, moveCursor)
-      options.onCursorSync()
+      const previousLogicalRow = patch.logicalCursor.row
+      const previousLogicalCol = patch.logicalCursor.col
+      const previousVisualRow = patch.visualCursor.visualRow
+      const previousVisualCol = patch.visualCursor.visualCol
+      if (moveCursor) {
+        preservePreferredVisualColThroughMicrotask()
+      }
+      originalSetViewport(x, y, width, height, moveCursor)
+      if (
+        moveCursor ||
+        patch.logicalCursor.row !== previousLogicalRow ||
+        patch.logicalCursor.col !== previousLogicalCol ||
+        patch.visualCursor.visualRow !== previousVisualRow ||
+        patch.visualCursor.visualCol !== previousVisualCol
+      ) {
+        options.onCursorSync()
+      }
     }) as TextareaRuntimePatch["editorView"]["setViewport"]
 
     const originalOnSelectionChanged = patch.onSelectionChanged.bind(patch)
@@ -315,6 +431,24 @@ export function createBufferOpentuiAdapter(options: CreateBufferOpentuiAdapterOp
     }) as TextareaRuntimePatch["onSelectionChanged"]
 
     patch.__oriRuntimeSyncPatch = true
+  }
+
+  const patchScrollPassthrough = (node: TextareaRenderable) => {
+    const patch = node as TextareaRuntimePatch
+    if (patch.__oriScrollPassthroughPatch) {
+      return
+    }
+
+    const originalOnMouseEvent = node.onMouseEvent.bind(node)
+    node.onMouseEvent = ((event: MouseEvent) => {
+      if (event.type === "scroll") {
+        return
+      }
+
+      originalOnMouseEvent(event)
+    }) as typeof node.onMouseEvent
+
+    patch.__oriScrollPassthroughPatch = true
   }
 
   const patchLargeTextRead = (node: TextareaRenderable) => {
@@ -344,6 +478,7 @@ export function createBufferOpentuiAdapter(options: CreateBufferOpentuiAdapterOp
 
     patchVirtualLineCount(node)
     patchRuntimeSync(node)
+    patchScrollPassthrough(node)
     patchLargeTextRead(node)
     applyRefTabWidth(node, options.tabWidth)
     node.on("line-info-change", options.onLineInfoChange)
@@ -366,9 +501,12 @@ export function createBufferOpentuiAdapter(options: CreateBufferOpentuiAdapterOp
     }
 
     const cursor = ref.logicalCursor
+    if (!preservePreferredVisualCol && manualScrollVisualCol === undefined) {
+      preferredVisualCol = ref.visualCursor.visualCol
+    }
     return {
       row: cursor.row,
-      offset: resolveCursorDocOffset(ref.plainText, cursor.row, cursor.col),
+      offset: resolveCursorDocOffset(options.getText(), cursor.row, cursor.col, options.getLineStarts()),
     } satisfies BufferCursorState
   }
 
@@ -378,7 +516,8 @@ export function createBufferOpentuiAdapter(options: CreateBufferOpentuiAdapterOp
       return 1
     }
 
-    return Math.max(1, ref.editorView.getTotalVirtualLineCount(), ref.lineInfo.lineSources.length)
+    const info = ref.lineInfo
+    return Math.max(1, ref.editorView.getTotalVirtualLineCount(), info.lineSources.length)
   }
 
   const measureRows = (viewportRows: number, version: number) => {
@@ -414,7 +553,9 @@ export function createBufferOpentuiAdapter(options: CreateBufferOpentuiAdapterOp
       return false
     }
 
-    const next = resolveCursorDocPosition(ref.plainText, offset)
+    clearManualScrollVisualCol()
+    preferredVisualCol = undefined
+    const next = resolveCursorDocPosition(options.getText(), offset, options.getLineStarts())
     ref.editBuffer.setCursor(next.line, next.col)
     ref.requestRender()
     return true
@@ -426,10 +567,15 @@ export function createBufferOpentuiAdapter(options: CreateBufferOpentuiAdapterOp
       return false
     }
 
+    if (moveCursor) {
+      preservePreferredVisualColThroughMicrotask()
+    }
     const patch = ref as TextareaRuntimePatch
     const originalSetViewport = patch.__oriOriginalSetViewport ?? ref.editorView.setViewport.bind(ref.editorView)
     applyViewportChange(ref, originalSetViewport, x, y, width, height, moveCursor)
-    options.onCursorSync()
+    if (moveCursor) {
+      options.onCursorSync()
+    }
     return true
   }
 
@@ -440,8 +586,9 @@ export function createBufferOpentuiAdapter(options: CreateBufferOpentuiAdapterOp
     }
 
     return resolveViewportOffsetPoint({
-      text: ref.plainText,
+      text: options.getText(),
       offset,
+      lineStarts: options.getLineStarts(),
       lineInfo: ref.lineInfo,
       widthMethod: ref.ctx?.widthMethod,
       tabWidth: options.tabWidth,
@@ -457,8 +604,11 @@ export function createBufferOpentuiAdapter(options: CreateBufferOpentuiAdapterOp
     }
 
     const current = ref.plainText
-    const from = resolveCursorDocPosition(current, start)
-    const to = resolveCursorDocPosition(current, end)
+    const starts = options.getLineStarts()
+    const from = resolveCursorDocPosition(current, start, starts)
+    const to = resolveCursorDocPosition(current, end, starts)
+    clearManualScrollVisualCol()
+    preferredVisualCol = undefined
     ref.editBuffer.setCursor(from.line, from.col)
     if (start !== end) {
       ref.editBuffer.deleteRange(from.line, from.col, to.line, to.col)
@@ -469,7 +619,7 @@ export function createBufferOpentuiAdapter(options: CreateBufferOpentuiAdapterOp
     }
 
     const finalOffset = docCharOffset(start + (nextCursorOffset ?? insertText.length))
-    const final = resolveCursorDocPosition(ref.plainText, finalOffset)
+    const final = resolveCursorDocPosition(ref.plainText, finalOffset, buildLineStarts(ref.plainText))
     ref.editBuffer.setCursor(final.line, final.col)
     ref.requestRender()
     return true
@@ -480,6 +630,7 @@ export function createBufferOpentuiAdapter(options: CreateBufferOpentuiAdapterOp
     detach,
     live,
     readCursorState,
+    noteManualScroll,
     setViewport,
     setCursorDocOffset,
     resolveViewportPoint,

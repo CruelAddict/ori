@@ -1,6 +1,7 @@
-import type { BufferAnalysis } from "@ui/components/buffer/analysis"
+import type { TextareaRenderable } from "@opentui/core"
+import type { BufferAnalysis, BufferTextChange } from "@ui/components/buffer/analysis"
 import {
-  addStatementHighlightSpanLines,
+  addStatementHighlightRange,
   applyStatementBatch,
   buildStatementBatch,
   buildStatementCache,
@@ -11,9 +12,10 @@ import {
   type StatementEntry,
 } from "@ui/components/buffer/buffer-statement-cache"
 import { offsetToLineCol } from "@utils/line-offsets"
-import { syntaxHighlighter, type SyntaxHighlightSpan } from "@utils/syntax-highlighter"
+import { syntaxHighlighter } from "@utils/syntax-highlighter"
 import type { Logger } from "pino"
 import { type Accessor, createSignal } from "solid-js"
+import { collectSqlQueries } from "./sql-statement-detector"
 
 const VISIBLE_OVERSCAN_ROWS = 8
 const WARM_OVERSCAN_ROWS = 24
@@ -43,6 +45,13 @@ type SyntaxThemePalette = {
 type MaterializedHighlightEntry = {
   highlightGroupId: number
   version: number
+  visibleStartOffset: number
+  visibleEndOffset: number
+}
+
+type VisibleOffsetWindow = {
+  start: number
+  end: number
 }
 
 function mapQuery(statement: SqlQuery | StatementEntry): SqlQuery {
@@ -52,6 +61,36 @@ function mapQuery(statement: SqlQuery | StatementEntry): SqlQuery {
     end: statement.end,
     startLine: statement.startLine,
     endLine: statement.endLine,
+  }
+}
+
+function getVisibleOffsetWindow(params: {
+  info: TextareaRenderable["lineInfo"]
+  scrollY: number
+  height: number
+  overscan: number
+  starts: readonly number[]
+  textLength: number
+}): VisibleOffsetWindow | undefined {
+  const visibleRowStart = Math.max(0, params.scrollY - params.overscan)
+  const visibleRowEnd = Math.min(params.info.lineSources.length, params.scrollY + params.height + params.overscan)
+  let visibleStartLine: number | undefined
+  let visibleEndLine: number | undefined
+  for (let row = visibleRowStart; row < visibleRowEnd; row += 1) {
+    const line = params.info.lineSources[row]
+    if (line === undefined) {
+      continue
+    }
+    visibleStartLine = visibleStartLine === undefined ? line : Math.min(visibleStartLine, line)
+    visibleEndLine = visibleEndLine === undefined ? line : Math.max(visibleEndLine, line)
+  }
+  if (visibleStartLine === undefined || visibleEndLine === undefined) {
+    return undefined
+  }
+
+  return {
+    start: params.starts[visibleStartLine] ?? 0,
+    end: params.starts[visibleEndLine + 1] ?? params.textLength,
   }
 }
 
@@ -144,7 +183,6 @@ export function createSqlAnalysis(params: { theme: Accessor<SyntaxThemePalette>;
       let isHighlightRunning = false
       let highlightBackfillTimer: ReturnType<typeof setTimeout> | undefined
       let highlightBackfillCursor = 0
-      let highlightedDocumentVersion = -1
       let lastEditAt = performance.now()
       let disposed = false
 
@@ -173,7 +211,6 @@ export function createSqlAnalysis(params: { theme: Accessor<SyntaxThemePalette>;
         const ref = host.getRef()
         const highlights = materializedStatementHighlights
         materializedStatementHighlights = new Map()
-        highlightedDocumentVersion = -1
         if (!ref || highlights.size === 0) {
           if (requestRender) {
             ref?.requestRender()
@@ -197,20 +234,127 @@ export function createSqlAnalysis(params: { theme: Accessor<SyntaxThemePalette>;
         materializedStatementHighlights = new Map(
           [...materializedStatementHighlights].map(([id, entry]) => [
             id,
-            { highlightGroupId: entry.highlightGroupId, version: -1 },
+            {
+              highlightGroupId: entry.highlightGroupId,
+              version: -1,
+              visibleStartOffset: entry.visibleStartOffset,
+              visibleEndOffset: entry.visibleEndOffset,
+            },
           ]),
         )
       }
 
-      const buildWarmBatch = () => {
+      const syncStatementHighlights = (params: {
+        ref: TextareaRenderable
+        statement: StatementEntry
+        starts: readonly number[]
+        text: string
+        visibleStartOffset?: number
+        visibleEndOffset?: number
+      }) => {
+        const { ref, statement, starts, text, visibleStartOffset, visibleEndOffset } = params
+        const statementVisibleStart =
+          visibleStartOffset === undefined ? statement.start : Math.max(statement.start, visibleStartOffset)
+        const statementVisibleEnd =
+          visibleEndOffset === undefined ? statement.end : Math.min(statement.end, visibleEndOffset)
+        if (statementVisibleEnd <= statementVisibleStart) {
+          return false
+        }
+
+        const current = materializedStatementHighlights.get(statement.id)
+        const coversVisibleRange =
+          current !== undefined &&
+          current.visibleStartOffset <= statementVisibleStart &&
+          current.visibleEndOffset >= statementVisibleEnd
+        if (current?.version === statement.highlightVersion && coversVisibleRange) {
+          return false
+        }
+        if (statement.dirty && statement.spans.length === 0) {
+          return false
+        }
+
+        if (current?.version === statement.highlightVersion) {
+          if (statementVisibleStart < current.visibleStartOffset) {
+            addStatementHighlightRange({
+              ref,
+              statement,
+              starts,
+              text,
+              tabWidth: host.tabWidth,
+              highlightGroupId: current.highlightGroupId,
+              visibleStartOffset: statementVisibleStart,
+              visibleEndOffset: current.visibleStartOffset,
+            })
+          }
+          if (current.visibleEndOffset < statementVisibleEnd) {
+            addStatementHighlightRange({
+              ref,
+              statement,
+              starts,
+              text,
+              tabWidth: host.tabWidth,
+              highlightGroupId: current.highlightGroupId,
+              visibleStartOffset: current.visibleEndOffset,
+              visibleEndOffset: statementVisibleEnd,
+            })
+          }
+
+          materializedStatementHighlights.set(statement.id, {
+            highlightGroupId: current.highlightGroupId,
+            version: current.version,
+            visibleStartOffset: Math.min(current.visibleStartOffset, statementVisibleStart),
+            visibleEndOffset: Math.max(current.visibleEndOffset, statementVisibleEnd),
+          })
+          return true
+        }
+
+        const highlightGroupId = current?.highlightGroupId ?? nextStatementHighlightGroupId()
+        if (current) {
+          ref.editBuffer.removeHighlightsByRef(highlightGroupId)
+        }
+
+        addStatementHighlightRange({
+          ref,
+          statement,
+          starts,
+          text,
+          tabWidth: host.tabWidth,
+          highlightGroupId,
+          visibleStartOffset: statementVisibleStart,
+          visibleEndOffset: statementVisibleEnd,
+        })
+
+        materializedStatementHighlights.set(statement.id, {
+          highlightGroupId,
+          version: statement.highlightVersion,
+          visibleStartOffset: statementVisibleStart,
+          visibleEndOffset: statementVisibleEnd,
+        })
+        return true
+      }
+
+      const buildWarmBatch = (preferFocusedStatement: boolean) => {
         const ref = host.getRef()
         if (!ref || !statementCache) {
+          return undefined
+        }
+        const starts = host.getLineStarts()
+        const info = ref.lineInfo
+        const visibleWindow = getVisibleOffsetWindow({
+          info,
+          scrollY: ref.scrollY,
+          height: ref.height,
+          overscan: WARM_OVERSCAN_ROWS,
+          starts,
+          textLength: host.getText().length,
+        })
+        if (!visibleWindow) {
           return undefined
         }
 
         const indices = collectVisibleStatementIndices(
           statementCache,
-          ref.lineInfo,
+          info,
           ref.scrollY,
           ref.height,
           host.getFocusedRow(),
@@ -221,12 +365,55 @@ export function createSqlAnalysis(params: { theme: Accessor<SyntaxThemePalette>;
           return undefined
         }
 
+        const unmaterializedDirtyIndices = dirtyIndices.filter((index) => {
+          const statement = statementCache?.statements[index]
+          if (!statement) {
+            return false
+          }
+          const current = materializedStatementHighlights.get(statement.id)
+          if (!current) {
+            return true
+          }
+          const statementVisibleStart = Math.max(statement.start, visibleWindow.start)
+          const statementVisibleEnd = Math.min(statement.end, visibleWindow.end)
+          return current.visibleStartOffset > statementVisibleStart || current.visibleEndOffset < statementVisibleEnd
+        })
+        if (unmaterializedDirtyIndices.length === 0) {
+          return undefined
+        }
+
+        const focusedIndex = statementCache.lineToStatement[host.getFocusedRow()]
+        if (
+          preferFocusedStatement &&
+          unmaterializedDirtyIndices.length === 1 &&
+          focusedIndex !== undefined &&
+          focusedIndex >= 0 &&
+          unmaterializedDirtyIndices.includes(focusedIndex)
+        ) {
+          return buildStatementBatch(statementCache, host.getText(), focusedIndex, focusedIndex)
+        }
+
         return buildStatementBatch(
           statementCache,
           host.getText(),
-          dirtyIndices[0] ?? 0,
-          dirtyIndices[dirtyIndices.length - 1] ?? 0,
+          unmaterializedDirtyIndices[0] ?? 0,
+          unmaterializedDirtyIndices[unmaterializedDirtyIndices.length - 1] ?? 0,
         )
+      }
+
+      const scheduleQuietRetry = (remainingQuietMs: number) => {
+        if (remainingQuietMs <= 0) {
+          return false
+        }
+        if (highlightBackfillTimer !== undefined) {
+          return true
+        }
+
+        highlightBackfillTimer = setTimeout(() => {
+          highlightBackfillTimer = undefined
+          scheduleUpdate()
+        }, remainingQuietMs)
+        return true
       }
 
       const findNextDirtyStatementIndex = (startIndex: number) => {
@@ -294,44 +481,115 @@ export function createSqlAnalysis(params: { theme: Accessor<SyntaxThemePalette>;
         })
       }
 
-      const runHighlightBatch = async (batch: NonNullable<ReturnType<typeof buildStatementBatch>>) => {
+      const runHighlightBatch = async (
+        batch: NonNullable<ReturnType<typeof buildStatementBatch>>,
+        options: { streamStatements: boolean },
+      ) => {
         const updateVersion = highlightUpdateVersion
+        let lastCompletedIndex = batch.startIndex - 1
+        let batchRenderedHighlights = false
         if (!statementCache) {
           return
         }
 
         isHighlightRunning = true
         try {
-          const spans = [] as SyntaxHighlightSpan[]
-          for (let index = batch.startIndex; index <= batch.endIndex; index += 1) {
-            const statement = statementCache.statements[index]
-            if (!statement) {
-              continue
+          const runStatement = async (index: number) => {
+            const cache = statementCache
+            const statement = cache?.statements[index]
+            if (!cache || !statement) {
+              return
             }
 
             const statementStart = statement.start - batch.startOffset
             const statementEnd = statement.end - batch.startOffset
-            const statementSpans = await highlighter.highlightText(batch.text.slice(statementStart, statementEnd))
-            if (disposed || updateVersion !== highlightUpdateVersion || !statementCache) {
+            const statementText = batch.text.slice(statementStart, statementEnd)
+            const statementSpans = await highlighter.highlightText(statementText)
+            const currentCache = statementCache
+            if (disposed || updateVersion !== highlightUpdateVersion || !currentCache) {
               return
             }
 
-            for (const span of statementSpans) {
-              spans.push({
-                start: span.start + statementStart,
-                end: span.end + statementStart,
-                styleId: span.styleId,
+            applyStatementBatch(
+              currentCache,
+              {
+                startIndex: index,
+                endIndex: index,
+                startOffset: statement.start,
+                endOffset: statement.end,
+                text: statementText,
+              },
+              statementSpans,
+            )
+            previousStatements = currentCache.statements
+            lastCompletedIndex = Math.max(lastCompletedIndex, index)
+            const nextStatement = currentCache.statements[index]
+            const ref = host.getRef()
+            if (nextStatement && ref) {
+              const starts = host.getLineStarts()
+              const text = host.getText()
+              const info = ref.lineInfo
+              const visibleWindow = getVisibleOffsetWindow({
+                info,
+                scrollY: ref.scrollY,
+                height: ref.height,
+                overscan: VISIBLE_OVERSCAN_ROWS,
+                starts,
+                textLength: text.length,
               })
+              const immediateMaterialized = syncStatementHighlights({
+                ref,
+                statement: nextStatement,
+                starts,
+                text,
+                visibleStartOffset: visibleWindow?.start,
+                visibleEndOffset: visibleWindow?.end,
+              })
+              if (immediateMaterialized) {
+                if (options.streamStatements) {
+                  ref.requestRender()
+                }
+                batchRenderedHighlights = true
+              }
+            }
+
+            if (options.streamStatements) {
+              host.requestSync()
             }
           }
 
-          applyStatementBatch(statementCache, batch, spans)
-          previousStatements = statementCache.statements
-          highlightBackfillCursor = Math.min(batch.endIndex + 1, Math.max(0, statementCache.statements.length - 1))
-          host.requestSync()
+          if (options.streamStatements) {
+            const tasks = [] as Promise<void>[]
+            for (let index = batch.startIndex; index <= batch.endIndex; index += 1) {
+              tasks.push(runStatement(index))
+            }
+            await Promise.all(tasks)
+          }
+          if (!options.streamStatements) {
+            for (let index = batch.startIndex; index <= batch.endIndex; index += 1) {
+              await runStatement(index)
+            }
+          }
+          if (disposed || updateVersion !== highlightUpdateVersion || !statementCache) {
+            return
+          }
+
+          if (!options.streamStatements && batchRenderedHighlights) {
+            host.getRef()?.requestRender()
+          }
+
+          if (!options.streamStatements && lastCompletedIndex >= batch.startIndex) {
+            highlightBackfillCursor = Math.min(
+              lastCompletedIndex + 1,
+              Math.max(0, statementCache.statements.length - 1),
+            )
+          }
+          if (!options.streamStatements && lastCompletedIndex >= batch.startIndex) {
+            host.requestSync()
+          }
         } catch (err) {
           if (!disposed && updateVersion === highlightUpdateVersion) {
-            params.logger.error({ err }, "buffer: statement highlight failed")
+            params.logger.error({ err, updateVersion }, "sql-analysis: statement highlight failed")
           }
         } finally {
           isHighlightRunning = false
@@ -348,20 +606,15 @@ export function createSqlAnalysis(params: { theme: Accessor<SyntaxThemePalette>;
           return
         }
 
-        const warmBatch = buildWarmBatch()
+        const now = performance.now()
+        const remainingEditQuietMs = lastEditAt + HIGHLIGHT_BACKFILL_QUIET_MS - now
+        const warmBatch = buildWarmBatch(remainingEditQuietMs > 0)
         if (warmBatch) {
-          void runHighlightBatch(warmBatch)
+          void runHighlightBatch(warmBatch, { streamStatements: true })
           return
         }
 
-        const remainingQuietMs = lastEditAt + HIGHLIGHT_BACKFILL_QUIET_MS - performance.now()
-        if (remainingQuietMs > 0) {
-          if (highlightBackfillTimer === undefined) {
-            highlightBackfillTimer = setTimeout(() => {
-              highlightBackfillTimer = undefined
-              scheduleUpdate()
-            }, remainingQuietMs)
-          }
+        if (scheduleQuietRetry(remainingEditQuietMs)) {
           return
         }
 
@@ -371,7 +624,7 @@ export function createSqlAnalysis(params: { theme: Accessor<SyntaxThemePalette>;
           return
         }
 
-        void runHighlightBatch(backfillBatch)
+        void runHighlightBatch(backfillBatch, { streamStatements: false })
       }
 
       const syncRenderedHighlights = () => {
@@ -381,16 +634,19 @@ export function createSqlAnalysis(params: { theme: Accessor<SyntaxThemePalette>;
           return
         }
 
+        let changed = false
         const style = highlighter.highlightResult().syntaxStyle
         if (appliedHighlightStyle !== style || statementCache.syntaxStyle !== style) {
           appliedHighlightStyle = style
           statementCache.syntaxStyle = style
           ref.syntaxStyle = style
+          changed = true
         }
 
+        const info = ref.lineInfo
         const statements = collectVisibleStatements(
           statementCache,
-          ref.lineInfo,
+          info,
           ref.scrollY,
           ref.height,
           host.getFocusedRow(),
@@ -399,7 +655,16 @@ export function createSqlAnalysis(params: { theme: Accessor<SyntaxThemePalette>;
         const visibleIds = new Set(statements.map((statement) => statement.id))
         const starts = host.getLineStarts()
         const value = host.getText()
-        let changed = highlightedDocumentVersion !== host.getVersion()
+        const visibleWindow = getVisibleOffsetWindow({
+          info,
+          scrollY: ref.scrollY,
+          height: ref.height,
+          overscan: VISIBLE_OVERSCAN_ROWS,
+          starts,
+          textLength: value.length,
+        })
+        const visibleStartOffset = visibleWindow?.start
+        const visibleEndOffset = visibleWindow?.end
 
         for (const [id, entry] of materializedStatementHighlights) {
           if (visibleIds.has(id)) {
@@ -412,44 +677,23 @@ export function createSqlAnalysis(params: { theme: Accessor<SyntaxThemePalette>;
         }
 
         for (const statement of statements) {
-          const current = materializedStatementHighlights.get(statement.id)
-          if (current?.version === statement.highlightVersion) {
-            continue
+          if (syncStatementHighlights({ ref, statement, starts, text: value, visibleStartOffset, visibleEndOffset })) {
+            changed = true
           }
-
-          const highlightGroupId = current?.highlightGroupId ?? nextStatementHighlightGroupId()
-          if (current) {
-            ref.editBuffer.removeHighlightsByRef(highlightGroupId)
-          }
-
-          for (const span of statement.spans) {
-            addStatementHighlightSpanLines({
-              ref,
-              span,
-              starts,
-              text: value,
-              tabWidth: host.tabWidth,
-              highlightGroupId,
-            })
-          }
-
-          materializedStatementHighlights.set(statement.id, {
-            highlightGroupId,
-            version: statement.highlightVersion,
-          })
-          changed = true
         }
 
         if (!changed) {
           return
         }
 
-        highlightedDocumentVersion = host.getVersion()
         ref.requestRender()
       }
 
       return {
-        rebuild: (text, lineStarts, version) => {
+        rebuild: (text, lineStarts, version, change?: BufferTextChange) => {
+          highlightUpdateVersion += 1
+          lastEditAt = performance.now()
+          clearRenderedHighlights(false)
           statementCache = buildStatementCache(
             text,
             lineStarts,
@@ -458,6 +702,8 @@ export function createSqlAnalysis(params: { theme: Accessor<SyntaxThemePalette>;
             nextStatementId,
             highlighter.highlightResult().syntaxStyle,
             version,
+            change,
+            collectSqlQueries,
           )
           previousStatements = statementCache.statements
           previousText = text
@@ -477,9 +723,11 @@ export function createSqlAnalysis(params: { theme: Accessor<SyntaxThemePalette>;
           refreshSnapshot(undefined, host.getLineStarts().length)
         },
         invalidate: invalidateRenderedHighlights,
-        sync: () => {
+        sync: (options = {}) => {
           syncRenderedHighlights()
-          scheduleUpdate()
+          if (options.scheduleUpdate ?? true) {
+            scheduleUpdate()
+          }
         },
         dispose: () => {
           disposed = true

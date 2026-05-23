@@ -100,6 +100,36 @@ export function lineCharRangeToDisplayRange(
   )
 }
 
+export function lineCharOffsetDisplayColumns(source: MetricsSource, text: string): DisplayColumn[] {
+  const columns = new Array<DisplayColumn>(text.length + 1)
+  let displayCol = 0
+  let offset = 0
+  columns[0] = displayColumn(0)
+
+  for (const segment of graphemeSegmenter.segment(text)) {
+    while (offset < segment.index) {
+      columns[offset] = displayColumn(displayCol)
+      offset += 1
+    }
+
+    const end = segment.index + segment.segment.length
+    for (let i = segment.index; i < end; i += 1) {
+      columns[i] = displayColumn(displayCol)
+    }
+
+    displayCol += graphemeWidth(segment.segment, displayCol, source.tabWidth, source.widthMethod)
+    columns[end] = displayColumn(displayCol)
+    offset = end
+  }
+
+  while (offset <= text.length) {
+    columns[offset] = displayColumn(displayCol)
+    offset += 1
+  }
+
+  return columns
+}
+
 export function lineDisplayWidth(source: MetricsSource, text: string): DisplayColumn {
   return lineCharOffsetToDisplayColumn(source, text, lineCharOffset(text.length))
 }

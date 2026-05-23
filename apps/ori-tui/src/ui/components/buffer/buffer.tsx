@@ -5,7 +5,7 @@ import type {
   ScrollBoxRenderable,
   TextareaRenderable,
 } from "@opentui/core"
-import { getViewportRect, OriScrollbox } from "@ui/components/ori-scrollbox"
+import { getViewportBandY, getViewportInsetY, getViewportRect, OriScrollbox } from "@ui/components/ori-scrollbox"
 import { SelectPopup } from "@ui/components/select-popup"
 import type { SelectPopupAnchor } from "@ui/components/select-popup-model"
 import { useTheme } from "@ui/providers/theme"
@@ -13,7 +13,7 @@ import { type KeyBinding, KeyScope } from "@ui/services/key-scopes"
 import { debounce } from "@utils/debounce"
 import { buildLineStarts, offsetToLineCol } from "@utils/line-offsets"
 import { type Accessor, createEffect, createMemo, createSignal, onCleanup, onMount } from "solid-js"
-import type { BufferAnalysis } from "./analysis"
+import type { BufferAnalysis, BufferTextChange } from "./analysis"
 import { createBufferAutocomplete } from "./autocomplete/controller"
 import type { BufferAutocompleteProvider } from "./autocomplete/types"
 import { createBufferOpentuiAdapter } from "./buffer-opentui-adapter"
@@ -27,6 +27,34 @@ const EMPTY_GUTTER_MARKERS = new Map<number, string>()
 type PendingChangeOrigin = {
   origin: "user" | "autocomplete"
   remainingEvents: number
+}
+
+function findTextChange(previous: string, next: string): BufferTextChange | undefined {
+  if (previous === next) {
+    return undefined
+  }
+
+  const limit = Math.min(previous.length, next.length)
+  let prefix = 0
+  for (; prefix < limit; prefix += 1) {
+    if (previous[prefix] !== next[prefix]) {
+      break
+    }
+  }
+
+  const suffixLimit = Math.min(previous.length - prefix, next.length - prefix)
+  let suffix = 0
+  for (; suffix < suffixLimit; suffix += 1) {
+    if (previous[previous.length - 1 - suffix] !== next[next.length - 1 - suffix]) {
+      break
+    }
+  }
+
+  return {
+    start: prefix,
+    previousEnd: previous.length - suffix,
+    nextEnd: next.length - suffix,
+  }
 }
 
 export type BufferApi = {
@@ -65,13 +93,11 @@ export function Buffer(props: BufferProps) {
   const [text, setTextState] = createSignal(props.initialText)
   const [contentModified, setContentModified] = createSignal(false)
   const [documentVersion, setDocumentVersion] = createSignal(0)
-  const lineStarts = createMemo(() => buildLineStarts(text()))
+  const [lineStarts, setLineStartsState] = createSignal(buildLineStarts(props.initialText))
 
-  // In visual lines that take wrapping into account
   const [viewportHeight, setViewportHeight] = createSignal(1)
   const [totalRows, setTotalRows] = createSignal(1)
 
-  // Last cursor position reported by OpenTUI
   const [cursorState, setCursorState] = createSignal({
     row: 0,
     offset: docCharOffset(0),
@@ -82,28 +108,25 @@ export function Buffer(props: BufferProps) {
   let scrollRef: ScrollBoxRenderable | undefined
   let bufferRootRef: BoxRenderable | undefined
   let gutterRef: LineNumberRenderable | undefined
-
-  // So that the focus effect runs only on transitions
   let previousFocusState = props.isFocused()
-
-  // Abandon queued work after cleanup
   let disposed = false
-  // Sync with opentui coalescing
   let syncQueued = false
-
+  let cursorSyncMode = "queued" as "queued" | "inline"
+  let pendingScrollboxTop: number | undefined
+  let scrollboxIntentQueued = false
   let viewportWidth = 0
   let viewportRows = 0
-
-  // TODO: check if we really need that
-  // Workaround for multiple opentui callbacks on startup that we shouldn't handle
+  let lastEditorScrollMargin = -1
+  let lastScrollboxMetrics = {
+    verticalScrollSize: -1,
+    verticalViewportSize: -1,
+    horizontalScrollSize: -1,
+    horizontalViewportSize: -1,
+  }
   let initialContextFlushQueued = false
   let initialContextPending = true
   let pendingInitialContext: BufferContext | undefined
-
-  // Autocomplete accept can emit selection and insertion as separate content
-  // events; keep its origin across both so the popup does not refresh itself
   let pendingChangeOrigin: PendingChangeOrigin | undefined
-  // setText is an external reset; its textarea event must report modified=false
   let pendingReset = false
 
   const bufferMicrotask = (callback: () => void) => {
@@ -115,14 +138,15 @@ export function Buffer(props: BufferProps) {
     })
   }
 
-  const syncCursorStateFromEditor = (shouldQueue = true) => {
+  const syncCursorStateFromEditor = (mode: "queued" | "inline" = "queued") => {
     const next = adapter.readCursorState()
     if (!next) {
       return
     }
 
     setCursorState(next)
-    if (!shouldQueue) {
+    if (mode === "inline") {
+      syncActiveLineColor()
       return
     }
 
@@ -131,15 +155,16 @@ export function Buffer(props: BufferProps) {
 
   const adapter = createBufferOpentuiAdapter({
     tabWidth,
+    getText: text,
+    getLineStarts: lineStarts,
     onLineInfoChange: () => {
       queueSync()
     },
     onCursorSync: () => {
-      syncCursorStateFromEditor()
+      syncCursorStateFromEditor(cursorSyncMode)
     },
   })
 
-  // coalesce parent onTextChange
   const debouncedPush = debounce(() => {
     props.onTextChange(text(), { modified: contentModified() })
   }, DEBOUNCE_MS)
@@ -203,6 +228,11 @@ export function Buffer(props: BufferProps) {
 
   const syncScrollMetrics = (ref: TextareaRenderable, nextViewportHeight: number) => {
     const height = Math.max(1, nextViewportHeight)
+    const margin = getViewportInsetY({ height }) / height
+    if (margin !== lastEditorScrollMargin) {
+      lastEditorScrollMargin = margin
+      ref.editorView.setScrollMargin(margin)
+    }
     setViewportHeight(height)
     setTotalRows(getTotalRowsForViewport(ref, height))
   }
@@ -219,6 +249,36 @@ export function Buffer(props: BufferProps) {
     scrollRef.content.translateY = 0
   }
 
+  const syncScrollboxBarMetrics = () => {
+    if (!scrollRef) {
+      return
+    }
+
+    const nextMetrics = {
+      verticalScrollSize: scrollRef.scrollHeight,
+      verticalViewportSize: scrollRef.viewport.height,
+      horizontalScrollSize: scrollRef.scrollWidth,
+      horizontalViewportSize: scrollRef.viewport.width,
+    }
+    if (nextMetrics.verticalScrollSize !== lastScrollboxMetrics.verticalScrollSize) {
+      scrollRef.verticalScrollBar.scrollSize = nextMetrics.verticalScrollSize
+    }
+    if (nextMetrics.verticalViewportSize !== lastScrollboxMetrics.verticalViewportSize) {
+      scrollRef.verticalScrollBar.viewportSize = nextMetrics.verticalViewportSize
+    }
+    if (nextMetrics.horizontalScrollSize !== lastScrollboxMetrics.horizontalScrollSize) {
+      scrollRef.horizontalScrollBar.scrollSize = nextMetrics.horizontalScrollSize
+    }
+    if (nextMetrics.horizontalViewportSize !== lastScrollboxMetrics.horizontalViewportSize) {
+      scrollRef.horizontalScrollBar.viewportSize = nextMetrics.horizontalViewportSize
+    }
+    lastScrollboxMetrics = nextMetrics
+  }
+
+  const noteUserScroll = () => {
+    adapter.noteManualScroll()
+  }
+
   const syncLineNumberViewportHeight = () => {
     if (!gutterRef || gutterRef.isDestroyed) {
       return
@@ -230,7 +290,7 @@ export function Buffer(props: BufferProps) {
     gutterRef.maxHeight = height
   }
 
-  const syncLineDecorations = () => {
+  const syncLineSigns = () => {
     if (!gutterRef || gutterRef.isDestroyed) {
       return
     }
@@ -246,6 +306,12 @@ export function Buffer(props: BufferProps) {
       })
     }
     gutterRef.setLineSigns(signs)
+  }
+
+  const syncActiveLineColor = () => {
+    if (!gutterRef || gutterRef.isDestroyed) {
+      return
+    }
 
     const colors = new Map<number, { gutter: string; content: string }>()
     if (props.isFocused()) {
@@ -257,11 +323,6 @@ export function Buffer(props: BufferProps) {
     gutterRef.setLineColors(colors)
   }
 
-  /**
-   * Applies a virtual scroll row to the textarea viewport.
-   * The textarea node stays viewport-sized; editorView moves to the rows that
-   * should be visible at scrollbox.scrollTop.
-   */
   const setEditorViewport = (top: number, nextHeight = adapter.live()?.height ?? 1, moveCursor = false) => {
     const ref = adapter.live()
     if (!ref) {
@@ -270,16 +331,25 @@ export function Buffer(props: BufferProps) {
 
     const viewport = ref.editorView.getViewport()
     const height = Math.max(1, nextHeight)
+    const margin = getViewportInsetY({ height }) / height
+    if (margin !== lastEditorScrollMargin) {
+      lastEditorScrollMargin = margin
+      ref.editorView.setScrollMargin(margin)
+    }
     const nextTop = Math.max(0, Math.min(top, Math.max(0, getTotalRowsForViewport(ref, height) - height)))
     if (viewport.offsetY === nextTop && viewport.width === ref.width && viewport.height === height) {
+      pendingScrollboxTop = undefined
       syncScrollMetrics(ref, height)
       syncScrollboxTop(ref.scrollY)
       return
     }
 
+    pendingScrollboxTop = moveCursor ? nextTop : undefined
+    cursorSyncMode = moveCursor ? "inline" : "queued"
     adapter.setViewport(viewport.offsetX, nextTop, Math.max(1, ref.width), height, moveCursor)
+    cursorSyncMode = "queued"
     ref.requestRender()
-    if (scrollRef && (scrollRef.scrollTop ?? 0) !== ref.scrollY) {
+    if (!moveCursor && scrollRef && (scrollRef.scrollTop ?? 0) !== ref.scrollY) {
       scrollRef.scrollTo({ x: 0, y: ref.scrollY })
     }
   }
@@ -290,9 +360,13 @@ export function Buffer(props: BufferProps) {
       return
     }
 
+    syncScrollboxBarMetrics()
     const viewport = getViewportRect(scrollRef)
     const height = Math.max(1, viewport.height)
     const maxTop = Math.max(0, getTotalRowsForViewport(ref, height) - height)
+    if (pendingScrollboxTop !== undefined && ref.scrollY === pendingScrollboxTop) {
+      pendingScrollboxTop = undefined
+    }
     if (ref.scrollY > maxTop) {
       setEditorViewport(maxTop, height)
       return
@@ -303,14 +377,38 @@ export function Buffer(props: BufferProps) {
   }
 
   const applyScrollboxIntent = () => {
+    scrollboxIntentQueued = false
     if (!scrollRef) {
       return
     }
 
+    syncScrollboxBarMetrics()
     const viewport = getViewportRect(scrollRef)
     setViewportHeight(Math.max(1, viewport.height))
-    setEditorViewport(scrollRef.scrollTop ?? 0, viewport.height, true)
+    const ref = adapter.live()
+    const nextTop = scrollRef.scrollTop ?? 0
+    let moveCursor = true
+    if (ref) {
+      const editorViewport = ref.editorView.getViewport()
+      const currentRow = editorViewport.offsetY + ref.visualCursor.visualRow
+      const band = getViewportBandY({ height: viewport.height })
+      moveCursor = currentRow < nextTop + band.start || currentRow > nextTop + band.end
+    }
+    setEditorViewport(nextTop, viewport.height, moveCursor)
+    analysisSession?.sync({ scheduleUpdate: false })
     scrollRef.content.translateY = 0
+  }
+
+  const queueScrollboxIntent = () => {
+    if (scrollRef) {
+      scrollRef.content.translateY = 0
+    }
+    if (scrollboxIntentQueued) {
+      return
+    }
+
+    scrollboxIntentQueued = true
+    bufferMicrotask(applyScrollboxIntent)
   }
 
   const handleScrollboxSync = () => {
@@ -319,9 +417,12 @@ export function Buffer(props: BufferProps) {
     }
 
     scrollRef.content.translateY = 0
+    syncScrollboxBarMetrics()
+    if (scrollboxIntentQueued) {
+      return
+    }
 
     const viewport = getViewportRect(scrollRef)
-    // Size changes affect wrapping; scroll-only syncs can reuse textarea layout.
     if (viewport.width !== viewportWidth || viewport.height !== viewportRows) {
       viewportWidth = viewport.width
       viewportRows = viewport.height
@@ -334,15 +435,27 @@ export function Buffer(props: BufferProps) {
       return
     }
 
+    if (pendingScrollboxTop !== undefined) {
+      if (ref.scrollY === pendingScrollboxTop) {
+        pendingScrollboxTop = undefined
+        queueSync()
+      }
+      if ((scrollRef.scrollTop ?? 0) === pendingScrollboxTop) {
+        return
+      }
+      pendingScrollboxTop = undefined
+    }
+
     if ((scrollRef.scrollTop ?? 0) !== ref.scrollY) {
       syncScrollboxTop(ref.scrollY)
+      return
     }
   }
 
   const syncLayout = () => {
     syncQueued = false
     syncScrollboxFromEditor()
-    syncLineDecorations()
+    syncActiveLineColor()
     syncLineNumberViewportHeight()
     analysisSession?.sync()
     autocomplete.syncAnchor()
@@ -357,10 +470,6 @@ export function Buffer(props: BufferProps) {
     bufferMicrotask(syncLayout)
   }
 
-  /**
-   * Resolves autocomplete popup position from a document offset.
-   * lineInfo is required because wrapping, tabs, and wide chars are layout-time facts.
-   */
   function getAnchor(replaceStart: DocCharOffset): SelectPopupAnchor | null {
     const ref = adapter.live()
     if (!bufferRootRef || !ref) {
@@ -380,7 +489,6 @@ export function Buffer(props: BufferProps) {
     }
   }
 
-  /** Applies document text through editorView so selection, cursor, and plainText stay in sync. */
   const replaceDocumentRange = (
     start: DocCharOffset,
     end: DocCharOffset,
@@ -413,16 +521,23 @@ export function Buffer(props: BufferProps) {
     const starts = lineStarts()
     const cursor = offsetToLineCol(offset, starts)
     const lineStart = starts[cursor.line] ?? 0
+    const needsEofWorkaround = cursor.line === starts.length - 1 && offset === current.length
 
     if (cursor.col > 0) {
-      const nextText = current.slice(0, lineStart) + current.slice(offset)
-      return replaceDocumentRange(docCharOffset(0), docCharOffset(current.length), nextText, lineStart, "user")
+      if (needsEofWorkaround) {
+        const nextText = current.slice(0, lineStart) + current.slice(offset)
+        return replaceDocumentRange(docCharOffset(0), docCharOffset(current.length), nextText, lineStart, "user")
+      }
+      return replaceDocumentRange(docCharOffset(lineStart), docCharOffset(offset), "", 0, "user")
     }
 
     if (cursor.line > 0) {
-      const nextCursorOffset = lineStart - 1
-      const nextText = current.slice(0, nextCursorOffset) + current.slice(lineStart)
-      return replaceDocumentRange(docCharOffset(0), docCharOffset(current.length), nextText, nextCursorOffset, "user")
+      if (needsEofWorkaround) {
+        const nextCursorOffset = lineStart - 1
+        const nextText = current.slice(0, nextCursorOffset) + current.slice(lineStart)
+        return replaceDocumentRange(docCharOffset(0), docCharOffset(current.length), nextText, nextCursorOffset, "user")
+      }
+      return replaceDocumentRange(docCharOffset(lineStart - 1), docCharOffset(lineStart), "", 0, "user")
     }
 
     return true
@@ -433,12 +548,12 @@ export function Buffer(props: BufferProps) {
     props.onTextChange(text(), { modified: contentModified() })
   }
 
-  /** Applies the latest textarea text to Buffer state and refreshes derived document state */
-  const applyTextChange = (nextText: string, modified: boolean) => {
+  const applyTextChange = (nextText: string, modified: boolean, change = findTextChange(text(), nextText)) => {
     const version = documentVersion() + 1
     const starts = buildLineStarts(nextText)
-    analysisSession?.rebuild(nextText, starts, version)
+    analysisSession?.rebuild(nextText, starts, version, change)
     setTextState(nextText)
+    setLineStartsState(starts)
     setContentModified(modified)
     setDocumentVersion(version)
     adapter.resetMeasuredRows()
@@ -449,7 +564,6 @@ export function Buffer(props: BufferProps) {
     adapter.live()?.focus()
   }
 
-  /** Replaces text from outside user input while keeping OpenTUI's buffer in sync. */
   const setText = (nextText: string) => {
     const ref = adapter.live()
     pendingReset = true
@@ -465,13 +579,13 @@ export function Buffer(props: BufferProps) {
     queueSync()
   }
 
-  /** Commits ref.plainText; pending flags only affect metadata and autocomplete refresh. */
   const handleContentChange = () => {
     const ref = adapter.live()
     if (!ref) {
       return
     }
 
+    const change = findTextChange(text(), ref.plainText)
     const pending = pendingChangeOrigin
     const origin = pending?.origin ?? "user"
     if (pending && pending.remainingEvents > 1) {
@@ -485,10 +599,15 @@ export function Buffer(props: BufferProps) {
     }
 
     const modified = !pendingReset
+    if (!change && ref.plainText === text() && modified === contentModified()) {
+      pendingReset = false
+      syncCursorStateFromEditor("queued")
+      queueSync()
+      return
+    }
     pendingReset = false
-    analysisSession?.invalidate()
-    syncCursorStateFromEditor(false)
-    applyTextChange(ref.plainText, modified)
+    applyTextChange(ref.plainText, modified, change)
+    syncCursorStateFromEditor("queued")
     queueSync()
     if (origin === "user") {
       bufferMicrotask(() => {
@@ -507,7 +626,6 @@ export function Buffer(props: BufferProps) {
       preventDefault: true,
     },
     {
-      // OpenTUI still corrupts EOF line/view state for ctrl+u on the final line.
       pattern: "ctrl+u",
       handler: () => {
         deleteToLineStart()
@@ -527,6 +645,7 @@ export function Buffer(props: BufferProps) {
   onCleanup(() => {
     disposed = true
     syncQueued = false
+    scrollboxIntentQueued = false
     pendingInitialContext = undefined
     debouncedPush.clear()
     autocomplete.close()
@@ -552,9 +671,14 @@ export function Buffer(props: BufferProps) {
 
   createEffect(() => {
     props.gutterMarkers?.()
+    palette().get("text_muted")
+    syncLineSigns()
+  })
+
+  createEffect(() => {
     props.isFocused()
     focusedRow()
-    syncLineDecorations()
+    syncActiveLineColor()
   })
 
   createEffect(() => {
@@ -611,8 +735,9 @@ export function Buffer(props: BufferProps) {
           }}
           onSync={handleScrollboxSync}
           onUserScroll={() => {
+            noteUserScroll()
             autocomplete.close()
-            applyScrollboxIntent()
+            queueScrollboxIntent()
           }}
           height="100%"
           horizontalScrollbarOptions={{
@@ -695,13 +820,12 @@ export function Buffer(props: BufferProps) {
                   event.stopPropagation()
                   props.focusSelf()
                 }}
-                onMouseScroll={(event: MouseEvent) => {
-                  event.stopPropagation()
+                onMouseScroll={(_event: MouseEvent) => {
+                  noteUserScroll()
                   props.focusSelf()
-                  queueSync()
                 }}
                 onCursorChange={() => {
-                  syncCursorStateFromEditor()
+                  syncCursorStateFromEditor(cursorSyncMode)
                 }}
                 onContentChange={handleContentChange}
               />

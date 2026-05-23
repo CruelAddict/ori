@@ -19,6 +19,7 @@ export type BufferAutocompleteResult = {
 
 export type BufferAutocompleteProvider = {
   getCompletions: (request: BufferAutocompleteRequest) => Promise<BufferAutocompleteResult | undefined>
+  subscribeState?: (listener: () => void) => () => void
 }
 
 export type BufferAutocompleteState = BufferAutocompleteResult & {

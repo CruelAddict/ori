@@ -99,6 +99,7 @@ export function createVM(options: CreateVMOptions) {
     query: options.query,
     resourceName: options.resourceName,
     getSchemaState: options.introspection.getState,
+    subscribeSchemaState: options.introspection.subscribe,
     ...paneFocusFuncs("editor"),
     unfocus: focusPreviousVisiblePane,
   })

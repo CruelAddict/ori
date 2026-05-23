@@ -1288,6 +1288,9 @@ function shouldSuppressExactKeyword(token: string, mode: "word" | "member", clau
   if (mode !== "word" || !token) {
     return false
   }
+  if (expectsTableSuggestions(clause)) {
+    return false
+  }
 
   const exact = normalize(token)
   if (EXACT_CLAUSE_KEYWORDS.has(exact)) {
@@ -1448,6 +1451,10 @@ export function getSqlAutocompleteResult(input: SqlAutocompleteInput): BufferAut
   const selectFollowUps = clause === "select" ? getSelectFollowUpOptions(beforeCursor) : []
   const clauseFollowUpsOnly = shouldShowClauseFollowUpsOnly(beforeCursor, clause, span.token, clauseFollowUps)
   const exactClauseFollowUp = clauseFollowUps.some((keyword) => normalize(keyword) === normalize(span.token))
+  const useUnfilteredRelationFallback =
+    expectsTableSuggestions(clause) &&
+    (EXACT_COMPLETED_KEYWORDS.has(normalize(span.token)) ||
+      input.dialect.keywords.some((keyword) => normalize(keyword) === normalize(span.token)))
   if (shouldSuppressExactKeyword(span.token, span.mode, clause, input.dialect) && !exactClauseFollowUp) {
     return undefined
   }
@@ -1584,7 +1591,7 @@ export function getSqlAutocompleteResult(input: SqlAutocompleteInput): BufferAut
     addFunctionItems(items, input.dialect, 1, sqlCasePreference)
   }
 
-  const filtered = sortItems(span.token, items)
+  const filtered = sortItems(useUnfilteredRelationFallback ? "" : span.token, items)
     .filter((item) => !usedColumns.includes(normalize(item.label)))
     .filter((item) => !isNoOpCompletion(statement.text, statement.cursorOffset, item))
     .slice(0, 50)

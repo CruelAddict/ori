@@ -5,6 +5,7 @@ import { createSqlAnalysis } from "@ui/widgets/editor-panel/sql-analysis"
 import { createComponent, onCleanup } from "solid-js"
 import { type MountedTuiApp, mountInTui } from "../../../test/opentui-harness"
 import { findRequiredNode, requirePresent } from "../../../test/opentui-test-tools"
+import type { BufferAnalysis } from "./analysis"
 import type { BufferAutocompleteProvider } from "./autocomplete/types"
 import { Buffer, type BufferApi, type BufferContext } from "./buffer"
 
@@ -13,6 +14,7 @@ type MountBufferOptions = {
   width: number
   height: number
   autocomplete?: BufferAutocompleteProvider
+  analysis?: BufferAnalysis
   onContextChange?: (context: BufferContext) => void
 }
 
@@ -27,13 +29,16 @@ function renderBuffer(options: MountBufferOptions, registerApi?: (api: BufferApi
       createComponent(() => {
         const { theme } = useTheme()
         const logger = useLogger()
-        const analysis = createSqlAnalysis({
-          theme,
-          logger,
-        })
+        const ownedAnalysis = options.analysis
+          ? undefined
+          : createSqlAnalysis({
+              theme,
+              logger,
+            })
+        const analysis = options.analysis ?? ownedAnalysis
 
         onCleanup(() => {
-          analysis.dispose()
+          ownedAnalysis?.dispose()
         })
 
         return createComponent(Buffer, {

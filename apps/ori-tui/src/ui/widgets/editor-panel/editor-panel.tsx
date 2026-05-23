@@ -25,6 +25,7 @@ export function EditorPanel(props: EditorPanelProps) {
     theme,
     logger,
     getSchemaState: pane.getSchemaState,
+    subscribeSchemaState: pane.subscribeSchemaState,
   })
 
   onCleanup(() => {

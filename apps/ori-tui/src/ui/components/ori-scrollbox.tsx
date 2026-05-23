@@ -87,6 +87,20 @@ export type ViewportRect = {
   height: number
 }
 
+export type ViewportBandY = {
+  start: number
+  end: number
+}
+
+type ScrollSyncState = {
+  scrollLeft: number
+  scrollTop: number
+  scrollHeight: number
+  scrollWidth: number
+  viewportWidth: number
+  viewportHeight: number
+}
+
 export function OriScrollbox(props: OriScrollboxProps) {
   const { theme } = useTheme()
   const [local, scrollboxProps] = splitProps(props, [
@@ -148,19 +162,31 @@ export function OriScrollbox(props: OriScrollboxProps) {
       local.scrollSpeed && originalOnMouseEvent
         ? createScrollSpeedHandler(originalOnMouseEvent, local.scrollSpeed)
         : originalOnMouseEvent
+    let lastSyncState = readScrollSyncState(node)
+
+    const maybeSync = () => {
+      const nextState = readScrollSyncState(node)
+      if (sameScrollSyncState(lastSyncState, nextState)) {
+        return
+      }
+
+      lastSyncState = nextState
+      local.onSync?.()
+    }
 
     installScrollbarUserScrollPatch(node, local.onUserScroll, local.onSync)
 
     // @ts-expect-error onUpdate is protected in typings
     node.onUpdate = (deltaTime: number) => {
       originalOnUpdate?.(deltaTime)
-      local.onSync?.()
+      maybeSync()
     }
 
     // @ts-expect-error onMouseEvent is protected in typings
     node.onMouseEvent = (event: MouseEvent) => {
       const prevLeft = node.scrollLeft ?? 0
       const prevTop = node.scrollTop ?? 0
+      let skippedNoopScrollSync = false
       handleMouseEvent?.(event)
       if (event.type === "scroll") {
         const newLeft = node.scrollLeft ?? 0
@@ -177,11 +203,20 @@ export function OriScrollbox(props: OriScrollboxProps) {
             scrollTop: newTop,
           })
         }
+        if (delta.x === 0 && delta.y === 0) {
+          skippedNoopScrollSync = true
+        }
       }
-      local.onSync?.()
+      if (skippedNoopScrollSync) {
+        return
+      }
+      maybeSync()
     }
 
-    process.nextTick(() => local.onSync?.())
+    process.nextTick(() => {
+      lastSyncState = readScrollSyncState(node)
+      local.onSync?.()
+    })
   }
 
   return (
@@ -240,6 +275,18 @@ export function hasDraggingSelectionInScrollbox(node: ScrollBoxRenderable | unde
 function computeVerticalInset(viewport: ViewportRect): number {
   const maxY = Math.max(0, viewport.height - 1)
   return Math.min(DEFAULT_SCROLL_INSET_Y, Math.floor(maxY / 2))
+}
+
+export function getViewportInsetY(viewport: Pick<ViewportRect, "height">): number {
+  return computeVerticalInset({ x: 0, y: 0, width: 0, height: viewport.height })
+}
+
+export function getViewportBandY(viewport: Pick<ViewportRect, "height">): ViewportBandY {
+  const inset = getViewportInsetY(viewport)
+  return {
+    start: inset,
+    end: Math.max(inset, viewport.height - 1 - inset),
+  }
 }
 
 function isDescendantOf(renderable: Renderable, parent: Renderable | undefined): boolean {
@@ -312,6 +359,28 @@ function mergeScrollbarOptions(base: ScrollbarOptions, custom: ScrollbarOptions 
       ...(custom.trackOptions ?? {}),
     },
   }
+}
+
+function readScrollSyncState(node: ScrollBoxRenderable): ScrollSyncState {
+  return {
+    scrollLeft: node.scrollLeft ?? 0,
+    scrollTop: node.scrollTop ?? 0,
+    scrollHeight: node.scrollHeight,
+    scrollWidth: node.scrollWidth,
+    viewportWidth: node.viewport.width,
+    viewportHeight: node.viewport.height,
+  }
+}
+
+function sameScrollSyncState(a: ScrollSyncState, b: ScrollSyncState) {
+  return (
+    a.scrollLeft === b.scrollLeft &&
+    a.scrollTop === b.scrollTop &&
+    a.scrollHeight === b.scrollHeight &&
+    a.scrollWidth === b.scrollWidth &&
+    a.viewportWidth === b.viewportWidth &&
+    a.viewportHeight === b.viewportHeight
+  )
 }
 
 function installScrollbarUserScrollPatch(

@@ -1,5 +1,5 @@
 import { createSelectPopup, type SelectPopupAnchor, type SelectPopupViewModel } from "@ui/components/select-popup-model"
-import { type Accessor, createMemo, createSignal } from "solid-js"
+import { type Accessor, createEffect, createMemo, createSignal, onCleanup } from "solid-js"
 import type { DocCharOffset, DocCharRange } from "../coords"
 import type { BufferAutocompleteItem, BufferAutocompleteProvider } from "./types"
 
@@ -158,6 +158,18 @@ export function createBufferAutocomplete(options: CreateBufferAutocompleteOption
     cancelRefresh()
     popup.close()
   }
+
+  createEffect(() => {
+    const provider = options.provider()
+    if (!provider?.subscribeState) {
+      return
+    }
+
+    const unsubscribe = provider.subscribeState(() => {
+      refresh()
+    })
+    onCleanup(unsubscribe)
+  })
 
   const syncAnchor = () => {
     const range = replace()

@@ -1,7 +1,14 @@
 import { describe, expect, test } from "bun:test"
-import { LineNumberRenderable, type MouseEvent, type ScrollBoxRenderable, type TextareaRenderable } from "@opentui/core"
+import {
+  LineNumberRenderable,
+  type MouseEvent,
+  type ScrollBoxRenderable,
+  SyntaxStyle,
+  type TextareaRenderable,
+} from "@opentui/core"
 import type { MountedTuiApp } from "../../../test/opentui-harness"
 import { findRequiredNode, readFrameLines, readFrameLineTokens } from "../../../test/opentui-test-tools"
+import type { BufferAnalysis } from "./analysis"
 import type { BufferContext } from "./buffer"
 import { getBufferScrollbox, getBufferTextarea, mountBuffer, moveCursor } from "./buffer.test-tools"
 
@@ -97,6 +104,38 @@ function readVisibleLines(app: MountedTuiApp) {
     .map((line) => line.replace(/\s+$/, ""))
     .filter((line) => line.trim().length > 0)
     .map(stripRenderedLineNumberPrefix)
+}
+
+function waitForImmediate() {
+  return new Promise<void>((resolve) => setImmediate(resolve))
+}
+
+function busyWait(ms: number) {
+  const started = performance.now()
+  let elapsed = 0
+  while (elapsed < ms) {
+    elapsed = performance.now() - started
+  }
+}
+
+function createBlockingAnalysis(syncMs: number): BufferAnalysis {
+  const syntaxStyle = SyntaxStyle.create()
+  return {
+    syntaxStyle: () => syntaxStyle,
+    createSession: () => ({
+      rebuild: () => {},
+      reset: () => {},
+      invalidate: () => {},
+      sync: () => {
+        busyWait(syncMs)
+      },
+      dispose: () => {},
+    }),
+  }
+}
+
+function createRawScrollSequence(x: number, y: number) {
+  return `\u001b[<65;${x + 1};${y + 1}M`
 }
 
 function createWrappedScrollLockFixture() {
@@ -240,6 +279,53 @@ GO`
       // A clipped tail would leave only the very end of the token visible.
       expect(visibleLines).not.toContain("*/")
       expect(visibleLines).not.toContain("/")
+    } finally {
+      app.destroy()
+    }
+  })
+
+  test("bounds multiline block comment highlights before following SQL", async () => {
+    const lines = [
+      "/*",
+      "** Copyright Microsoft, Inc. 1994 - 2000",
+      "** All Rights Reserved.",
+      "*/",
+      "",
+      "-- This script does not create a database.",
+      "SET NOCOUNT ON",
+      "GO",
+      "go",
+      "",
+      "/* Set DATEFORMAT so that the date strings are interpreted correctly regardless of",
+      "   the default DATEFORMAT on the server.",
+      "*/",
+      "SET DATEFORMAT mdy",
+      "GO",
+      "go",
+      "if exists (select 1)",
+      "select 2",
+    ]
+    const sql = lines.join("\n")
+    const app = await mountBuffer({ text: sql, width: 120, height: 12 })
+
+    try {
+      const textarea = getBufferTextarea(app)
+      const hasStyle = (line: number, styleId: number | undefined) =>
+        textarea.getLineHighlights(line).some((highlight) => highlight.styleId === styleId)
+
+      await app.waitFor(() => textarea.getLineHighlights(0).length > 0 && textarea.getLineHighlights(13).length > 0)
+      const commentStyleId = textarea.getLineHighlights(0)[0]?.styleId
+
+      expect(commentStyleId).toBeDefined()
+      expect(hasStyle(0, commentStyleId)).toBe(true)
+      expect(hasStyle(10, commentStyleId)).toBe(true)
+      expect(hasStyle(6, commentStyleId)).toBe(false)
+      expect(hasStyle(7, commentStyleId)).toBe(false)
+      expect(hasStyle(8, commentStyleId)).toBe(false)
+      expect(hasStyle(13, commentStyleId)).toBe(false)
+      expect(hasStyle(14, commentStyleId)).toBe(false)
+      expect(hasStyle(15, commentStyleId)).toBe(false)
+      expect(hasStyle(16, commentStyleId)).toBe(false)
     } finally {
       app.destroy()
     }
@@ -442,6 +528,163 @@ GO`
     }
   })
 
+  test("does not move the cursor until scrolling pushes it into the viewport band", async () => {
+    const text = Array.from({ length: 24 }, (_, i) => `line-${i}`).join("\n")
+    const app = await mountBuffer({ text, width: 24, height: 8 })
+
+    try {
+      const textarea = getBufferTextarea(app)
+      const scrollbox = getBufferScrollbox(app)
+      await moveCursor(app, textarea, 4, 0)
+      await app.waitFor(() => textarea.logicalCursor.row === 4 && textarea.scrollY === 0)
+
+      await app.setup.mockMouse.scroll(textarea.x + 1, textarea.y + 1, "down")
+      await app.waitFor(() => textarea.scrollY === 1)
+      let state = captureScrollState(textarea, scrollbox)
+      expect(state.cursorLogicalRow).toBe(4)
+      expect(state.cursorVisualRow).toBe(3)
+
+      await app.setup.mockMouse.scroll(textarea.x + 1, textarea.y + 1, "down")
+      await app.waitFor(() => textarea.scrollY === 2)
+      state = captureScrollState(textarea, scrollbox)
+      expect(state.cursorLogicalRow).toBe(4)
+      expect(state.cursorVisualRow).toBe(2)
+
+      await app.setup.mockMouse.scroll(textarea.x + 1, textarea.y + 1, "down")
+      await app.waitFor(() => textarea.scrollY === 3)
+      state = captureScrollState(textarea, scrollbox)
+      expect(state.cursorLogicalRow).toBe(5)
+      expect(state.cursorVisualRow).toBe(2)
+      expect(state.editorScrollY).toBe(state.scrollboxTop)
+    } finally {
+      app.destroy()
+    }
+  })
+
+  test("keeps split sgr mouse tails out of text when scroll sync is slow", async () => {
+    const text = Array.from({ length: 20 }, (_, i) => `line-${i}`).join("\n")
+    const app = await mountBuffer({ text, width: 24, height: 8, analysis: createBlockingAnalysis(40) })
+
+    try {
+      const textarea = getBufferTextarea(app)
+      const x = textarea.x + 1
+      const y = textarea.y + 1
+
+      app.setup.renderer.stdin.emit("data", Buffer.from(`${createRawScrollSequence(x, y)}\u001b[`))
+      await waitForImmediate()
+      app.setup.renderer.stdin.emit("data", Buffer.from(`<65;${x + 1};${y + 1}M`))
+      await app.waitFor(() => textarea.scrollY > 0)
+
+      expect(textarea.plainText).toBe(text)
+    } finally {
+      app.destroy()
+    }
+  })
+
+  test("extends highlights for newly revealed lines of the same statement on first scroll", async () => {
+    const row = [
+      'INSERT INTO "Orders"',
+      '("OrderID","CustomerID","EmployeeID","OrderDate","RequiredDate",',
+      '\t"ShippedDate","ShipVia","Freight","ShipName","ShipAddress",',
+      '\t"ShipCity","ShipRegion","ShipPostalCode","ShipCountry")',
+      "VALUES (10958,N'OCEAN',7,'3/18/1998','4/15/1998','3/27/1998',2,49.56,",
+      "\tN'Oceano Atlantico Ltda.',N'Ing. Gustavo Moncada 8585 Piso 20-A',N'Buenos Aires',",
+      "\tNULL,N'1010',N'Argentina')",
+    ].join("\n")
+    const sql = Array.from({ length: 6 }, (_, index) => row.replace("10958", String(10000 + index))).join("\n")
+    const app = await mountBuffer({ text: sql, width: 72, height: 4 })
+
+    try {
+      const textarea = getBufferTextarea(app)
+
+      await app.waitFor(() => textarea.getLineHighlights(0).length > 0)
+      expect(textarea.getLineHighlights(20).length).toBe(0)
+
+      for (let i = 0; i < 18; i += 1) {
+        await app.setup.mockMouse.scroll(textarea.x + 1, textarea.y + 1, "down")
+        await app.renderOnce()
+      }
+
+      expect(textarea.scrollY).toBeGreaterThanOrEqual(16)
+      expect(textarea.getLineHighlights(19).length).toBeGreaterThan(0)
+    } finally {
+      app.destroy()
+    }
+  })
+
+  test("keeps a shifted visible GO-delimited insert block highlighted after inserting the same block", async () => {
+    const block = `INSERT INTO "Records"
+("Id","Code","Label")
+VALUES (1,N'alpha',N'one')`
+    const inserted = `${block}\nGO\n`
+    const text = [block, "GO", block, "GO", block].join("\n")
+    const expectedText = [block, "GO", block, "GO", block, "GO", block].join("\n")
+    const app = await mountBuffer({ text, width: 72, height: 20 })
+
+    try {
+      const textarea = getBufferTextarea(app)
+
+      await app.waitFor(
+        () =>
+          textarea.getLineHighlights(8).length > 0 &&
+          textarea.getLineHighlights(9).length > 0 &&
+          textarea.getLineHighlights(10).length > 0,
+      )
+      await moveCursor(app, textarea, 8, 0)
+
+      await app.setup.mockInput.pasteBracketedText(inserted)
+      await app.waitFor(() => textarea.plainText === expectedText)
+
+      expect(textarea.getLineHighlights(12).length).toBeGreaterThan(0)
+      expect(textarea.getLineHighlights(13).length).toBeGreaterThan(0)
+      expect(textarea.getLineHighlights(14).length).toBeGreaterThan(0)
+
+      await app.setup.renderOnce()
+
+      expect(textarea.getLineHighlights(12).length).toBeGreaterThan(0)
+      expect(textarea.getLineHighlights(13).length).toBeGreaterThan(0)
+      expect(textarea.getLineHighlights(14).length).toBeGreaterThan(0)
+    } finally {
+      app.destroy()
+    }
+  })
+
+  test("keeps the pasted cursor visible after prior wheel scrolling", async () => {
+    const text = Array.from({ length: 40 }, (_, i) => `line-${i}`).join("\n")
+    const pasted = "\nalpha\nbeta\ngamma\ndelta\nepsilon\nzeta\neta\ntheta\niota\n"
+    const app = await mountBuffer({ text, width: 24, height: 8 })
+
+    try {
+      const textarea = getBufferTextarea(app)
+      const scrollbox = getBufferScrollbox(app)
+
+      textarea.focus()
+      await moveCursor(app, textarea, 8, -1)
+      await app.waitFor(() => textarea.logicalCursor.row === 8)
+
+      for (let i = 0; i < 4; i += 1) {
+        await app.setup.mockMouse.scroll(textarea.x + 1, textarea.y + 1, "down")
+        await app.renderOnce()
+      }
+      await app.waitFor(() => textarea.scrollY > 0)
+      const scrollBeforePaste = textarea.scrollY
+
+      await app.setup.mockInput.pasteBracketedText(pasted)
+      await app.waitFor(() => textarea.plainText.includes("theta"))
+      await app.waitFor(() => textarea.logicalCursor.row > 8)
+      await app.waitFor(() => textarea.scrollY > scrollBeforePaste)
+
+      const state = captureScrollState(textarea, scrollbox)
+      expect(state.editorScrollY).toBe(state.scrollboxTop)
+      expect(state.cursorVisualRow).toBeGreaterThanOrEqual(0)
+      expect(state.cursorVisualRow).toBeLessThan(state.editorHeight)
+      expect(state.cursorLogicalRow).toBeGreaterThan(8)
+      expect(state.editorScrollY).toBeGreaterThan(scrollBeforePaste)
+    } finally {
+      app.destroy()
+    }
+  })
+
   test("uses visual rows for viewport clamping during scroll", async () => {
     const fixture = createWrappedScrollLockFixture()
     const app = await mountBuffer({ text: fixture.text, width: 48, height: 8 })
@@ -548,6 +791,32 @@ GO`
       await app.waitFor(() => textarea.plainText === "Line 1\nLine 2\nLine 4")
       expect(textarea.logicalCursor.row).toBe(1)
       expect(textarea.logicalCursor.col).toBe(6)
+    } finally {
+      app.destroy()
+    }
+  })
+
+  test("does not scroll downward after ctrl+u at the end of a long wrapped line", async () => {
+    const fixture = createWrappedScrollLockFixture()
+    const app = await mountBuffer({ text: fixture.text, width: 48, height: 8 })
+
+    try {
+      const textarea = getBufferTextarea(app)
+      const scrollbox = getBufferScrollbox(app)
+      const beforeLine = fixture.text.split("\n")[fixture.longLineRow] ?? ""
+
+      await moveCursor(app, textarea, fixture.longLineRow, beforeLine.length)
+      await app.waitFor(() => textarea.logicalCursor.row === fixture.longLineRow)
+      const beforeScrollY = textarea.scrollY
+
+      app.setup.mockInput.pressKey("u", { ctrl: true })
+      await app.waitFor(() => textarea.logicalCursor.row === fixture.longLineRow && textarea.logicalCursor.col === 0)
+
+      const state = captureScrollState(textarea, scrollbox)
+      expect(state.editorScrollY).toBe(state.scrollboxTop)
+      expect(state.editorScrollY).toBeLessThanOrEqual(beforeScrollY)
+      expect(state.cursorVisualRow).toBeGreaterThanOrEqual(0)
+      expect(state.cursorVisualRow).toBeLessThan(state.editorHeight)
     } finally {
       app.destroy()
     }
