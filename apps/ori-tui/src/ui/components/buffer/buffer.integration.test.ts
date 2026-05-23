@@ -123,13 +123,13 @@ function createBlockingAnalysis(syncMs: number): BufferAnalysis {
   return {
     syntaxStyle: () => syntaxStyle,
     createSession: () => ({
-      rebuild: () => {},
-      reset: () => {},
-      invalidate: () => {},
+      rebuild: () => { },
+      reset: () => { },
+      invalidate: () => { },
       sync: () => {
         busyWait(syncMs)
       },
-      dispose: () => {},
+      dispose: () => { },
     }),
   }
 }

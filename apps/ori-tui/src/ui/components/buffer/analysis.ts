@@ -1,4 +1,4 @@
-import type { SyntaxStyle, TextareaRenderable } from "@opentui/core"
+import type { LineInfo, SyntaxStyle, TextareaRenderable } from "@opentui/core"
 import type { SyntaxHighlightSpan } from "@utils/syntax-highlighter"
 import type { Accessor } from "solid-js"
 
@@ -31,6 +31,7 @@ export type BufferAnalysisSnapshot = {
 export type AnalysisHost = {
   tabWidth: number
   getRef: () => TextareaRenderable | undefined
+  getLineInfo: (ref: TextareaRenderable) => LineInfo
   getText: () => string
   getLineStarts: () => number[]
   getVersion: () => number

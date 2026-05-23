@@ -339,7 +339,7 @@ export function createSqlAnalysis(params: { theme: Accessor<SyntaxThemePalette>;
           return undefined
         }
         const starts = host.getLineStarts()
-        const info = ref.lineInfo
+        const info = host.getLineInfo(ref)
         const visibleWindow = getVisibleOffsetWindow({
           info,
           scrollY: ref.scrollY,
@@ -528,7 +528,7 @@ export function createSqlAnalysis(params: { theme: Accessor<SyntaxThemePalette>;
             if (nextStatement && ref) {
               const starts = host.getLineStarts()
               const text = host.getText()
-              const info = ref.lineInfo
+              const info = host.getLineInfo(ref)
               const visibleWindow = getVisibleOffsetWindow({
                 info,
                 scrollY: ref.scrollY,
@@ -643,7 +643,7 @@ export function createSqlAnalysis(params: { theme: Accessor<SyntaxThemePalette>;
           changed = true
         }
 
-        const info = ref.lineInfo
+        const info = host.getLineInfo(ref)
         const statements = collectVisibleStatements(
           statementCache,
           info,

@@ -172,6 +172,7 @@ export function Buffer(props: BufferProps) {
   const analysisSession = props.analysis?.createSession({
     tabWidth,
     getRef: () => adapter.live(),
+    getLineInfo: adapter.getLineInfo,
     getText: text,
     getLineStarts: lineStarts,
     getVersion: documentVersion,
