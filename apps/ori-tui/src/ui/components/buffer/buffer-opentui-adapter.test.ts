@@ -6,6 +6,7 @@ import {
   resolveVisualCursorDocOffset,
 } from "./buffer-opentui-adapter"
 import { containerX, containerY, docCharOffset } from "./coords"
+import { Document } from "./document"
 
 describe("buffer opentui adapter", () => {
   test("maps a single-line cursor directly into a document offset", () => {
@@ -53,7 +54,7 @@ describe("buffer opentui adapter", () => {
 
     expect(
       resolveViewportOffsetPoint({
-        text,
+        document: Document.create(text),
         offset: docCharOffset(text.lastIndexOf("fr")),
         lineInfo: {
           lineStartCols: [0, 22],
@@ -73,7 +74,7 @@ describe("buffer opentui adapter", () => {
   test("maps wrapped rows relative to their source line", () => {
     expect(
       resolveViewportOffsetPoint({
-        text: "ignored\nabcdefghijkl",
+        document: Document.create("ignored\nabcdefghijkl"),
         offset: docCharOffset("ignored\nabcdefghijkl".length),
         lineInfo: {
           lineStartCols: [22, 32],
@@ -95,7 +96,7 @@ describe("buffer opentui adapter", () => {
 
     expect(
       resolveVisualCursorDocOffset({
-        text,
+        document: Document.create(text),
         visualRow: 1,
         visualCol: 2,
         lineInfo: {
@@ -116,7 +117,7 @@ describe("buffer opentui adapter", () => {
 
     expect(
       resolveVisualCursorDocOffset({
-        text,
+        document: Document.create(text),
         visualRow: 1,
         visualCol: 12,
         lineInfo: {

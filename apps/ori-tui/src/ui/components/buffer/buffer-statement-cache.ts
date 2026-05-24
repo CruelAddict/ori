@@ -1,19 +1,18 @@
-import type { LineInfo, SyntaxStyle, TextareaRenderable } from "@opentui/core"
-import { buildLineStarts, offsetToLine, offsetToLineCol } from "@utils/line-offsets"
+import type { LineInfo, SyntaxStyle } from "@opentui/core"
+import { buildLineStarts, offsetToLine } from "@utils/line-offsets"
 import type { SyntaxHighlightSpan } from "@utils/syntax-highlighter"
-import type { BufferTextChange } from "./analysis"
 import { buildChangedStatementReuse } from "./buffer-highlight-reuse"
-import { type DisplayColumn, displayColumn, lineDisplayRange } from "./coords"
-import { lineCharOffsetDisplayColumns } from "./text-metrics"
+import { type DocCharOffset, type DocumentVersion, docCharOffset, type LineIndex, lineIndex } from "./coords"
+import type { BufferTextChange, Document } from "./document"
 
 export type StatementRange = {
-  start: number
-  end: number
-  startLine: number
-  endLine: number
+  start: DocCharOffset
+  end: DocCharOffset
+  startLine: LineIndex
+  endLine: LineIndex
 }
 
-export type CollectStatements = (text: string, lineStarts: readonly number[]) => StatementRange[]
+export type CollectStatements = (text: string, lineStarts: readonly DocCharOffset[]) => StatementRange[]
 
 export type StatementEntry = StatementRange & {
   id: string
@@ -23,7 +22,7 @@ export type StatementEntry = StatementRange & {
 }
 
 export type StatementCache = {
-  version: number | string
+  version: DocumentVersion | string
   syntaxStyle: SyntaxStyle
   statements: StatementEntry[]
   lineToStatement: number[]
@@ -32,24 +31,10 @@ export type StatementCache = {
 export type StatementBatch = {
   startIndex: number
   endIndex: number
-  startOffset: number
-  endOffset: number
+  startOffset: DocCharOffset
+  endOffset: DocCharOffset
   text: string
 }
-
-type LineHighlightMetrics =
-  | {
-      kind: "simple"
-    }
-  | {
-      kind: "ascii-tabs"
-      columns: DisplayColumn[]
-    }
-  | {
-      kind: "unicode"
-      columns: DisplayColumn[]
-    }
-  | false
 
 function readStatementText(text: string, statement: StatementRange) {
   return text.slice(statement.start, statement.end)
@@ -67,7 +52,7 @@ function hasShiftedStatementRange(previous: StatementRange, next: StatementRange
   return previous.start + delta === next.start && previous.end + delta === next.end
 }
 
-function touchesChangeWindow(statement: StatementRange, start: number, end: number) {
+function touchesChangeWindow(statement: StatementRange, start: DocCharOffset, end: DocCharOffset) {
   if (start === end) {
     return statement.start <= start && start <= statement.end
   }
@@ -304,7 +289,7 @@ function reconcileIncrementalStatementEntries(params: {
   return statements
 }
 
-function resolveIncrementalReparseStart(previous: readonly StatementEntry[], changeStart: number) {
+function resolveIncrementalReparseStart(previous: readonly StatementEntry[], changeStart: DocCharOffset) {
   let index = -1
 
   for (let i = 0; i < previous.length; i += 1) {
@@ -321,20 +306,20 @@ function resolveIncrementalReparseStart(previous: readonly StatementEntry[], cha
   if (index < 0) {
     return {
       prefixCount: 0,
-      startOffset: 0,
+      startOffset: docCharOffset(0),
     }
   }
 
   return {
     prefixCount: index,
-    startOffset: previous[index]?.start ?? 0,
+    startOffset: previous[index]?.start ?? docCharOffset(0),
   }
 }
 
 function collectIncrementalQueries(
   text: string,
-  lineStarts: number[],
-  startOffset: number,
+  lineStarts: readonly DocCharOffset[],
+  startOffset: DocCharOffset,
   collectStatements: CollectStatements,
 ) {
   if (startOffset <= 0) {
@@ -342,19 +327,19 @@ function collectIncrementalQueries(
   }
 
   const tailText = text.slice(startOffset)
-  const tailLineStarts = buildLineStarts(tailText)
+  const tailLineStarts = buildLineStarts(tailText).map(docCharOffset)
   const baseLine = offsetToLine(startOffset, lineStarts)
   return collectStatements(tailText, tailLineStarts).map((statement) => ({
-    start: statement.start + startOffset,
-    end: statement.end + startOffset,
-    startLine: statement.startLine + baseLine,
-    endLine: statement.endLine + baseLine,
+    start: docCharOffset(statement.start + startOffset),
+    end: docCharOffset(statement.end + startOffset),
+    startLine: lineIndex(statement.startLine + baseLine),
+    endLine: lineIndex(statement.endLine + baseLine),
   }))
 }
 
 function buildIncrementalStatementEntries(params: {
   text: string
-  lineStarts: number[]
+  lineStarts: readonly DocCharOffset[]
   previous: readonly StatementEntry[]
   previousText: string
   nextId: () => string
@@ -379,7 +364,7 @@ function buildIncrementalStatementEntries(params: {
 function buildStatementLineMap(statements: readonly StatementRange[], lineCount: number) {
   const lines = Array.from({ length: lineCount }, () => -1)
   statements.forEach((statement, index) => {
-    for (let line = statement.startLine; line <= statement.endLine; line += 1) {
+    for (let line = Number(statement.startLine); line <= statement.endLine; line += 1) {
       lines[line] = index
     }
   })
@@ -414,7 +399,7 @@ function absolutizeStatementSpans(spans: readonly SyntaxHighlightSpan[], start: 
   }))
 }
 
-function nextHighlightVersion(entry: StatementEntry | undefined, nextStart: number, textChanged: boolean) {
+function nextHighlightVersion(entry: StatementEntry | undefined, nextStart: DocCharOffset, textChanged: boolean) {
   if (!entry) {
     return 0
   }
@@ -437,16 +422,17 @@ function needsStatementHighlight(entry: StatementEntry | undefined) {
 }
 
 export function buildStatementCache(
-  text: string,
-  lineStarts: number[],
+  document: Document,
   previous: readonly StatementEntry[],
   previousText: string,
   nextId: () => string,
   syntaxStyle: SyntaxStyle,
-  version: number,
+  version: DocumentVersion | string,
   change: BufferTextChange | undefined,
   collectStatements: CollectStatements,
 ): StatementCache {
+  const text = document.text
+  const lineStarts = document.lineStarts
   const statements =
     change && previous.length > 0
       ? buildIncrementalStatementEntries({
@@ -474,94 +460,7 @@ export function buildStatementCache(
   }
 }
 
-export function getLineText(text: string, starts: readonly number[], line: number) {
-  const start = starts[line] ?? 0
-  const next = line + 1 < starts.length ? (starts[line + 1] ?? text.length) : text.length
-  const end = next > start && text[next - 1] === "\n" ? next - 1 : next
-  return text.slice(start, end)
-}
-
-function isSingleWidthAsciiLine(text: string) {
-  for (let i = 0; i < text.length; i += 1) {
-    const code = text.charCodeAt(i)
-    if (code < 32 || code > 126) {
-      return false
-    }
-  }
-  return true
-}
-
-function buildAsciiTabColumns(text: string, tabWidth: number) {
-  const columns = new Array<DisplayColumn>(text.length + 1)
-  let column = 0
-  columns[0] = displayColumn(0)
-  for (let i = 0; i < text.length; i += 1) {
-    const code = text.charCodeAt(i)
-    if (code === 9) {
-      column += tabWidth - (column % tabWidth)
-      columns[i + 1] = displayColumn(column)
-      continue
-    }
-    if (code < 32 || code > 126) {
-      return undefined
-    }
-    column += 1
-    columns[i + 1] = displayColumn(column)
-  }
-  return columns
-}
-
-function buildLineDisplayHighlightRange(params: {
-  startOffset: number
-  endOffset: number
-  metrics: LineHighlightMetrics
-}) {
-  const { startOffset, endOffset, metrics } = params
-  if (metrics?.kind === "simple") {
-    return lineDisplayRange(startOffset, endOffset)
-  }
-  if (metrics) {
-    return {
-      start: metrics.columns[startOffset] ?? displayColumn(0),
-      end: metrics.columns[endOffset] ?? metrics.columns[metrics.columns.length - 1] ?? displayColumn(0),
-    }
-  }
-
-  return lineDisplayRange(startOffset, endOffset)
-}
-
-function getCachedLineHighlightMetrics(params: {
-  text: string
-  starts: readonly number[]
-  line: number
-  tabWidth: number
-  widthMethod: TextareaRenderable["ctx"] extends { widthMethod?: infer T } ? T : never
-  cache: Map<number, LineHighlightMetrics>
-}) {
-  const cached = params.cache.get(params.line)
-  if (cached !== undefined) {
-    return cached
-  }
-
-  const lineText = getLineText(params.text, params.starts, params.line)
-  const simple = isSingleWidthAsciiLine(lineText)
-  const columns = simple ? undefined : buildAsciiTabColumns(lineText, params.tabWidth)
-  const value = simple
-    ? ({ kind: "simple" } satisfies LineHighlightMetrics)
-    : columns
-      ? ({ kind: "ascii-tabs", columns } satisfies LineHighlightMetrics)
-      : ({
-          kind: "unicode",
-          columns: lineCharOffsetDisplayColumns(
-            { tabWidth: params.tabWidth, widthMethod: params.widthMethod },
-            lineText,
-          ),
-        } satisfies LineHighlightMetrics)
-  params.cache.set(params.line, value)
-  return value
-}
-
-export function getCurrentStatement(cache: StatementCache | undefined, line: number) {
+export function getCurrentStatement(cache: StatementCache | undefined, line: LineIndex) {
   if (!cache) {
     return undefined
   }
@@ -587,7 +486,7 @@ export function collectVisibleStatementIndices(
   info: LineInfo,
   scrollY: number,
   height: number,
-  focusedRow: number,
+  focusedRow: LineIndex,
   overscan: number,
 ) {
   if (!cache) {
@@ -624,7 +523,7 @@ export function collectVisibleStatements(
   info: LineInfo,
   scrollY: number,
   height: number,
-  focusedRow: number,
+  focusedRow: LineIndex,
   overscan: number,
 ) {
   if (!cache) {
@@ -638,7 +537,7 @@ export function collectVisibleStatements(
 
 export function buildStatementBatch(
   cache: StatementCache | undefined,
-  text: string,
+  document: Document,
   startIndex: number,
   endIndex: number,
 ) {
@@ -657,7 +556,7 @@ export function buildStatementBatch(
     endIndex,
     startOffset: first.start,
     endOffset: last.end,
-    text: text.slice(first.start, last.end),
+    text: document.text.slice(first.start, last.end),
   } satisfies StatementBatch
 }
 
@@ -700,142 +599,5 @@ export function applyStatementBatch(
     }))
     statement.dirty = false
     statement.highlightVersion += 1
-  }
-}
-
-function addStatementHighlightSpanLines(params: {
-  ref: TextareaRenderable
-  span: SyntaxHighlightSpan
-  starts: readonly number[]
-  text: string
-  tabWidth: number
-  highlightGroupId: number
-  lineMetricsCache: Map<number, LineHighlightMetrics>
-  visibleStartOffset?: number
-  visibleEndOffset?: number
-}) {
-  const {
-    ref,
-    span,
-    starts,
-    text,
-    tabWidth,
-    highlightGroupId,
-    lineMetricsCache,
-    visibleStartOffset,
-    visibleEndOffset,
-  } = params
-  if (span.end <= span.start) {
-    return
-  }
-
-  const clippedStart = visibleStartOffset === undefined ? span.start : Math.max(span.start, visibleStartOffset)
-  const clippedEnd = visibleEndOffset === undefined ? span.end : Math.min(span.end, visibleEndOffset)
-  if (clippedEnd <= clippedStart) {
-    return
-  }
-
-  const startCursor = offsetToLineCol(clippedStart, starts)
-  const endCursor = offsetToLineCol(clippedEnd - 1, starts)
-  for (let line = startCursor.line; line <= endCursor.line; line += 1) {
-    const metrics = getCachedLineHighlightMetrics({
-      text,
-      starts,
-      line,
-      tabWidth,
-      widthMethod: ref.ctx?.widthMethod,
-      cache: lineMetricsCache,
-    })
-    const lineStart = starts[line] ?? 0
-    const nextLineStart = line + 1 < starts.length ? (starts[line + 1] ?? text.length) : text.length
-    const lineEnd = nextLineStart > lineStart && text[nextLineStart - 1] === "\n" ? nextLineStart - 1 : nextLineStart
-    const start = line === startCursor.line ? clippedStart : lineStart
-    const end = line === endCursor.line ? clippedEnd : lineEnd
-    if (end <= start) {
-      continue
-    }
-
-    const startOffset = start - lineStart
-    const endOffset = Math.min(end, lineEnd) - lineStart
-    const displayRange = buildLineDisplayHighlightRange({
-      startOffset,
-      endOffset,
-      metrics,
-    })
-    ref.editBuffer.addHighlight(line, {
-      start: displayRange.start,
-      end: displayRange.end,
-      styleId: span.styleId,
-      hlRef: highlightGroupId,
-    })
-  }
-}
-
-function findFirstHighlightSpanIndex(spans: readonly SyntaxHighlightSpan[], startOffset: number) {
-  let low = 0
-  let high = spans.length
-
-  while (low < high) {
-    const mid = (low + high) >> 1
-    const spanStart = spans[mid]?.start ?? 0
-    if (spanStart < startOffset) {
-      low = mid + 1
-      continue
-    }
-    high = mid
-  }
-
-  let index = Math.max(0, low - 1)
-  while (index > 0 && (spans[index - 1]?.end ?? 0) > startOffset) {
-    index -= 1
-  }
-  return index
-}
-
-export function addStatementHighlightRange(params: {
-  ref: TextareaRenderable
-  statement: StatementEntry
-  starts: readonly number[]
-  text: string
-  tabWidth: number
-  highlightGroupId: number
-  visibleStartOffset?: number
-  visibleEndOffset?: number
-}) {
-  const { ref, statement, starts, text, tabWidth, highlightGroupId, visibleStartOffset, visibleEndOffset } = params
-  const lineMetricsCache = new Map<number, LineHighlightMetrics>()
-  const rangeStart = visibleStartOffset === undefined ? statement.start : Math.max(statement.start, visibleStartOffset)
-  const rangeEnd = visibleEndOffset === undefined ? statement.end : Math.min(statement.end, visibleEndOffset)
-  if (rangeEnd <= rangeStart) {
-    return
-  }
-
-  for (
-    let index = findFirstHighlightSpanIndex(statement.spans, rangeStart);
-    index < statement.spans.length;
-    index += 1
-  ) {
-    const span = statement.spans[index]
-    if (!span) {
-      continue
-    }
-    if (span.end <= rangeStart) {
-      continue
-    }
-    if (span.start >= rangeEnd) {
-      break
-    }
-
-    addStatementHighlightSpanLines({
-      ref,
-      span,
-      starts,
-      text,
-      tabWidth,
-      highlightGroupId,
-      lineMetricsCache,
-      visibleStartOffset: rangeStart,
-      visibleEndOffset: rangeEnd,
-    })
   }
 }

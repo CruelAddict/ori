@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import { lineIndex } from "@ui/components/buffer/coords"
 import { buildLineStarts } from "@utils/line-offsets"
 import {
   analyzeSqlDocument,
@@ -36,8 +37,8 @@ describe("sql statement detector", () => {
       return
     }
     expect(sql.text.slice(resolution.query.start, resolution.query.end)).toBe("SELECT 2;")
-    expect(resolution.query.startLine).toBe(1)
-    expect(resolution.query.endLine).toBe(1)
+    expect(resolution.query.startLine).toBe(lineIndex(1))
+    expect(resolution.query.endLine).toBe(lineIndex(1))
   })
 
   test("resolves the only query on the current line even when the cursor is after its semicolon", () => {
@@ -51,8 +52,8 @@ describe("sql statement detector", () => {
       return
     }
     expect(sql.text.slice(resolution.query.start, resolution.query.end)).toBe("SELECT * FROM authors;")
-    expect(resolution.query.startLine).toBe(0)
-    expect(resolution.query.endLine).toBe(0)
+    expect(resolution.query.startLine).toBe(lineIndex(0))
+    expect(resolution.query.endLine).toBe(lineIndex(0))
   })
 
   test("returns none when the current line is outside every query", () => {
@@ -277,8 +278,8 @@ SELECT 2`,
       return
     }
     expect(underSelect.text.slice(resolution.query.start, resolution.query.end)).toBe("select 1")
-    expect(resolution.query.startLine).toBe(0)
-    expect(resolution.query.endLine).toBe(0)
+    expect(resolution.query.startLine).toBe(lineIndex(0))
+    expect(resolution.query.endLine).toBe(lineIndex(0))
   })
 
   test("strict statement collection skips malformed logical spans", () => {
@@ -300,6 +301,6 @@ SELECT 2`,
     const sql = "-- note\nselect * from authors;"
     const parsed = collectSqlStatements(sql, buildLineStarts(sql))
 
-    expect(parsed[0]?.startLine).toBe(0)
+    expect(parsed[0]?.startLine).toBe(lineIndex(0))
   })
 })

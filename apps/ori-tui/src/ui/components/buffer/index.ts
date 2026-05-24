@@ -1,4 +1,4 @@
-export type { AnalysisHost, AnalysisSession, BufferAnalysis } from "./analysis"
+export type { BufferAnalysis } from "./analysis"
 export type {
   BufferAutocompleteItem,
   BufferAutocompleteProvider,
@@ -6,15 +6,19 @@ export type {
   BufferAutocompleteResult,
   BufferAutocompleteState,
 } from "./autocomplete/types"
-export { Buffer, type BufferApi, type BufferContext, type BufferProps } from "./buffer"
+export { Buffer, type BufferApi, type BufferCursor, type BufferProps, type BufferState } from "./buffer"
 export type {
-  BufferCursor,
   DisplayColumn,
   DocCharOffset,
   DocCharRange,
+  DocumentVersion,
   LineCharOffset,
   LineCharPosition,
   LineCharRange,
   LineDisplayRange,
   LineIndex,
+  TotalVisualRows,
+  ViewportHeight,
+  ViewportTop,
 } from "./coords"
+export { Document } from "./document"

@@ -11,12 +11,12 @@ import {
   displayColumn,
   docCharOffset,
   type LineIndex,
-  lineCharOffset,
   lineIndex,
   type VisualRow,
   visualColumn,
   visualRow,
 } from "./coords"
+import type { Document } from "./document"
 import { applyRefTabWidth, lineCharOffsetToDisplayColumn, lineDisplayColumnToCharOffset } from "./text-metrics"
 
 export type BufferCursorState = {
@@ -63,8 +63,7 @@ const EDIT_BUFFER_GET_TEXT_MAX_SIZE_CAP = 64 * 1024 * 1024
 
 type CreateBufferOpentuiAdapterOptions = {
   tabWidth: number
-  getText: () => string
-  getLineStarts: () => readonly number[]
+  getDocument: () => Document
   onLineInfoChange: () => void
   onCursorSync: () => void
 }
@@ -73,20 +72,13 @@ export function resolveCursorDocOffset(
   text: string,
   row: number,
   col: number,
-  starts = buildLineStarts(text),
+  starts: readonly number[] = buildLineStarts(text),
 ): DocCharOffset {
   const line = Math.max(0, Math.min(row, starts.length - 1))
   const start = starts[line] ?? 0
   const next = starts[line + 1] ?? text.length
   const lineLength = Math.max(0, next - start - (next < text.length ? 1 : 0))
   return docCharOffset(start + Math.max(0, Math.min(col, lineLength)))
-}
-
-function getLineText(text: string, starts: readonly number[], line: LineIndex) {
-  const start = starts[line] ?? 0
-  const next = line + 1 < starts.length ? (starts[line + 1] ?? text.length) : text.length
-  const end = next > start && text[next - 1] === "\n" ? next - 1 : next
-  return text.slice(start, end)
 }
 
 function getVisualLineStartColumn(info: LineInfo, row: VisualRow, sourceLine: LineIndex): DisplayColumn {
@@ -127,23 +119,21 @@ function findVisualLine(info: LineInfo, sourceLine: LineIndex, displayCol: Displ
 }
 
 export function resolveViewportOffsetPoint(params: {
-  text: string
+  document: Document
   offset: DocCharOffset
-  lineStarts?: readonly number[]
   lineInfo: LineInfo
   widthMethod: WidthMethod | undefined
   tabWidth: number
   scrollY: number
   viewportHeight: number
 }): BufferViewportPoint | null {
-  const starts = params.lineStarts ?? buildLineStarts(params.text)
-  const cursor = offsetToLineCol(params.offset, starts)
-  const sourceLine = lineIndex(cursor.line)
-  const lineText = getLineText(params.text, starts, sourceLine)
+  const cursor = params.document.lineColAt(params.offset)
+  const sourceLine = cursor.line
+  const lineText = params.document.lineText(sourceLine)
   const displayCol = lineCharOffsetToDisplayColumn(
     { tabWidth: params.tabWidth, widthMethod: params.widthMethod },
     lineText,
-    lineCharOffset(cursor.col),
+    cursor.offset,
   )
   const line = findVisualLine(params.lineInfo, sourceLine, displayCol)
   if (!line) {
@@ -163,10 +153,9 @@ export function resolveViewportOffsetPoint(params: {
 }
 
 export function resolveVisualCursorDocOffset(params: {
-  text: string
+  document: Document
   visualRow: number
   visualCol: number
-  lineStarts?: readonly number[]
   lineInfo: LineInfo
   widthMethod: WidthMethod | undefined
   tabWidth: number
@@ -181,9 +170,8 @@ export function resolveVisualCursorDocOffset(params: {
     return undefined
   }
 
-  const starts = params.lineStarts ?? buildLineStarts(params.text)
   const line = lineIndex(sourceLine)
-  const lineText = getLineText(params.text, starts, line)
+  const lineText = params.document.lineText(line)
   const startCol = getVisualLineStartColumn(params.lineInfo, visualRow(row), line)
   const width = params.lineInfo.lineWidthCols[row] ?? 0
   const targetCol = displayColumn(startCol + Math.max(0, Math.min(params.visualCol, width)))
@@ -193,10 +181,14 @@ export function resolveVisualCursorDocOffset(params: {
     targetCol,
   )
 
-  return docCharOffset((starts[line] ?? 0) + lineOffset)
+  return docCharOffset(params.document.lineStart(line) + lineOffset)
 }
 
-function resolveCursorDocPosition(text: string, offset: DocCharOffset, starts = buildLineStarts(text)) {
+function resolveCursorDocPosition(
+  text: string,
+  offset: DocCharOffset,
+  starts: readonly number[] = buildLineStarts(text),
+) {
   const cursor = Math.max(0, Math.min(offset, text.length))
   return offsetToLineCol(cursor, starts)
 }
@@ -321,17 +313,17 @@ export function createBufferOpentuiAdapter(options: CreateBufferOpentuiAdapterOp
     let nextViewport = ref.editorView.getViewport()
     if (nextViewport.offsetY !== y) {
       const info = getLineInfo(ref)
+      const document = options.getDocument()
       const proxyOffset = resolveVisualCursorDocOffset({
-        text: options.getText(),
+        document,
         visualRow: Math.max(0, Math.min(y + cursor.visualRow, info.lineSources.length - 1)),
         visualCol: targetVisualCol,
-        lineStarts: options.getLineStarts(),
         lineInfo: info,
         widthMethod: ref.ctx?.widthMethod,
         tabWidth: options.tabWidth,
       })
       if (proxyOffset !== undefined) {
-        const proxy = resolveCursorDocPosition(options.getText(), proxyOffset, options.getLineStarts())
+        const proxy = resolveCursorDocPosition(document.text, proxyOffset, document.lineStarts)
         if (ref.logicalCursor.row !== proxy.line || ref.logicalCursor.col !== proxy.col) {
           ref.editBuffer.setCursor(proxy.line, proxy.col)
         }
@@ -365,10 +357,9 @@ export function createBufferOpentuiAdapter(options: CreateBufferOpentuiAdapterOp
     }
 
     const nextOffset = resolveVisualCursorDocOffset({
-      text: options.getText(),
+      document: options.getDocument(),
       visualRow: resolvedRow,
       visualCol: targetVisualCol,
-      lineStarts: options.getLineStarts(),
       lineInfo: info,
       widthMethod: ref.ctx?.widthMethod,
       tabWidth: options.tabWidth,
@@ -377,7 +368,8 @@ export function createBufferOpentuiAdapter(options: CreateBufferOpentuiAdapterOp
       return
     }
 
-    const next = resolveCursorDocPosition(options.getText(), nextOffset, options.getLineStarts())
+    const document = options.getDocument()
+    const next = resolveCursorDocPosition(document.text, nextOffset, document.lineStarts)
     if (ref.logicalCursor.row !== next.line || ref.logicalCursor.col !== next.col) {
       ref.editBuffer.setCursor(next.line, next.col)
       const cursorViewport = ref.editorView.getViewport()
@@ -560,9 +552,10 @@ export function createBufferOpentuiAdapter(options: CreateBufferOpentuiAdapterOp
     if (!preservePreferredVisualCol && manualScrollVisualCol === undefined) {
       preferredVisualCol = ref.visualCursor.visualCol
     }
+    const document = options.getDocument()
     return {
       row: cursor.row,
-      offset: resolveCursorDocOffset(options.getText(), cursor.row, cursor.col, options.getLineStarts()),
+      offset: resolveCursorDocOffset(document.text, cursor.row, cursor.col, document.lineStarts),
     } satisfies BufferCursorState
   }
 
@@ -611,7 +604,8 @@ export function createBufferOpentuiAdapter(options: CreateBufferOpentuiAdapterOp
 
     clearManualScrollVisualCol()
     preferredVisualCol = undefined
-    const next = resolveCursorDocPosition(options.getText(), offset, options.getLineStarts())
+    const document = options.getDocument()
+    const next = resolveCursorDocPosition(document.text, offset, document.lineStarts)
     ref.editBuffer.setCursor(next.line, next.col)
     ref.requestRender()
     return true
@@ -645,9 +639,8 @@ export function createBufferOpentuiAdapter(options: CreateBufferOpentuiAdapterOp
     }
 
     return resolveViewportOffsetPoint({
-      text: options.getText(),
+      document: options.getDocument(),
       offset,
-      lineStarts: options.getLineStarts(),
       lineInfo: getLineInfo(ref),
       widthMethod: ref.ctx?.widthMethod,
       tabWidth: options.tabWidth,
@@ -663,7 +656,7 @@ export function createBufferOpentuiAdapter(options: CreateBufferOpentuiAdapterOp
     }
 
     const current = ref.plainText
-    const starts = options.getLineStarts()
+    const starts = options.getDocument().lineStarts
     const from = resolveCursorDocPosition(current, start, starts)
     const to = resolveCursorDocPosition(current, end, starts)
     clearManualScrollVisualCol()

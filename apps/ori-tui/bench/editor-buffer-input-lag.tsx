@@ -1,6 +1,6 @@
 import type { Renderable, TextareaRenderable } from "@opentui/core"
 import { testRender } from "@opentui/solid"
-import { Buffer, type BufferContext } from "@ui/components/buffer"
+import { Buffer, type BufferState } from "@ui/components/buffer"
 import { LoggerProvider } from "@ui/providers/logger"
 import { ThemeProvider } from "@ui/providers/theme"
 import { KeymapProvider } from "@ui/services/key-scopes"
@@ -66,7 +66,7 @@ function makeMarkers(analysis: SqlDocumentAnalysis | undefined, cursorLine: numb
   }
 
   const activeLine = hasCursor ? (analysis.queryStartLineByLine[cursorLine] ?? -1) : -1
-  const markers = new Map(analysis.queries.map((query) => [query.startLine, "• "]))
+  const markers = new Map<number, string>(analysis.queries.map((query) => [query.startLine, "• "]))
   if (activeLine >= 0) {
     markers.set(activeLine, "󰻃 ")
   }
@@ -74,30 +74,30 @@ function makeMarkers(analysis: SqlDocumentAnalysis | undefined, cursorLine: numb
 }
 
 function BenchBuffer(props: { text: string; context: boolean }) {
-  const [context, setContext] = createSignal<BufferContext>()
+  const [state, setState] = createSignal<BufferState>()
   const [analysis, setAnalysis] = createSignal<SqlDocumentAnalysis>()
   const markers = createMemo(() => {
-    const current = context()
-    return makeMarkers(analysis(), current?.focusedRow ?? -1, current?.cursorOffset !== undefined)
+    const current = state()
+    const cursor = current?.cursor
+    return makeMarkers(analysis(), cursor?.kind === "present" ? cursor.line : -1, cursor?.kind === "present")
   })
 
-  const handleContext = (next: BufferContext) => {
+  const handleState = (next: BufferState) => {
     if (!props.context) {
       return
     }
 
-    setContext(next)
-    setAnalysis(analyzeSqlDocument(next.text, next.lineStarts))
+    setState(next)
+    setAnalysis(analyzeSqlDocument(next.document.text, next.document.lineStarts))
   }
 
   return (
     <Buffer
       initialText={props.text}
-      language="sql"
       isFocused={() => true}
       onTextChange={() => {}}
       focusSelf={() => {}}
-      onContextChange={props.context ? handleContext : undefined}
+      onStateChange={props.context ? handleState : undefined}
       gutterMarkers={props.context ? markers : undefined}
     />
   )

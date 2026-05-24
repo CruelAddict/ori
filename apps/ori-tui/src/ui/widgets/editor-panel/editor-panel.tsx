@@ -1,4 +1,4 @@
-import { Buffer, type BufferContext } from "@ui/components/buffer"
+import { Buffer, type BufferState } from "@ui/components/buffer"
 import { useLogger } from "@ui/providers/logger"
 import { useTheme } from "@ui/providers/theme"
 import { type KeyBinding, KeyScope } from "@ui/services/key-scopes"
@@ -18,9 +18,12 @@ export function EditorPanel(props: EditorPanelProps) {
   const logger = useLogger()
   const statusline = useStatusline()
   const { theme } = useTheme()
-  const [bufferContext, setBufferContext] = createSignal<BufferContext>()
-  const cursorLine = createMemo(() => bufferContext()?.focusedRow ?? -1)
-  const hasCursor = createMemo(() => bufferContext()?.cursorOffset !== undefined)
+  const [bufferState, setBufferState] = createSignal<BufferState>()
+  const cursorLine = createMemo(() => {
+    const cursor = bufferState()?.cursor
+    return cursor?.kind === "present" ? cursor.line : -1
+  })
+  const hasCursor = createMemo(() => bufferState()?.cursor.kind === "present")
   const support = createSqlSupport({
     theme,
     logger,
@@ -67,8 +70,8 @@ export function EditorPanel(props: EditorPanelProps) {
     return next
   })
 
-  const handleContextChange = (context: BufferContext) => {
-    setBufferContext(context)
+  const handleStateChange = (state: BufferState) => {
+    setBufferState(state)
   }
 
   const handleTextChange = (text: string, info: { modified: boolean }) => {
@@ -88,8 +91,8 @@ export function EditorPanel(props: EditorPanelProps) {
       mode: "leader",
       description: "Execute query",
       handler: () => {
-        const context = bufferContext()
-        void pane.executeQuery(context?.cursorOffset, support.snapshot())
+        const cursor = bufferState()?.cursor
+        void pane.executeQuery(cursor?.kind === "present" ? cursor.offset : undefined, support.snapshot())
       },
       preventDefault: true,
       commandPaletteSection: "Query",
@@ -114,7 +117,7 @@ export function EditorPanel(props: EditorPanelProps) {
           onTextChange={handleTextChange}
           onUnfocus={handleUnfocus}
           focusSelf={pane.focusSelf}
-          onContextChange={handleContextChange}
+          onStateChange={handleStateChange}
           gutterMarkers={gutterMarkers}
           autocomplete={support.autocomplete}
           analysis={support.analysis}

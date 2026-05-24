@@ -34,6 +34,6 @@ export function offsetToLineCol(offset: number, starts: readonly number[]): Line
   return { line: starts.length - 1, col: 0 }
 }
 
-export function offsetToLine(offset: number, starts: number[]): number {
+export function offsetToLine(offset: number, starts: readonly number[]): number {
   return offsetToLineCol(offset, starts).line
 }

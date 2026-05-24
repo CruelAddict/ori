@@ -1,3 +1,4 @@
+import { type DocCharOffset, docCharOffset } from "@ui/components/buffer/coords"
 import type { QueryJob, QueryUsecase } from "@usecase/query/usecase"
 import { getScriptFilePath, readScript, writeScript } from "@usecase/script/storage"
 import { buildLineStarts } from "@utils/line-offsets"
@@ -20,7 +21,7 @@ export type EditorPaneViewModel = {
   getSchemaState: () => SqlEditorSchemaState
   subscribeSchemaState: (listener: () => void) => () => void
   onQueryChange: (text: string) => void
-  executeQuery: (cursorOffset?: number, snapshot?: SqlAnalysisSnapshot) => Promise<void>
+  executeQuery: (cursorOffset?: DocCharOffset, snapshot?: SqlAnalysisSnapshot) => Promise<void>
   cancelQuery: () => Promise<void>
   saveQuery: () => boolean
   isFocused: Accessor<boolean>
@@ -59,7 +60,7 @@ export function createVM(options: CreateVMOptions): EditorPaneViewModel {
     options.query.setQueryText(text)
   }
 
-  const executeQuery = async (cursorOffset?: number, snapshot?: SqlAnalysisSnapshot) => {
+  const executeQuery = async (cursorOffset?: DocCharOffset, snapshot?: SqlAnalysisSnapshot) => {
     const text = queryText()
     if (!text.trim()) {
       return
@@ -70,7 +71,7 @@ export function createVM(options: CreateVMOptions): EditorPaneViewModel {
       return
     }
 
-    const lineStarts = buildLineStarts(text)
+    const lineStarts = buildLineStarts(text).map(docCharOffset)
     const resolution =
       snapshot === undefined
         ? resolveSqlQueryAtOffsetFallback(text, lineStarts, cursorOffset)

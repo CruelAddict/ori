@@ -1,10 +1,11 @@
+import { type DocCharOffset, docCharOffset, type LineIndex, lineIndex } from "@ui/components/buffer/coords"
 import { offsetToLine } from "../../../utils/line-offsets"
 
 export type SqlStatement = {
-  start: number
-  end: number
-  startLine: number
-  endLine: number
+  start: DocCharOffset
+  end: DocCharOffset
+  startLine: LineIndex
+  endLine: LineIndex
 }
 
 export type SqlQueryResolution =
@@ -158,7 +159,7 @@ function buildQueryStartLineByLine(queries: SqlStatement[], lineCount: number) {
   const lines = Array.from({ length: lineCount }, () => -1)
 
   for (const query of queries) {
-    for (let line = query.startLine; line <= query.endLine; line += 1) {
+    for (let line = Number(query.startLine); line <= query.endLine; line += 1) {
       const current = lines[line]
       if (current === -1) {
         lines[line] = query.startLine
@@ -748,16 +749,16 @@ function collectExecutableSpans(text: string) {
     .filter((span): span is Span => !!span)
 }
 
-function toSqlStatement(span: Span, lineStarts: number[]): SqlStatement {
+function toSqlStatement(span: Span, lineStarts: readonly number[]): SqlStatement {
   return {
-    start: span.start,
-    end: span.end,
-    startLine: offsetToLine(span.start, lineStarts),
-    endLine: offsetToLine(span.end - 1, lineStarts),
+    start: docCharOffset(span.start),
+    end: docCharOffset(span.end),
+    startLine: lineIndex(offsetToLine(span.start, lineStarts)),
+    endLine: lineIndex(offsetToLine(span.end - 1, lineStarts)),
   }
 }
 
-function getCursorLine(text: string, lineStarts: number[], offset: number) {
+function getCursorLine(text: string, lineStarts: readonly number[], offset: number) {
   if (!text.length) {
     return 0
   }
@@ -796,7 +797,7 @@ function findSpanAtOffset(text: string, spans: Span[], offset: number): Span | u
   return spans.find((span) => span.start <= probe && probe < span.end)
 }
 
-export function collectSqlQueries(text: string, lineStarts: number[]): SqlStatement[] {
+export function collectSqlQueries(text: string, lineStarts: readonly number[]): SqlStatement[] {
   if (!text.length) {
     return []
   }
@@ -806,7 +807,7 @@ export function collectSqlQueries(text: string, lineStarts: number[]): SqlStatem
     .map((span) => toSqlStatement(span, lineStarts))
 }
 
-export function analyzeSqlDocument(text: string, lineStarts: number[]): SqlDocumentAnalysis {
+export function analyzeSqlDocument(text: string, lineStarts: readonly number[]): SqlDocumentAnalysis {
   const queries = collectSqlQueries(text, lineStarts)
   return {
     queries,
@@ -814,7 +815,7 @@ export function analyzeSqlDocument(text: string, lineStarts: number[]): SqlDocum
   }
 }
 
-export function collectSqlStatements(text: string, lineStarts: number[]): SqlStatement[] {
+export function collectSqlStatements(text: string, lineStarts: readonly number[]): SqlStatement[] {
   const result: SqlStatement[] = []
 
   for (const logical of collectStatementSpans(text)) {
@@ -824,17 +825,21 @@ export function collectSqlStatements(text: string, lineStarts: number[]): SqlSta
     }
 
     result.push({
-      start: logical.start,
-      end: logical.end,
-      startLine: offsetToLine(logical.start, lineStarts),
-      endLine: offsetToLine(logical.end - 1, lineStarts),
+      start: docCharOffset(logical.start),
+      end: docCharOffset(logical.end),
+      startLine: lineIndex(offsetToLine(logical.start, lineStarts)),
+      endLine: lineIndex(offsetToLine(logical.end - 1, lineStarts)),
     })
   }
 
   return result
 }
 
-export function resolveSqlQueryAtOffset(text: string, lineStarts: number[], offset: number): SqlQueryResolution {
+export function resolveSqlQueryAtOffset(
+  text: string,
+  lineStarts: readonly number[],
+  offset: number,
+): SqlQueryResolution {
   return resolveSqlQueryAtLine(collectSqlQueries(text, lineStarts), getCursorLine(text, lineStarts, offset))
 }
 
@@ -854,7 +859,11 @@ export function resolveSqlQueryAtLine(queries: SqlStatement[], line: number): Sq
   return { kind: "query", query: lineQueries[0]! }
 }
 
-export function getSqlStatementAtOffset(text: string, lineStarts: number[], offset: number): SqlStatement | undefined {
+export function getSqlStatementAtOffset(
+  text: string,
+  lineStarts: readonly number[],
+  offset: number,
+): SqlStatement | undefined {
   const span = findSpanAtOffset(text, collectStatementSpans(text), offset)
   if (!span) {
     return undefined

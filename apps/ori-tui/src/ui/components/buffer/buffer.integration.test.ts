@@ -9,8 +9,9 @@ import {
 import type { MountedTuiApp } from "../../../test/opentui-harness"
 import { findRequiredNode, readFrameLines, readFrameLineTokens } from "../../../test/opentui-test-tools"
 import type { BufferAnalysis } from "./analysis"
-import type { BufferContext } from "./buffer"
+import type { BufferState } from "./buffer"
 import { getBufferScrollbox, getBufferTextarea, mountBuffer, moveCursor } from "./buffer.test-tools"
+import { docCharOffset, lineIndex } from "./coords"
 
 type HighlightState = {
   plainText: string
@@ -110,6 +111,16 @@ function waitForImmediate() {
   return new Promise<void>((resolve) => setImmediate(resolve))
 }
 
+function getStateCursorOffset(state: BufferState | undefined) {
+  const cursor = state?.cursor
+  return cursor?.kind === "present" ? cursor.offset : undefined
+}
+
+function getStateCursorLine(state: BufferState | undefined) {
+  const cursor = state?.cursor
+  return cursor?.kind === "present" ? cursor.line : undefined
+}
+
 function busyWait(ms: number) {
   const started = performance.now()
   let elapsed = 0
@@ -121,16 +132,19 @@ function busyWait(ms: number) {
 function createBlockingAnalysis(syncMs: number): BufferAnalysis {
   const syntaxStyle = SyntaxStyle.create()
   return {
-    syntaxStyle: () => syntaxStyle,
-    createSession: () => ({
-      rebuild: () => { },
-      reset: () => { },
-      invalidate: () => { },
-      sync: () => {
-        busyWait(syncMs)
+    syntaxStyle: () => {
+      busyWait(syncMs)
+      return syntaxStyle
+    },
+    collectRanges: (text, lineStarts) => [
+      {
+        start: docCharOffset(0),
+        end: docCharOffset(text.length),
+        startLine: lineIndex(0),
+        endLine: lineIndex(Math.max(0, lineStarts.length - 1)),
       },
-      dispose: () => { },
-    }),
+    ],
+    highlightText: () => Promise.resolve([]),
   }
 }
 
@@ -162,7 +176,7 @@ function getBufferLineNumber(app: MountedTuiApp) {
 function captureCursorState(
   textarea: TextareaRenderable,
   scrollbox: ScrollBoxRenderable,
-  latestContext: BufferContext | undefined,
+  latestState: BufferState | undefined,
 ) {
   return {
     cursorOffset: textarea.cursorOffset,
@@ -170,8 +184,8 @@ function captureCursorState(
     cursorVisualRow: textarea.visualCursor.visualRow,
     editorScrollY: textarea.scrollY,
     scrollboxTop: scrollbox.scrollTop ?? 0,
-    contextOffset: latestContext?.cursorOffset,
-    focusedRow: latestContext?.focusedRow,
+    contextOffset: getStateCursorOffset(latestState),
+    focusedRow: getStateCursorLine(latestState),
   } satisfies CursorState
 }
 
@@ -337,13 +351,13 @@ GO`
     const initialClickRowOffset = 2
     const scrolledClickRowOffset = 1
     const arrowDownPresses = 12
-    let latestContext: BufferContext | undefined
+    let latestState: BufferState | undefined
     const app = await mountBuffer({
       text,
       width: 30,
       height: 8,
-      onContextChange: (context) => {
-        latestContext = context
+      onStateChange: (state) => {
+        latestState = state
       },
     })
 
@@ -351,11 +365,11 @@ GO`
       const textarea = getBufferTextarea(app)
       const scrollbox = getBufferScrollbox(app)
 
-      await app.waitFor(() => latestContext?.cursorOffset === 0)
+      await app.waitFor(() => getStateCursorOffset(latestState) === 0)
 
       await app.setup.mockMouse.click(textarea.x + clickColumnOffset, textarea.y + initialClickRowOffset)
-      await app.waitFor(() => (latestContext?.cursorOffset ?? -1) === textarea.cursorOffset)
-      const stateAfterClick = captureCursorState(textarea, scrollbox, latestContext)
+      await app.waitFor(() => (getStateCursorOffset(latestState) ?? -1) === textarea.cursorOffset)
+      const stateAfterClick = captureCursorState(textarea, scrollbox, latestState)
 
       expectCursorContextSync(stateAfterClick)
 
@@ -363,16 +377,16 @@ GO`
         app.setup.mockInput.pressArrow("down")
       }
       await app.waitFor(() => (scrollbox.scrollTop ?? 0) > 0)
-      await app.waitFor(() => (latestContext?.cursorOffset ?? -1) === textarea.cursorOffset)
-      const stateAfterKeyScroll = captureCursorState(textarea, scrollbox, latestContext)
+      await app.waitFor(() => (getStateCursorOffset(latestState) ?? -1) === textarea.cursorOffset)
+      const stateAfterKeyScroll = captureCursorState(textarea, scrollbox, latestState)
 
       expect(stateAfterKeyScroll.editorScrollY).toBe(stateAfterKeyScroll.scrollboxTop)
       expectCursorContextSync(stateAfterKeyScroll)
 
       await app.setup.mockMouse.click(textarea.x + clickColumnOffset, textarea.y + scrolledClickRowOffset)
       await app.waitFor(() => textarea.visualCursor.visualRow === 1)
-      await app.waitFor(() => (latestContext?.cursorOffset ?? -1) === textarea.cursorOffset)
-      const stateAfterScrolledClick = captureCursorState(textarea, scrollbox, latestContext)
+      await app.waitFor(() => (getStateCursorOffset(latestState) ?? -1) === textarea.cursorOffset)
+      const stateAfterScrolledClick = captureCursorState(textarea, scrollbox, latestState)
 
       expect(stateAfterScrolledClick.editorScrollY).toBe(stateAfterScrolledClick.scrollboxTop)
       expect(stateAfterScrolledClick.cursorVisualRow).toBe(1)

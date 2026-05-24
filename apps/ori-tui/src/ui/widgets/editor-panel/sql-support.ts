@@ -1,4 +1,5 @@
 import type { BufferAnalysis } from "@ui/components/buffer/analysis"
+import type { DocCharOffset } from "@ui/components/buffer/coords"
 import type { SyntaxThemePalette } from "@utils/syntax-highlighter"
 import type { Logger } from "pino"
 import type { Accessor } from "solid-js"
@@ -15,7 +16,11 @@ export type SqlSupport = {
   analysis: BufferAnalysis
   autocomplete: ReturnType<typeof createSqlEditorBgWorkerAdapter>["autocomplete"]
   snapshot: Accessor<SqlAnalysisSnapshot>
-  resolveQueryAtOffset: (text: string, lineStarts: readonly number[], offset: number) => SqlQueryResolution
+  resolveQueryAtOffset: (
+    text: string,
+    lineStarts: readonly DocCharOffset[],
+    offset: DocCharOffset,
+  ) => SqlQueryResolution
   dispose: () => void
 }
 

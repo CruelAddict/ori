@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { type Node, NodeType } from "@adapters/ori/client"
-import { docCharOffset } from "@ui/components/buffer/coords"
+import { docCharOffset, lineIndex } from "@ui/components/buffer/coords"
 import { buildLineStarts } from "@utils/line-offsets"
 import { resolveSqlDialect } from "./sql-autocomplete/dialect"
 import { createSqlAutocompleteProvider } from "./sql-autocomplete/provider"
@@ -155,8 +155,8 @@ describe("sql autocomplete", () => {
       }))
 
       expect(spans).toEqual([
-        { start: "SELECT 1;", startLine: 0, endLine: 0 },
-        { start: "SELECT 2;", startLine: 2, endLine: 2 },
+        { start: "SELECT 1;", startLine: lineIndex(0), endLine: lineIndex(0) },
+        { start: "SELECT 2;", startLine: lineIndex(2), endLine: lineIndex(2) },
       ])
     })
 

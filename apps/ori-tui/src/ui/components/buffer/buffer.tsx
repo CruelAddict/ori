@@ -11,14 +11,15 @@ import type { SelectPopupAnchor } from "@ui/components/select-popup-model"
 import { useTheme } from "@ui/providers/theme"
 import { type KeyBinding, KeyScope } from "@ui/services/key-scopes"
 import { debounce } from "@utils/debounce"
-import { buildLineStarts, offsetToLineCol } from "@utils/line-offsets"
+import { offsetToLineCol } from "@utils/line-offsets"
 import { type Accessor, createEffect, createMemo, createSignal, onCleanup, onMount } from "solid-js"
-import type { BufferAnalysis, BufferTextChange } from "./analysis"
+import { type BufferAnalysis, createActiveBufferAnalysis } from "./analysis"
 import { createBufferAutocomplete } from "./autocomplete/controller"
 import type { BufferAutocompleteProvider } from "./autocomplete/types"
 import { createBufferOpentuiAdapter } from "./buffer-opentui-adapter"
-import type { DocCharOffset } from "./coords"
-import { containerHeight, containerWidth, containerX, containerY, docCharOffset } from "./coords"
+import type { DocCharOffset, LineIndex } from "./coords"
+import { containerHeight, containerWidth, containerX, containerY, docCharOffset, lineIndex } from "./coords"
+import { type BufferTextChange, Document, findTextChange, normalizeDocumentText } from "./document"
 
 const DEBOUNCE_MS = 200
 const DEFAULT_TAB_WIDTH = 2
@@ -29,46 +30,25 @@ type PendingChangeOrigin = {
   remainingEvents: number
 }
 
-function findTextChange(previous: string, next: string): BufferTextChange | undefined {
-  if (previous === next) {
-    return undefined
-  }
-
-  const limit = Math.min(previous.length, next.length)
-  let prefix = 0
-  for (; prefix < limit; prefix += 1) {
-    if (previous[prefix] !== next[prefix]) {
-      break
-    }
-  }
-
-  const suffixLimit = Math.min(previous.length - prefix, next.length - prefix)
-  let suffix = 0
-  for (; suffix < suffixLimit; suffix += 1) {
-    if (previous[previous.length - 1 - suffix] !== next[next.length - 1 - suffix]) {
-      break
-    }
-  }
-
-  return {
-    start: prefix,
-    previousEnd: previous.length - suffix,
-    nextEnd: next.length - suffix,
-  }
-}
-
 export type BufferApi = {
   setText: (text: string) => void
   focus: () => void
   getCursorOffset: () => DocCharOffset | undefined
 }
 
-export type BufferContext = {
-  text: string
-  lineStarts: number[]
-  focusedRow: number
-  cursorOffset: DocCharOffset | undefined
-  documentVersion: number
+export type BufferCursor =
+  | {
+      kind: "present"
+      line: LineIndex
+      offset: DocCharOffset
+    }
+  | {
+      kind: "absent"
+    }
+
+export type BufferState = {
+  document: Document
+  cursor: BufferCursor
 }
 
 export type BufferProps = {
@@ -80,7 +60,7 @@ export type BufferProps = {
   registerApi?: (api: BufferApi) => void
   focusSelf: () => void
   gutterMarkers?: Accessor<ReadonlyMap<number, string>>
-  onContextChange?: (context: BufferContext) => void
+  onStateChange?: (state: BufferState) => void
   autocomplete?: BufferAutocompleteProvider
   analysis?: BufferAnalysis
 }
@@ -90,20 +70,28 @@ export function Buffer(props: BufferProps) {
   const palette = theme
 
   const tabWidth = Math.max(1, props.tabWidth ?? DEFAULT_TAB_WIDTH)
-  const [text, setTextState] = createSignal(props.initialText)
-  const [contentModified, setContentModified] = createSignal(false)
-  const [documentVersion, setDocumentVersion] = createSignal(0)
-  const [lineStarts, setLineStartsState] = createSignal(buildLineStarts(props.initialText))
+  const [doc, setDoc] = createSignal(Document.create(props.initialText))
+  const text = createMemo(() => doc().text)
+  const contentModified = createMemo(() => doc().modified)
+  const documentVersion = createMemo(() => doc().version)
+  const lineStarts = createMemo(() => doc().lineStarts)
 
   const [viewportHeight, setViewportHeight] = createSignal(1)
   const [totalRows, setTotalRows] = createSignal(1)
 
-  const [cursorState, setCursorState] = createSignal({
-    row: 0,
+  const [cursorState, setCursorState] = createSignal<BufferCursor>({
+    kind: "present",
+    line: lineIndex(0),
     offset: docCharOffset(0),
   })
-  const cursorOffset = createMemo(() => cursorState().offset)
-  const focusedRow = createMemo(() => cursorState().row)
+  const cursorOffset = createMemo(() => {
+    const cursor = cursorState()
+    return cursor.kind === "present" ? cursor.offset : undefined
+  })
+  const focusedLine = createMemo(() => {
+    const cursor = cursorState()
+    return cursor.kind === "present" ? cursor.line : lineIndex(0)
+  })
 
   let scrollRef: ScrollBoxRenderable | undefined
   let bufferRootRef: BoxRenderable | undefined
@@ -123,9 +111,9 @@ export function Buffer(props: BufferProps) {
     horizontalScrollSize: -1,
     horizontalViewportSize: -1,
   }
-  let initialContextFlushQueued = false
-  let initialContextPending = true
-  let pendingInitialContext: BufferContext | undefined
+  let initialStateFlushQueued = false
+  let initialStatePending = true
+  let pendingInitialState: BufferState | undefined
   let pendingChangeOrigin: PendingChangeOrigin | undefined
   let pendingReset = false
 
@@ -141,10 +129,20 @@ export function Buffer(props: BufferProps) {
   const syncCursorStateFromEditor = (mode: "queued" | "inline" = "queued") => {
     const next = adapter.readCursorState()
     if (!next) {
+      setCursorState({ kind: "absent" })
       return
     }
 
-    setCursorState(next)
+    if (next.offset === undefined) {
+      setCursorState({ kind: "absent" })
+      return
+    }
+
+    setCursorState({
+      kind: "present",
+      line: lineIndex(next.row),
+      offset: next.offset,
+    })
     if (mode === "inline") {
       syncActiveLineColor()
       return
@@ -155,8 +153,7 @@ export function Buffer(props: BufferProps) {
 
   const adapter = createBufferOpentuiAdapter({
     tabWidth,
-    getText: text,
-    getLineStarts: lineStarts,
+    getDocument: doc,
     onLineInfoChange: () => {
       queueSync()
     },
@@ -169,16 +166,19 @@ export function Buffer(props: BufferProps) {
     props.onTextChange(text(), { modified: contentModified() })
   }, DEBOUNCE_MS)
 
-  const analysisSession = props.analysis?.createSession({
-    tabWidth,
-    getRef: () => adapter.live(),
-    getLineInfo: adapter.getLineInfo,
-    getText: text,
-    getLineStarts: lineStarts,
-    getVersion: documentVersion,
-    getFocusedRow: focusedRow,
-    requestSync: () => queueSync(),
-  })
+  const activeAnalysis = props.analysis
+    ? createActiveBufferAnalysis({
+        analysis: props.analysis,
+        host: {
+          tabWidth,
+          getRef: () => adapter.live(),
+          getLineInfo: adapter.getLineInfo,
+          getDocument: doc,
+          getFocusedRow: () => focusedLine(),
+          requestSync: () => queueSync(),
+        },
+      })
+    : undefined
 
   const autocomplete = createBufferAutocomplete({
     provider: () => props.autocomplete,
@@ -189,38 +189,38 @@ export function Buffer(props: BufferProps) {
     accept: (item, range) => replaceDocumentRange(range.start, range.end, item.insertText, item.cursorOffset),
   })
 
-  const flushInitialContextChange = () => {
-    initialContextFlushQueued = false
+  const flushInitialStateChange = () => {
+    initialStateFlushQueued = false
     if (disposed) {
       return
     }
 
-    const context = pendingInitialContext
-    if (!context) {
+    const state = pendingInitialState
+    if (!state) {
       return
     }
 
-    pendingInitialContext = undefined
-    initialContextPending = false
-    props.onContextChange?.(context)
+    pendingInitialState = undefined
+    initialStatePending = false
+    props.onStateChange?.(state)
   }
 
-  const scheduleContextChange = (context: BufferContext) => {
-    if (!props.onContextChange) {
+  const scheduleStateChange = (state: BufferState) => {
+    if (!props.onStateChange) {
       return
     }
-    if (!initialContextPending) {
-      props.onContextChange(context)
-      return
-    }
-
-    pendingInitialContext = context
-    if (initialContextFlushQueued) {
+    if (!initialStatePending) {
+      props.onStateChange(state)
       return
     }
 
-    initialContextFlushQueued = true
-    queueMicrotask(flushInitialContextChange)
+    pendingInitialState = state
+    if (initialStateFlushQueued) {
+      return
+    }
+
+    initialStateFlushQueued = true
+    queueMicrotask(flushInitialStateChange)
   }
 
   const getTotalRowsForViewport = (_ref: TextareaRenderable, nextViewportHeight: number) => {
@@ -316,7 +316,7 @@ export function Buffer(props: BufferProps) {
 
     const colors = new Map<number, { gutter: string; content: string }>()
     if (props.isFocused()) {
-      colors.set(focusedRow(), {
+      colors.set(focusedLine(), {
         gutter: palette().get("editor_active_line_background"),
         content: palette().get("editor_active_line_background"),
       })
@@ -396,7 +396,7 @@ export function Buffer(props: BufferProps) {
       moveCursor = currentRow < nextTop + band.start || currentRow > nextTop + band.end
     }
     setEditorViewport(nextTop, viewport.height, moveCursor)
-    analysisSession?.sync({ scheduleUpdate: false })
+    activeAnalysis?.sync({ scheduleUpdate: false })
     scrollRef.content.translateY = 0
   }
 
@@ -458,7 +458,7 @@ export function Buffer(props: BufferProps) {
     syncScrollboxFromEditor()
     syncActiveLineColor()
     syncLineNumberViewportHeight()
-    analysisSession?.sync()
+    activeAnalysis?.sync()
     autocomplete.syncAnchor()
   }
 
@@ -549,14 +549,15 @@ export function Buffer(props: BufferProps) {
     props.onTextChange(text(), { modified: contentModified() })
   }
 
-  const applyTextChange = (nextText: string, modified: boolean, change = findTextChange(text(), nextText)) => {
-    const version = documentVersion() + 1
-    const starts = buildLineStarts(nextText)
-    analysisSession?.rebuild(nextText, starts, version, change)
-    setTextState(nextText)
-    setLineStartsState(starts)
-    setContentModified(modified)
-    setDocumentVersion(version)
+  const applyTextChange = (nextText: string, modified: boolean, change?: BufferTextChange) => {
+    const edit = doc().applyText(nextText, modified)
+    const next = edit.document
+    if (next === doc()) {
+      return
+    }
+
+    activeAnalysis?.rebuild(next, change ?? edit.change)
+    setDoc(next)
     adapter.resetMeasuredRows()
     debouncedPush()
   }
@@ -566,17 +567,18 @@ export function Buffer(props: BufferProps) {
   }
 
   const setText = (nextText: string) => {
+    const normalizedText = normalizeDocumentText(nextText)
     const ref = adapter.live()
     pendingReset = true
-    analysisSession?.reset()
+    activeAnalysis?.reset()
     if (ref) {
-      ref.setText(nextText)
+      ref.setText(normalizedText)
       adapter.setCursorDocOffset(docCharOffset(0))
     }
     if (!ref) {
-      applyTextChange(nextText, false)
+      applyTextChange(normalizedText, false)
     }
-    setCursorState({ row: 0, offset: docCharOffset(0) })
+    setCursorState({ kind: "present", line: lineIndex(0), offset: docCharOffset(0) })
     queueSync()
   }
 
@@ -586,7 +588,8 @@ export function Buffer(props: BufferProps) {
       return
     }
 
-    const change = findTextChange(text(), ref.plainText)
+    const nextText = normalizeDocumentText(ref.plainText)
+    const change = findTextChange(text(), nextText)
     const pending = pendingChangeOrigin
     const origin = pending?.origin ?? "user"
     if (pending && pending.remainingEvents > 1) {
@@ -600,14 +603,14 @@ export function Buffer(props: BufferProps) {
     }
 
     const modified = !pendingReset
-    if (!change && ref.plainText === text() && modified === contentModified()) {
+    if (!change && nextText === text() && modified === contentModified()) {
       pendingReset = false
       syncCursorStateFromEditor("queued")
       queueSync()
       return
     }
     pendingReset = false
-    applyTextChange(ref.plainText, modified, change)
+    applyTextChange(nextText, modified, change)
     syncCursorStateFromEditor("queued")
     queueSync()
     if (origin === "user") {
@@ -647,22 +650,19 @@ export function Buffer(props: BufferProps) {
     disposed = true
     syncQueued = false
     scrollboxIntentQueued = false
-    pendingInitialContext = undefined
+    pendingInitialState = undefined
     debouncedPush.clear()
     autocomplete.close()
-    analysisSession?.dispose()
+    activeAnalysis?.dispose()
     adapter.detach()
   })
 
   createEffect(() => {
-    const context = {
-      text: text(),
-      lineStarts: lineStarts(),
-      focusedRow: focusedRow(),
-      cursorOffset: cursorOffset(),
-      documentVersion: documentVersion(),
-    } satisfies BufferContext
-    scheduleContextChange(context)
+    const state = {
+      document: doc(),
+      cursor: cursorState(),
+    } satisfies BufferState
+    scheduleStateChange(state)
   })
 
   createEffect(() => {
@@ -678,7 +678,7 @@ export function Buffer(props: BufferProps) {
 
   createEffect(() => {
     props.isFocused()
-    focusedRow()
+    focusedLine()
     syncActiveLineColor()
   })
 
@@ -699,7 +699,7 @@ export function Buffer(props: BufferProps) {
     })
   })
 
-  analysisSession?.rebuild(props.initialText, buildLineStarts(props.initialText), documentVersion())
+  activeAnalysis?.rebuild(doc())
 
   return (
     <KeyScope
@@ -808,7 +808,7 @@ export function Buffer(props: BufferProps) {
                 width="100%"
                 flexGrow={1}
                 flexShrink={1}
-                initialValue={props.initialText}
+                initialValue={doc().text}
                 textColor={palette().get("editor_text")}
                 focusedTextColor={palette().get("editor_text")}
                 backgroundColor="transparent"

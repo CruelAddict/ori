@@ -24,6 +24,18 @@ export type VisualRow = Coord<"VisualRow">
 /** Zero-based visual column inside a wrapped row. */
 export type VisualColumn = Coord<"VisualColumn">
 
+/** Monotonic document content version. */
+export type DocumentVersion = Coord<"DocumentVersion">
+
+/** Zero-based top row of the rendered viewport. */
+export type ViewportTop = Coord<"ViewportTop">
+
+/** Height of the rendered viewport in visual rows. */
+export type ViewportHeight = Coord<"ViewportHeight">
+
+/** Total count of visual rows produced by the editor view. */
+export type TotalVisualRows = Coord<"TotalVisualRows">
+
 /** X coordinate relative to a container. */
 export type ContainerX = Coord<"ContainerX">
 
@@ -60,15 +72,6 @@ export type LineDisplayRange = {
   end: DisplayColumn
 }
 
-/** Current cursor location as exposed by the buffer model. */
-export type BufferCursor = {
-  line: LineIndex
-  /** Caret column in OpenTUI's line-global display space. */
-  displayCol: DisplayColumn
-  /** Wrapped row inside the focused textarea line. */
-  row: number
-}
-
 export function lineIndex(value: number): LineIndex {
   return value as LineIndex
 }
@@ -91,6 +94,22 @@ export function visualRow(value: number): VisualRow {
 
 export function visualColumn(value: number): VisualColumn {
   return value as VisualColumn
+}
+
+export function documentVersion(value: number): DocumentVersion {
+  return value as DocumentVersion
+}
+
+export function viewportTop(value: number): ViewportTop {
+  return value as ViewportTop
+}
+
+export function viewportHeight(value: number): ViewportHeight {
+  return value as ViewportHeight
+}
+
+export function totalVisualRows(value: number): TotalVisualRows {
+  return value as TotalVisualRows
 }
 
 export function containerX(value: number): ContainerX {

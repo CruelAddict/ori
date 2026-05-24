@@ -7,7 +7,7 @@ import { type MountedTuiApp, mountInTui } from "../../../test/opentui-harness"
 import { findRequiredNode, requirePresent } from "../../../test/opentui-test-tools"
 import type { BufferAnalysis } from "./analysis"
 import type { BufferAutocompleteProvider } from "./autocomplete/types"
-import { Buffer, type BufferApi, type BufferContext } from "./buffer"
+import { Buffer, type BufferApi, type BufferState } from "./buffer"
 
 type MountBufferOptions = {
   text?: string
@@ -15,7 +15,7 @@ type MountBufferOptions = {
   height: number
   autocomplete?: BufferAutocompleteProvider
   analysis?: BufferAnalysis
-  onContextChange?: (context: BufferContext) => void
+  onStateChange?: (state: BufferState) => void
 }
 
 export type MountedBufferWithApi = {
@@ -35,7 +35,7 @@ function renderBuffer(options: MountBufferOptions, registerApi?: (api: BufferApi
               theme,
               logger,
             })
-        const analysis = options.analysis ?? ownedAnalysis
+        const analysis = options.analysis ?? ownedAnalysis?.analysis
 
         onCleanup(() => {
           ownedAnalysis?.dispose()
@@ -46,9 +46,9 @@ function renderBuffer(options: MountBufferOptions, registerApi?: (api: BufferApi
           isFocused: () => true,
           onTextChange: () => {},
           focusSelf: () => {},
-          onContextChange: options.onContextChange,
+          onStateChange: options.onStateChange,
           autocomplete: options.autocomplete,
-          analysis: analysis.analysis,
+          analysis,
           registerApi,
         })
       }, {}),
