@@ -4,11 +4,16 @@ import {
   resolveCursorDocOffset,
   resolveViewportOffsetPoint,
   resolveVisualCursorDocOffset,
-} from "./buffer-opentui-adapter"
+} from "./buffer-viewport-controller"
 import { containerX, containerY, docCharOffset } from "./coords"
 import { Document } from "./document"
+import { createTextLayout } from "./text-layout"
 
-describe("buffer opentui adapter", () => {
+function createTestLayout(document: Document) {
+  return createTextLayout({ getDocument: () => document, tabWidth: 2, getWidthMethod: () => undefined })
+}
+
+describe("buffer viewport controller", () => {
   test("maps a single-line cursor directly into a document offset", () => {
     expect(resolveCursorDocOffset("select * from auth", 0, 18)).toBe(docCharOffset(18))
   })
@@ -54,7 +59,7 @@ describe("buffer opentui adapter", () => {
 
     expect(
       resolveViewportOffsetPoint({
-        document: Document.create(text),
+        layout: createTestLayout(Document.create(text)),
         offset: docCharOffset(text.lastIndexOf("fr")),
         lineInfo: {
           lineStartCols: [0, 22],
@@ -63,8 +68,6 @@ describe("buffer opentui adapter", () => {
           lineSources: [0, 1],
           lineWraps: [0, 0],
         } satisfies LineInfo,
-        widthMethod: undefined,
-        tabWidth: 2,
         scrollY: 0,
         viewportHeight: 20,
       }),
@@ -74,7 +77,7 @@ describe("buffer opentui adapter", () => {
   test("maps wrapped rows relative to their source line", () => {
     expect(
       resolveViewportOffsetPoint({
-        document: Document.create("ignored\nabcdefghijkl"),
+        layout: createTestLayout(Document.create("ignored\nabcdefghijkl")),
         offset: docCharOffset("ignored\nabcdefghijkl".length),
         lineInfo: {
           lineStartCols: [22, 32],
@@ -83,8 +86,6 @@ describe("buffer opentui adapter", () => {
           lineSources: [1, 1],
           lineWraps: [0, 1],
         } satisfies LineInfo,
-        widthMethod: undefined,
-        tabWidth: 2,
         scrollY: 0,
         viewportHeight: 20,
       }),
@@ -96,7 +97,7 @@ describe("buffer opentui adapter", () => {
 
     expect(
       resolveVisualCursorDocOffset({
-        document: Document.create(text),
+        layout: createTestLayout(Document.create(text)),
         visualRow: 1,
         visualCol: 2,
         lineInfo: {
@@ -106,8 +107,6 @@ describe("buffer opentui adapter", () => {
           lineSources: [1, 1],
           lineWraps: [0, 1],
         } satisfies LineInfo,
-        widthMethod: undefined,
-        tabWidth: 2,
       }),
     ).toBe(docCharOffset("ignored\nabcdefghijkl".length))
   })
@@ -117,7 +116,7 @@ describe("buffer opentui adapter", () => {
 
     expect(
       resolveVisualCursorDocOffset({
-        document: Document.create(text),
+        layout: createTestLayout(Document.create(text)),
         visualRow: 1,
         visualCol: 12,
         lineInfo: {
@@ -127,8 +126,6 @@ describe("buffer opentui adapter", () => {
           lineSources: [1, 1],
           lineWraps: [0, 1],
         } satisfies LineInfo,
-        widthMethod: undefined,
-        tabWidth: 2,
       }),
     ).toBe(docCharOffset("ignored\nabcdefghijklmnopqrst".length))
   })

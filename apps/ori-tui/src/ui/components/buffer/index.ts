@@ -7,6 +7,7 @@ export type {
   BufferAutocompleteState,
 } from "./autocomplete/types"
 export { Buffer, type BufferApi, type BufferCursor, type BufferProps, type BufferState } from "./buffer"
+export type { BufferCursorState, BufferViewportPoint } from "./buffer-viewport-controller"
 export type {
   DisplayColumn,
   DocCharOffset,
@@ -22,3 +23,6 @@ export type {
   ViewportTop,
 } from "./coords"
 export { Document } from "./document"
+export type { RenderTarget } from "./render-target"
+export type { TextLayout } from "./text-layout"
+export type { Viewport } from "./viewport"

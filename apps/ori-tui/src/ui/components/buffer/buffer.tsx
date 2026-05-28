@@ -13,13 +13,17 @@ import { type KeyBinding, KeyScope } from "@ui/services/key-scopes"
 import { debounce } from "@utils/debounce"
 import { offsetToLineCol } from "@utils/line-offsets"
 import { type Accessor, createEffect, createMemo, createSignal, onCleanup, onMount } from "solid-js"
-import { type BufferAnalysis, createActiveBufferAnalysis } from "./analysis"
+import { type BufferAnalysis, createAnalysisHighlightLayer } from "./analysis"
 import { createBufferAutocomplete } from "./autocomplete/controller"
 import type { BufferAutocompleteProvider } from "./autocomplete/types"
 import { createBufferOpentuiAdapter } from "./buffer-opentui-adapter"
+import { createBufferViewportController } from "./buffer-viewport-controller"
 import type { DocCharOffset, LineIndex } from "./coords"
 import { containerHeight, containerWidth, containerX, containerY, docCharOffset, lineIndex } from "./coords"
 import { type BufferTextChange, Document, findTextChange, normalizeDocumentText } from "./document"
+import { createTextareaRenderTarget } from "./render-target"
+import { createTextLayout } from "./text-layout"
+import { createViewport } from "./viewport"
 
 const DEBOUNCE_MS = 200
 const DEFAULT_TAB_WIDTH = 2
@@ -126,8 +130,35 @@ export function Buffer(props: BufferProps) {
     })
   }
 
-  const syncCursorStateFromEditor = (mode: "queued" | "inline" = "queued") => {
-    const next = adapter.readCursorState()
+  let preservePreferredVisualCol = () => {}
+  const adapter = createBufferOpentuiAdapter({
+    tabWidth,
+    onLineInfoChange: () => {
+      queueSync()
+    },
+    onCursorSync: () => {
+      syncCursorStateFromEditor(cursorSyncMode)
+    },
+    onPreservePreferredVisualCol: () => {
+      preservePreferredVisualCol()
+    },
+  })
+  const textLayout = createTextLayout({
+    getDocument: doc,
+    tabWidth,
+    getWidthMethod: () => adapter.live()?.ctx?.widthMethod,
+  })
+  const viewportController = createBufferViewportController({
+    textarea: adapter,
+    layout: textLayout,
+    onCursorSync: () => {
+      syncCursorStateFromEditor(cursorSyncMode)
+    },
+  })
+  preservePreferredVisualCol = viewportController.preservePreferredVisualColThroughMicrotask
+
+  function syncCursorStateFromEditor(mode: "queued" | "inline" = "queued") {
+    const next = viewportController.readCursorState()
     if (!next) {
       setCursorState({ kind: "absent" })
       return
@@ -151,30 +182,25 @@ export function Buffer(props: BufferProps) {
     queueSync()
   }
 
-  const adapter = createBufferOpentuiAdapter({
-    tabWidth,
-    getDocument: doc,
-    onLineInfoChange: () => {
-      queueSync()
-    },
-    onCursorSync: () => {
-      syncCursorStateFromEditor(cursorSyncMode)
-    },
-  })
-
   const debouncedPush = debounce(() => {
     props.onTextChange(text(), { modified: contentModified() })
   }, DEBOUNCE_MS)
 
-  const activeAnalysis = props.analysis
-    ? createActiveBufferAnalysis({
+  const analysisHighlightLayer = props.analysis
+    ? createAnalysisHighlightLayer({
         analysis: props.analysis,
         host: {
-          tabWidth,
           getRef: () => adapter.live(),
-          getLineInfo: adapter.getLineInfo,
+          getViewport: (ref) =>
+            createViewport({
+              layout: textLayout,
+              lineInfo: adapter.getLineInfo(ref),
+              scrollY: ref.scrollY,
+              height: ref.height,
+              focusedLine: focusedLine(),
+            }),
+          getRenderTarget: createTextareaRenderTarget,
           getDocument: doc,
-          getFocusedRow: () => focusedLine(),
           requestSync: () => queueSync(),
         },
       })
@@ -224,7 +250,7 @@ export function Buffer(props: BufferProps) {
   }
 
   const getTotalRowsForViewport = (_ref: TextareaRenderable, nextViewportHeight: number) => {
-    return Math.max(nextViewportHeight, adapter.measureRows(nextViewportHeight, documentVersion()))
+    return Math.max(nextViewportHeight, viewportController.measureRows(nextViewportHeight, documentVersion()))
   }
 
   const syncScrollMetrics = (ref: TextareaRenderable, nextViewportHeight: number) => {
@@ -277,7 +303,7 @@ export function Buffer(props: BufferProps) {
   }
 
   const noteUserScroll = () => {
-    adapter.noteManualScroll()
+    viewportController.noteManualScroll()
   }
 
   const syncLineNumberViewportHeight = () => {
@@ -347,7 +373,7 @@ export function Buffer(props: BufferProps) {
 
     pendingScrollboxTop = moveCursor ? nextTop : undefined
     cursorSyncMode = moveCursor ? "inline" : "queued"
-    adapter.setViewport(viewport.offsetX, nextTop, Math.max(1, ref.width), height, moveCursor)
+    viewportController.setViewport(viewport.offsetX, nextTop, Math.max(1, ref.width), height, moveCursor)
     cursorSyncMode = "queued"
     ref.requestRender()
     if (!moveCursor && scrollRef && (scrollRef.scrollTop ?? 0) !== ref.scrollY) {
@@ -396,7 +422,7 @@ export function Buffer(props: BufferProps) {
       moveCursor = currentRow < nextTop + band.start || currentRow > nextTop + band.end
     }
     setEditorViewport(nextTop, viewport.height, moveCursor)
-    activeAnalysis?.sync({ scheduleUpdate: false })
+    analysisHighlightLayer?.sync({ scheduleUpdate: false })
     scrollRef.content.translateY = 0
   }
 
@@ -458,7 +484,7 @@ export function Buffer(props: BufferProps) {
     syncScrollboxFromEditor()
     syncActiveLineColor()
     syncLineNumberViewportHeight()
-    activeAnalysis?.sync()
+    analysisHighlightLayer?.sync()
     autocomplete.syncAnchor()
   }
 
@@ -477,7 +503,7 @@ export function Buffer(props: BufferProps) {
       return null
     }
 
-    const point = adapter.resolveViewportPoint(replaceStart)
+    const point = viewportController.resolveViewportPoint(replaceStart)
     if (!point) {
       return null
     }
@@ -501,7 +527,7 @@ export function Buffer(props: BufferProps) {
       origin,
       remainingEvents: start === end ? 1 : 2,
     }
-    const replaced = adapter.replaceDocRange(start, end, insertText, nextCursorOffset)
+    const replaced = viewportController.replaceDocRange(start, end, insertText, nextCursorOffset)
     if (!replaced) {
       return false
     }
@@ -556,9 +582,9 @@ export function Buffer(props: BufferProps) {
       return
     }
 
-    activeAnalysis?.rebuild(next, change ?? edit.change)
+    analysisHighlightLayer?.rebuild(next, change ?? edit.change)
     setDoc(next)
-    adapter.resetMeasuredRows()
+    viewportController.resetMeasuredRows()
     debouncedPush()
   }
 
@@ -570,10 +596,10 @@ export function Buffer(props: BufferProps) {
     const normalizedText = normalizeDocumentText(nextText)
     const ref = adapter.live()
     pendingReset = true
-    activeAnalysis?.reset()
+    analysisHighlightLayer?.reset()
     if (ref) {
       ref.setText(normalizedText)
-      adapter.setCursorDocOffset(docCharOffset(0))
+      viewportController.setCursorDocOffset(docCharOffset(0))
     }
     if (!ref) {
       applyTextChange(normalizedText, false)
@@ -653,7 +679,7 @@ export function Buffer(props: BufferProps) {
     pendingInitialState = undefined
     debouncedPush.clear()
     autocomplete.close()
-    activeAnalysis?.dispose()
+    analysisHighlightLayer?.dispose()
     adapter.detach()
   })
 
@@ -699,7 +725,7 @@ export function Buffer(props: BufferProps) {
     })
   })
 
-  activeAnalysis?.rebuild(doc())
+  analysisHighlightLayer?.rebuild(doc())
 
   return (
     <KeyScope

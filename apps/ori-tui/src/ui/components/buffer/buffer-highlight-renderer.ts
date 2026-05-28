@@ -1,9 +1,9 @@
-import type { TextareaRenderable } from "@opentui/core"
 import type { SyntaxHighlightSpan } from "@utils/syntax-highlighter"
 import type { StatementEntry } from "./buffer-statement-cache"
 import {
   type DisplayColumn,
   type DocCharOffset,
+  type DocCharRange,
   displayColumn,
   docCharOffset,
   type LineCharOffset,
@@ -12,21 +12,21 @@ import {
   lineDisplayRange,
   lineIndex,
 } from "./coords"
-import type { Document } from "./document"
-import { lineCharOffsetDisplayColumns } from "./text-metrics"
+import type { RenderTarget } from "./render-target"
+import type { TextLayout } from "./text-layout"
 
 type LineHighlightMetrics =
   | {
-      kind: "simple"
-    }
+    kind: "simple"
+  }
   | {
-      kind: "ascii-tabs"
-      columns: DisplayColumn[]
-    }
+    kind: "ascii-tabs"
+    columns: DisplayColumn[]
+  }
   | {
-      kind: "unicode"
-      columns: DisplayColumn[]
-    }
+    kind: "unicode"
+    columns: DisplayColumn[]
+  }
 
 function isSingleWidthAsciiLine(text: string) {
   for (let i = 0; i < text.length; i += 1) {
@@ -36,26 +36,6 @@ function isSingleWidthAsciiLine(text: string) {
     }
   }
   return true
-}
-
-function buildAsciiTabColumns(text: string, tabWidth: number) {
-  const columns = new Array<DisplayColumn>(text.length + 1)
-  let column = 0
-  columns[0] = displayColumn(0)
-  for (let i = 0; i < text.length; i += 1) {
-    const code = text.charCodeAt(i)
-    if (code === 9) {
-      column += tabWidth - (column % tabWidth)
-      columns[i + 1] = displayColumn(column)
-      continue
-    }
-    if (code < 32 || code > 126) {
-      return undefined
-    }
-    column += 1
-    columns[i + 1] = displayColumn(column)
-  }
-  return columns
 }
 
 function buildLineDisplayHighlightRange(params: {
@@ -75,10 +55,8 @@ function buildLineDisplayHighlightRange(params: {
 }
 
 function getCachedLineHighlightMetrics(params: {
-  document: Document
+  layout: TextLayout
   line: LineIndex
-  tabWidth: number
-  widthMethod: TextareaRenderable["ctx"] extends { widthMethod?: infer T } ? T : never
   cache: Map<LineIndex, LineHighlightMetrics>
 }) {
   const cached = params.cache.get(params.line)
@@ -86,61 +64,51 @@ function getCachedLineHighlightMetrics(params: {
     return cached
   }
 
-  const lineText = params.document.lineText(params.line)
+  const lineText = params.layout.document.lineText(params.line)
   const simple = isSingleWidthAsciiLine(lineText)
-  const columns = simple ? undefined : buildAsciiTabColumns(lineText, params.tabWidth)
+  const columns = simple ? undefined : params.layout.asciiTabDisplayColumns(lineText)
   const value = simple
     ? ({ kind: "simple" } satisfies LineHighlightMetrics)
     : columns
       ? ({ kind: "ascii-tabs", columns } satisfies LineHighlightMetrics)
       : ({
-          kind: "unicode",
-          columns: lineCharOffsetDisplayColumns(
-            { tabWidth: params.tabWidth, widthMethod: params.widthMethod },
-            lineText,
-          ),
-        } satisfies LineHighlightMetrics)
+        kind: "unicode",
+        columns: params.layout.lineDisplayColumns(params.line),
+      } satisfies LineHighlightMetrics)
   params.cache.set(params.line, value)
   return value
 }
 
-function addStatementHighlightSpanLines(params: {
-  ref: TextareaRenderable
+function renderStatementHighlightSpanLines(params: {
+  target: RenderTarget
   span: SyntaxHighlightSpan
-  document: Document
-  tabWidth: number
+  layout: TextLayout
   highlightGroupId: number
   lineMetricsCache: Map<LineIndex, LineHighlightMetrics>
-  visibleStartOffset?: DocCharOffset
-  visibleEndOffset?: DocCharOffset
+  renderRange: DocCharRange
 }) {
-  const { ref, span, document, tabWidth, highlightGroupId, lineMetricsCache, visibleStartOffset, visibleEndOffset } =
-    params
+  const { target, span, layout, highlightGroupId, lineMetricsCache, renderRange } = params
   if (span.end <= span.start) {
     return
   }
 
-  const clippedStart = docCharOffset(
-    visibleStartOffset === undefined ? span.start : Math.max(span.start, visibleStartOffset),
-  )
-  const clippedEnd = docCharOffset(visibleEndOffset === undefined ? span.end : Math.min(span.end, visibleEndOffset))
+  const clippedStart = docCharOffset(Math.max(span.start, renderRange.start))
+  const clippedEnd = docCharOffset(Math.min(span.end, renderRange.end))
   if (clippedEnd <= clippedStart) {
     return
   }
 
-  const startCursor = document.lineColAt(clippedStart)
-  const endCursor = document.lineColAt(docCharOffset(clippedEnd - 1))
+  const startCursor = layout.document.lineColAt(clippedStart)
+  const endCursor = layout.document.lineColAt(docCharOffset(clippedEnd - 1))
   for (let line = Number(startCursor.line); line <= endCursor.line; line += 1) {
     const lineRef = lineIndex(line)
     const metrics = getCachedLineHighlightMetrics({
-      document,
+      layout,
       line: lineRef,
-      tabWidth,
-      widthMethod: ref.ctx?.widthMethod,
       cache: lineMetricsCache,
     })
-    const lineStart = document.lineStart(lineRef)
-    const lineEnd = document.lineEnd(lineRef)
+    const lineStart = layout.document.lineStart(lineRef)
+    const lineEnd = layout.document.lineEnd(lineRef)
     const start = line === startCursor.line ? clippedStart : lineStart
     const end = line === endCursor.line ? clippedEnd : lineEnd
     if (end <= start) {
@@ -154,11 +122,11 @@ function addStatementHighlightSpanLines(params: {
       endOffset,
       metrics,
     })
-    ref.editBuffer.addHighlight(lineRef, {
+    target.addHighlight(lineRef, {
       start: displayRange.start,
       end: displayRange.end,
       styleId: span.styleId,
-      hlRef: highlightGroupId,
+      groupId: highlightGroupId,
     })
   }
 }
@@ -184,23 +152,23 @@ function findFirstHighlightSpanIndex(spans: readonly SyntaxHighlightSpan[], star
   return index
 }
 
-export function addStatementHighlightRange(params: {
-  ref: TextareaRenderable
+/**
+ * Renders syntax-highlight spans for the visible part of a parsed statement.
+ *
+ * This first clips the statement to `renderRange`, jumps to the first
+ * possibly-overlapping span, and then render seach overlapping span line-by-line.
+ */
+export function renderStatementHighlightRange(params: {
+  target: RenderTarget
   statement: StatementEntry
-  document: Document
-  tabWidth: number
+  layout: TextLayout
   highlightGroupId: number
-  visibleStartOffset?: DocCharOffset
-  visibleEndOffset?: DocCharOffset
+  renderRange: DocCharRange
 }) {
-  const { ref, statement, document, tabWidth, highlightGroupId, visibleStartOffset, visibleEndOffset } = params
+  const { target, statement, layout, highlightGroupId, renderRange } = params
   const lineMetricsCache = new Map<LineIndex, LineHighlightMetrics>()
-  const rangeStart = docCharOffset(
-    visibleStartOffset === undefined ? statement.start : Math.max(statement.start, visibleStartOffset),
-  )
-  const rangeEnd = docCharOffset(
-    visibleEndOffset === undefined ? statement.end : Math.min(statement.end, visibleEndOffset),
-  )
+  const rangeStart = docCharOffset(Math.max(statement.start, renderRange.start))
+  const rangeEnd = docCharOffset(Math.min(statement.end, renderRange.end))
   if (rangeEnd <= rangeStart) {
     return
   }
@@ -221,15 +189,16 @@ export function addStatementHighlightRange(params: {
       break
     }
 
-    addStatementHighlightSpanLines({
-      ref,
+    renderStatementHighlightSpanLines({
+      target,
       span,
-      document,
-      tabWidth,
+      layout,
       highlightGroupId,
       lineMetricsCache,
-      visibleStartOffset: rangeStart,
-      visibleEndOffset: rangeEnd,
+      renderRange: {
+        start: rangeStart,
+        end: rangeEnd,
+      },
     })
   }
 }

@@ -1,7 +1,7 @@
-import type { LineInfo, SyntaxStyle, TextareaRenderable } from "@opentui/core"
+import type { SyntaxStyle, TextareaRenderable } from "@opentui/core"
 import type { SyntaxHighlightSpan } from "@utils/syntax-highlighter"
 import type { Accessor } from "solid-js"
-import { addStatementHighlightRange } from "./buffer-highlight-renderer"
+import { renderStatementHighlightRange } from "./buffer-highlight-renderer"
 import {
   applyStatementBatch,
   buildStatementBatch,
@@ -12,8 +12,10 @@ import {
   type StatementCache,
   type StatementEntry,
 } from "./buffer-statement-cache"
-import { type DocCharOffset, type DocumentVersion, docCharOffset, type LineIndex, lineIndex } from "./coords"
+import { type DocCharOffset, type DocCharRange, type DocumentVersion, docCharOffset, type LineIndex } from "./coords"
 import type { BufferTextChange, Document } from "./document"
+import type { RenderTarget } from "./render-target"
+import { type Viewport, viewportRenderRange } from "./viewport"
 
 export type BufferAnalysisRange = {
   start: DocCharOffset
@@ -45,15 +47,14 @@ export type BufferAnalysis = {
 }
 
 type AnalysisHost = {
-  tabWidth: number
   getRef: () => TextareaRenderable | undefined
-  getLineInfo: (ref: TextareaRenderable) => LineInfo
+  getViewport: (ref: TextareaRenderable) => Viewport
+  getRenderTarget: (ref: TextareaRenderable) => RenderTarget
   getDocument: () => Document
-  getFocusedRow: () => LineIndex
   requestSync: () => void
 }
 
-type ActiveBufferAnalysis = {
+type AnalysisHighlightLayer = {
   rebuild: (document: Document, change?: BufferTextChange) => void
   reset: () => void
   invalidate: () => void
@@ -67,48 +68,13 @@ const HIGHLIGHT_BACKFILL_QUIET_MS = 180
 const HIGHLIGHT_BACKFILL_BATCH_STATEMENTS = 64
 const HIGHLIGHT_BACKFILL_BATCH_CHARS = 24_000
 
-type MaterializedHighlightEntry = {
+type RenderedHighlightEntry = {
   highlightGroupId: number
   version: number
-  visibleStartOffset: DocCharOffset
-  visibleEndOffset: DocCharOffset
+  renderRange: DocCharRange
 }
 
-type VisibleOffsetWindow = {
-  start: DocCharOffset
-  end: DocCharOffset
-}
-
-function getVisibleOffsetWindow(params: {
-  info: TextareaRenderable["lineInfo"]
-  scrollY: number
-  height: number
-  overscan: number
-  document: Document
-}): VisibleOffsetWindow | undefined {
-  const visibleRowStart = Math.max(0, params.scrollY - params.overscan)
-  const visibleRowEnd = Math.min(params.info.lineSources.length, params.scrollY + params.height + params.overscan)
-  let visibleStartLine: number | undefined
-  let visibleEndLine: number | undefined
-  for (let row = visibleRowStart; row < visibleRowEnd; row += 1) {
-    const line = params.info.lineSources[row]
-    if (line === undefined) {
-      continue
-    }
-    visibleStartLine = visibleStartLine === undefined ? line : Math.min(visibleStartLine, line)
-    visibleEndLine = visibleEndLine === undefined ? line : Math.max(visibleEndLine, line)
-  }
-  if (visibleStartLine === undefined || visibleEndLine === undefined) {
-    return undefined
-  }
-
-  return {
-    start: params.document.lineStart(lineIndex(visibleStartLine)),
-    end: params.document.nextLineStart(lineIndex(visibleEndLine)),
-  }
-}
-
-function createNoopActiveBufferAnalysis(): ActiveBufferAnalysis {
+function createNoopAnalysisHighlightLayer(): AnalysisHighlightLayer {
   return {
     rebuild: () => {},
     reset: () => {},
@@ -118,14 +84,14 @@ function createNoopActiveBufferAnalysis(): ActiveBufferAnalysis {
   }
 }
 
-export function createActiveBufferAnalysis(params: {
+export function createAnalysisHighlightLayer(params: {
   analysis: BufferAnalysis
   host: AnalysisHost
-}): ActiveBufferAnalysis {
+}): AnalysisHighlightLayer {
   const collectRanges = params.analysis.collectRanges
   const highlightText = params.analysis.highlightText
   if (!collectRanges || !highlightText) {
-    return createNoopActiveBufferAnalysis()
+    return createNoopAnalysisHighlightLayer()
   }
 
   const host = params.host
@@ -134,7 +100,7 @@ export function createActiveBufferAnalysis(params: {
   let previousStatements: StatementEntry[] = []
   let previousText = ""
   let appliedHighlightStyle = params.analysis.syntaxStyle()
-  let materializedStatementHighlights = new Map<string, MaterializedHighlightEntry>()
+  let renderedStatementHighlights = new Map<string, RenderedHighlightEntry>()
   let statementHighlightGroupId = 1
   let highlightUpdateVersion = 0
   let isHighlightQueued = false
@@ -178,10 +144,17 @@ export function createActiveBufferAnalysis(params: {
     highlightBackfillTimer = undefined
   }
 
+  const getStatementRenderRange = (statement: StatementEntry, renderRange: DocCharRange | undefined) => {
+    return {
+      start: docCharOffset(renderRange === undefined ? statement.start : Math.max(statement.start, renderRange.start)),
+      end: docCharOffset(renderRange === undefined ? statement.end : Math.min(statement.end, renderRange.end)),
+    } satisfies DocCharRange
+  }
+
   const clearRenderedHighlights = (requestRender: boolean) => {
     const ref = host.getRef()
-    const highlights = materializedStatementHighlights
-    materializedStatementHighlights = new Map()
+    const highlights = renderedStatementHighlights
+    renderedStatementHighlights = new Map()
     if (!ref || highlights.size === 0) {
       if (requestRender) {
         ref?.requestRender()
@@ -189,56 +162,50 @@ export function createActiveBufferAnalysis(params: {
       return
     }
 
+    const target = host.getRenderTarget(ref)
     for (const entry of highlights.values()) {
-      ref.editBuffer.removeHighlightsByRef(entry.highlightGroupId)
+      target.removeHighlightsByRef(entry.highlightGroupId)
     }
     if (requestRender) {
-      ref.requestRender()
+      target.requestRender()
     }
   }
 
   const invalidateRenderedHighlights = () => {
-    if (materializedStatementHighlights.size === 0) {
+    if (renderedStatementHighlights.size === 0) {
       return
     }
 
-    materializedStatementHighlights = new Map(
-      [...materializedStatementHighlights].map(([id, entry]) => [
+    renderedStatementHighlights = new Map(
+      [...renderedStatementHighlights].map(([id, entry]) => [
         id,
         {
           highlightGroupId: entry.highlightGroupId,
           version: -1,
-          visibleStartOffset: entry.visibleStartOffset,
-          visibleEndOffset: entry.visibleEndOffset,
+          renderRange: entry.renderRange,
         },
       ]),
     )
   }
 
   const syncStatementHighlights = (options: {
-    ref: TextareaRenderable
+    target: RenderTarget
     statement: StatementEntry
-    document: Document
-    visibleStartOffset?: DocCharOffset
-    visibleEndOffset?: DocCharOffset
+    viewport: Viewport
+    renderRange?: DocCharRange
   }) => {
-    const { ref, statement, document, visibleStartOffset, visibleEndOffset } = options
-    const statementVisibleStart = docCharOffset(
-      visibleStartOffset === undefined ? statement.start : Math.max(statement.start, visibleStartOffset),
-    )
-    const statementVisibleEnd = docCharOffset(
-      visibleEndOffset === undefined ? statement.end : Math.min(statement.end, visibleEndOffset),
-    )
-    if (statementVisibleEnd <= statementVisibleStart) {
+    const { target, statement, viewport, renderRange } = options
+    const statementRenderRange = getStatementRenderRange(statement, renderRange)
+    if (statementRenderRange.end <= statementRenderRange.start) {
       return false
     }
 
-    const current = materializedStatementHighlights.get(statement.id)
-    const coversVisibleRange =
+    const current = renderedStatementHighlights.get(statement.id)
+    const coversRenderRange =
       current !== undefined &&
-      current.visibleStartOffset <= statementVisibleStart &&
-      current.visibleEndOffset >= statementVisibleEnd
-    if (current?.version === statement.highlightVersion && coversVisibleRange) {
+      current.renderRange.start <= statementRenderRange.start &&
+      current.renderRange.end >= statementRenderRange.end
+    if (current?.version === statement.highlightVersion && coversRenderRange) {
       return false
     }
     if (statement.dirty && statement.spans.length === 0) {
@@ -246,58 +213,59 @@ export function createActiveBufferAnalysis(params: {
     }
 
     if (current?.version === statement.highlightVersion) {
-      if (statementVisibleStart < current.visibleStartOffset) {
-        addStatementHighlightRange({
-          ref,
+      if (statementRenderRange.start < current.renderRange.start) {
+        renderStatementHighlightRange({
+          target,
           statement,
-          document,
-          tabWidth: host.tabWidth,
+          layout: viewport.layout,
           highlightGroupId: current.highlightGroupId,
-          visibleStartOffset: statementVisibleStart,
-          visibleEndOffset: current.visibleStartOffset,
+          renderRange: {
+            start: statementRenderRange.start,
+            end: current.renderRange.start,
+          },
         })
       }
-      if (current.visibleEndOffset < statementVisibleEnd) {
-        addStatementHighlightRange({
-          ref,
+      if (current.renderRange.end < statementRenderRange.end) {
+        renderStatementHighlightRange({
+          target,
           statement,
-          document,
-          tabWidth: host.tabWidth,
+          layout: viewport.layout,
           highlightGroupId: current.highlightGroupId,
-          visibleStartOffset: current.visibleEndOffset,
-          visibleEndOffset: statementVisibleEnd,
+          renderRange: {
+            start: current.renderRange.end,
+            end: statementRenderRange.end,
+          },
         })
       }
 
-      materializedStatementHighlights.set(statement.id, {
+      renderedStatementHighlights.set(statement.id, {
         highlightGroupId: current.highlightGroupId,
         version: current.version,
-        visibleStartOffset: docCharOffset(Math.min(current.visibleStartOffset, statementVisibleStart)),
-        visibleEndOffset: docCharOffset(Math.max(current.visibleEndOffset, statementVisibleEnd)),
+        renderRange: {
+          start: docCharOffset(Math.min(current.renderRange.start, statementRenderRange.start)),
+          end: docCharOffset(Math.max(current.renderRange.end, statementRenderRange.end)),
+        },
       })
       return true
     }
 
     const highlightGroupId = current?.highlightGroupId ?? nextStatementHighlightGroupId()
     if (current) {
-      ref.editBuffer.removeHighlightsByRef(highlightGroupId)
+      target.removeHighlightsByRef(highlightGroupId)
     }
 
-    addStatementHighlightRange({
-      ref,
+    renderStatementHighlightRange({
+      target,
       statement,
-      document,
-      tabWidth: host.tabWidth,
+      layout: viewport.layout,
       highlightGroupId,
-      visibleStartOffset: statementVisibleStart,
-      visibleEndOffset: statementVisibleEnd,
+      renderRange: statementRenderRange,
     })
 
-    materializedStatementHighlights.set(statement.id, {
+    renderedStatementHighlights.set(statement.id, {
       highlightGroupId,
       version: statement.highlightVersion,
-      visibleStartOffset: statementVisibleStart,
-      visibleEndOffset: statementVisibleEnd,
+      renderRange: statementRenderRange,
     })
     return true
   }
@@ -308,24 +276,18 @@ export function createActiveBufferAnalysis(params: {
       return undefined
     }
     const document = host.getDocument()
-    const info = host.getLineInfo(ref)
-    const visibleWindow = getVisibleOffsetWindow({
-      info,
-      scrollY: ref.scrollY,
-      height: ref.height,
-      overscan: WARM_OVERSCAN_ROWS,
-      document,
-    })
-    if (!visibleWindow) {
+    const viewport = host.getViewport(ref)
+    const renderRange = viewportRenderRange(viewport, WARM_OVERSCAN_ROWS)
+    if (!renderRange) {
       return undefined
     }
 
     const indices = collectVisibleStatementIndices(
       statementCache,
-      info,
-      ref.scrollY,
-      ref.height,
-      host.getFocusedRow(),
+      viewport.lineInfo,
+      viewport.scrollY,
+      viewport.height,
+      viewport.focusedLine,
       WARM_OVERSCAN_ROWS,
     )
     const dirtyIndices = indices.filter((index) => statementCache?.statements[index]?.dirty)
@@ -333,30 +295,31 @@ export function createActiveBufferAnalysis(params: {
       return undefined
     }
 
-    const unmaterializedDirtyIndices = dirtyIndices.filter((index) => {
+    const dirtyIndicesNeedingRender = dirtyIndices.filter((index) => {
       const statement = statementCache?.statements[index]
       if (!statement) {
         return false
       }
-      const current = materializedStatementHighlights.get(statement.id)
+      const current = renderedStatementHighlights.get(statement.id)
       if (!current) {
         return true
       }
-      const statementVisibleStart = Math.max(statement.start, visibleWindow.start)
-      const statementVisibleEnd = Math.min(statement.end, visibleWindow.end)
-      return current.visibleStartOffset > statementVisibleStart || current.visibleEndOffset < statementVisibleEnd
+      const statementRenderRange = getStatementRenderRange(statement, renderRange)
+      return (
+        current.renderRange.start > statementRenderRange.start || current.renderRange.end < statementRenderRange.end
+      )
     })
-    if (unmaterializedDirtyIndices.length === 0) {
+    if (dirtyIndicesNeedingRender.length === 0) {
       return undefined
     }
 
-    const focusedIndex = statementCache.lineToStatement[host.getFocusedRow()]
+    const focusedIndex = statementCache.lineToStatement[viewport.focusedLine]
     if (
       preferFocusedStatement &&
-      unmaterializedDirtyIndices.length === 1 &&
+      dirtyIndicesNeedingRender.length === 1 &&
       focusedIndex !== undefined &&
       focusedIndex >= 0 &&
-      unmaterializedDirtyIndices.includes(focusedIndex)
+      dirtyIndicesNeedingRender.includes(focusedIndex)
     ) {
       return buildStatementBatch(statementCache, document, focusedIndex, focusedIndex)
     }
@@ -364,8 +327,8 @@ export function createActiveBufferAnalysis(params: {
     return buildStatementBatch(
       statementCache,
       document,
-      unmaterializedDirtyIndices[0] ?? 0,
-      unmaterializedDirtyIndices[unmaterializedDirtyIndices.length - 1] ?? 0,
+      dirtyIndicesNeedingRender[0] ?? 0,
+      dirtyIndicesNeedingRender[dirtyIndicesNeedingRender.length - 1] ?? 0,
     )
   }
 
@@ -494,25 +457,17 @@ export function createActiveBufferAnalysis(params: {
         const nextStatement = currentCache.statements[index]
         const ref = host.getRef()
         if (nextStatement && ref) {
-          const document = host.getDocument()
-          const info = host.getLineInfo(ref)
-          const visibleWindow = getVisibleOffsetWindow({
-            info,
-            scrollY: ref.scrollY,
-            height: ref.height,
-            overscan: VISIBLE_OVERSCAN_ROWS,
-            document,
-          })
-          const immediateMaterialized = syncStatementHighlights({
-            ref,
+          const viewport = host.getViewport(ref)
+          const target = host.getRenderTarget(ref)
+          const renderedImmediately = syncStatementHighlights({
+            target,
             statement: nextStatement,
-            document,
-            visibleStartOffset: visibleWindow?.start,
-            visibleEndOffset: visibleWindow?.end,
+            viewport,
+            renderRange: viewportRenderRange(viewport, VISIBLE_OVERSCAN_ROWS),
           })
-          if (immediateMaterialized) {
+          if (renderedImmediately) {
             if (options.streamStatements) {
-              ref.requestRender()
+              target.requestRender()
             }
             batchRenderedHighlights = true
           }
@@ -540,7 +495,10 @@ export function createActiveBufferAnalysis(params: {
       }
 
       if (!options.streamStatements && batchRenderedHighlights) {
-        host.getRef()?.requestRender()
+        const ref = host.getRef()
+        if (ref) {
+          host.getRenderTarget(ref).requestRender()
+        }
       }
 
       if (!options.streamStatements && lastCompletedIndex >= batch.startIndex) {
@@ -605,39 +563,31 @@ export function createActiveBufferAnalysis(params: {
       changed = true
     }
 
-    const info = host.getLineInfo(ref)
-    const document = host.getDocument()
+    const viewport = host.getViewport(ref)
+    const target = host.getRenderTarget(ref)
     const statements = collectVisibleStatements(
       statementCache,
-      info,
-      ref.scrollY,
-      ref.height,
-      host.getFocusedRow(),
+      viewport.lineInfo,
+      viewport.scrollY,
+      viewport.height,
+      viewport.focusedLine,
       VISIBLE_OVERSCAN_ROWS,
     )
     const visibleIds = new Set(statements.map((statement) => statement.id))
-    const visibleWindow = getVisibleOffsetWindow({
-      info,
-      scrollY: ref.scrollY,
-      height: ref.height,
-      overscan: VISIBLE_OVERSCAN_ROWS,
-      document,
-    })
-    const visibleStartOffset = visibleWindow?.start
-    const visibleEndOffset = visibleWindow?.end
+    const renderRange = viewportRenderRange(viewport, VISIBLE_OVERSCAN_ROWS)
 
-    for (const [id, entry] of materializedStatementHighlights) {
+    for (const [id, entry] of renderedStatementHighlights) {
       if (visibleIds.has(id)) {
         continue
       }
 
-      ref.editBuffer.removeHighlightsByRef(entry.highlightGroupId)
-      materializedStatementHighlights.delete(id)
+      target.removeHighlightsByRef(entry.highlightGroupId)
+      renderedStatementHighlights.delete(id)
       changed = true
     }
 
     for (const statement of statements) {
-      if (syncStatementHighlights({ ref, statement, document, visibleStartOffset, visibleEndOffset })) {
+      if (syncStatementHighlights({ target, statement, viewport, renderRange })) {
         changed = true
       }
     }
@@ -646,7 +596,7 @@ export function createActiveBufferAnalysis(params: {
       return
     }
 
-    ref.requestRender()
+    target.requestRender()
   }
 
   return {

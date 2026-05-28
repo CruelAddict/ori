@@ -6,7 +6,7 @@ import { readFrameText } from "../../../test/opentui-test-tools"
 import { createSqlEditorBgWorkerAdapter } from "../../widgets/editor-panel/sql-editor-bg-worker-adapter"
 import type { SqlEditorSchemaState } from "../../widgets/editor-panel/sql-editor-protocol"
 import { getBufferTextarea, mountBufferWithApi, mountText, moveCursor } from "./buffer.test-tools"
-import { resolveCursorDocOffset } from "./buffer-opentui-adapter"
+import { resolveCursorDocOffset } from "./buffer-viewport-controller"
 import { type DocCharOffset, docCharOffset, docCharRange } from "./coords"
 
 function popupBox(app: MountedTuiApp) {
