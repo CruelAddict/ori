@@ -7,6 +7,7 @@ import {
   type LineCharPosition,
   type LineIndex,
   lineCharPosition,
+  lineIndex,
 } from "./coords"
 
 export type BufferTextChange = {
@@ -92,9 +93,16 @@ export class Document {
     return this.text.slice(this.lineStart(line), this.lineEnd(line))
   }
 
-  lineColAt(offset: DocCharOffset): LineCharPosition {
-    const cursor = offsetToLineCol(offset, this.lineStarts)
+  positionAtOffset(offset: DocCharOffset): LineCharPosition {
+    const cursor = offsetToLineCol(Math.max(0, Math.min(offset, this.text.length)), this.lineStarts)
     return lineCharPosition(cursor.line, cursor.col)
+  }
+
+  offsetAtLineChar(row: number, col: number): DocCharOffset {
+    const line = lineIndex(Math.max(0, Math.min(row, this.lineStarts.length - 1)))
+    const start = this.lineStart(line)
+    const end = this.lineEnd(line)
+    return docCharOffset(start + Math.max(0, Math.min(col, end - start)))
   }
 
   applyText(nextText: string, modified: boolean): DocumentEdit {

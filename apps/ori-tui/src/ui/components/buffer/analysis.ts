@@ -217,7 +217,7 @@ export function createAnalysisHighlightLayer(params: {
         renderStatementHighlightRange({
           target,
           statement,
-          layout: viewport.layout,
+          geometry: viewport.geometry,
           highlightGroupId: current.highlightGroupId,
           renderRange: {
             start: statementRenderRange.start,
@@ -229,7 +229,7 @@ export function createAnalysisHighlightLayer(params: {
         renderStatementHighlightRange({
           target,
           statement,
-          layout: viewport.layout,
+          geometry: viewport.geometry,
           highlightGroupId: current.highlightGroupId,
           renderRange: {
             start: current.renderRange.end,
@@ -257,7 +257,7 @@ export function createAnalysisHighlightLayer(params: {
     renderStatementHighlightRange({
       target,
       statement,
-      layout: viewport.layout,
+      geometry: viewport.geometry,
       highlightGroupId,
       renderRange: statementRenderRange,
     })

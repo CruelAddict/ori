@@ -1,93 +1,33 @@
 import type { SyntaxHighlightSpan } from "@utils/syntax-highlighter"
 import type { StatementEntry } from "./buffer-statement-cache"
-import {
-  type DisplayColumn,
-  type DocCharOffset,
-  type DocCharRange,
-  displayColumn,
-  docCharOffset,
-  type LineCharOffset,
-  type LineIndex,
-  lineCharOffset,
-  lineDisplayRange,
-  lineIndex,
-} from "./coords"
+import { type DocCharOffset, type DocCharRange, docCharOffset, type LineIndex, lineIndex } from "./coords"
 import type { RenderTarget } from "./render-target"
-import type { TextLayout } from "./text-layout"
+import type { TextGeometry, TextLineGeometry } from "./text-geometry"
 
-type LineHighlightMetrics =
-  | {
-    kind: "simple"
-  }
-  | {
-    kind: "ascii-tabs"
-    columns: DisplayColumn[]
-  }
-  | {
-    kind: "unicode"
-    columns: DisplayColumn[]
-  }
-
-function isSingleWidthAsciiLine(text: string) {
-  for (let i = 0; i < text.length; i += 1) {
-    const code = text.charCodeAt(i)
-    if (code < 32 || code > 126) {
-      return false
-    }
-  }
-  return true
-}
-
-function buildLineDisplayHighlightRange(params: {
-  startOffset: LineCharOffset
-  endOffset: LineCharOffset
-  metrics: LineHighlightMetrics
-}) {
-  const { startOffset, endOffset, metrics } = params
-  if (metrics.kind === "simple") {
-    return lineDisplayRange(startOffset, endOffset)
-  }
-
-  return {
-    start: metrics.columns[startOffset] ?? displayColumn(0),
-    end: metrics.columns[endOffset] ?? metrics.columns[metrics.columns.length - 1] ?? displayColumn(0),
-  }
-}
-
-function getCachedLineHighlightMetrics(params: {
-  layout: TextLayout
+function getCachedLineGeometry(params: {
+  geometry: TextGeometry
   line: LineIndex
-  cache: Map<LineIndex, LineHighlightMetrics>
+  cache: Map<LineIndex, TextLineGeometry>
 }) {
   const cached = params.cache.get(params.line)
   if (cached !== undefined) {
     return cached
   }
 
-  const lineText = params.layout.document.lineText(params.line)
-  const simple = isSingleWidthAsciiLine(lineText)
-  const columns = simple ? undefined : params.layout.asciiTabDisplayColumns(lineText)
-  const value = simple
-    ? ({ kind: "simple" } satisfies LineHighlightMetrics)
-    : columns
-      ? ({ kind: "ascii-tabs", columns } satisfies LineHighlightMetrics)
-      : ({
-        kind: "unicode",
-        columns: params.layout.lineDisplayColumns(params.line),
-      } satisfies LineHighlightMetrics)
+  const value = params.geometry.line(params.line)
   params.cache.set(params.line, value)
   return value
 }
 
-function renderStatementHighlightSpanLines(params: {
+function collectStatementHighlightSpanLines(params: {
   target: RenderTarget
   span: SyntaxHighlightSpan
-  layout: TextLayout
+  geometry: TextGeometry
   highlightGroupId: number
-  lineMetricsCache: Map<LineIndex, LineHighlightMetrics>
+  lineGeometryCache: Map<LineIndex, TextLineGeometry>
   renderRange: DocCharRange
 }) {
-  const { target, span, layout, highlightGroupId, lineMetricsCache, renderRange } = params
+  const { target, span, geometry, highlightGroupId, lineGeometryCache, renderRange } = params
   if (span.end <= span.start) {
     return
   }
@@ -98,30 +38,22 @@ function renderStatementHighlightSpanLines(params: {
     return
   }
 
-  const startCursor = layout.document.lineColAt(clippedStart)
-  const endCursor = layout.document.lineColAt(docCharOffset(clippedEnd - 1))
-  for (let line = Number(startCursor.line); line <= endCursor.line; line += 1) {
+  const startPosition = geometry.lineAtDocOffset(clippedStart)
+  const endPosition = geometry.lineAtDocOffset(docCharOffset(clippedEnd - 1))
+  for (let line = Number(startPosition.line.index); line <= endPosition.line.index; line += 1) {
     const lineRef = lineIndex(line)
-    const metrics = getCachedLineHighlightMetrics({
-      layout,
+    const lineGeometry = getCachedLineGeometry({
+      geometry,
       line: lineRef,
-      cache: lineMetricsCache,
+      cache: lineGeometryCache,
     })
-    const lineStart = layout.document.lineStart(lineRef)
-    const lineEnd = layout.document.lineEnd(lineRef)
-    const start = line === startCursor.line ? clippedStart : lineStart
-    const end = line === endCursor.line ? clippedEnd : lineEnd
+    const start = line === startPosition.line.index ? clippedStart : lineGeometry.start
+    const end = line === endPosition.line.index ? clippedEnd : lineGeometry.end
     if (end <= start) {
       continue
     }
 
-    const startOffset = lineCharOffset(start - lineStart)
-    const endOffset = lineCharOffset(Math.min(end, lineEnd) - lineStart)
-    const displayRange = buildLineDisplayHighlightRange({
-      startOffset,
-      endOffset,
-      metrics,
-    })
+    const displayRange = lineGeometry.docRangeDisplayRange(start, end)
     target.addHighlight(lineRef, {
       start: displayRange.start,
       end: displayRange.end,
@@ -156,17 +88,17 @@ function findFirstHighlightSpanIndex(spans: readonly SyntaxHighlightSpan[], star
  * Renders syntax-highlight spans for the visible part of a parsed statement.
  *
  * This first clips the statement to `renderRange`, jumps to the first
- * possibly-overlapping span, and then render seach overlapping span line-by-line.
+ * possibly-overlapping span, and then renders each overlapping span line-by-line.
  */
 export function renderStatementHighlightRange(params: {
   target: RenderTarget
   statement: StatementEntry
-  layout: TextLayout
+  geometry: TextGeometry
   highlightGroupId: number
   renderRange: DocCharRange
 }) {
-  const { target, statement, layout, highlightGroupId, renderRange } = params
-  const lineMetricsCache = new Map<LineIndex, LineHighlightMetrics>()
+  const { target, statement, geometry, highlightGroupId, renderRange } = params
+  const lineGeometryCache = new Map<LineIndex, TextLineGeometry>()
   const rangeStart = docCharOffset(Math.max(statement.start, renderRange.start))
   const rangeEnd = docCharOffset(Math.min(statement.end, renderRange.end))
   if (rangeEnd <= rangeStart) {
@@ -189,12 +121,12 @@ export function renderStatementHighlightRange(params: {
       break
     }
 
-    renderStatementHighlightSpanLines({
+    collectStatementHighlightSpanLines({
       target,
       span,
-      layout,
+      geometry,
       highlightGroupId,
-      lineMetricsCache,
+      lineGeometryCache,
       renderRange: {
         start: rangeStart,
         end: rangeEnd,

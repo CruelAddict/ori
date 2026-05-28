@@ -1,6 +1,5 @@
 import type { LineInfo, TextareaRenderable } from "@opentui/core"
 import { getViewportBandY } from "@ui/components/ori-scrollbox"
-import { buildLineStarts, offsetToLineCol } from "@utils/line-offsets"
 import {
   type ContainerX,
   type ContainerY,
@@ -16,7 +15,8 @@ import {
   visualColumn,
   visualRow,
 } from "./coords"
-import type { TextLayout } from "./text-layout"
+import { Document } from "./document"
+import type { TextGeometry } from "./text-geometry"
 
 export type BufferCursorState = {
   row: number
@@ -44,21 +44,8 @@ type TextareaBridge = {
 
 type CreateBufferViewportControllerOptions = {
   textarea: TextareaBridge
-  layout: TextLayout
+  geometry: TextGeometry
   onCursorSync: () => void
-}
-
-export function resolveCursorDocOffset(
-  text: string,
-  row: number,
-  col: number,
-  starts: readonly number[] = buildLineStarts(text),
-): DocCharOffset {
-  const line = Math.max(0, Math.min(row, starts.length - 1))
-  const start = starts[line] ?? 0
-  const next = starts[line + 1] ?? text.length
-  const lineLength = Math.max(0, next - start - (next < text.length ? 1 : 0))
-  return docCharOffset(start + Math.max(0, Math.min(col, lineLength)))
 }
 
 function getVisualLineStartColumn(info: LineInfo, row: VisualRow, sourceLine: LineIndex): DisplayColumn {
@@ -99,15 +86,15 @@ function findVisualLine(info: LineInfo, sourceLine: LineIndex, displayCol: Displ
 }
 
 export function resolveViewportOffsetPoint(params: {
-  layout: TextLayout
+  geometry: TextGeometry
   offset: DocCharOffset
   lineInfo: LineInfo
   scrollY: number
   viewportHeight: number
 }): BufferViewportPoint | null {
-  const cursor = params.layout.document.lineColAt(params.offset)
-  const sourceLine = cursor.line
-  const displayCol = params.layout.docOffsetDisplayColumn(params.offset)
+  const point = params.geometry.displayPointAtDocOffset(params.offset)
+  const sourceLine = point.line
+  const displayCol = point.column
   const line = findVisualLine(params.lineInfo, sourceLine, displayCol)
   if (!line) {
     return null
@@ -126,7 +113,7 @@ export function resolveViewportOffsetPoint(params: {
 }
 
 export function resolveVisualCursorDocOffset(params: {
-  layout: TextLayout
+  geometry: TextGeometry
   visualRow: number
   visualCol: number
   lineInfo: LineInfo
@@ -145,18 +132,7 @@ export function resolveVisualCursorDocOffset(params: {
   const startCol = getVisualLineStartColumn(params.lineInfo, visualRow(row), line)
   const width = params.lineInfo.lineWidthCols[row] ?? 0
   const targetCol = displayColumn(startCol + Math.max(0, Math.min(params.visualCol, width)))
-  const lineOffset = params.layout.lineDisplayColumnCharOffset(line, targetCol)
-
-  return docCharOffset(params.layout.document.lineStart(line) + lineOffset)
-}
-
-function resolveCursorDocPosition(
-  text: string,
-  offset: DocCharOffset,
-  starts: readonly number[] = buildLineStarts(text),
-) {
-  const cursor = Math.max(0, Math.min(offset, text.length))
-  return offsetToLineCol(cursor, starts)
+  return params.geometry.docOffsetAtDisplayColumn(line, targetCol)
 }
 
 export function createBufferViewportController(options: CreateBufferViewportControllerOptions) {
@@ -224,16 +200,16 @@ export function createBufferViewportController(options: CreateBufferViewportCont
     if (nextViewport.offsetY !== y) {
       const info = options.textarea.getLineInfo(ref)
       const proxyOffset = resolveVisualCursorDocOffset({
-        layout: options.layout,
+        geometry: options.geometry,
         visualRow: Math.max(0, Math.min(y + cursor.visualRow, info.lineSources.length - 1)),
         visualCol: targetVisualCol,
         lineInfo: info,
       })
       if (proxyOffset !== undefined) {
-        const document = options.layout.document
-        const proxy = resolveCursorDocPosition(document.text, proxyOffset, document.lineStarts)
-        if (ref.logicalCursor.row !== proxy.line || ref.logicalCursor.col !== proxy.col) {
-          ref.editBuffer.setCursor(proxy.line, proxy.col)
+        const document = options.geometry.document
+        const proxy = document.positionAtOffset(proxyOffset)
+        if (ref.logicalCursor.row !== proxy.line || ref.logicalCursor.col !== proxy.offset) {
+          ref.editBuffer.setCursor(proxy.line, proxy.offset)
         }
       }
       options.textarea.setNativeViewport(ref, x, y, width, height, false)
@@ -265,7 +241,7 @@ export function createBufferViewportController(options: CreateBufferViewportCont
     }
 
     const nextOffset = resolveVisualCursorDocOffset({
-      layout: options.layout,
+      geometry: options.geometry,
       visualRow: resolvedRow,
       visualCol: targetVisualCol,
       lineInfo: info,
@@ -274,10 +250,10 @@ export function createBufferViewportController(options: CreateBufferViewportCont
       return
     }
 
-    const document = options.layout.document
-    const next = resolveCursorDocPosition(document.text, nextOffset, document.lineStarts)
-    if (ref.logicalCursor.row !== next.line || ref.logicalCursor.col !== next.col) {
-      ref.editBuffer.setCursor(next.line, next.col)
+    const document = options.geometry.document
+    const next = document.positionAtOffset(nextOffset)
+    if (ref.logicalCursor.row !== next.line || ref.logicalCursor.col !== next.offset) {
+      ref.editBuffer.setCursor(next.line, next.offset)
       const cursorViewport = ref.editorView.getViewport()
       if (cursorViewport.offsetY !== nextViewport.offsetY) {
         options.textarea.setNativeViewport(ref, x, nextViewport.offsetY, width, height, false)
@@ -295,10 +271,10 @@ export function createBufferViewportController(options: CreateBufferViewportCont
     if (!preservePreferredVisualCol && manualScrollVisualCol === undefined) {
       preferredVisualCol = ref.visualCursor.visualCol
     }
-    const document = options.layout.document
+    const document = options.geometry.document
     return {
       row: cursor.row,
-      offset: resolveCursorDocOffset(document.text, cursor.row, cursor.col, document.lineStarts),
+      offset: document.offsetAtLineChar(cursor.row, cursor.col),
     } satisfies BufferCursorState
   }
 
@@ -347,9 +323,9 @@ export function createBufferViewportController(options: CreateBufferViewportCont
 
     clearManualScrollVisualCol()
     preferredVisualCol = undefined
-    const document = options.layout.document
-    const next = resolveCursorDocPosition(document.text, offset, document.lineStarts)
-    ref.editBuffer.setCursor(next.line, next.col)
+    const document = options.geometry.document
+    const next = document.positionAtOffset(offset)
+    ref.editBuffer.setCursor(next.line, next.offset)
     ref.requestRender()
     return true
   }
@@ -380,7 +356,7 @@ export function createBufferViewportController(options: CreateBufferViewportCont
     }
 
     return resolveViewportOffsetPoint({
-      layout: options.layout,
+      geometry: options.geometry,
       offset,
       lineInfo: options.textarea.getLineInfo(ref),
       scrollY: ref.scrollY,
@@ -394,24 +370,23 @@ export function createBufferViewportController(options: CreateBufferViewportCont
       return false
     }
 
-    const current = ref.plainText
-    const starts = options.layout.document.lineStarts
-    const from = resolveCursorDocPosition(current, start, starts)
-    const to = resolveCursorDocPosition(current, end, starts)
+    const document = options.geometry.document
+    const from = document.positionAtOffset(start)
+    const to = document.positionAtOffset(end)
     clearManualScrollVisualCol()
     preferredVisualCol = undefined
-    ref.editBuffer.setCursor(from.line, from.col)
+    ref.editBuffer.setCursor(from.line, from.offset)
     if (start !== end) {
-      ref.editBuffer.deleteRange(from.line, from.col, to.line, to.col)
-      ref.editBuffer.setCursor(from.line, from.col)
+      ref.editBuffer.deleteRange(from.line, from.offset, to.line, to.offset)
+      ref.editBuffer.setCursor(from.line, from.offset)
     }
     if (insertText) {
       ref.insertText(insertText)
     }
 
     const finalOffset = docCharOffset(start + (nextCursorOffset ?? insertText.length))
-    const final = resolveCursorDocPosition(ref.plainText, finalOffset, buildLineStarts(ref.plainText))
-    ref.editBuffer.setCursor(final.line, final.col)
+    const final = Document.create(ref.plainText).positionAtOffset(finalOffset)
+    ref.editBuffer.setCursor(final.line, final.offset)
     ref.requestRender()
     return true
   }

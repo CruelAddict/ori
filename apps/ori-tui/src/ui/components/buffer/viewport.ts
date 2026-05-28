@@ -1,9 +1,9 @@
 import type { LineInfo } from "@opentui/core"
 import { type DocCharRange, docCharRange, type LineIndex, lineIndex } from "./coords"
-import type { TextLayout } from "./text-layout"
+import type { TextGeometry } from "./text-geometry"
 
 export type Viewport = {
-  layout: TextLayout
+  geometry: TextGeometry
   lineInfo: LineInfo
   scrollY: number
   height: number
@@ -32,7 +32,7 @@ export function viewportRenderRange(viewport: Viewport, overscan: number): DocCh
   }
 
   return docCharRange(
-    viewport.layout.document.lineStart(lineIndex(startLine)),
-    viewport.layout.document.nextLineStart(lineIndex(endLine)),
+    viewport.geometry.document.lineStart(lineIndex(startLine)),
+    viewport.geometry.document.nextLineStart(lineIndex(endLine)),
   )
 }

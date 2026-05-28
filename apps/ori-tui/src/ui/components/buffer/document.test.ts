@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { docCharOffset, documentVersion } from "./coords"
+import { docCharOffset, documentVersion, lineCharPosition } from "./coords"
 import { Document } from "./document"
 
 describe("buffer document", () => {
@@ -21,5 +21,22 @@ describe("buffer document", () => {
     expect(edit.document.version).toBe(documentVersion(1))
     expect(edit.document.modified).toBe(true)
     expect(edit.change).toEqual({ start: docCharOffset(7), previousEnd: docCharOffset(7), nextEnd: docCharOffset(13) })
+  })
+
+  test("maps logical line columns to document offsets", () => {
+    const document = Document.create("auth\nUSE\n")
+
+    expect(document.offsetAtLineChar(0, 2)).toBe(docCharOffset(2))
+    expect(document.offsetAtLineChar(1, 2)).toBe(docCharOffset(7))
+    expect(document.offsetAtLineChar(0, 99)).toBe(docCharOffset(4))
+    expect(document.offsetAtLineChar(99, 2)).toBe(docCharOffset(9))
+  })
+
+  test("maps document offsets to logical line positions", () => {
+    const document = Document.create("auth\nUSE\n")
+
+    expect(document.positionAtOffset(docCharOffset(0))).toEqual(lineCharPosition(0, 0))
+    expect(document.positionAtOffset(docCharOffset(6))).toEqual(lineCharPosition(1, 1))
+    expect(document.positionAtOffset(docCharOffset(999))).toEqual(lineCharPosition(2, 0))
   })
 })

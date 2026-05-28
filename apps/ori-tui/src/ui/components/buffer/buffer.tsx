@@ -11,7 +11,6 @@ import type { SelectPopupAnchor } from "@ui/components/select-popup-model"
 import { useTheme } from "@ui/providers/theme"
 import { type KeyBinding, KeyScope } from "@ui/services/key-scopes"
 import { debounce } from "@utils/debounce"
-import { offsetToLineCol } from "@utils/line-offsets"
 import { type Accessor, createEffect, createMemo, createSignal, onCleanup, onMount } from "solid-js"
 import { type BufferAnalysis, createAnalysisHighlightLayer } from "./analysis"
 import { createBufferAutocomplete } from "./autocomplete/controller"
@@ -22,7 +21,7 @@ import type { DocCharOffset, LineIndex } from "./coords"
 import { containerHeight, containerWidth, containerX, containerY, docCharOffset, lineIndex } from "./coords"
 import { type BufferTextChange, Document, findTextChange, normalizeDocumentText } from "./document"
 import { createTextareaRenderTarget } from "./render-target"
-import { createTextLayout } from "./text-layout"
+import { createTextGeometry } from "./text-geometry"
 import { createViewport } from "./viewport"
 
 const DEBOUNCE_MS = 200
@@ -78,7 +77,6 @@ export function Buffer(props: BufferProps) {
   const text = createMemo(() => doc().text)
   const contentModified = createMemo(() => doc().modified)
   const documentVersion = createMemo(() => doc().version)
-  const lineStarts = createMemo(() => doc().lineStarts)
 
   const [viewportHeight, setViewportHeight] = createSignal(1)
   const [totalRows, setTotalRows] = createSignal(1)
@@ -143,14 +141,14 @@ export function Buffer(props: BufferProps) {
       preservePreferredVisualCol()
     },
   })
-  const textLayout = createTextLayout({
+  const textGeometry = createTextGeometry({
     getDocument: doc,
     tabWidth,
     getWidthMethod: () => adapter.live()?.ctx?.widthMethod,
   })
   const viewportController = createBufferViewportController({
     textarea: adapter,
-    layout: textLayout,
+    geometry: textGeometry,
     onCursorSync: () => {
       syncCursorStateFromEditor(cursorSyncMode)
     },
@@ -193,7 +191,7 @@ export function Buffer(props: BufferProps) {
           getRef: () => adapter.live(),
           getViewport: (ref) =>
             createViewport({
-              layout: textLayout,
+              geometry: textGeometry,
               lineInfo: adapter.getLineInfo(ref),
               scrollY: ref.scrollY,
               height: ref.height,
@@ -545,17 +543,17 @@ export function Buffer(props: BufferProps) {
 
     const current = text()
     const offset = Number(currentOffset)
-    const starts = lineStarts()
-    const cursor = offsetToLineCol(offset, starts)
-    const lineStart = starts[cursor.line] ?? 0
-    const needsEofWorkaround = cursor.line === starts.length - 1 && offset === current.length
+    const document = doc()
+    const cursor = document.positionAtOffset(currentOffset)
+    const lineStart = document.lineStart(cursor.line)
+    const needsEofWorkaround = cursor.line === document.lineStarts.length - 1 && offset === current.length
 
-    if (cursor.col > 0) {
+    if (cursor.offset > 0) {
       if (needsEofWorkaround) {
         const nextText = current.slice(0, lineStart) + current.slice(offset)
         return replaceDocumentRange(docCharOffset(0), docCharOffset(current.length), nextText, lineStart, "user")
       }
-      return replaceDocumentRange(docCharOffset(lineStart), docCharOffset(offset), "", 0, "user")
+      return replaceDocumentRange(lineStart, docCharOffset(offset), "", 0, "user")
     }
 
     if (cursor.line > 0) {

@@ -6,8 +6,8 @@ import { readFrameText } from "../../../test/opentui-test-tools"
 import { createSqlEditorBgWorkerAdapter } from "../../widgets/editor-panel/sql-editor-bg-worker-adapter"
 import type { SqlEditorSchemaState } from "../../widgets/editor-panel/sql-editor-protocol"
 import { getBufferTextarea, mountBufferWithApi, mountText, moveCursor } from "./buffer.test-tools"
-import { resolveCursorDocOffset } from "./buffer-viewport-controller"
 import { type DocCharOffset, docCharOffset, docCharRange } from "./coords"
+import { Document } from "./document"
 
 function popupBox(app: MountedTuiApp) {
   return app.find((node): node is BoxRenderable => node instanceof BoxRenderable && node.zIndex === 30)
@@ -222,8 +222,9 @@ describe("buffer autocomplete integration", () => {
       const eolAfterGotoLine = textarea.editBuffer.getEOL()
       await moveCursor(mounted.app, textarea, line, -1)
 
-      const rebuilt = resolveCursorDocOffset(textarea.plainText, textarea.logicalCursor.row, textarea.logicalCursor.col)
-      const rebuiltLineStart = resolveCursorDocOffset(textarea.plainText, afterGotoLine.row, afterGotoLine.col)
+      const document = Document.create(textarea.plainText)
+      const rebuilt = document.offsetAtLineChar(textarea.logicalCursor.row, textarea.logicalCursor.col)
+      const rebuiltLineStart = document.offsetAtLineChar(afterGotoLine.row, afterGotoLine.col)
 
       expect(tabsBeforeLine).toBe(2)
       expect(tabsBeforeCursor).toBe(2)

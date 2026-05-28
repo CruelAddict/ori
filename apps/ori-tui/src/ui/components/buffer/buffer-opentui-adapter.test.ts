@@ -1,57 +1,57 @@
 import { describe, expect, test } from "bun:test"
 import type { LineInfo } from "@opentui/core"
-import {
-  resolveCursorDocOffset,
-  resolveViewportOffsetPoint,
-  resolveVisualCursorDocOffset,
-} from "./buffer-viewport-controller"
+import { resolveViewportOffsetPoint, resolveVisualCursorDocOffset } from "./buffer-viewport-controller"
 import { containerX, containerY, docCharOffset } from "./coords"
 import { Document } from "./document"
-import { createTextLayout } from "./text-layout"
+import { createTextGeometry } from "./text-geometry"
 
-function createTestLayout(document: Document) {
-  return createTextLayout({ getDocument: () => document, tabWidth: 2, getWidthMethod: () => undefined })
+function createTestGeometry(document: Document) {
+  return createTextGeometry({ getDocument: () => document, tabWidth: 2, getWidthMethod: () => undefined })
 }
 
 describe("buffer viewport controller", () => {
   test("maps a single-line cursor directly into a document offset", () => {
-    expect(resolveCursorDocOffset("select * from auth", 0, 18)).toBe(docCharOffset(18))
+    expect(Document.create("select * from auth").offsetAtLineChar(0, 18)).toBe(docCharOffset(18))
   })
 
   test("maps a later line using document line starts", () => {
-    expect(resolveCursorDocOffset("select 1\nselect * from auth\n", 1, 18)).toBe(docCharOffset(27))
+    expect(Document.create("select 1\nselect * from auth\n").offsetAtLineChar(1, 18)).toBe(docCharOffset(27))
   })
 
   test("does not let earlier tabs skew later line offsets", () => {
     const text = "\tfoo\n\tbar\nselect * from auth\n"
     const lineStart = text.lastIndexOf("select * from auth")
 
-    expect(resolveCursorDocOffset(text, 2, 18)).toBe(docCharOffset(lineStart + 18))
+    expect(Document.create(text).offsetAtLineChar(2, 18)).toBe(docCharOffset(lineStart + 18))
   })
 
   test("does not let earlier wide characters skew later line offsets", () => {
     const text = "表\n🙂\nselect * from auth\n"
     const lineStart = text.lastIndexOf("select * from auth")
 
-    expect(resolveCursorDocOffset(text, 2, 18)).toBe(docCharOffset(lineStart + 18))
+    expect(Document.create(text).offsetAtLineChar(2, 18)).toBe(docCharOffset(lineStart + 18))
   })
 
   test("treats the current line column as a character offset even with tabs", () => {
-    expect(resolveCursorDocOffset("\tselect * from auth\n", 0, 1)).toBe(docCharOffset(1))
-    expect(resolveCursorDocOffset("\tselect * from auth\n", 0, 19)).toBe(docCharOffset(19))
+    const document = Document.create("\tselect * from auth\n")
+
+    expect(document.offsetAtLineChar(0, 1)).toBe(docCharOffset(1))
+    expect(document.offsetAtLineChar(0, 19)).toBe(docCharOffset(19))
   })
 
   test("treats the current line column as a character offset even with wide characters", () => {
-    expect(resolveCursorDocOffset("表auth\n", 0, 1)).toBe(docCharOffset(1))
-    expect(resolveCursorDocOffset("表auth\n", 0, 5)).toBe(docCharOffset(5))
+    const document = Document.create("表auth\n")
+
+    expect(document.offsetAtLineChar(0, 1)).toBe(docCharOffset(1))
+    expect(document.offsetAtLineChar(0, 5)).toBe(docCharOffset(5))
   })
 
   test("clamps past-the-end columns to the line end before newline", () => {
-    expect(resolveCursorDocOffset("auth\nUSE\n", 0, 99)).toBe(docCharOffset(4))
+    expect(Document.create("auth\nUSE\n").offsetAtLineChar(0, 99)).toBe(docCharOffset(4))
   })
 
   test("clamps out-of-range rows to the last line", () => {
-    expect(resolveCursorDocOffset("auth\n", 99, 2)).toBe(docCharOffset(5))
+    expect(Document.create("auth\n").offsetAtLineChar(99, 2)).toBe(docCharOffset(5))
   })
 
   test("maps a later line viewport point without subtracting previous line width", () => {
@@ -59,7 +59,7 @@ describe("buffer viewport controller", () => {
 
     expect(
       resolveViewportOffsetPoint({
-        layout: createTestLayout(Document.create(text)),
+        geometry: createTestGeometry(Document.create(text)),
         offset: docCharOffset(text.lastIndexOf("fr")),
         lineInfo: {
           lineStartCols: [0, 22],
@@ -77,7 +77,7 @@ describe("buffer viewport controller", () => {
   test("maps wrapped rows relative to their source line", () => {
     expect(
       resolveViewportOffsetPoint({
-        layout: createTestLayout(Document.create("ignored\nabcdefghijkl")),
+        geometry: createTestGeometry(Document.create("ignored\nabcdefghijkl")),
         offset: docCharOffset("ignored\nabcdefghijkl".length),
         lineInfo: {
           lineStartCols: [22, 32],
@@ -97,7 +97,7 @@ describe("buffer viewport controller", () => {
 
     expect(
       resolveVisualCursorDocOffset({
-        layout: createTestLayout(Document.create(text)),
+        geometry: createTestGeometry(Document.create(text)),
         visualRow: 1,
         visualCol: 2,
         lineInfo: {
@@ -116,7 +116,7 @@ describe("buffer viewport controller", () => {
 
     expect(
       resolveVisualCursorDocOffset({
-        layout: createTestLayout(Document.create(text)),
+        geometry: createTestGeometry(Document.create(text)),
         visualRow: 1,
         visualCol: 12,
         lineInfo: {

@@ -24,5 +24,5 @@ export type {
 } from "./coords"
 export { Document } from "./document"
 export type { RenderTarget } from "./render-target"
-export type { TextLayout } from "./text-layout"
+export type { TextDisplayPoint, TextGeometry, TextLineGeometry, TextLinePosition } from "./text-geometry"
 export type { Viewport } from "./viewport"
