@@ -17,6 +17,7 @@ import {
 } from "./coords"
 import { Document } from "./document"
 import type { TextGeometry } from "./text-geometry"
+import type { Viewport } from "./viewport"
 
 export type BufferCursorState = {
   row: number
@@ -32,14 +33,19 @@ type TextareaBridge = {
   live: () => TextareaRenderable | undefined
   getLineInfo: (ref: TextareaRenderable) => LineInfo
   clearLineInfoCache: (ref?: TextareaRenderable) => void
-  setNativeViewport: (
+  setViewport: (
     ref: TextareaRenderable,
     x: number,
     y: number,
     width: number,
     height: number,
     moveCursor?: boolean,
+    options?: SetViewportOptions,
   ) => void
+}
+
+type SetViewportOptions = {
+  notify?: boolean
 }
 
 type CreateBufferViewportControllerOptions = {
@@ -190,11 +196,11 @@ export function createBufferViewportController(options: CreateBufferViewportCont
     const targetVisualCol = manualScrollVisualCol ?? preferredVisualCol ?? cursor.visualCol
 
     if (!moveCursor) {
-      options.textarea.setNativeViewport(ref, x, y, width, height, false)
+      options.textarea.setViewport(ref, x, y, width, height, false, { notify: false })
       return
     }
 
-    options.textarea.setNativeViewport(ref, x, y, width, height, false)
+    options.textarea.setViewport(ref, x, y, width, height, false, { notify: false })
 
     let nextViewport = ref.editorView.getViewport()
     if (nextViewport.offsetY !== y) {
@@ -212,7 +218,7 @@ export function createBufferViewportController(options: CreateBufferViewportCont
           ref.editBuffer.setCursor(proxy.line, proxy.offset)
         }
       }
-      options.textarea.setNativeViewport(ref, x, y, width, height, false)
+      options.textarea.setViewport(ref, x, y, width, height, false, { notify: false })
       nextViewport = ref.editorView.getViewport()
     }
 
@@ -256,7 +262,7 @@ export function createBufferViewportController(options: CreateBufferViewportCont
       ref.editBuffer.setCursor(next.line, next.offset)
       const cursorViewport = ref.editorView.getViewport()
       if (cursorViewport.offsetY !== nextViewport.offsetY) {
-        options.textarea.setNativeViewport(ref, x, nextViewport.offsetY, width, height, false)
+        options.textarea.setViewport(ref, x, nextViewport.offsetY, width, height, false, { notify: false })
       }
     }
   }
@@ -276,6 +282,21 @@ export function createBufferViewportController(options: CreateBufferViewportCont
       row: cursor.row,
       offset: document.offsetAtLineChar(cursor.row, cursor.col),
     } satisfies BufferCursorState
+  }
+
+  const readViewport = () => {
+    const ref = options.textarea.live()
+    if (!ref) {
+      return undefined
+    }
+
+    return {
+      geometry: options.geometry,
+      lineInfo: options.textarea.getLineInfo(ref),
+      scrollY: ref.scrollY,
+      height: ref.height,
+      focusedLine: lineIndex(ref.logicalCursor.row),
+    } satisfies Viewport
   }
 
   const totalVirtualRows = () => {
@@ -394,6 +415,7 @@ export function createBufferViewportController(options: CreateBufferViewportCont
   return {
     preservePreferredVisualColThroughMicrotask,
     readCursorState,
+    readViewport,
     noteManualScroll,
     setViewport,
     setCursorDocOffset,

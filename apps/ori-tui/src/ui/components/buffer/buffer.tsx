@@ -15,14 +15,13 @@ import { type Accessor, createEffect, createMemo, createSignal, onCleanup, onMou
 import { type BufferAnalysis, createAnalysisHighlightLayer } from "./analysis"
 import { createBufferAutocomplete } from "./autocomplete/controller"
 import type { BufferAutocompleteProvider } from "./autocomplete/types"
-import { createBufferOpentuiAdapter } from "./buffer-opentui-adapter"
+import { createBufferTextarea } from "./buffer-textarea"
 import { createBufferViewportController } from "./buffer-viewport-controller"
 import type { DocCharOffset, LineIndex } from "./coords"
 import { containerHeight, containerWidth, containerX, containerY, docCharOffset, lineIndex } from "./coords"
 import { type BufferTextChange, Document, findTextChange, normalizeDocumentText } from "./document"
 import { createTextareaRenderTarget } from "./render-target"
 import { createTextGeometry } from "./text-geometry"
-import { createViewport } from "./viewport"
 
 const DEBOUNCE_MS = 200
 const DEFAULT_TAB_WIDTH = 2
@@ -129,7 +128,7 @@ export function Buffer(props: BufferProps) {
   }
 
   let preservePreferredVisualCol = () => {}
-  const adapter = createBufferOpentuiAdapter({
+  const textarea = createBufferTextarea({
     tabWidth,
     onLineInfoChange: () => {
       queueSync()
@@ -144,10 +143,10 @@ export function Buffer(props: BufferProps) {
   const textGeometry = createTextGeometry({
     getDocument: doc,
     tabWidth,
-    getWidthMethod: () => adapter.live()?.ctx?.widthMethod,
+    getWidthMethod: () => textarea.live()?.ctx?.widthMethod,
   })
   const viewportController = createBufferViewportController({
-    textarea: adapter,
+    textarea,
     geometry: textGeometry,
     onCursorSync: () => {
       syncCursorStateFromEditor(cursorSyncMode)
@@ -188,15 +187,8 @@ export function Buffer(props: BufferProps) {
     ? createAnalysisHighlightLayer({
         analysis: props.analysis,
         host: {
-          getRef: () => adapter.live(),
-          getViewport: (ref) =>
-            createViewport({
-              geometry: textGeometry,
-              lineInfo: adapter.getLineInfo(ref),
-              scrollY: ref.scrollY,
-              height: ref.height,
-              focusedLine: focusedLine(),
-            }),
+          getRef: () => textarea.live(),
+          getViewport: () => viewportController.readViewport(),
           getRenderTarget: createTextareaRenderTarget,
           getDocument: doc,
           requestSync: () => queueSync(),
@@ -348,8 +340,8 @@ export function Buffer(props: BufferProps) {
     gutterRef.setLineColors(colors)
   }
 
-  const setEditorViewport = (top: number, nextHeight = adapter.live()?.height ?? 1, moveCursor = false) => {
-    const ref = adapter.live()
+  const setEditorViewport = (top: number, nextHeight = textarea.live()?.height ?? 1, moveCursor = false) => {
+    const ref = textarea.live()
     if (!ref) {
       return
     }
@@ -380,7 +372,7 @@ export function Buffer(props: BufferProps) {
   }
 
   const syncScrollboxFromEditor = () => {
-    const ref = adapter.live()
+    const ref = textarea.live()
     if (!scrollRef || !ref) {
       return
     }
@@ -410,7 +402,7 @@ export function Buffer(props: BufferProps) {
     syncScrollboxBarMetrics()
     const viewport = getViewportRect(scrollRef)
     setViewportHeight(Math.max(1, viewport.height))
-    const ref = adapter.live()
+    const ref = textarea.live()
     const nextTop = scrollRef.scrollTop ?? 0
     let moveCursor = true
     if (ref) {
@@ -455,7 +447,7 @@ export function Buffer(props: BufferProps) {
       return
     }
 
-    const ref = adapter.live()
+    const ref = textarea.live()
     if (!ref) {
       return
     }
@@ -496,7 +488,7 @@ export function Buffer(props: BufferProps) {
   }
 
   function getAnchor(replaceStart: DocCharOffset): SelectPopupAnchor | null {
-    const ref = adapter.live()
+    const ref = textarea.live()
     if (!bufferRootRef || !ref) {
       return null
     }
@@ -587,12 +579,12 @@ export function Buffer(props: BufferProps) {
   }
 
   const focus = () => {
-    adapter.live()?.focus()
+    textarea.live()?.focus()
   }
 
   const setText = (nextText: string) => {
     const normalizedText = normalizeDocumentText(nextText)
-    const ref = adapter.live()
+    const ref = textarea.live()
     pendingReset = true
     analysisHighlightLayer?.reset()
     if (ref) {
@@ -607,7 +599,7 @@ export function Buffer(props: BufferProps) {
   }
 
   const handleContentChange = () => {
-    const ref = adapter.live()
+    const ref = textarea.live()
     if (!ref) {
       return
     }
@@ -678,7 +670,7 @@ export function Buffer(props: BufferProps) {
     debouncedPush.clear()
     autocomplete.close()
     analysisHighlightLayer?.dispose()
-    adapter.detach()
+    textarea.detach()
   })
 
   createEffect(() => {
@@ -713,12 +705,12 @@ export function Buffer(props: BufferProps) {
     }
     previousFocusState = isFocused
     if (!isFocused) {
-      adapter.live()?.blur()
+      textarea.live()?.blur()
       autocomplete.close()
       return
     }
     bufferMicrotask(() => {
-      adapter.live()?.focus()
+      textarea.live()?.focus()
       queueSync()
     })
   })
@@ -807,14 +799,14 @@ export function Buffer(props: BufferProps) {
             >
               <textarea
                 ref={(node: TextareaRenderable | undefined) => {
-                  adapter.attach(node)
+                  textarea.attach(node)
                   if (!node) {
                     return
                   }
                   node.syntaxStyle = props.analysis?.syntaxStyle() ?? null
                   queueSync()
                   setTimeout(() => {
-                    if (disposed || adapter.live() !== node) {
+                    if (disposed || textarea.live() !== node) {
                       return
                     }
                     node.flexShrink = 1
@@ -822,7 +814,7 @@ export function Buffer(props: BufferProps) {
                   }, 0)
                   if (props.isFocused()) {
                     bufferMicrotask(() => {
-                      adapter.live()?.focus()
+                      textarea.live()?.focus()
                     })
                   }
                 }}

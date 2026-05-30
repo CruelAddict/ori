@@ -48,7 +48,7 @@ export type BufferAnalysis = {
 
 type AnalysisHost = {
   getRef: () => TextareaRenderable | undefined
-  getViewport: (ref: TextareaRenderable) => Viewport
+  getViewport: () => Viewport | undefined
   getRenderTarget: (ref: TextareaRenderable) => RenderTarget
   getDocument: () => Document
   requestSync: () => void
@@ -149,6 +149,20 @@ export function createAnalysisHighlightLayer(params: {
       start: docCharOffset(renderRange === undefined ? statement.start : Math.max(statement.start, renderRange.start)),
       end: docCharOffset(renderRange === undefined ? statement.end : Math.min(statement.end, renderRange.end)),
     } satisfies DocCharRange
+  }
+
+  const readRenderContext = () => {
+    const ref = host.getRef()
+    const viewport = host.getViewport()
+    if (!ref || !viewport) {
+      return undefined
+    }
+
+    return {
+      ref,
+      viewport,
+      target: host.getRenderTarget(ref),
+    }
   }
 
   const clearRenderedHighlights = (requestRender: boolean) => {
@@ -271,12 +285,15 @@ export function createAnalysisHighlightLayer(params: {
   }
 
   const buildWarmBatch = (preferFocusedStatement: boolean) => {
-    const ref = host.getRef()
-    if (!ref || !statementCache) {
+    if (!statementCache) {
+      return undefined
+    }
+
+    const viewport = host.getViewport()
+    if (!viewport) {
       return undefined
     }
     const document = host.getDocument()
-    const viewport = host.getViewport(ref)
     const renderRange = viewportRenderRange(viewport, WARM_OVERSCAN_ROWS)
     if (!renderRange) {
       return undefined
@@ -455,19 +472,17 @@ export function createAnalysisHighlightLayer(params: {
         previousStatements = currentCache.statements
         lastCompletedIndex = Math.max(lastCompletedIndex, index)
         const nextStatement = currentCache.statements[index]
-        const ref = host.getRef()
-        if (nextStatement && ref) {
-          const viewport = host.getViewport(ref)
-          const target = host.getRenderTarget(ref)
+        const context = readRenderContext()
+        if (nextStatement && context) {
           const renderedImmediately = syncStatementHighlights({
-            target,
+            target: context.target,
             statement: nextStatement,
-            viewport,
-            renderRange: viewportRenderRange(viewport, VISIBLE_OVERSCAN_ROWS),
+            viewport: context.viewport,
+            renderRange: viewportRenderRange(context.viewport, VISIBLE_OVERSCAN_ROWS),
           })
           if (renderedImmediately) {
             if (options.streamStatements) {
-              target.requestRender()
+              context.target.requestRender()
             }
             batchRenderedHighlights = true
           }
@@ -548,8 +563,8 @@ export function createAnalysisHighlightLayer(params: {
   }
 
   const syncRenderedHighlights = () => {
-    const ref = host.getRef()
-    if (!ref || !statementCache) {
+    const context = readRenderContext()
+    if (!context || !statementCache) {
       clearRenderedHighlights(false)
       return
     }
@@ -559,35 +574,33 @@ export function createAnalysisHighlightLayer(params: {
     if (appliedHighlightStyle !== style || statementCache.syntaxStyle !== style) {
       appliedHighlightStyle = style
       statementCache.syntaxStyle = style
-      ref.syntaxStyle = style
+      context.ref.syntaxStyle = style
       changed = true
     }
 
-    const viewport = host.getViewport(ref)
-    const target = host.getRenderTarget(ref)
     const statements = collectVisibleStatements(
       statementCache,
-      viewport.lineInfo,
-      viewport.scrollY,
-      viewport.height,
-      viewport.focusedLine,
+      context.viewport.lineInfo,
+      context.viewport.scrollY,
+      context.viewport.height,
+      context.viewport.focusedLine,
       VISIBLE_OVERSCAN_ROWS,
     )
     const visibleIds = new Set(statements.map((statement) => statement.id))
-    const renderRange = viewportRenderRange(viewport, VISIBLE_OVERSCAN_ROWS)
+    const renderRange = viewportRenderRange(context.viewport, VISIBLE_OVERSCAN_ROWS)
 
     for (const [id, entry] of renderedStatementHighlights) {
       if (visibleIds.has(id)) {
         continue
       }
 
-      target.removeHighlightsByRef(entry.highlightGroupId)
+      context.target.removeHighlightsByRef(entry.highlightGroupId)
       renderedStatementHighlights.delete(id)
       changed = true
     }
 
     for (const statement of statements) {
-      if (syncStatementHighlights({ target, statement, viewport, renderRange })) {
+      if (syncStatementHighlights({ target: context.target, statement, viewport: context.viewport, renderRange })) {
         changed = true
       }
     }
@@ -596,7 +609,7 @@ export function createAnalysisHighlightLayer(params: {
       return
     }
 
-    target.requestRender()
+    context.target.requestRender()
   }
 
   return {

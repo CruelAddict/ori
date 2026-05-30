@@ -10,10 +10,6 @@ export type Viewport = {
   focusedLine: LineIndex
 }
 
-export function createViewport(params: Viewport): Viewport {
-  return params
-}
-
 export function viewportRenderRange(viewport: Viewport, overscan: number): DocCharRange | undefined {
   const startRow = Math.max(0, viewport.scrollY - overscan)
   const endRow = Math.min(viewport.lineInfo.lineSources.length, viewport.scrollY + viewport.height + overscan)
