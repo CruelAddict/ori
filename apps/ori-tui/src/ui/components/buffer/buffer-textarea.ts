@@ -6,8 +6,8 @@ import { createTextareaLineInfoCache } from "./opentui-textarea-extensions/line-
 import { installSelectionHooks } from "./opentui-textarea-extensions/selection-hooks"
 import {
   installSetViewportHooks,
+  type SetViewport,
   type SetViewportResult,
-  setViewportAndReadCursorChange,
 } from "./opentui-textarea-extensions/set-viewport-hooks"
 import { installViewportSizeHooks } from "./opentui-textarea-extensions/viewport-size-hooks"
 import { exposeVirtualLineCount } from "./opentui-textarea-extensions/virtual-line-count"
@@ -74,6 +74,10 @@ export function createBufferTextarea(options: CreateBufferTextareaOptions) {
         }
       },
       afterSetViewport: (event) => {
+        if (event.source === "buffer") {
+          return
+        }
+
         if (event.moveCursor || event.cursorChanged) {
           options.onTextareaCursorChanged()
         }
@@ -156,7 +160,8 @@ export function createBufferTextarea(options: CreateBufferTextareaOptions) {
       return undefined
     }
 
-    return setViewportAndReadCursorChange(node, x, y, width, height, moveCursor)
+    const set = node.editorView.setViewport as SetViewport
+    return set(x, y, width, height, moveCursor, { source: "buffer" })
   }
 
   return {
