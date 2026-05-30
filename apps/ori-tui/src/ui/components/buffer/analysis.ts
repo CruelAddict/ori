@@ -1,4 +1,4 @@
-import type { SyntaxStyle, TextareaRenderable } from "@opentui/core"
+import type { SyntaxStyle } from "@opentui/core"
 import type { SyntaxHighlightSpan } from "@utils/syntax-highlighter"
 import type { Accessor } from "solid-js"
 import { renderStatementHighlightRange } from "./buffer-highlight-renderer"
@@ -47,10 +47,10 @@ export type BufferAnalysis = {
 }
 
 type AnalysisHost = {
-  getRef: () => TextareaRenderable | undefined
   getViewport: () => Viewport | undefined
-  getRenderTarget: (ref: TextareaRenderable) => RenderTarget
+  getRenderTarget: () => RenderTarget | undefined
   getDocument: () => Document
+  setSyntaxStyle: (style: SyntaxStyle | null) => void
   requestSync: () => void
 }
 
@@ -152,31 +152,29 @@ export function createAnalysisHighlightLayer(params: {
   }
 
   const readRenderContext = () => {
-    const ref = host.getRef()
     const viewport = host.getViewport()
-    if (!ref || !viewport) {
+    const target = host.getRenderTarget()
+    if (!viewport || !target) {
       return undefined
     }
 
     return {
-      ref,
       viewport,
-      target: host.getRenderTarget(ref),
+      target,
     }
   }
 
   const clearRenderedHighlights = (requestRender: boolean) => {
-    const ref = host.getRef()
+    const target = host.getRenderTarget()
     const highlights = renderedStatementHighlights
     renderedStatementHighlights = new Map()
-    if (!ref || highlights.size === 0) {
+    if (!target || highlights.size === 0) {
       if (requestRender) {
-        ref?.requestRender()
+        target?.requestRender()
       }
       return
     }
 
-    const target = host.getRenderTarget(ref)
     for (const entry of highlights.values()) {
       target.removeHighlightsByRef(entry.highlightGroupId)
     }
@@ -510,10 +508,7 @@ export function createAnalysisHighlightLayer(params: {
       }
 
       if (!options.streamStatements && batchRenderedHighlights) {
-        const ref = host.getRef()
-        if (ref) {
-          host.getRenderTarget(ref).requestRender()
-        }
+        host.getRenderTarget()?.requestRender()
       }
 
       if (!options.streamStatements && lastCompletedIndex >= batch.startIndex) {
@@ -574,7 +569,7 @@ export function createAnalysisHighlightLayer(params: {
     if (appliedHighlightStyle !== style || statementCache.syntaxStyle !== style) {
       appliedHighlightStyle = style
       statementCache.syntaxStyle = style
-      context.ref.syntaxStyle = style
+      host.setSyntaxStyle(style)
       changed = true
     }
 

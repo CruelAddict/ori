@@ -6,10 +6,10 @@ type TextareaLineInfoCacheExtension = TextareaRenderable & {
   }
 }
 
-export type LineInfoCache = {
-  getLineInfo: (ref: TextareaRenderable) => LineInfo
-  clearLineInfoCache: (ref?: TextareaRenderable) => void
-  readOrSet: (ref: TextareaRenderable, read: () => LineInfo) => LineInfo
+type TextareaLineInfoCache = {
+  attach: (node: TextareaRenderable) => void
+  read: (ref: TextareaRenderable) => LineInfo
+  clear: (ref?: TextareaRenderable) => void
 }
 
 const textareas = new WeakSet<TextareaRenderable>()
@@ -17,11 +17,13 @@ const textareas = new WeakSet<TextareaRenderable>()
 // LineInfo is expensive and is often read repeatedly while deriving layout,
 // viewport, and render metadata. Keep one snapshot per live textarea and
 // invalidate it explicitly when layout-affecting operations happen.
-export function createLineInfoCache(getDefaultRef: () => TextareaRenderable | undefined): LineInfoCache {
+export function createTextareaLineInfoCache(
+  getDefaultRef: () => TextareaRenderable | undefined,
+): TextareaLineInfoCache {
   let cachedLineInfoRef: TextareaRenderable | undefined
   let cachedLineInfo: LineInfo | undefined
 
-  const clearLineInfoCache = (node = getDefaultRef()) => {
+  const clear = (node = getDefaultRef()) => {
     if (!node) {
       cachedLineInfoRef = undefined
       cachedLineInfo = undefined
@@ -45,28 +47,25 @@ export function createLineInfoCache(getDefaultRef: () => TextareaRenderable | un
     return info
   }
 
+  const attach = (node: TextareaRenderable) => {
+    if (textareas.has(node)) {
+      return
+    }
+
+    const textarea = node as TextareaLineInfoCacheExtension
+    const originalGetLogicalLineInfo = textarea.editorView.getLogicalLineInfo.bind(textarea.editorView)
+    textarea.editorView.getLogicalLineInfo = (() =>
+      readOrSet(
+        textarea,
+        originalGetLogicalLineInfo,
+      )) as TextareaLineInfoCacheExtension["editorView"]["getLogicalLineInfo"]
+
+    textareas.add(node)
+  }
+
   return {
-    getLineInfo: (ref) => readOrSet(ref, () => ref.lineInfo),
-    clearLineInfoCache,
-    readOrSet,
+    attach,
+    read: (ref) => readOrSet(ref, () => ref.lineInfo),
+    clear,
   }
-}
-
-// OpenTUI's editorView.getLogicalLineInfo bypasses TextareaRenderable.lineInfo.
-// Route both APIs through the same cache so layout readers share one snapshot
-// instead of recomputing native line info through different paths.
-export function addLogicalLineInfoCache(node: TextareaRenderable, cache: LineInfoCache) {
-  if (textareas.has(node)) {
-    return
-  }
-
-  const textarea = node as TextareaLineInfoCacheExtension
-  const originalGetLogicalLineInfo = textarea.editorView.getLogicalLineInfo.bind(textarea.editorView)
-  textarea.editorView.getLogicalLineInfo = (() =>
-    cache.readOrSet(
-      textarea,
-      originalGetLogicalLineInfo,
-    )) as TextareaLineInfoCacheExtension["editorView"]["getLogicalLineInfo"]
-
-  textareas.add(node)
 }

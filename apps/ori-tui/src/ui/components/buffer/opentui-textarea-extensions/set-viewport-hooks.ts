@@ -1,9 +1,5 @@
 import type { TextareaRenderable } from "@opentui/core"
 
-export type SetViewportOptions = {
-  notify?: boolean
-}
-
 type TextareaSetViewportExtension = TextareaRenderable & {
   editorView: {
     setViewport: (x: number, y: number, width: number, height: number, moveCursor?: boolean) => void
@@ -26,7 +22,6 @@ type SetViewportBeforeEvent = {
   width: number
   height: number
   moveCursor: boolean
-  notify: boolean
   previousViewport: TextareaViewport
   previousCursor: CursorSnapshot
 }
@@ -45,6 +40,10 @@ type SetViewportState = {
   hooks: SetViewportHooks
 }
 
+export type SetViewportResult = {
+  cursorChanged: boolean
+}
+
 const states = new WeakMap<TextareaRenderable, SetViewportState>()
 
 function readCursor(ref: TextareaRenderable) {
@@ -57,12 +56,7 @@ function readCursor(ref: TextareaRenderable) {
 }
 
 function hasCursorChanged(ref: TextareaRenderable, previous: CursorSnapshot) {
-  return (
-    ref.logicalCursor.row !== previous.logicalRow ||
-    ref.logicalCursor.col !== previous.logicalCol ||
-    ref.visualCursor.visualRow !== previous.visualRow ||
-    ref.visualCursor.visualCol !== previous.visualCol
-  )
+  return ref.logicalCursor.row !== previous.logicalRow || ref.logicalCursor.col !== previous.logicalCol
 }
 
 function applySetViewport(
@@ -73,7 +67,7 @@ function applySetViewport(
   width: number,
   height: number,
   moveCursor = false,
-  options?: SetViewportOptions,
+  emitAfterHook = true,
 ) {
   const event = {
     ref,
@@ -82,20 +76,26 @@ function applySetViewport(
     width,
     height,
     moveCursor,
-    notify: options?.notify !== false,
     previousViewport: ref.editorView.getViewport(),
     previousCursor: readCursor(ref),
   } satisfies SetViewportBeforeEvent
   state.hooks.beforeSetViewport?.(event)
   state.nativeSetViewport(x, y, width, height, moveCursor)
+  const result = {
+    cursorChanged: hasCursorChanged(ref, event.previousCursor),
+  } satisfies SetViewportResult
+  if (!emitAfterHook) {
+    return result
+  }
+
   state.hooks.afterSetViewport?.({
     ...event,
-    cursorChanged: hasCursorChanged(ref, event.previousCursor),
+    ...result,
   })
+  return result
 }
 
-// Installs hook points around OpenTUI setViewport. Direct OpenTUI calls and
-// controlled setTextareaViewport calls share the same before/after hook path.
+// Installs hook points around OpenTUI setViewport.
 export function installSetViewportHooks(node: TextareaRenderable, hooks: SetViewportHooks) {
   const current = states.get(node)
   if (current) {
@@ -110,25 +110,28 @@ export function installSetViewportHooks(node: TextareaRenderable, hooks: SetView
   } satisfies SetViewportState
   states.set(node, state)
   textarea.editorView.setViewport = ((x, y, width, height, moveCursor = false) => {
-    applySetViewport(textarea, state, x, y, width, height, moveCursor)
+    applySetViewport(textarea, state, x, y, width, height, moveCursor, true)
   }) as TextareaSetViewportExtension["editorView"]["setViewport"]
 }
 
-// Use this for internal multi-step viewport operations
-export function setTextareaViewport(
+// Buffer-owned viewport changes need cache invalidation, but the caller owns
+// app-level reactions. Return whether OpenTUI moved the cursor while applying it.
+export function setViewportAndReadCursorChange(
   ref: TextareaRenderable,
   x: number,
   y: number,
   width: number,
   height: number,
   moveCursor = false,
-  options?: SetViewportOptions,
-) {
+): SetViewportResult {
   const state = states.get(ref)
   if (!state) {
+    const previousCursor = readCursor(ref)
     ref.editorView.setViewport(x, y, width, height, moveCursor)
-    return
+    return {
+      cursorChanged: hasCursorChanged(ref, previousCursor),
+    }
   }
 
-  applySetViewport(ref, state, x, y, width, height, moveCursor, options)
+  return applySetViewport(ref, state, x, y, width, height, moveCursor, false)
 }

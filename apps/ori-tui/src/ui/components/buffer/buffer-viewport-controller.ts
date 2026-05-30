@@ -1,5 +1,6 @@
-import type { LineInfo, TextareaRenderable } from "@opentui/core"
+import type { LineInfo } from "@opentui/core"
 import { getViewportBandY } from "@ui/components/ori-scrollbox"
+import type { BufferTextareaCursor, BufferTextareaMetrics, BufferTextareaViewport } from "./buffer-textarea"
 import {
   type ContainerX,
   type ContainerY,
@@ -30,28 +31,39 @@ export type BufferViewportPoint = {
 }
 
 type TextareaBridge = {
-  live: () => TextareaRenderable | undefined
-  getLineInfo: (ref: TextareaRenderable) => LineInfo
-  clearLineInfoCache: (ref?: TextareaRenderable) => void
+  readLineInfo: () => LineInfo | undefined
+  clearLineInfo: () => void
+  readCursor: () => BufferTextareaCursor | undefined
+  readMetrics: () => BufferTextareaMetrics | undefined
+  readViewport: () => BufferTextareaViewport | undefined
+  getTotalVirtualRows: () => number | undefined
+  measureRows: (width: number, height: number) => number | undefined
+  setCursor: (row: number, col: number) => void
+  deleteRange: (startRow: number, startCol: number, endRow: number, endCol: number) => void
+  insertText: (text: string) => void
+  readText: () => string | undefined
+  requestRender: () => void
   setViewport: (
-    ref: TextareaRenderable,
     x: number,
     y: number,
     width: number,
     height: number,
     moveCursor?: boolean,
-    options?: SetViewportOptions,
-  ) => void
+  ) => TextareaViewportChange | undefined
 }
 
-type SetViewportOptions = {
-  notify?: boolean
+type TextareaViewportChange = {
+  cursorChanged: boolean
+}
+
+type BufferViewportChange = {
+  applied: boolean
+  cursorChanged: boolean
 }
 
 type CreateBufferViewportControllerOptions = {
   textarea: TextareaBridge
   geometry: TextGeometry
-  onCursorSync: () => void
 }
 
 function getVisualLineStartColumn(info: LineInfo, row: VisualRow, sourceLine: LineIndex): DisplayColumn {
@@ -167,12 +179,12 @@ export function createBufferViewportController(options: CreateBufferViewportCont
   }
 
   const noteManualScroll = () => {
-    const ref = options.textarea.live()
-    if (!ref) {
+    const cursor = options.textarea.readCursor()
+    if (!cursor) {
       return
     }
 
-    manualScrollVisualCol ??= preferredVisualCol ?? ref.visualCursor.visualCol
+    manualScrollVisualCol ??= preferredVisualCol ?? cursor.visualCol
     if (manualScrollResetTimer !== undefined) {
       clearTimeout(manualScrollResetTimer)
     }
@@ -182,29 +194,37 @@ export function createBufferViewportController(options: CreateBufferViewportCont
     }, 120)
   }
 
-  const applyViewportChange = (
-    ref: TextareaRenderable,
-    x: number,
-    y: number,
-    width: number,
-    height: number,
-    moveCursor = false,
-  ) => {
-    const viewport = ref.editorView.getViewport()
-    const cursor = ref.visualCursor
+  const applyViewportChange = (x: number, y: number, width: number, height: number, moveCursor = false) => {
+    let cursorChanged = false
+    const viewport = options.textarea.readViewport()
+    const cursor = options.textarea.readCursor()
+    if (!viewport || !cursor) {
+      return cursorChanged
+    }
+
     const currentRow = viewport.offsetY + cursor.visualRow
     const targetVisualCol = manualScrollVisualCol ?? preferredVisualCol ?? cursor.visualCol
 
     if (!moveCursor) {
-      options.textarea.setViewport(ref, x, y, width, height, false, { notify: false })
-      return
+      return Boolean(options.textarea.setViewport(x, y, width, height, false)?.cursorChanged)
     }
 
-    options.textarea.setViewport(ref, x, y, width, height, false, { notify: false })
+    const firstInfo = options.textarea.readLineInfo()
+    if (!firstInfo) {
+      return cursorChanged
+    }
+    if (firstInfo.lineSources.length === options.geometry.document.lineStarts.length) {
+      return Boolean(options.textarea.setViewport(x, y, width, height, true)?.cursorChanged)
+    }
 
-    let nextViewport = ref.editorView.getViewport()
+    cursorChanged = cursorChanged || Boolean(options.textarea.setViewport(x, y, width, height, false)?.cursorChanged)
+
+    let nextViewport = options.textarea.readViewport()
+    if (!nextViewport) {
+      return cursorChanged
+    }
     if (nextViewport.offsetY !== y) {
-      const info = options.textarea.getLineInfo(ref)
+      const info = firstInfo
       const proxyOffset = resolveVisualCursorDocOffset({
         geometry: options.geometry,
         visualRow: Math.max(0, Math.min(y + cursor.visualRow, info.lineSources.length - 1)),
@@ -214,17 +234,25 @@ export function createBufferViewportController(options: CreateBufferViewportCont
       if (proxyOffset !== undefined) {
         const document = options.geometry.document
         const proxy = document.positionAtOffset(proxyOffset)
-        if (ref.logicalCursor.row !== proxy.line || ref.logicalCursor.col !== proxy.offset) {
-          ref.editBuffer.setCursor(proxy.line, proxy.offset)
+        const nextCursor = options.textarea.readCursor()
+        if (!nextCursor || nextCursor.logicalRow !== proxy.line || nextCursor.logicalCol !== proxy.offset) {
+          options.textarea.setCursor(proxy.line, proxy.offset)
+          cursorChanged = true
         }
       }
-      options.textarea.setViewport(ref, x, y, width, height, false, { notify: false })
-      nextViewport = ref.editorView.getViewport()
+      cursorChanged = cursorChanged || Boolean(options.textarea.setViewport(x, y, width, height, false)?.cursorChanged)
+      nextViewport = options.textarea.readViewport()
+      if (!nextViewport) {
+        return cursorChanged
+      }
     }
 
     const bandY = getViewportBandY({ height })
     const nextVisualRow = currentRow - nextViewport.offsetY
-    const info = options.textarea.getLineInfo(ref)
+    const info = options.textarea.readLineInfo()
+    if (!info) {
+      return cursorChanged
+    }
     const maxRow = Math.max(0, info.lineSources.length - 1)
     const targetRow = Math.max(
       0,
@@ -243,7 +271,7 @@ export function createBufferViewportController(options: CreateBufferViewportCont
         : targetRow
 
     if (resolvedRow === currentRow) {
-      return
+      return cursorChanged
     }
 
     const nextOffset = resolveVisualCursorDocOffset({
@@ -253,75 +281,80 @@ export function createBufferViewportController(options: CreateBufferViewportCont
       lineInfo: info,
     })
     if (nextOffset === undefined) {
-      return
+      return cursorChanged
     }
 
     const document = options.geometry.document
     const next = document.positionAtOffset(nextOffset)
-    if (ref.logicalCursor.row !== next.line || ref.logicalCursor.col !== next.offset) {
-      ref.editBuffer.setCursor(next.line, next.offset)
-      const cursorViewport = ref.editorView.getViewport()
-      if (cursorViewport.offsetY !== nextViewport.offsetY) {
-        options.textarea.setViewport(ref, x, nextViewport.offsetY, width, height, false, { notify: false })
+    const nextCursor = options.textarea.readCursor()
+    if (!nextCursor || nextCursor.logicalRow !== next.line || nextCursor.logicalCol !== next.offset) {
+      options.textarea.setCursor(next.line, next.offset)
+      cursorChanged = true
+      const cursorViewport = options.textarea.readViewport()
+      if (cursorViewport && cursorViewport.offsetY !== nextViewport.offsetY) {
+        cursorChanged =
+          cursorChanged ||
+          Boolean(options.textarea.setViewport(x, nextViewport.offsetY, width, height, false)?.cursorChanged)
       }
     }
+    return cursorChanged
   }
 
   const readCursorState = () => {
-    const ref = options.textarea.live()
-    if (!ref) {
+    const cursor = options.textarea.readCursor()
+    if (!cursor) {
       return undefined
     }
 
-    const cursor = ref.logicalCursor
     if (!preservePreferredVisualCol && manualScrollVisualCol === undefined) {
-      preferredVisualCol = ref.visualCursor.visualCol
+      preferredVisualCol = cursor.visualCol
     }
     const document = options.geometry.document
     return {
-      row: cursor.row,
-      offset: document.offsetAtLineChar(cursor.row, cursor.col),
+      row: cursor.logicalRow,
+      offset: document.offsetAtLineChar(cursor.logicalRow, cursor.logicalCol),
     } satisfies BufferCursorState
   }
 
   const readViewport = () => {
-    const ref = options.textarea.live()
-    if (!ref) {
+    const metrics = options.textarea.readMetrics()
+    const cursor = options.textarea.readCursor()
+    const info = options.textarea.readLineInfo()
+    if (!metrics || !cursor || !info) {
       return undefined
     }
 
     return {
       geometry: options.geometry,
-      lineInfo: options.textarea.getLineInfo(ref),
-      scrollY: ref.scrollY,
-      height: ref.height,
-      focusedLine: lineIndex(ref.logicalCursor.row),
+      lineInfo: info,
+      scrollY: metrics.scrollY,
+      height: metrics.height,
+      focusedLine: lineIndex(cursor.logicalRow),
     } satisfies Viewport
   }
 
   const totalVirtualRows = () => {
-    const ref = options.textarea.live()
-    if (!ref) {
+    const info = options.textarea.readLineInfo()
+    if (!info) {
       return 1
     }
 
-    const info = options.textarea.getLineInfo(ref)
-    return Math.max(1, ref.editorView.getTotalVirtualLineCount(), info.lineSources.length)
+    return Math.max(1, options.textarea.getTotalVirtualRows() ?? 0, info.lineSources.length)
   }
 
   const measureRows = (viewportRows: number, version: number) => {
-    const ref = options.textarea.live()
-    if (!ref) {
+    const metrics = options.textarea.readMetrics()
+    if (!metrics) {
       return 1
     }
 
-    const width = Math.max(1, ref.width)
+    const width = Math.max(1, metrics.width)
     const height = Math.max(1, viewportRows)
     if (measuredRowVersion === version && measuredRowWidth === width && measuredRowHeight === height) {
       return measuredRowCount
     }
 
-    const measured = ref.editorView.measureForDimensions(width, height)?.lineCount
+    const measured = options.textarea.measureRows(width, height)
     measuredRowVersion = version
     measuredRowWidth = width
     measuredRowHeight = height
@@ -337,8 +370,7 @@ export function createBufferViewportController(options: CreateBufferViewportCont
   }
 
   const setCursorDocOffset = (offset: DocCharOffset) => {
-    const ref = options.textarea.live()
-    if (!ref) {
+    if (!options.textarea.readCursor()) {
       return false
     }
 
@@ -346,48 +378,54 @@ export function createBufferViewportController(options: CreateBufferViewportCont
     preferredVisualCol = undefined
     const document = options.geometry.document
     const next = document.positionAtOffset(offset)
-    ref.editBuffer.setCursor(next.line, next.offset)
-    ref.requestRender()
+    options.textarea.setCursor(next.line, next.offset)
+    options.textarea.requestRender()
     return true
   }
 
-  const setViewport = (x: number, y: number, width: number, height: number, moveCursor = false) => {
-    const ref = options.textarea.live()
-    if (!ref) {
-      return false
+  const setViewport = (
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+    moveCursor = false,
+  ): BufferViewportChange => {
+    const viewport = options.textarea.readViewport()
+    if (!viewport) {
+      return { applied: false, cursorChanged: false }
     }
 
     if (moveCursor) {
       preservePreferredVisualColThroughMicrotask()
     }
-    if (ref.editorView.getViewport().width !== width) {
-      options.textarea.clearLineInfoCache(ref)
+    if (viewport.width !== width) {
+      options.textarea.clearLineInfo()
     }
-    applyViewportChange(ref, x, y, width, height, moveCursor)
-    if (moveCursor) {
-      options.onCursorSync()
+    return {
+      applied: true,
+      cursorChanged: applyViewportChange(x, y, width, height, moveCursor),
     }
-    return true
   }
 
   const resolveViewportPoint = (offset: DocCharOffset) => {
-    const ref = options.textarea.live()
-    if (!ref) {
+    const metrics = options.textarea.readMetrics()
+    const info = options.textarea.readLineInfo()
+    if (!metrics || !info) {
       return null
     }
 
     return resolveViewportOffsetPoint({
       geometry: options.geometry,
       offset,
-      lineInfo: options.textarea.getLineInfo(ref),
-      scrollY: ref.scrollY,
-      viewportHeight: ref.height,
+      lineInfo: info,
+      scrollY: metrics.scrollY,
+      viewportHeight: metrics.height,
     })
   }
 
   const replaceDocRange = (start: DocCharOffset, end: DocCharOffset, insertText: string, nextCursorOffset?: number) => {
-    const ref = options.textarea.live()
-    if (!ref) {
+    const text = options.textarea.readText()
+    if (text === undefined) {
       return false
     }
 
@@ -396,19 +434,19 @@ export function createBufferViewportController(options: CreateBufferViewportCont
     const to = document.positionAtOffset(end)
     clearManualScrollVisualCol()
     preferredVisualCol = undefined
-    ref.editBuffer.setCursor(from.line, from.offset)
+    options.textarea.setCursor(from.line, from.offset)
     if (start !== end) {
-      ref.editBuffer.deleteRange(from.line, from.offset, to.line, to.offset)
-      ref.editBuffer.setCursor(from.line, from.offset)
+      options.textarea.deleteRange(from.line, from.offset, to.line, to.offset)
+      options.textarea.setCursor(from.line, from.offset)
     }
     if (insertText) {
-      ref.insertText(insertText)
+      options.textarea.insertText(insertText)
     }
 
     const finalOffset = docCharOffset(start + (nextCursorOffset ?? insertText.length))
-    const final = Document.create(ref.plainText).positionAtOffset(finalOffset)
-    ref.editBuffer.setCursor(final.line, final.offset)
-    ref.requestRender()
+    const final = Document.create(options.textarea.readText() ?? text).positionAtOffset(finalOffset)
+    options.textarea.setCursor(final.line, final.offset)
+    options.textarea.requestRender()
     return true
   }
 

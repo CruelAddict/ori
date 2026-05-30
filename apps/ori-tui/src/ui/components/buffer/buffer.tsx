@@ -20,7 +20,6 @@ import { createBufferViewportController } from "./buffer-viewport-controller"
 import type { DocCharOffset, LineIndex } from "./coords"
 import { containerHeight, containerWidth, containerX, containerY, docCharOffset, lineIndex } from "./coords"
 import { type BufferTextChange, Document, findTextChange, normalizeDocumentText } from "./document"
-import { createTextareaRenderTarget } from "./render-target"
 import { createTextGeometry } from "./text-geometry"
 
 const DEBOUNCE_MS = 200
@@ -100,7 +99,7 @@ export function Buffer(props: BufferProps) {
   let previousFocusState = props.isFocused()
   let disposed = false
   let syncQueued = false
-  let cursorSyncMode = "queued" as "queued" | "inline"
+  let cursorStateUpdateMode = "queued" as "queued" | "inline"
   let pendingScrollboxTop: number | undefined
   let scrollboxIntentQueued = false
   let viewportWidth = 0
@@ -133,28 +132,25 @@ export function Buffer(props: BufferProps) {
     onLineInfoChange: () => {
       queueSync()
     },
-    onCursorSync: () => {
-      syncCursorStateFromEditor(cursorSyncMode)
+    onTextareaCursorChanged: () => {
+      updateCursorStateFromTextarea(cursorStateUpdateMode)
     },
-    onPreservePreferredVisualCol: () => {
+    onBeforeVisualCursorMove: () => {
       preservePreferredVisualCol()
     },
   })
   const textGeometry = createTextGeometry({
     getDocument: doc,
     tabWidth,
-    getWidthMethod: () => textarea.live()?.ctx?.widthMethod,
+    getWidthMethod: () => textarea.getWidthMethod(),
   })
   const viewportController = createBufferViewportController({
     textarea,
     geometry: textGeometry,
-    onCursorSync: () => {
-      syncCursorStateFromEditor(cursorSyncMode)
-    },
   })
   preservePreferredVisualCol = viewportController.preservePreferredVisualColThroughMicrotask
 
-  function syncCursorStateFromEditor(mode: "queued" | "inline" = "queued") {
+  function updateCursorStateFromTextarea(mode: "queued" | "inline" = "queued") {
     const next = viewportController.readCursorState()
     if (!next) {
       setCursorState({ kind: "absent" })
@@ -187,10 +183,10 @@ export function Buffer(props: BufferProps) {
     ? createAnalysisHighlightLayer({
         analysis: props.analysis,
         host: {
-          getRef: () => textarea.live(),
           getViewport: () => viewportController.readViewport(),
-          getRenderTarget: createTextareaRenderTarget,
+          getRenderTarget: () => textarea.createRenderTarget(),
           getDocument: doc,
+          setSyntaxStyle: (style) => textarea.setSyntaxStyle(style),
           requestSync: () => queueSync(),
         },
       })
@@ -239,19 +235,19 @@ export function Buffer(props: BufferProps) {
     queueMicrotask(flushInitialStateChange)
   }
 
-  const getTotalRowsForViewport = (_ref: TextareaRenderable, nextViewportHeight: number) => {
+  const getTotalRowsForViewport = (nextViewportHeight: number) => {
     return Math.max(nextViewportHeight, viewportController.measureRows(nextViewportHeight, documentVersion()))
   }
 
-  const syncScrollMetrics = (ref: TextareaRenderable, nextViewportHeight: number) => {
+  const syncScrollMetrics = (nextViewportHeight: number) => {
     const height = Math.max(1, nextViewportHeight)
     const margin = getViewportInsetY({ height }) / height
     if (margin !== lastEditorScrollMargin) {
       lastEditorScrollMargin = margin
-      ref.editorView.setScrollMargin(margin)
+      textarea.setScrollMargin(margin)
     }
     setViewportHeight(height)
-    setTotalRows(getTotalRowsForViewport(ref, height))
+    setTotalRows(getTotalRowsForViewport(height))
   }
 
   const syncScrollboxTop = (top: number) => {
@@ -340,57 +336,71 @@ export function Buffer(props: BufferProps) {
     gutterRef.setLineColors(colors)
   }
 
-  const setEditorViewport = (top: number, nextHeight = textarea.live()?.height ?? 1, moveCursor = false) => {
-    const ref = textarea.live()
-    if (!ref) {
+  const setEditorViewport = (top: number, nextHeight = textarea.readMetrics()?.height ?? 1, moveCursor = false) => {
+    const metrics = textarea.readMetrics()
+    const editorViewport = textarea.readViewport()
+    if (!metrics || !editorViewport) {
       return
     }
 
-    const viewport = ref.editorView.getViewport()
     const height = Math.max(1, nextHeight)
     const margin = getViewportInsetY({ height }) / height
     if (margin !== lastEditorScrollMargin) {
       lastEditorScrollMargin = margin
-      ref.editorView.setScrollMargin(margin)
+      textarea.setScrollMargin(margin)
     }
-    const nextTop = Math.max(0, Math.min(top, Math.max(0, getTotalRowsForViewport(ref, height) - height)))
-    if (viewport.offsetY === nextTop && viewport.width === ref.width && viewport.height === height) {
+    const nextTop = Math.max(0, Math.min(top, Math.max(0, getTotalRowsForViewport(height) - height)))
+    if (
+      editorViewport.offsetY === nextTop &&
+      editorViewport.width === metrics.width &&
+      editorViewport.height === height
+    ) {
       pendingScrollboxTop = undefined
-      syncScrollMetrics(ref, height)
-      syncScrollboxTop(ref.scrollY)
+      syncScrollMetrics(height)
+      syncScrollboxTop(metrics.scrollY)
       return
     }
 
     pendingScrollboxTop = moveCursor ? nextTop : undefined
-    cursorSyncMode = moveCursor ? "inline" : "queued"
-    viewportController.setViewport(viewport.offsetX, nextTop, Math.max(1, ref.width), height, moveCursor)
-    cursorSyncMode = "queued"
-    ref.requestRender()
-    if (!moveCursor && scrollRef && (scrollRef.scrollTop ?? 0) !== ref.scrollY) {
-      scrollRef.scrollTo({ x: 0, y: ref.scrollY })
+    cursorStateUpdateMode = moveCursor ? "inline" : "queued"
+    const change = viewportController.setViewport(
+      editorViewport.offsetX,
+      nextTop,
+      Math.max(1, metrics.width),
+      height,
+      moveCursor,
+    )
+    if (moveCursor || change.cursorChanged) {
+      updateCursorStateFromTextarea(cursorStateUpdateMode)
+    }
+    cursorStateUpdateMode = "queued"
+    textarea.requestRender()
+    const nextMetrics = textarea.readMetrics()
+    if (!moveCursor && scrollRef && nextMetrics && (scrollRef.scrollTop ?? 0) !== nextMetrics.scrollY) {
+      scrollRef.scrollTo({ x: 0, y: nextMetrics.scrollY })
     }
   }
 
   const syncScrollboxFromEditor = () => {
-    const ref = textarea.live()
-    if (!scrollRef || !ref) {
+    const metrics = textarea.readMetrics()
+    if (!scrollRef || !metrics) {
       return
     }
 
     syncScrollboxBarMetrics()
     const viewport = getViewportRect(scrollRef)
     const height = Math.max(1, viewport.height)
-    const maxTop = Math.max(0, getTotalRowsForViewport(ref, height) - height)
-    if (pendingScrollboxTop !== undefined && ref.scrollY === pendingScrollboxTop) {
+    const maxTop = Math.max(0, getTotalRowsForViewport(height) - height)
+    if (pendingScrollboxTop !== undefined && metrics.scrollY === pendingScrollboxTop) {
       pendingScrollboxTop = undefined
     }
-    if (ref.scrollY > maxTop) {
+    if (metrics.scrollY > maxTop) {
       setEditorViewport(maxTop, height)
       return
     }
 
-    syncScrollMetrics(ref, height)
-    syncScrollboxTop(ref.scrollY)
+    syncScrollMetrics(height)
+    syncScrollboxTop(metrics.scrollY)
   }
 
   const applyScrollboxIntent = () => {
@@ -402,12 +412,12 @@ export function Buffer(props: BufferProps) {
     syncScrollboxBarMetrics()
     const viewport = getViewportRect(scrollRef)
     setViewportHeight(Math.max(1, viewport.height))
-    const ref = textarea.live()
     const nextTop = scrollRef.scrollTop ?? 0
     let moveCursor = true
-    if (ref) {
-      const editorViewport = ref.editorView.getViewport()
-      const currentRow = editorViewport.offsetY + ref.visualCursor.visualRow
+    const editorViewport = textarea.readViewport()
+    const cursor = textarea.readCursor()
+    if (editorViewport && cursor) {
+      const currentRow = editorViewport.offsetY + cursor.visualRow
       const band = getViewportBandY({ height: viewport.height })
       moveCursor = currentRow < nextTop + band.start || currentRow > nextTop + band.end
     }
@@ -447,13 +457,13 @@ export function Buffer(props: BufferProps) {
       return
     }
 
-    const ref = textarea.live()
-    if (!ref) {
+    const metrics = textarea.readMetrics()
+    if (!metrics) {
       return
     }
 
     if (pendingScrollboxTop !== undefined) {
-      if (ref.scrollY === pendingScrollboxTop) {
+      if (metrics.scrollY === pendingScrollboxTop) {
         pendingScrollboxTop = undefined
         queueSync()
       }
@@ -463,8 +473,8 @@ export function Buffer(props: BufferProps) {
       pendingScrollboxTop = undefined
     }
 
-    if ((scrollRef.scrollTop ?? 0) !== ref.scrollY) {
-      syncScrollboxTop(ref.scrollY)
+    if ((scrollRef.scrollTop ?? 0) !== metrics.scrollY) {
+      syncScrollboxTop(metrics.scrollY)
       return
     }
   }
@@ -488,8 +498,8 @@ export function Buffer(props: BufferProps) {
   }
 
   function getAnchor(replaceStart: DocCharOffset): SelectPopupAnchor | null {
-    const ref = textarea.live()
-    if (!bufferRootRef || !ref) {
+    const metrics = textarea.readMetrics()
+    if (!bufferRootRef || !metrics) {
       return null
     }
 
@@ -499,8 +509,8 @@ export function Buffer(props: BufferProps) {
     }
 
     return {
-      x: containerX(Math.max(0, ref.x + point.x - bufferRootRef.x - 1)),
-      y: containerY(Math.max(0, ref.y + point.y - bufferRootRef.y)),
+      x: containerX(Math.max(0, metrics.x + point.x - bufferRootRef.x - 1)),
+      y: containerY(Math.max(0, metrics.y + point.y - bufferRootRef.y)),
       containerWidth: containerWidth(bufferRootRef.width),
       containerHeight: containerHeight(bufferRootRef.height),
     }
@@ -522,7 +532,7 @@ export function Buffer(props: BufferProps) {
       return false
     }
     bufferMicrotask(() => {
-      syncCursorStateFromEditor()
+      updateCursorStateFromTextarea()
     })
     return true
   }
@@ -579,19 +589,19 @@ export function Buffer(props: BufferProps) {
   }
 
   const focus = () => {
-    textarea.live()?.focus()
+    textarea.focus()
   }
 
   const setText = (nextText: string) => {
     const normalizedText = normalizeDocumentText(nextText)
-    const ref = textarea.live()
+    const hasTextarea = textarea.readText() !== undefined
     pendingReset = true
     analysisHighlightLayer?.reset()
-    if (ref) {
-      ref.setText(normalizedText)
+    if (hasTextarea) {
+      textarea.setText(normalizedText)
       viewportController.setCursorDocOffset(docCharOffset(0))
     }
-    if (!ref) {
+    if (!hasTextarea) {
       applyTextChange(normalizedText, false)
     }
     setCursorState({ kind: "present", line: lineIndex(0), offset: docCharOffset(0) })
@@ -599,12 +609,12 @@ export function Buffer(props: BufferProps) {
   }
 
   const handleContentChange = () => {
-    const ref = textarea.live()
-    if (!ref) {
+    const textValue = textarea.readText()
+    if (textValue === undefined) {
       return
     }
 
-    const nextText = normalizeDocumentText(ref.plainText)
+    const nextText = normalizeDocumentText(textValue)
     const change = findTextChange(text(), nextText)
     const pending = pendingChangeOrigin
     const origin = pending?.origin ?? "user"
@@ -621,13 +631,13 @@ export function Buffer(props: BufferProps) {
     const modified = !pendingReset
     if (!change && nextText === text() && modified === contentModified()) {
       pendingReset = false
-      syncCursorStateFromEditor("queued")
+      updateCursorStateFromTextarea("queued")
       queueSync()
       return
     }
     pendingReset = false
     applyTextChange(nextText, modified, change)
-    syncCursorStateFromEditor("queued")
+    updateCursorStateFromTextarea("queued")
     queueSync()
     if (origin === "user") {
       bufferMicrotask(() => {
@@ -705,12 +715,12 @@ export function Buffer(props: BufferProps) {
     }
     previousFocusState = isFocused
     if (!isFocused) {
-      textarea.live()?.blur()
+      textarea.blur()
       autocomplete.close()
       return
     }
     bufferMicrotask(() => {
-      textarea.live()?.focus()
+      textarea.focus()
       queueSync()
     })
   })
@@ -803,10 +813,10 @@ export function Buffer(props: BufferProps) {
                   if (!node) {
                     return
                   }
-                  node.syntaxStyle = props.analysis?.syntaxStyle() ?? null
+                  textarea.setSyntaxStyle(props.analysis?.syntaxStyle() ?? null)
                   queueSync()
                   setTimeout(() => {
-                    if (disposed || textarea.live() !== node) {
+                    if (disposed || !textarea.isAttached(node)) {
                       return
                     }
                     node.flexShrink = 1
@@ -814,7 +824,7 @@ export function Buffer(props: BufferProps) {
                   }, 0)
                   if (props.isFocused()) {
                     bufferMicrotask(() => {
-                      textarea.live()?.focus()
+                      textarea.focus()
                     })
                   }
                 }}
@@ -842,7 +852,7 @@ export function Buffer(props: BufferProps) {
                   props.focusSelf()
                 }}
                 onCursorChange={() => {
-                  syncCursorStateFromEditor(cursorSyncMode)
+                  updateCursorStateFromTextarea(cursorStateUpdateMode)
                 }}
                 onContentChange={handleContentChange}
               />
