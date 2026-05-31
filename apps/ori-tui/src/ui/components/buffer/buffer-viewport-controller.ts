@@ -244,7 +244,8 @@ export function createBufferViewportController(options: CreateBufferViewportCont
           cursorChanged = true
         }
       }
-      cursorChanged = cursorChanged || Boolean(options.textarea.setViewport(x, y, width, height, false)?.cursorChanged)
+      const viewportChange = options.textarea.setViewport(x, y, width, height, false)
+      cursorChanged = cursorChanged || Boolean(viewportChange?.cursorChanged)
       nextViewport = options.textarea.readViewport()
       if (!nextViewport) {
         return cursorChanged
@@ -296,9 +297,8 @@ export function createBufferViewportController(options: CreateBufferViewportCont
       cursorChanged = true
       const cursorViewport = options.textarea.readViewport()
       if (cursorViewport && cursorViewport.offsetY !== nextViewport.offsetY) {
-        cursorChanged =
-          cursorChanged ||
-          Boolean(options.textarea.setViewport(x, nextViewport.offsetY, width, height, false)?.cursorChanged)
+        const viewportChange = options.textarea.setViewport(x, nextViewport.offsetY, width, height, false)
+        cursorChanged = cursorChanged || Boolean(viewportChange?.cursorChanged)
       }
     }
     return cursorChanged
