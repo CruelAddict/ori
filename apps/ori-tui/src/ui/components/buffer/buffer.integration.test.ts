@@ -8,7 +8,7 @@ import {
 } from "@opentui/core"
 import type { MountedTuiApp } from "../../../test/opentui-harness"
 import { findRequiredNode, readFrameLines, readFrameLineTokens } from "../../../test/opentui-test-tools"
-import type { BufferAnalysis } from "./analysis"
+import type { BufferAnalysis, BufferAnalysisRange } from "./analysis"
 import type { BufferState } from "./buffer"
 import { getBufferScrollbox, getBufferTextarea, mountBuffer, moveCursor } from "./buffer.test-tools"
 import { docCharOffset, lineIndex } from "./coords"
@@ -143,6 +143,33 @@ function createBlockingAnalysis(syncMs: number): BufferAnalysis {
       },
     ],
     highlightText: () => Promise.resolve([]),
+  }
+}
+
+function createLineHighlightAnalysis(): BufferAnalysis {
+  const syntaxStyle = SyntaxStyle.create()
+  return {
+    syntaxStyle: () => syntaxStyle,
+    collectRanges: (text, lineStarts) => {
+      const ranges = [] as BufferAnalysisRange[]
+      for (let index = 0; index < lineStarts.length; index += 1) {
+        const start = lineStarts[index] ?? docCharOffset(0)
+        const nextStart = lineStarts[index + 1] ?? docCharOffset(text.length)
+        const end = docCharOffset(index + 1 < lineStarts.length ? Math.max(start, nextStart - 1) : text.length)
+        if (end <= start) {
+          continue
+        }
+
+        ranges.push({
+          start,
+          end,
+          startLine: lineIndex(index),
+          endLine: lineIndex(index),
+        })
+      }
+      return ranges
+    },
+    highlightText: (text) => Promise.resolve(text.length > 0 ? [{ start: 0, end: text.length, styleId: 1 }] : []),
   }
 }
 
@@ -389,6 +416,103 @@ GO`
       expect(stateAfterScrolledClick.editorScrollY).toBe(stateAfterScrolledClick.scrollboxTop)
       expect(stateAfterScrolledClick.cursorVisualRow).toBe(1)
       expectCursorContextSync(stateAfterScrolledClick)
+    } finally {
+      app.destroy()
+    }
+  })
+
+  test("keeps drag selection near the current viewport when released above the buffer", async () => {
+    const text = `${Array.from({ length: 200 }, (_, i) => `line-${i}`).join("\n")}\n`
+    const app = await mountBuffer({ text, width: 40, height: 8 })
+
+    try {
+      const textarea = getBufferTextarea(app)
+      const scrollbox = getBufferScrollbox(app)
+
+      await moveCursor(app, textarea, 120, 0)
+      await app.waitFor(() => textarea.scrollY > 0)
+
+      await app.setup.mockMouse.pressDown(textarea.x + 1, textarea.y + 4)
+      await app.setup.mockMouse.moveTo(textarea.x + 8, textarea.y - 1)
+      await app.renderOnce()
+      await app.setup.mockMouse.release(textarea.x + 8, textarea.y - 1)
+      await app.waitFor(() => app.setup.renderer.getSelection()?.isDragging === false)
+
+      expect(textarea.showCursor).toBe(true)
+      expect(textarea.logicalCursor.row).toBeGreaterThan(0)
+      expect(textarea.scrollY).toBeGreaterThan(0)
+      expect(textarea.scrollY).toBe(scrollbox.scrollTop)
+      const scrollTopAfterRelease = scrollbox.scrollTop ?? 0
+
+      scrollbox.startAutoScroll(scrollbox.x + 1, scrollbox.y - 1)
+      expect(scrollbox.live).toBe(true)
+      await app.waitFor(() => scrollbox.live === false, 500)
+
+      expect(scrollbox.content.translateY).toBe(0)
+      expect(scrollbox.scrollTop ?? 0).toBe(scrollTopAfterRelease)
+      expect(readVisibleLines(app).length).toBeGreaterThan(0)
+    } finally {
+      app.destroy()
+    }
+  })
+
+  test("scrolls upward while drag selection is held near the top edge", async () => {
+    const text = `${Array.from({ length: 200 }, (_, i) => `line-${i}`).join("\n")}\n`
+    const app = await mountBuffer({ text, width: 40, height: 8 })
+
+    try {
+      const textarea = getBufferTextarea(app)
+      const scrollbox = getBufferScrollbox(app)
+
+      await moveCursor(app, textarea, 120, 0)
+      await app.waitFor(() => textarea.scrollY > 0)
+      const topBeforeDrag = textarea.scrollY
+      const liveBeforeDrag = textarea.live
+      const scrollSpeedBeforeDrag = textarea.scrollSpeed
+
+      await app.setup.mockMouse.pressDown(textarea.x + 1, textarea.y + 5)
+      await app.setup.mockMouse.moveTo(textarea.x + 1, textarea.y)
+      await app.waitFor(() => textarea.scrollY < topBeforeDrag)
+
+      expect(textarea.showCursor).toBe(false)
+      expect(textarea.live).toBe(true)
+      expect(textarea.scrollSpeed).toBe(scrollSpeedBeforeDrag)
+      expect(textarea.scrollY).toBe(scrollbox.scrollTop)
+
+      await app.setup.mockMouse.moveTo(textarea.x + 1, textarea.y - 2)
+      await app.renderOnce()
+      expect(textarea.scrollSpeed).toBeGreaterThan(scrollSpeedBeforeDrag)
+
+      await app.setup.mockMouse.release(textarea.x + 1, textarea.y)
+      await app.waitFor(() => app.setup.renderer.getSelection()?.isDragging === false)
+
+      expect(textarea.showCursor).toBe(true)
+      expect(textarea.live).toBe(liveBeforeDrag)
+      expect(textarea.scrollSpeed).toBe(scrollSpeedBeforeDrag)
+    } finally {
+      app.destroy()
+    }
+  })
+
+  test("highlights lines revealed by drag selection autoscroll", async () => {
+    const text = Array.from({ length: 80 }, (_, i) => `select ${i} as value`).join("\n")
+    const app = await mountBuffer({ text, width: 40, height: 8, analysis: createLineHighlightAnalysis() })
+
+    try {
+      const textarea = getBufferTextarea(app)
+      await app.waitFor(() => textarea.getLineHighlights(0).length > 0)
+
+      await app.setup.mockMouse.pressDown(textarea.x + 1, textarea.y + 1)
+      await app.setup.mockMouse.moveTo(textarea.x + 1, textarea.y + textarea.height - 1)
+      await app.waitFor(() => {
+        const revealedLine = Math.min(textarea.lineCount - 1, textarea.scrollY + textarea.height - 1)
+        return textarea.scrollY > 0 && textarea.getLineHighlights(revealedLine).length > 0
+      })
+
+      expect(textarea.showCursor).toBe(false)
+
+      await app.setup.mockMouse.release(textarea.x + 1, textarea.y + textarea.height - 1)
+      await app.waitFor(() => app.setup.renderer.getSelection()?.isDragging === false)
     } finally {
       app.destroy()
     }

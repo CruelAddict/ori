@@ -42,7 +42,7 @@ type SetViewportBeforeEvent = {
   previousCursor: CursorSnapshot
 }
 
-type SetViewportAfterEvent = SetViewportBeforeEvent & {
+export type SetViewportAfterEvent = SetViewportBeforeEvent & {
   cursorChanged: boolean
 }
 

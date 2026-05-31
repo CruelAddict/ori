@@ -1,16 +1,17 @@
-import type { TextareaRenderable } from "@opentui/core"
+import type { Selection, TextareaRenderable } from "@opentui/core"
 
 type TextareaSelectionExtension = TextareaRenderable & {
-  onSelectionChanged: (selection: unknown) => boolean
+  onSelectionChanged: (selection: Selection | null) => boolean
 }
 
-type SelectionChangeEvent = {
+export type SelectionChangeEvent = {
   ref: TextareaRenderable
-  selection: unknown
-  result: boolean
+  selection: Selection | null
+  result?: boolean
 }
 
 type SelectionHooks = {
+  beforeSelectionChange?: (event: SelectionChangeEvent) => void
   afterSelectionChange?: (event: SelectionChangeEvent) => void
 }
 
@@ -33,7 +34,8 @@ export function installSelectionHooks(node: TextareaRenderable, hooks: Selection
   const originalOnSelectionChanged = textarea.onSelectionChanged.bind(textarea)
   states.set(node, state)
 
-  textarea.onSelectionChanged = ((selection: unknown) => {
+  textarea.onSelectionChanged = ((selection: Selection | null) => {
+    state.hooks.beforeSelectionChange?.({ ref: textarea, selection })
     const result = originalOnSelectionChanged(selection)
     state.hooks.afterSelectionChange?.({ ref: textarea, selection, result })
     return result

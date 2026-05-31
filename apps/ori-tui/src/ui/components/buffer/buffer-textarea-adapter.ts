@@ -3,10 +3,11 @@ import { installCursorMovementHooks } from "./opentui-textarea-extensions/cursor
 import { disableScroll } from "./opentui-textarea-extensions/disable-scroll"
 import { enableLargeTextRead } from "./opentui-textarea-extensions/large-text-read"
 import { createTextareaLineInfoCache } from "./opentui-textarea-extensions/line-info-cache"
-import { installSelectionHooks } from "./opentui-textarea-extensions/selection-hooks"
+import { installSelectionHooks, type SelectionChangeEvent } from "./opentui-textarea-extensions/selection-hooks"
 import {
   installSetViewportHooks,
   type SetViewport,
+  type SetViewportAfterEvent,
   type SetViewportResult,
 } from "./opentui-textarea-extensions/set-viewport-hooks"
 import { installViewportSizeHooks } from "./opentui-textarea-extensions/viewport-size-hooks"
@@ -18,6 +19,8 @@ type CreateBufferTextareaAdapterOptions = {
   tabWidth: number
   onLineInfoChange: () => void
   onTextareaCursorChanged: () => void
+  onTextareaSelectionChange: (event: SelectionChangeEvent) => void
+  onTextareaViewportChange: (event: SetViewportAfterEvent) => void
   onBeforeVisualCursorMove: () => void
 }
 
@@ -78,6 +81,7 @@ export function createBufferTextareaAdapter(options: CreateBufferTextareaAdapter
           return
         }
 
+        options.onTextareaViewportChange(event)
         if (event.moveCursor || event.cursorChanged) {
           options.onTextareaCursorChanged()
         }
@@ -105,7 +109,11 @@ export function createBufferTextareaAdapter(options: CreateBufferTextareaAdapter
       },
     })
     installSelectionHooks(node, {
-      afterSelectionChange: () => {
+      beforeSelectionChange: (event) => {
+        options.onTextareaSelectionChange(event)
+      },
+      afterSelectionChange: (event) => {
+        options.onTextareaSelectionChange(event)
         options.onTextareaCursorChanged()
       },
     })
@@ -170,6 +178,24 @@ export function createBufferTextareaAdapter(options: CreateBufferTextareaAdapter
     isAttached: (node: TextareaRenderable) => ref() === node,
     focus: () => ref()?.focus(),
     blur: () => ref()?.blur(),
+    setCursorVisible: (visible: boolean) => {
+      const node = ref()
+      if (node) {
+        node.showCursor = visible
+      }
+    },
+    setLive: (live: boolean) => {
+      const node = ref()
+      if (node) {
+        node.live = live
+      }
+    },
+    setScrollSpeed: (speed: number) => {
+      const node = ref()
+      if (node) {
+        node.scrollSpeed = speed
+      }
+    },
     setText: (text: string) => ref()?.setText(text),
     insertText: (text: string) => ref()?.insertText(text),
     requestRender: () => ref()?.requestRender(),

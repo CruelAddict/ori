@@ -17,11 +17,16 @@ import { createBufferTextareaAdapter } from "./buffer-textarea-adapter"
 import { createBufferViewportController } from "./buffer-viewport-controller"
 import { type DocCharOffset, docCharOffset, type LineIndex, lineIndex } from "./coords"
 import { type BufferTextChange, Document, findTextChange, normalizeDocumentText } from "./document"
+import type { SelectionChangeEvent } from "./opentui-textarea-extensions/selection-hooks"
+import type { SetViewportAfterEvent } from "./opentui-textarea-extensions/set-viewport-hooks"
 import { createTextGeometry } from "./text-geometry"
 
 const DEBOUNCE_MS = 200
 const DEFAULT_TAB_WIDTH = 2
 const EMPTY_GUTTER_MARKERS = new Map<number, string>()
+const DEFAULT_SELECTION_DRAG_SCROLL_SPEED = 16
+const SELECTION_DRAG_MEDIUM_DISTANCE = 2
+const SELECTION_DRAG_FAST_DISTANCE = 3
 
 type PendingChangeOrigin = {
   origin: "user" | "autocomplete"
@@ -104,6 +109,12 @@ export function createBufferController(props: BufferProps, palette: BufferPalett
     onTextareaCursorChanged: () => {
       updateCursorStateFromTextarea(cursorStateUpdateMode)
     },
+    onTextareaSelectionChange: (event) => {
+      handleTextareaSelectionChange(event)
+    },
+    onTextareaViewportChange: (event) => {
+      handleTextareaViewportChange(event)
+    },
     onBeforeVisualCursorMove: () => {
       viewportController.preservePreferredVisualColThroughMicrotask()
     },
@@ -124,6 +135,11 @@ export function createBufferController(props: BufferProps, palette: BufferPalett
   })
 
   function updateCursorStateFromTextarea(mode: "queued" | "inline" = "queued") {
+    if (scrollRef?.ctx.getSelection()?.isDragging) {
+      // OpenTUI mutates cursor/viewport while selection autoscrolls; feeding that back here makes both sync loops race.
+      return
+    }
+
     const next = viewportController.captureCursorState()
     if (!next) {
       setCursorState(undefined)
@@ -198,6 +214,8 @@ export function createBufferController(props: BufferProps, palette: BufferPalett
     if (!scrollRef) {
       return
     }
+    // Scrollbox autoscroll can leave a transient visual offset; textarea owns the rendered rows here.
+    scrollRef.content.translateY = 0
     if ((scrollRef.scrollTop ?? 0) === top) {
       return
     }
@@ -215,6 +233,60 @@ export function createBufferController(props: BufferProps, palette: BufferPalett
     scrollRef.verticalScrollBar.viewportSize = scrollRef.viewport.height
     scrollRef.horizontalScrollBar.scrollSize = scrollRef.scrollWidth
     scrollRef.horizontalScrollBar.viewportSize = scrollRef.viewport.width
+  }
+
+  const pinScrollboxContent = () => {
+    if (!scrollRef) {
+      return
+    }
+
+    scrollRef.stopAutoScroll()
+    // Keep scrollTop and rendered rows aligned after interrupting scrollbox autoscroll.
+    scrollRef.content.translateY = 0
+  }
+
+  const handleTextareaViewportChange = (event: SetViewportAfterEvent) => {
+    if (!scrollRef?.ctx.getSelection()?.isDragging) {
+      return
+    }
+
+    syncScrollboxBarMetrics()
+    scrollRef?.stopAutoScroll()
+    syncScrollboxTop(event.y)
+    analysisHighlightLayer?.sync()
+  }
+
+  const syncSelectionDragScrollSpeed = (event: SelectionChangeEvent) => {
+    const selection = event.selection
+    const metrics = textareaAdapter.readMetrics()
+    if (!selection?.isDragging || !metrics) {
+      return
+    }
+
+    const focus = selection.focus
+    const maxY = metrics.y + Math.max(0, metrics.height - 1)
+    const distance = Math.max(metrics.y - focus.y, focus.y - maxY, 0)
+    const speed =
+      distance >= SELECTION_DRAG_FAST_DISTANCE
+        ? DEFAULT_SELECTION_DRAG_SCROLL_SPEED * 4
+        : distance >= SELECTION_DRAG_MEDIUM_DISTANCE
+          ? DEFAULT_SELECTION_DRAG_SCROLL_SPEED * 2
+          : DEFAULT_SELECTION_DRAG_SCROLL_SPEED
+    textareaAdapter.setScrollSpeed(speed)
+  }
+
+  const clampSelectionDragFocus = (event: SelectionChangeEvent) => {
+    const selection = event.selection
+    const metrics = textareaAdapter.readMetrics()
+    if (!selection || !metrics) {
+      return
+    }
+
+    const focus = selection.focus
+    selection.focus = {
+      x: Math.max(metrics.x, Math.min(focus.x, metrics.x + Math.max(0, metrics.width - 1))),
+      y: Math.max(metrics.y, Math.min(focus.y, metrics.y + Math.max(0, metrics.height - 1))),
+    }
   }
 
   const noteUserScroll = () => {
@@ -374,6 +446,8 @@ export function createBufferController(props: BufferProps, palette: BufferPalett
       return
     }
 
+    // Scrollbox can also receive drag events; textarea owns selection autoscroll here.
+    scrollRef.stopAutoScroll()
     scrollRef.content.translateY = 0
     syncScrollboxBarMetrics()
     if (scrollboxIntentQueued) {
@@ -602,6 +676,10 @@ export function createBufferController(props: BufferProps, palette: BufferPalett
   }
 
   const handleScrollboxUserScroll = () => {
+    if (scrollRef) {
+      // Scrollbox autoscroll can leave a transient visual offset; user scroll should start from real scrollTop.
+      scrollRef.content.translateY = 0
+    }
     noteUserScroll()
     autocomplete.close()
     queueScrollboxIntent()
@@ -615,6 +693,50 @@ export function createBufferController(props: BufferProps, palette: BufferPalett
   const handleTextareaMouseScroll = () => {
     noteUserScroll()
     props.focusSelf()
+  }
+
+  const finishSelectionDrag = () => {
+    pinScrollboxContent()
+    const metrics = textareaAdapter.readMetrics()
+    if (metrics) {
+      syncScrollboxTop(metrics.scrollY)
+    }
+    textareaAdapter.setCursorVisible(true)
+    textareaAdapter.setLive(false)
+    textareaAdapter.setScrollSpeed(DEFAULT_SELECTION_DRAG_SCROLL_SPEED)
+    updateCursorStateFromTextarea("queued")
+  }
+
+  const handleTextareaSelectionChange = (event: SelectionChangeEvent) => {
+    const before = event.result === undefined
+    const selection = event.selection
+    const rendererDragging = Boolean(scrollRef?.ctx.getSelection()?.isDragging)
+    if (before && selection?.isDragging && !rendererDragging && !selection.isStart) {
+      selection.isDragging = false
+    }
+    if (before && selection) {
+      pinScrollboxContent()
+      syncSelectionDragScrollSpeed(event)
+      clampSelectionDragFocus(event)
+    }
+
+    const dragging = Boolean(selection?.isDragging)
+    if (before) {
+      if (!dragging) {
+        return
+      }
+
+      // OpenTUI applies selection autoscroll from onUpdate, so it must stay live while the mouse is held.
+      textareaAdapter.setLive(true)
+      textareaAdapter.setCursorVisible(false)
+      autocomplete.close()
+      return
+    }
+
+    if (!dragging) {
+      finishSelectionDrag()
+      return
+    }
   }
 
   const handleCursorChange = () => {
@@ -641,6 +763,8 @@ export function createBufferController(props: BufferProps, palette: BufferPalett
     debouncedPush.clear()
     autocomplete.close()
     analysisHighlightLayer?.dispose()
+    textareaAdapter.setLive(false)
+    textareaAdapter.setScrollSpeed(DEFAULT_SELECTION_DRAG_SCROLL_SPEED)
     textareaAdapter.detach()
   })
 
@@ -711,6 +835,10 @@ export function createBufferController(props: BufferProps, palette: BufferPalett
     scrollbox: {
       handleSync: handleScrollboxSync,
       handleUserScroll: handleScrollboxUserScroll,
+    },
+    root: {
+      handleMouseDragEnd: finishSelectionDrag,
+      handleMouseUp: finishSelectionDrag,
     },
     textarea: {
       handleMouseDown: handleTextareaMouseDown,

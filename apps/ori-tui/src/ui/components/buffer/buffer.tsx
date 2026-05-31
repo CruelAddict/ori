@@ -39,12 +39,15 @@ export function Buffer(props: BufferProps) {
       bindings={bindings}
       enabled={props.isFocused}
     >
+      {/* biome-ignore lint/a11y/noStaticElementInteractions: root terminates drag selection when release lands outside textarea */}
       <box
         ref={controller.refs.setRoot}
         position="relative"
         flexDirection="column"
         flexGrow={1}
         backgroundColor={background()}
+        onMouseUp={controller.root.handleMouseUp}
+        onMouseDragEnd={controller.root.handleMouseDragEnd}
       >
         <OriScrollbox
           marginTop={1}
