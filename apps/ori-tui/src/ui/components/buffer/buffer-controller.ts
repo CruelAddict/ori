@@ -124,7 +124,6 @@ export function createBufferController(props: BufferProps, palette: BufferPalett
     })
   }
 
-  let preservePreferredVisualCol = () => {}
   const textareaAdapter = createBufferTextareaAdapter({
     tabWidth,
     onLineInfoChange: () => {
@@ -134,7 +133,7 @@ export function createBufferController(props: BufferProps, palette: BufferPalett
       updateCursorStateFromTextarea(cursorStateUpdateMode)
     },
     onBeforeVisualCursorMove: () => {
-      preservePreferredVisualCol()
+      viewportController.preservePreferredVisualColThroughMicrotask()
     },
   })
   const textGeometry = createTextGeometry({
@@ -151,7 +150,6 @@ export function createBufferController(props: BufferProps, palette: BufferPalett
     geometry: textGeometry,
     resetCursorTracking: viewportController.resetCursorTracking,
   })
-  preservePreferredVisualCol = viewportController.preservePreferredVisualColThroughMicrotask
 
   function updateCursorStateFromTextarea(mode: "queued" | "inline" = "queued") {
     const next = viewportController.captureCursorState()
