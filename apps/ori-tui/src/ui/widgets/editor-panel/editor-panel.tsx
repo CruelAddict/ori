@@ -20,10 +20,9 @@ export function EditorPanel(props: EditorPanelProps) {
   const { theme } = useTheme()
   const [bufferState, setBufferState] = createSignal<BufferState>()
   const cursorLine = createMemo(() => {
-    const cursor = bufferState()?.cursor
-    return cursor?.kind === "present" ? cursor.line : -1
+    return bufferState()?.cursor?.line ?? -1
   })
-  const hasCursor = createMemo(() => bufferState()?.cursor.kind === "present")
+  const hasCursor = createMemo(() => bufferState()?.cursor !== undefined)
   const support = createSqlSupport({
     theme,
     logger,
@@ -91,8 +90,7 @@ export function EditorPanel(props: EditorPanelProps) {
       mode: "leader",
       description: "Execute query",
       handler: () => {
-        const cursor = bufferState()?.cursor
-        void pane.executeQuery(cursor?.kind === "present" ? cursor.offset : undefined, support.snapshot())
+        void pane.executeQuery(bufferState()?.cursor?.offset, support.snapshot())
       },
       preventDefault: true,
       commandPaletteSection: "Query",

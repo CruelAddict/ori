@@ -112,13 +112,11 @@ function waitForImmediate() {
 }
 
 function getStateCursorOffset(state: BufferState | undefined) {
-  const cursor = state?.cursor
-  return cursor?.kind === "present" ? cursor.offset : undefined
+  return state?.cursor?.offset
 }
 
 function getStateCursorLine(state: BufferState | undefined) {
-  const cursor = state?.cursor
-  return cursor?.kind === "present" ? cursor.line : undefined
+  return state?.cursor?.line
 }
 
 function busyWait(ms: number) {

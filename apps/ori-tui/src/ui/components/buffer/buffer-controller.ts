@@ -8,7 +8,7 @@ import type {
 import { getViewportBandY, getViewportInsetY, getViewportRect } from "@ui/components/ori-scrollbox"
 import type { SelectPopupAnchor } from "@ui/components/select-popup-model"
 import { debounce } from "@utils/debounce"
-import { type Accessor, createEffect, createMemo, createSignal, onCleanup, onMount } from "solid-js"
+import { type Accessor, createEffect, createSignal, on, onCleanup, onMount } from "solid-js"
 import { type BufferAnalysis, createAnalysisHighlightLayer } from "./analysis"
 import { createBufferAutocomplete } from "./autocomplete/controller"
 import type { BufferAutocompleteProvider } from "./autocomplete/types"
@@ -40,13 +40,10 @@ export type BufferApi = {
 
 export type BufferCursor =
   | {
-      kind: "present"
       line: LineIndex
       offset: DocCharOffset
     }
-  | {
-      kind: "absent"
-    }
+  | undefined
 
 export type BufferState = {
   document: Document
@@ -70,31 +67,17 @@ export type BufferProps = {
 export function createBufferController(props: BufferProps, palette: BufferPalette) {
   const tabWidth = Math.max(1, props.tabWidth ?? DEFAULT_TAB_WIDTH)
   const [doc, setDoc] = createSignal(Document.create(props.initialText))
-  const text = createMemo(() => doc().text)
-  const contentModified = createMemo(() => doc().modified)
-  const documentVersion = createMemo(() => doc().version)
 
-  const [viewportHeight, setViewportHeight] = createSignal(1)
-  const [totalRows, setTotalRows] = createSignal(1)
+  const [layoutState, setLayoutState] = createSignal({ viewportHeight: 1, totalRows: 1 })
 
   const [cursorState, setCursorState] = createSignal<BufferCursor>({
-    kind: "present",
     line: lineIndex(0),
     offset: docCharOffset(0),
-  })
-  const cursorOffset = createMemo(() => {
-    const cursor = cursorState()
-    return cursor.kind === "present" ? cursor.offset : undefined
-  })
-  const focusedLine = createMemo(() => {
-    const cursor = cursorState()
-    return cursor.kind === "present" ? cursor.line : lineIndex(0)
   })
 
   let scrollRef: ScrollBoxRenderable | undefined
   let bufferRootRef: BoxRenderable | undefined
   let gutterRef: LineNumberRenderable | undefined
-  let previousFocusState = props.isFocused()
   let disposed = false
   let syncQueued = false
   let cursorStateUpdateMode = "queued" as "queued" | "inline"
@@ -102,18 +85,7 @@ export function createBufferController(props: BufferProps, palette: BufferPalett
   let scrollboxIntentQueued = false
   let viewportWidth = 0
   let viewportRows = 0
-  let lastEditorScrollMargin = -1
-  let lastScrollboxMetrics = {
-    verticalScrollSize: -1,
-    verticalViewportSize: -1,
-    horizontalScrollSize: -1,
-    horizontalViewportSize: -1,
-  }
-  let initialStateFlushQueued = false
-  let initialStatePending = true
-  let pendingInitialState: BufferState | undefined
   let pendingChangeOrigin: PendingChangeOrigin | undefined
-  let pendingReset = false
 
   const bufferMicrotask = (callback: () => void) => {
     queueMicrotask(() => {
@@ -154,17 +126,16 @@ export function createBufferController(props: BufferProps, palette: BufferPalett
   function updateCursorStateFromTextarea(mode: "queued" | "inline" = "queued") {
     const next = viewportController.captureCursorState()
     if (!next) {
-      setCursorState({ kind: "absent" })
+      setCursorState(undefined)
       return
     }
 
     if (next.offset === undefined) {
-      setCursorState({ kind: "absent" })
+      setCursorState(undefined)
       return
     }
 
     setCursorState({
-      kind: "present",
       line: lineIndex(next.row),
       offset: next.offset,
     })
@@ -177,7 +148,7 @@ export function createBufferController(props: BufferProps, palette: BufferPalett
   }
 
   const debouncedPush = debounce(() => {
-    props.onTextChange(text(), { modified: contentModified() })
+    props.onTextChange(doc().text, { modified: doc().modified })
   }, DEBOUNCE_MS)
 
   const analysisHighlightLayer = props.analysis
@@ -196,59 +167,31 @@ export function createBufferController(props: BufferProps, palette: BufferPalett
   const autocomplete = createBufferAutocomplete({
     provider: () => props.autocomplete,
     isFocused: props.isFocused,
-    getText: text,
-    getCursorOffset: () => cursorOffset(),
+    getText: () => doc().text,
+    getCursorOffset: () => cursorState()?.offset,
     resolveAnchor: (replaceStart) => getAnchor(replaceStart),
     accept: (item, range) => replaceDocumentRange(range.start, range.end, item.insertText, item.cursorOffset),
   })
 
-  const flushInitialStateChange = () => {
-    initialStateFlushQueued = false
-    if (disposed) {
-      return
-    }
-
-    const state = pendingInitialState
-    if (!state) {
-      return
-    }
-
-    pendingInitialState = undefined
-    initialStatePending = false
-    props.onStateChange?.(state)
-  }
-
-  const scheduleStateChange = (state: BufferState) => {
-    if (!props.onStateChange) {
-      return
-    }
-    if (!initialStatePending) {
-      props.onStateChange(state)
-      return
-    }
-
-    pendingInitialState = state
-    if (initialStateFlushQueued) {
-      return
-    }
-
-    initialStateFlushQueued = true
-    queueMicrotask(flushInitialStateChange)
-  }
-
   const getTotalRowsForViewport = (nextViewportHeight: number) => {
-    return Math.max(nextViewportHeight, viewportController.measureRows(nextViewportHeight, documentVersion()))
+    return Math.max(nextViewportHeight, viewportController.measureRows(nextViewportHeight, doc().version))
+  }
+
+  const setLayout = (height: number, rows: number) => {
+    setLayoutState((current) => {
+      if (current.viewportHeight === height && current.totalRows === rows) {
+        return current
+      }
+
+      return { viewportHeight: height, totalRows: rows }
+    })
   }
 
   const syncScrollMetrics = (nextViewportHeight: number) => {
     const height = Math.max(1, nextViewportHeight)
     const margin = getViewportInsetY({ height }) / height
-    if (margin !== lastEditorScrollMargin) {
-      lastEditorScrollMargin = margin
-      textareaAdapter.setScrollMargin(margin)
-    }
-    setViewportHeight(height)
-    setTotalRows(getTotalRowsForViewport(height))
+    textareaAdapter.setScrollMargin(margin)
+    setLayout(height, getTotalRowsForViewport(height))
   }
 
   const syncScrollboxTop = (top: number) => {
@@ -268,25 +211,10 @@ export function createBufferController(props: BufferProps, palette: BufferPalett
       return
     }
 
-    const nextMetrics = {
-      verticalScrollSize: scrollRef.scrollHeight,
-      verticalViewportSize: scrollRef.viewport.height,
-      horizontalScrollSize: scrollRef.scrollWidth,
-      horizontalViewportSize: scrollRef.viewport.width,
-    }
-    if (nextMetrics.verticalScrollSize !== lastScrollboxMetrics.verticalScrollSize) {
-      scrollRef.verticalScrollBar.scrollSize = nextMetrics.verticalScrollSize
-    }
-    if (nextMetrics.verticalViewportSize !== lastScrollboxMetrics.verticalViewportSize) {
-      scrollRef.verticalScrollBar.viewportSize = nextMetrics.verticalViewportSize
-    }
-    if (nextMetrics.horizontalScrollSize !== lastScrollboxMetrics.horizontalScrollSize) {
-      scrollRef.horizontalScrollBar.scrollSize = nextMetrics.horizontalScrollSize
-    }
-    if (nextMetrics.horizontalViewportSize !== lastScrollboxMetrics.horizontalViewportSize) {
-      scrollRef.horizontalScrollBar.viewportSize = nextMetrics.horizontalViewportSize
-    }
-    lastScrollboxMetrics = nextMetrics
+    scrollRef.verticalScrollBar.scrollSize = scrollRef.scrollHeight
+    scrollRef.verticalScrollBar.viewportSize = scrollRef.viewport.height
+    scrollRef.horizontalScrollBar.scrollSize = scrollRef.scrollWidth
+    scrollRef.horizontalScrollBar.viewportSize = scrollRef.viewport.width
   }
 
   const noteUserScroll = () => {
@@ -298,7 +226,7 @@ export function createBufferController(props: BufferProps, palette: BufferPalett
       return
     }
 
-    const height = viewportHeight()
+    const height = layoutState().viewportHeight
     gutterRef.height = height
     gutterRef.minHeight = height
     gutterRef.maxHeight = height
@@ -329,7 +257,7 @@ export function createBufferController(props: BufferProps, palette: BufferPalett
 
     const colors = new Map<number, { gutter: string; content: string }>()
     if (props.isFocused()) {
-      colors.set(focusedLine(), {
+      colors.set(cursorState()?.line ?? lineIndex(0), {
         gutter: palette().get("editor_active_line_background"),
         content: palette().get("editor_active_line_background"),
       })
@@ -350,10 +278,7 @@ export function createBufferController(props: BufferProps, palette: BufferPalett
 
     const height = Math.max(1, nextHeight)
     const margin = getViewportInsetY({ height }) / height
-    if (margin !== lastEditorScrollMargin) {
-      lastEditorScrollMargin = margin
-      textareaAdapter.setScrollMargin(margin)
-    }
+    textareaAdapter.setScrollMargin(margin)
     const nextTop = Math.max(0, Math.min(top, Math.max(0, getTotalRowsForViewport(height) - height)))
     if (
       editorViewport.offsetY === nextTop &&
@@ -416,7 +341,8 @@ export function createBufferController(props: BufferProps, palette: BufferPalett
 
     syncScrollboxBarMetrics()
     const viewport = getViewportRect(scrollRef)
-    setViewportHeight(Math.max(1, viewport.height))
+    const height = Math.max(1, viewport.height)
+    setLayout(height, getTotalRowsForViewport(height))
     const nextTop = scrollRef.scrollTop ?? 0
     let moveCursor = true
     const editorViewport = textareaAdapter.readViewport()
@@ -542,7 +468,7 @@ export function createBufferController(props: BufferProps, palette: BufferPalett
   }
 
   const deleteToLineStart = () => {
-    const currentOffset = cursorOffset()
+    const currentOffset = cursorState()?.offset
     if (currentOffset === undefined) {
       return false
     }
@@ -557,7 +483,7 @@ export function createBufferController(props: BufferProps, palette: BufferPalett
 
   const flush = () => {
     debouncedPush.clear()
-    props.onTextChange(text(), { modified: contentModified() })
+    props.onTextChange(doc().text, { modified: doc().modified })
   }
 
   const applyTextChange = (nextText: string, modified: boolean, change?: BufferTextChange) => {
@@ -580,16 +506,15 @@ export function createBufferController(props: BufferProps, palette: BufferPalett
   const setText = (nextText: string) => {
     const normalizedText = normalizeDocumentText(nextText)
     const hasTextarea = textareaAdapter.readText() !== undefined
-    pendingReset = true
-    analysisHighlightLayer?.reset()
+    if (normalizedText !== doc().text) {
+      analysisHighlightLayer?.reset()
+    }
+    applyTextChange(normalizedText, false)
     if (hasTextarea) {
       textareaAdapter.setText(normalizedText)
       editCommands.setCursorDocOffset(docCharOffset(0))
     }
-    if (!hasTextarea) {
-      applyTextChange(normalizedText, false)
-    }
-    setCursorState({ kind: "present", line: lineIndex(0), offset: docCharOffset(0) })
+    setCursorState({ line: lineIndex(0), offset: docCharOffset(0) })
     queueSync()
   }
 
@@ -600,7 +525,7 @@ export function createBufferController(props: BufferProps, palette: BufferPalett
     }
 
     const nextText = normalizeDocumentText(textValue)
-    const change = findTextChange(text(), nextText)
+    const change = findTextChange(doc().text, nextText)
     const pending = pendingChangeOrigin
     const origin = pending?.origin ?? "user"
     if (pending && pending.remainingEvents > 1) {
@@ -613,14 +538,17 @@ export function createBufferController(props: BufferProps, palette: BufferPalett
       pendingChangeOrigin = undefined
     }
 
-    const modified = !pendingReset
-    if (!change && nextText === text() && modified === contentModified()) {
-      pendingReset = false
+    const modified = change ? true : doc().modified
+    if (!change && nextText === doc().text && modified === doc().modified) {
       updateCursorStateFromTextarea("queued")
       queueSync()
+      if (origin === "user") {
+        bufferMicrotask(() => {
+          autocomplete.refresh()
+        })
+      }
       return
     }
-    pendingReset = false
     applyTextChange(nextText, modified, change)
     updateCursorStateFromTextarea("queued")
     queueSync()
@@ -702,7 +630,7 @@ export function createBufferController(props: BufferProps, palette: BufferPalett
     props.registerApi?.({
       setText,
       focus,
-      getCursorOffset: () => cursorOffset(),
+      getCursorOffset: () => cursorState()?.offset,
     })
   })
 
@@ -710,7 +638,6 @@ export function createBufferController(props: BufferProps, palette: BufferPalett
     disposed = true
     syncQueued = false
     scrollboxIntentQueued = false
-    pendingInitialState = undefined
     debouncedPush.clear()
     autocomplete.close()
     analysisHighlightLayer?.dispose()
@@ -722,7 +649,7 @@ export function createBufferController(props: BufferProps, palette: BufferPalett
       document: doc(),
       cursor: cursorState(),
     } satisfies BufferState
-    scheduleStateChange(state)
+    props.onStateChange?.(state)
   })
 
   createEffect(() => {
@@ -738,26 +665,27 @@ export function createBufferController(props: BufferProps, palette: BufferPalett
 
   createEffect(() => {
     props.isFocused()
-    focusedLine()
+    cursorState()?.line
     syncActiveLineColor()
   })
 
-  createEffect(() => {
-    const isFocused = props.isFocused()
-    if (isFocused === previousFocusState) {
-      return
-    }
-    previousFocusState = isFocused
-    if (!isFocused) {
-      textareaAdapter.blur()
-      autocomplete.close()
-      return
-    }
-    bufferMicrotask(() => {
-      textareaAdapter.focus()
-      queueSync()
-    })
-  })
+  createEffect(
+    on(
+      props.isFocused,
+      (isFocused) => {
+        if (!isFocused) {
+          textareaAdapter.blur()
+          autocomplete.close()
+          return
+        }
+        bufferMicrotask(() => {
+          textareaAdapter.focus()
+          queueSync()
+        })
+      },
+      { defer: true },
+    ),
+  )
 
   analysisHighlightLayer?.rebuild(doc())
 
@@ -766,8 +694,8 @@ export function createBufferController(props: BufferProps, palette: BufferPalett
       doc,
     },
     layout: {
-      viewportHeight,
-      totalRows,
+      viewportHeight: () => layoutState().viewportHeight,
+      totalRows: () => layoutState().totalRows,
     },
     autocomplete: {
       viewModel: autocomplete.viewModel,
