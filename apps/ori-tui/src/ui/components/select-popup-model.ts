@@ -1,11 +1,10 @@
 import { type Accessor, batch, createSignal } from "solid-js"
-import type { ContainerHeight, ContainerWidth, ContainerX, ContainerY } from "./buffer/coords"
 
 export type SelectPopupAnchor = {
-  x: ContainerX
-  y: ContainerY
-  containerWidth: ContainerWidth
-  containerHeight: ContainerHeight
+  x: number
+  y: number
+  containerWidth: number
+  containerHeight: number
 }
 
 export type SelectPopupItem = {

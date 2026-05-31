@@ -14,21 +14,21 @@ import { exposeVirtualLineCount } from "./opentui-textarea-extensions/virtual-li
 import { createTextareaRenderTarget, type RenderTarget } from "./render-target"
 import { applyRefTabWidth } from "./text-metrics"
 
-type CreateBufferTextareaOptions = {
+type CreateBufferTextareaAdapterOptions = {
   tabWidth: number
   onLineInfoChange: () => void
   onTextareaCursorChanged: () => void
   onBeforeVisualCursorMove: () => void
 }
 
-export type BufferTextareaCursor = {
+export type BufferTextareaAdapterCursor = {
   logicalRow: number
   logicalCol: number
   visualRow: number
   visualCol: number
 }
 
-export type BufferTextareaMetrics = {
+export type BufferTextareaAdapterMetrics = {
   x: number
   y: number
   width: number
@@ -36,9 +36,9 @@ export type BufferTextareaMetrics = {
   scrollY: number
 }
 
-export type BufferTextareaViewport = ReturnType<TextareaRenderable["editorView"]["getViewport"]>
+export type BufferTextareaAdapterViewport = ReturnType<TextareaRenderable["editorView"]["getViewport"]>
 
-export function createBufferTextarea(options: CreateBufferTextareaOptions) {
+export function createBufferTextareaAdapter(options: CreateBufferTextareaAdapterOptions) {
   let editorRef: TextareaRenderable | undefined
 
   const ref = () => {
@@ -185,7 +185,7 @@ export function createBufferTextarea(options: CreateBufferTextareaOptions) {
       return node ? lineInfo.read(node) : undefined
     },
     clearLineInfo: () => lineInfo.clear(),
-    readCursor: (): BufferTextareaCursor | undefined => {
+    readCursor: (): BufferTextareaAdapterCursor | undefined => {
       const node = ref()
       if (!node) {
         return undefined
@@ -198,7 +198,7 @@ export function createBufferTextarea(options: CreateBufferTextareaOptions) {
         visualCol: node.visualCursor.visualCol,
       }
     },
-    readMetrics: (): BufferTextareaMetrics | undefined => {
+    readMetrics: (): BufferTextareaAdapterMetrics | undefined => {
       const node = ref()
       if (!node) {
         return undefined
@@ -212,7 +212,7 @@ export function createBufferTextarea(options: CreateBufferTextareaOptions) {
         scrollY: node.scrollY,
       }
     },
-    readViewport: (): BufferTextareaViewport | undefined => ref()?.editorView.getViewport(),
+    readViewport: (): BufferTextareaAdapterViewport | undefined => ref()?.editorView.getViewport(),
     getWidthMethod: (): WidthMethod | undefined => ref()?.ctx?.widthMethod,
     getTotalVirtualRows: () => ref()?.editorView.getTotalVirtualLineCount(),
     measureRows: (width: number, height: number) => ref()?.editorView.measureForDimensions(width, height)?.lineCount,

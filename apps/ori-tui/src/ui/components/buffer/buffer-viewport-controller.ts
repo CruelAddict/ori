@@ -1,6 +1,10 @@
 import type { LineInfo } from "@opentui/core"
 import { getViewportBandY } from "@ui/components/ori-scrollbox"
-import type { BufferTextareaCursor, BufferTextareaMetrics, BufferTextareaViewport } from "./buffer-textarea"
+import type {
+  BufferTextareaAdapterCursor,
+  BufferTextareaAdapterMetrics,
+  BufferTextareaAdapterViewport,
+} from "./buffer-textarea-adapter"
 import {
   type ContainerX,
   type ContainerY,
@@ -16,7 +20,6 @@ import {
   visualColumn,
   visualRow,
 } from "./coords"
-import { Document } from "./document"
 import type { TextGeometry } from "./text-geometry"
 import type { Viewport } from "./viewport"
 
@@ -33,16 +36,12 @@ export type BufferViewportPoint = {
 type TextareaBridge = {
   readLineInfo: () => LineInfo | undefined
   clearLineInfo: () => void
-  readCursor: () => BufferTextareaCursor | undefined
-  readMetrics: () => BufferTextareaMetrics | undefined
-  readViewport: () => BufferTextareaViewport | undefined
+  readCursor: () => BufferTextareaAdapterCursor | undefined
+  readMetrics: () => BufferTextareaAdapterMetrics | undefined
+  readViewport: () => BufferTextareaAdapterViewport | undefined
   getTotalVirtualRows: () => number | undefined
   measureRows: (width: number, height: number) => number | undefined
   setCursor: (row: number, col: number) => void
-  deleteRange: (startRow: number, startCol: number, endRow: number, endCol: number) => void
-  insertText: (text: string) => void
-  readText: () => string | undefined
-  requestRender: () => void
   setViewport: (
     x: number,
     y: number,
@@ -178,6 +177,11 @@ export function createBufferViewportController(options: CreateBufferViewportCont
     manualScrollVisualCol = undefined
   }
 
+  const resetCursorTracking = () => {
+    clearManualScrollVisualCol()
+    preferredVisualCol = undefined
+  }
+
   const noteManualScroll = () => {
     const cursor = options.textarea.readCursor()
     if (!cursor) {
@@ -300,7 +304,7 @@ export function createBufferViewportController(options: CreateBufferViewportCont
     return cursorChanged
   }
 
-  const readCursorState = () => {
+  const captureCursorState = () => {
     const cursor = options.textarea.readCursor()
     if (!cursor) {
       return undefined
@@ -369,20 +373,6 @@ export function createBufferViewportController(options: CreateBufferViewportCont
     measuredRowCount = 1
   }
 
-  const setCursorDocOffset = (offset: DocCharOffset) => {
-    if (!options.textarea.readCursor()) {
-      return false
-    }
-
-    clearManualScrollVisualCol()
-    preferredVisualCol = undefined
-    const document = options.geometry.document
-    const next = document.positionAtOffset(offset)
-    options.textarea.setCursor(next.line, next.offset)
-    options.textarea.requestRender()
-    return true
-  }
-
   const setViewport = (
     x: number,
     y: number,
@@ -423,42 +413,14 @@ export function createBufferViewportController(options: CreateBufferViewportCont
     })
   }
 
-  const replaceDocRange = (start: DocCharOffset, end: DocCharOffset, insertText: string, nextCursorOffset?: number) => {
-    const text = options.textarea.readText()
-    if (text === undefined) {
-      return false
-    }
-
-    const document = options.geometry.document
-    const from = document.positionAtOffset(start)
-    const to = document.positionAtOffset(end)
-    clearManualScrollVisualCol()
-    preferredVisualCol = undefined
-    options.textarea.setCursor(from.line, from.offset)
-    if (start !== end) {
-      options.textarea.deleteRange(from.line, from.offset, to.line, to.offset)
-      options.textarea.setCursor(from.line, from.offset)
-    }
-    if (insertText) {
-      options.textarea.insertText(insertText)
-    }
-
-    const finalOffset = docCharOffset(start + (nextCursorOffset ?? insertText.length))
-    const final = Document.create(options.textarea.readText() ?? text).positionAtOffset(finalOffset)
-    options.textarea.setCursor(final.line, final.offset)
-    options.textarea.requestRender()
-    return true
-  }
-
   return {
     preservePreferredVisualColThroughMicrotask,
-    readCursorState,
+    captureCursorState,
     readViewport,
     noteManualScroll,
+    resetCursorTracking,
     setViewport,
-    setCursorDocOffset,
     resolveViewportPoint,
-    replaceDocRange,
     totalVirtualRows,
     measureRows,
     resetMeasuredRows,
