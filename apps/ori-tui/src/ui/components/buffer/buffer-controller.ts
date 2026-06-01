@@ -3,6 +3,7 @@ import type {
   LineNumberRenderable,
   MouseEvent,
   ScrollBoxRenderable,
+  Selection,
   TextareaRenderable,
 } from "@opentui/core"
 import { getViewportBandY, getViewportInsetY, getViewportRect } from "@ui/components/ori-scrollbox"
@@ -235,31 +236,14 @@ export function createBufferController(props: BufferProps, palette: BufferPalett
     scrollRef.horizontalScrollBar.viewportSize = scrollRef.viewport.width
   }
 
-  const pinScrollboxContent = () => {
-    if (!scrollRef) {
-      return
-    }
-
-    scrollRef.stopAutoScroll()
-    // Keep scrollTop and rendered rows aligned after interrupting scrollbox autoscroll.
-    scrollRef.content.translateY = 0
-  }
-
   const handleTextareaViewportChange = (event: SetViewportAfterEvent) => {
-    if (!scrollRef?.ctx.getSelection()?.isDragging) {
-      return
-    }
-
-    syncScrollboxBarMetrics()
-    scrollRef?.stopAutoScroll()
     syncScrollboxTop(event.y)
     analysisHighlightLayer?.sync()
   }
 
-  const syncSelectionDragScrollSpeed = (event: SelectionChangeEvent) => {
-    const selection = event.selection
+  const syncSelectionDragScrollSpeed = (selection: Selection) => {
     const metrics = textareaAdapter.readMetrics()
-    if (!selection?.isDragging || !metrics) {
+    if (!metrics) {
       return
     }
 
@@ -275,10 +259,9 @@ export function createBufferController(props: BufferProps, palette: BufferPalett
     textareaAdapter.setScrollSpeed(speed)
   }
 
-  const clampSelectionDragFocus = (event: SelectionChangeEvent) => {
-    const selection = event.selection
+  const clampSelectionDragFocus = (selection: Selection) => {
     const metrics = textareaAdapter.readMetrics()
-    if (!selection || !metrics) {
+    if (!metrics) {
       return
     }
 
@@ -430,9 +413,6 @@ export function createBufferController(props: BufferProps, palette: BufferPalett
   }
 
   const queueScrollboxIntent = () => {
-    if (scrollRef) {
-      scrollRef.content.translateY = 0
-    }
     if (scrollboxIntentQueued) {
       return
     }
@@ -676,10 +656,6 @@ export function createBufferController(props: BufferProps, palette: BufferPalett
   }
 
   const handleScrollboxUserScroll = () => {
-    if (scrollRef) {
-      // Scrollbox autoscroll can leave a transient visual offset; user scroll should start from real scrollTop.
-      scrollRef.content.translateY = 0
-    }
     noteUserScroll()
     autocomplete.close()
     queueScrollboxIntent()
@@ -696,7 +672,6 @@ export function createBufferController(props: BufferProps, palette: BufferPalett
   }
 
   const finishSelectionDrag = () => {
-    pinScrollboxContent()
     const metrics = textareaAdapter.readMetrics()
     if (metrics) {
       syncScrollboxTop(metrics.scrollY)
@@ -710,14 +685,9 @@ export function createBufferController(props: BufferProps, palette: BufferPalett
   const handleTextareaSelectionChange = (event: SelectionChangeEvent) => {
     const before = event.result === undefined
     const selection = event.selection
-    const rendererDragging = Boolean(scrollRef?.ctx.getSelection()?.isDragging)
-    if (before && selection?.isDragging && !rendererDragging && !selection.isStart) {
-      selection.isDragging = false
-    }
-    if (before && selection) {
-      pinScrollboxContent()
-      syncSelectionDragScrollSpeed(event)
-      clampSelectionDragFocus(event)
+    if (before && selection?.isDragging) {
+      syncSelectionDragScrollSpeed(selection)
+      clampSelectionDragFocus(selection)
     }
 
     const dragging = Boolean(selection?.isDragging)
