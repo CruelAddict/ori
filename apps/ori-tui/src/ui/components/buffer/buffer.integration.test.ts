@@ -697,6 +697,52 @@ GO`
     }
   })
 
+  test("keeps the sticky visual column when scroll moves the cursor", async () => {
+    const stickyColumn = 20
+    const shortLine = "tiny"
+    const longLine = "012345678901234567890123456789"
+    const text = [longLine, shortLine, longLine, longLine, longLine, longLine, longLine, longLine, longLine].join("\n")
+    let latestState: BufferState | undefined
+    const app = await mountBuffer({
+      text,
+      width: 80,
+      height: 8,
+      onStateChange: (state) => {
+        latestState = state
+      },
+    })
+
+    try {
+      const textarea = getBufferTextarea(app)
+      const scrollbox = getBufferScrollbox(app)
+      const scrollNode = scrollbox as unknown as { onMouseEvent: (event: MouseEvent) => void }
+      const scrollEvent = {
+        type: "scroll",
+        x: scrollbox.viewport.x + 1,
+        y: scrollbox.viewport.y + 1,
+        modifiers: { shift: false, alt: false, ctrl: false },
+        scroll: { direction: "down", delta: 1 },
+      } as unknown as MouseEvent
+
+      for (let i = 0; i < stickyColumn; i += 1) {
+        app.setup.mockInput.pressArrow("right")
+      }
+      await app.waitFor(() => textarea.logicalCursor.row === 0 && textarea.logicalCursor.col === stickyColumn)
+      await app.waitFor(() => getStateCursorOffset(latestState) === stickyColumn)
+
+      app.setup.mockInput.pressArrow("down")
+      await app.waitFor(() => textarea.logicalCursor.row === 1)
+      expect(textarea.logicalCursor.col).toBe(shortLine.length)
+
+      scrollNode.onMouseEvent(scrollEvent)
+      await app.waitFor(() => textarea.logicalCursor.row === 3)
+
+      expect(textarea.logicalCursor.col).toBe(stickyColumn)
+    } finally {
+      app.destroy()
+    }
+  })
+
   test("keeps split sgr mouse tails out of text when viewport render is slow", async () => {
     const text = Array.from({ length: 20 }, (_, i) => `line-${i}`).join("\n")
     const app = await mountBuffer({ text, width: 24, height: 8, analysis: createBlockingAnalysis(40) })

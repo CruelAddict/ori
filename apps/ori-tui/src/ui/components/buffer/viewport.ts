@@ -138,9 +138,6 @@ export function createViewport(options: CreateViewportOptions) {
     if (!firstLayout) {
       return cursorChanged
     }
-    if (firstLayout.sourceLines.length === options.geometry.document.lineStarts.length) {
-      return Boolean(options.textarea.moveViewport({ left: x, top: y, width, rows: height }, true)?.cursorChanged)
-    }
 
     cursorChanged =
       cursorChanged ||
