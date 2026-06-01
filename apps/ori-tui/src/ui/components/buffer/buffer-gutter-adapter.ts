@@ -5,7 +5,7 @@ import { type LineIndex, lineIndex } from "./coords"
 const EMPTY_GUTTER_MARKERS = new Map<number, string>()
 
 type BufferGutterPalette = Accessor<{
-  get: (name: string) => string
+  get: (name: "text_muted" | "editor_active_line_background") => string
 }>
 
 type CreateBufferGutterAdapterOptions = {

@@ -48,6 +48,7 @@ export function createViewport(options: CreateViewportOptions) {
   let scrollboxWidth = 0
   let scrollboxRows = 0
   let stickyVisualColumn: number | undefined
+  let holdStickyVisualColumn = false
   let scrollStickyVisualColumn: number | undefined
   let scrollStickyVisualColumnResetTimer: ReturnType<typeof setTimeout> | undefined
 
@@ -101,6 +102,14 @@ export function createViewport(options: CreateViewportOptions) {
   const resetCursorTracking = () => {
     clearScrollStickyVisualColumn()
     stickyVisualColumn = undefined
+  }
+
+  const startVisualCursorMove = () => {
+    holdStickyVisualColumn = true
+  }
+
+  const endVisualCursorMove = () => {
+    holdStickyVisualColumn = false
   }
 
   const rememberScrollStickyColumn = () => {
@@ -233,7 +242,7 @@ export function createViewport(options: CreateViewportOptions) {
       return undefined
     }
 
-    if (!captureOptions.keepStickyVisualColumn && scrollStickyVisualColumn === undefined) {
+    if (!holdStickyVisualColumn && !captureOptions.keepStickyVisualColumn && scrollStickyVisualColumn === undefined) {
       stickyVisualColumn = cursor.visualCol
     }
     const document = options.geometry.document
@@ -494,6 +503,8 @@ export function createViewport(options: CreateViewportOptions) {
     attachScrollbox,
     captureCursorState,
     snapshot,
+    startVisualCursorMove,
+    endVisualCursorMove,
     rememberScrollStickyColumn,
     resetCursorTracking,
     moveViewport,
