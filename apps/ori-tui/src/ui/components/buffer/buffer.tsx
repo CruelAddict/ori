@@ -9,8 +9,7 @@ import { type BufferAnalysis, createAnalysisHighlightLayer } from "./analysis"
 import { createBufferAutocomplete } from "./autocomplete/controller"
 import type { BufferAutocompleteProvider } from "./autocomplete/types"
 import { createBufferEditCommands, getDeleteToLineStartEdit } from "./buffer-edit-commands"
-import { createBufferGutterAdapter } from "./buffer-gutter-adapter"
-import { createBufferTextareaAdapter } from "./buffer-textarea-adapter"
+import { type BufferTextareaCursorChangeEvent, createBufferTextareaAdapter } from "./buffer-textarea-adapter"
 import { type DocCharOffset, docCharOffset, type LineIndex, lineIndex } from "./coords"
 import { type BufferTextChange, Document, findTextChange, normalizeDocumentText } from "./document"
 import type { SelectionChangeEvent } from "./opentui-textarea-extensions/selection-hooks"
@@ -20,6 +19,7 @@ import { createViewport } from "./viewport"
 const DEBOUNCE_MS = 200
 const DEFAULT_TAB_WIDTH = 2
 const DEFAULT_SELECTION_DRAG_SCROLL_SPEED = 16
+const EMPTY_GUTTER_MARKERS = new Map<number, string>()
 
 type PendingChangeOrigin = {
   origin: "user" | "autocomplete"
@@ -59,6 +59,7 @@ export type BufferProps = {
 }
 
 type CursorStateSyncOptions = {
+  cause?: BufferTextareaCursorChangeEvent["cause"]
   keepStickyVisualColumn?: boolean
 }
 
@@ -73,9 +74,9 @@ export function Buffer(props: BufferProps) {
   })
 
   let bufferRootRef: BoxRenderable | undefined
+  let gutterRef: LineNumberRenderable | undefined
   let disposed = false
   let renderQueued = false
-  let cursorStateUpdateMode = "queued" as "queued" | "inline"
   let pendingChangeOrigin: PendingChangeOrigin | undefined
   let analysisHighlightLayer: ReturnType<typeof createAnalysisHighlightLayer> | undefined
 
@@ -98,12 +99,61 @@ export function Buffer(props: BufferProps) {
     renderQueued = true
     defer(() => {
       renderQueued = false
-      viewport.renderScrollboxFromTextarea()
-      gutterAdapter.renderCursorLine()
-      gutterAdapter.renderViewportRows(viewport.viewportRows())
-      analysisHighlightLayer?.renderVisibleStatements()
-      autocomplete.repositionPopup()
+      renderFrame()
     })
+  }
+
+  function renderFrame() {
+    viewport.renderScrollboxFromTextarea()
+    renderGutter()
+    analysisHighlightLayer?.renderVisibleStatements()
+    autocomplete.repositionPopup()
+  }
+
+  function renderGutter(options: { layout?: boolean; markers?: boolean; cursor?: boolean } = {}) {
+    const node = gutterRef
+    if (!node || node.isDestroyed) {
+      return
+    }
+
+    const renderLayout = options.layout ?? true
+    const renderMarkers = options.markers ?? true
+    const renderCursor = options.cursor ?? true
+
+    if (renderLayout) {
+      const rows = viewport.viewportRows()
+      node.height = rows
+      node.minHeight = rows
+      node.maxHeight = rows
+    }
+
+    if (renderMarkers) {
+      const signs = new Map<number, { before: string; beforeColor: string }>()
+      for (const [line, marker] of props.gutterMarkers?.() ?? EMPTY_GUTTER_MARKERS) {
+        if (!marker) {
+          continue
+        }
+        signs.set(line, {
+          before: marker,
+          beforeColor: theme().get("text_muted"),
+        })
+      }
+      node.setLineSigns(signs)
+    }
+
+    if (!renderCursor) {
+      return
+    }
+
+    const colors = new Map<number, { gutter: string; content: string }>()
+    if (props.isFocused()) {
+      const color = theme().get("editor_active_line_background")
+      colors.set(cursorState()?.line ?? lineIndex(0), {
+        gutter: color,
+        content: color,
+      })
+    }
+    node.setLineColors(colors)
   }
 
   const textareaAdapter = createBufferTextareaAdapter({
@@ -112,7 +162,7 @@ export function Buffer(props: BufferProps) {
       queueRender()
     },
     onTextareaCursorChanged: (options) => {
-      updateCursorStateFromTextarea(cursorStateUpdateMode, options)
+      updateCursorStateFromTextarea(options)
     },
     onTextareaSelectionChange: (event) => {
       handleTextareaSelectionChange(event)
@@ -138,11 +188,8 @@ export function Buffer(props: BufferProps) {
     queueRender,
     defer,
     isDisposed: () => disposed,
-    setCursorStateUpdateMode: (mode) => {
-      cursorStateUpdateMode = mode
-    },
-    updateCursorFromTextarea: (mode, options) => {
-      updateCursorStateFromTextarea(mode, options)
+    updateCursorFromTextarea: (options) => {
+      updateCursorStateFromTextarea(options)
     },
     renderVisibleAnalysis: (options) => {
       analysisHighlightLayer?.renderVisibleStatements(options)
@@ -154,7 +201,7 @@ export function Buffer(props: BufferProps) {
     resetCursorTracking: viewport.resetCursorTracking,
   })
 
-  function updateCursorStateFromTextarea(mode: "queued" | "inline" = "queued", options?: CursorStateSyncOptions) {
+  function updateCursorStateFromTextarea(options?: CursorStateSyncOptions) {
     if (viewport.isSelecting()) {
       // OpenTUI mutates cursor/viewport while selection autoscrolls; feeding that back here makes both render loops race.
       return
@@ -175,23 +222,12 @@ export function Buffer(props: BufferProps) {
       line: lineIndex(next.row),
       offset: next.offset,
     })
-    if (mode === "inline") {
-      gutterAdapter.renderCursorLine()
+    if (options?.cause === "scroll") {
+      renderGutter({ layout: false, markers: false })
       return
     }
 
     queueRender()
-  }
-
-  function isCursorStateSyncedWithTextarea() {
-    const current = cursorState()
-    const cursor = textareaAdapter.readCursor()
-    if (!current || !cursor) {
-      return false
-    }
-
-    const offset = doc().offsetAtLineChar(cursor.logicalRow, cursor.logicalCol)
-    return current.line === lineIndex(cursor.logicalRow) && current.offset === offset
   }
 
   const debouncedPush = debounce(() => {
@@ -235,14 +271,6 @@ export function Buffer(props: BufferProps) {
       }
     },
     accept: (item, range) => replaceDocumentRange(range.start, range.end, item.insertText, item.cursorOffset),
-  })
-
-  const gutterAdapter = createBufferGutterAdapter({
-    palette: theme,
-    isFocused: props.isFocused,
-    getCursorLine: () => cursorState()?.line,
-    getMarkers: () => props.gutterMarkers?.(),
-    queueRender,
   })
 
   const replaceDocumentRange = (
@@ -339,7 +367,7 @@ export function Buffer(props: BufferProps) {
 
     const modified = change ? true : doc().modified
     if (!change && nextText === doc().text && modified === doc().modified) {
-      updateCursorStateFromTextarea("queued")
+      updateCursorStateFromTextarea()
       queueRender()
       if (origin === "user") {
         defer(() => {
@@ -349,7 +377,7 @@ export function Buffer(props: BufferProps) {
       return
     }
     applyTextChange(nextText, modified, change)
-    updateCursorStateFromTextarea("queued")
+    updateCursorStateFromTextarea()
     queueRender()
     if (origin === "user") {
       defer(() => {
@@ -403,7 +431,7 @@ export function Buffer(props: BufferProps) {
     textareaAdapter.setCursorVisible(true)
     textareaAdapter.setLive(false)
     textareaAdapter.setScrollSpeed(DEFAULT_SELECTION_DRAG_SCROLL_SPEED)
-    updateCursorStateFromTextarea("queued")
+    updateCursorStateFromTextarea()
   }
 
   const handleTextareaSelectionChange = (event: SelectionChangeEvent) => {
@@ -431,14 +459,6 @@ export function Buffer(props: BufferProps) {
       finishSelectionDrag()
       return
     }
-  }
-
-  const handleCursorChange = () => {
-    if (isCursorStateSyncedWithTextarea()) {
-      return
-    }
-
-    updateCursorStateFromTextarea(cursorStateUpdateMode)
   }
 
   const handleEscape = () => {
@@ -482,13 +502,14 @@ export function Buffer(props: BufferProps) {
   createEffect(() => {
     props.gutterMarkers?.()
     theme().get("text_muted")
-    gutterAdapter.renderMarkers()
+    renderGutter({ layout: false, cursor: false })
   })
 
   createEffect(() => {
     props.isFocused()
     cursorState()?.line
-    gutterAdapter.renderCursorLine()
+    theme().get("editor_active_line_background")
+    renderGutter({ layout: false, markers: false })
   })
 
   createEffect(
@@ -576,7 +597,8 @@ export function Buffer(props: BufferProps) {
             />
             <line_number
               ref={(node: LineNumberRenderable | undefined) => {
-                gutterAdapter.attach(node)
+                gutterRef = node
+                queueRender()
               }}
               position="absolute"
               top={0}
@@ -611,7 +633,6 @@ export function Buffer(props: BufferProps) {
                 keyBindings={[]}
                 onMouseDown={handleTextareaMouseDown}
                 onMouseScroll={handleTextareaMouseScroll}
-                onCursorChange={handleCursorChange}
                 onContentChange={handleContentChange}
               />
             </line_number>

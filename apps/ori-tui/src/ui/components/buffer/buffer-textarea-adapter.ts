@@ -18,7 +18,7 @@ import { applyRefTabWidth } from "./text-metrics"
 type CreateBufferTextareaAdapterOptions = {
   tabWidth: number
   onVisualLayoutChange: () => void
-  onTextareaCursorChanged: (options?: { keepStickyVisualColumn?: boolean }) => void
+  onTextareaCursorChanged: (event: BufferTextareaCursorChangeEvent) => void
   onTextareaSelectionChange: (event: SelectionChangeEvent) => void
   onTextareaViewportChange: (event: BufferTextareaViewportChange) => void
   onVisualCursorMoveStart: () => void
@@ -52,6 +52,13 @@ export type BufferTextareaViewportChange = {
   cursorMoved: boolean
 }
 
+export type BufferTextareaCursorChangeCause = "input" | "scroll"
+
+export type BufferTextareaCursorChangeEvent = {
+  cause: BufferTextareaCursorChangeCause
+  keepStickyVisualColumn?: boolean
+}
+
 export type BufferTextareaVisualLayout = {
   sourceLines: readonly LineIndex[]
   lineStartColumns: readonly DisplayColumn[]
@@ -63,6 +70,7 @@ export function createBufferTextareaAdapter(options: CreateBufferTextareaAdapter
   let measuredRowWidth = 0
   let measuredRowHeight = 0
   let measuredRowCount = 1
+  let cursorChangeCause: BufferTextareaCursorChangeCause = "input"
 
   const ref = () => {
     if (!editorRef || editorRef.isDestroyed) {
@@ -73,6 +81,21 @@ export function createBufferTextareaAdapter(options: CreateBufferTextareaAdapter
   }
 
   const lineInfo = createTextareaLineInfoCache(ref)
+
+  const withCursorChangeCause = <T>(cause: BufferTextareaCursorChangeCause, callback: () => T) => {
+    const previous = cursorChangeCause
+    cursorChangeCause = cause
+    const result = callback()
+    cursorChangeCause = previous
+    return result
+  }
+
+  const emitCursorChange = (event: Omit<BufferTextareaCursorChangeEvent, "cause"> = {}) => {
+    options.onTextareaCursorChanged({
+      ...event,
+      cause: cursorChangeCause,
+    })
+  }
 
   const resetMeasurements = () => {
     measuredRowWidth = 0
@@ -106,6 +129,7 @@ export function createBufferTextareaAdapter(options: CreateBufferTextareaAdapter
   }
 
   const detachFromCurrentRef = (node: TextareaRenderable) => {
+    node.onCursorChange = undefined
     node.off("line-info-change", handleLineInfoChange)
     lineInfo.clear(node)
     resetMeasurements()
@@ -134,7 +158,7 @@ export function createBufferTextareaAdapter(options: CreateBufferTextareaAdapter
           cursorMoved: event.moveCursor || event.cursorChanged,
         })
         if (event.moveCursor || event.cursorChanged) {
-          options.onTextareaCursorChanged()
+          emitCursorChange()
         }
       },
     })
@@ -146,18 +170,21 @@ export function createBufferTextareaAdapter(options: CreateBufferTextareaAdapter
         }
       },
       afterViewportSizeChange: () => {
-        options.onTextareaCursorChanged()
+        emitCursorChange()
       },
     })
   }
 
   const installCursorHooks = (node: TextareaRenderable) => {
+    node.onCursorChange = () => {
+      emitCursorChange()
+    }
     installCursorMovementHooks(node, {
       beforeVisualMove: () => {
         options.onVisualCursorMoveStart()
       },
       afterVisualMove: () => {
-        options.onTextareaCursorChanged({ keepStickyVisualColumn: true })
+        emitCursorChange({ keepStickyVisualColumn: true })
         options.onVisualCursorMoveEnd()
       },
     })
@@ -167,7 +194,7 @@ export function createBufferTextareaAdapter(options: CreateBufferTextareaAdapter
       },
       afterSelectionChange: (event) => {
         options.onTextareaSelectionChange(event)
-        options.onTextareaCursorChanged()
+        emitCursorChange()
       },
     })
   }
@@ -209,14 +236,20 @@ export function createBufferTextareaAdapter(options: CreateBufferTextareaAdapter
     editorRef = undefined
   }
 
-  const moveViewport = (viewport: BufferTextareaViewport, moveCursor = false): SetViewportResult | undefined => {
+  const moveViewport = (
+    viewport: BufferTextareaViewport,
+    moveCursor = false,
+    cause: BufferTextareaCursorChangeCause = "input",
+  ): SetViewportResult | undefined => {
     const node = ref()
     if (!node) {
       return undefined
     }
 
     const set = node.editorView.setViewport as SetViewport
-    return set(viewport.left, viewport.top, viewport.width, viewport.rows, moveCursor, { source: "buffer" })
+    return withCursorChangeCause(cause, () => {
+      return set(viewport.left, viewport.top, viewport.width, viewport.rows, moveCursor, { source: "buffer" })
+    })
   }
 
   return {
@@ -318,7 +351,9 @@ export function createBufferTextareaAdapter(options: CreateBufferTextareaAdapter
     measureContentRows,
     resetMeasurements,
     setScrollMargin: (margin: number) => ref()?.editorView.setScrollMargin(margin),
-    setCursor: (row: number, col: number) => ref()?.editBuffer.setCursor(row, col),
+    setCursor: (row: number, col: number, cause: BufferTextareaCursorChangeCause = "input") => {
+      withCursorChangeCause(cause, () => ref()?.editBuffer.setCursor(row, col))
+    },
     deleteRange: (startRow: number, startCol: number, endRow: number, endCol: number) => {
       resetMeasurements()
       ref()?.editBuffer.deleteRange(startRow, startCol, endRow, endCol)

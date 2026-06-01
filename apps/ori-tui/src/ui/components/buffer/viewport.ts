@@ -1,7 +1,12 @@
 import type { ScrollBoxRenderable, Selection } from "@opentui/core"
 import { getViewportBandY, getViewportInsetY, getViewportRect } from "@ui/components/ori-scrollbox"
 import { createSignal } from "solid-js"
-import type { BufferTextarea, BufferTextareaViewportChange } from "./buffer-textarea-adapter"
+import type {
+  BufferTextarea,
+  BufferTextareaCursorChangeCause,
+  BufferTextareaCursorChangeEvent,
+  BufferTextareaViewportChange,
+} from "./buffer-textarea-adapter"
 import { type DocCharOffset, lineIndex } from "./coords"
 import type { TextGeometry } from "./text-geometry"
 import { resolveViewportOffsetPoint, resolveVisualCursorDocOffset } from "./viewport-geometry"
@@ -12,8 +17,6 @@ export type { ViewportPoint } from "./viewport-geometry"
 const DEFAULT_SELECTION_DRAG_SCROLL_SPEED = 16
 const SELECTION_DRAG_MEDIUM_DISTANCE = 2
 const SELECTION_DRAG_FAST_DISTANCE = 3
-
-type CursorStateUpdateMode = "queued" | "inline"
 
 type CursorStateCaptureOptions = {
   keepStickyVisualColumn?: boolean
@@ -35,8 +38,7 @@ type CreateViewportOptions = {
   queueRender: () => void
   defer: (callback: () => void) => void
   isDisposed: () => boolean
-  setCursorStateUpdateMode: (mode: CursorStateUpdateMode) => void
-  updateCursorFromTextarea: (mode: CursorStateUpdateMode, options?: CursorStateCaptureOptions) => void
+  updateCursorFromTextarea: (event: BufferTextareaCursorChangeEvent) => void
   renderVisibleAnalysis: (options?: { continueHighlighting?: boolean }) => void
 }
 
@@ -128,7 +130,14 @@ export function createViewport(options: CreateViewportOptions) {
     }, 120)
   }
 
-  const applyViewportChange = (x: number, y: number, width: number, height: number, moveCursor = false) => {
+  const applyViewportChange = (
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+    moveCursor = false,
+    cause: BufferTextareaCursorChangeCause = "input",
+  ) => {
     let cursorChanged = false
     const viewport = options.textarea.readViewport()
     const cursor = options.textarea.readCursor()
@@ -140,7 +149,9 @@ export function createViewport(options: CreateViewportOptions) {
     const targetVisualCol = scrollStickyVisualColumn ?? stickyVisualColumn ?? cursor.visualCol
 
     if (!moveCursor) {
-      return Boolean(options.textarea.moveViewport({ left: x, top: y, width, rows: height }, false)?.cursorChanged)
+      return Boolean(
+        options.textarea.moveViewport({ left: x, top: y, width, rows: height }, false, cause)?.cursorChanged,
+      )
     }
 
     const firstLayout = options.textarea.readVisualLayout()
@@ -150,7 +161,7 @@ export function createViewport(options: CreateViewportOptions) {
 
     cursorChanged =
       cursorChanged ||
-      Boolean(options.textarea.moveViewport({ left: x, top: y, width, rows: height }, false)?.cursorChanged)
+      Boolean(options.textarea.moveViewport({ left: x, top: y, width, rows: height }, false, cause)?.cursorChanged)
 
     let nextViewport = options.textarea.readViewport()
     if (!nextViewport) {
@@ -169,11 +180,11 @@ export function createViewport(options: CreateViewportOptions) {
         const proxy = document.positionAtOffset(proxyOffset)
         const nextCursor = options.textarea.readCursor()
         if (!nextCursor || nextCursor.logicalRow !== proxy.line || nextCursor.logicalCol !== proxy.offset) {
-          options.textarea.setCursor(proxy.line, proxy.offset)
+          options.textarea.setCursor(proxy.line, proxy.offset, cause)
           cursorChanged = true
         }
       }
-      const viewportChange = options.textarea.moveViewport({ left: x, top: y, width, rows: height }, false)
+      const viewportChange = options.textarea.moveViewport({ left: x, top: y, width, rows: height }, false, cause)
       cursorChanged = cursorChanged || Boolean(viewportChange?.cursorChanged)
       nextViewport = options.textarea.readViewport()
       if (!nextViewport) {
@@ -222,13 +233,14 @@ export function createViewport(options: CreateViewportOptions) {
     const next = document.positionAtOffset(nextOffset)
     const nextCursor = options.textarea.readCursor()
     if (!nextCursor || nextCursor.logicalRow !== next.line || nextCursor.logicalCol !== next.offset) {
-      options.textarea.setCursor(next.line, next.offset)
+      options.textarea.setCursor(next.line, next.offset, cause)
       cursorChanged = true
       const cursorViewport = options.textarea.readViewport()
       if (cursorViewport && cursorViewport.top !== nextViewport.top) {
         const viewportChange = options.textarea.moveViewport(
           { left: x, top: nextViewport.top, width, rows: height },
           false,
+          cause,
         )
         cursorChanged = cursorChanged || Boolean(viewportChange?.cursorChanged)
       }
@@ -269,7 +281,14 @@ export function createViewport(options: CreateViewportOptions) {
     } satisfies ViewportSnapshot
   }
 
-  const moveViewport = (x: number, y: number, width: number, height: number, moveCursor = false): ViewportChange => {
+  const moveViewport = (
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+    moveCursor = false,
+    cause: BufferTextareaCursorChangeCause = "input",
+  ): ViewportChange => {
     const viewport = options.textarea.readViewport()
     if (!viewport) {
       return { applied: false, cursorChanged: false }
@@ -280,7 +299,7 @@ export function createViewport(options: CreateViewportOptions) {
     }
     return {
       applied: true,
-      cursorChanged: applyViewportChange(x, y, width, height, moveCursor),
+      cursorChanged: applyViewportChange(x, y, width, height, moveCursor, cause),
     }
   }
 
@@ -327,13 +346,11 @@ export function createViewport(options: CreateViewportOptions) {
     }
 
     pendingTextareaTop = moveCursor ? nextTop : undefined
-    const mode = moveCursor ? "inline" : "queued"
-    options.setCursorStateUpdateMode(mode)
-    const change = moveViewport(textareaViewport.left, nextTop, Math.max(1, box.width), viewportRows, moveCursor)
+    const cause = moveCursor ? "scroll" : "input"
+    const change = moveViewport(textareaViewport.left, nextTop, Math.max(1, box.width), viewportRows, moveCursor, cause)
     if (moveCursor || change.cursorChanged) {
-      options.updateCursorFromTextarea(mode, { keepStickyVisualColumn: moveCursor })
+      options.updateCursorFromTextarea({ cause, keepStickyVisualColumn: moveCursor })
     }
-    options.setCursorStateUpdateMode("queued")
     options.textarea.requestRender()
     const nextBox = options.textarea.readBox()
     if (!moveCursor && scrollboxRef && nextBox && (scrollboxRef.scrollTop ?? 0) !== nextBox.top) {
