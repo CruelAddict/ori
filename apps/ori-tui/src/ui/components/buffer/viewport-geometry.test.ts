@@ -1,15 +1,14 @@
 import { describe, expect, test } from "bun:test"
-import type { LineInfo } from "@opentui/core"
-import { resolveViewportOffsetPoint, resolveVisualCursorDocOffset } from "./buffer-viewport-controller"
-import { containerX, containerY, docCharOffset } from "./coords"
+import { containerX, containerY, displayColumn, docCharOffset, lineIndex } from "./coords"
 import { Document } from "./document"
 import { createTextGeometry } from "./text-geometry"
+import { resolveViewportOffsetPoint, resolveVisualCursorDocOffset } from "./viewport-geometry"
 
 function createTestGeometry(document: Document) {
   return createTextGeometry({ getDocument: () => document, tabWidth: 2, getWidthMethod: () => undefined })
 }
 
-describe("buffer viewport controller", () => {
+describe("viewport geometry", () => {
   test("maps a single-line cursor directly into a document offset", () => {
     expect(Document.create("select * from auth").offsetAtLineChar(0, 18)).toBe(docCharOffset(18))
   })
@@ -61,13 +60,11 @@ describe("buffer viewport controller", () => {
       resolveViewportOffsetPoint({
         geometry: createTestGeometry(Document.create(text)),
         offset: docCharOffset(text.lastIndexOf("fr")),
-        lineInfo: {
-          lineStartCols: [0, 22],
-          lineWidthCols: [21, 11],
-          lineWidthColsMax: 21,
-          lineSources: [0, 1],
-          lineWraps: [0, 0],
-        } satisfies LineInfo,
+        layout: {
+          sourceLines: [lineIndex(0), lineIndex(1)],
+          lineStartColumns: [displayColumn(0), displayColumn(22)],
+          lineWidths: [displayColumn(21), displayColumn(11)],
+        },
         scrollY: 0,
         viewportHeight: 20,
       }),
@@ -79,13 +76,11 @@ describe("buffer viewport controller", () => {
       resolveViewportOffsetPoint({
         geometry: createTestGeometry(Document.create("ignored\nabcdefghijkl")),
         offset: docCharOffset("ignored\nabcdefghijkl".length),
-        lineInfo: {
-          lineStartCols: [22, 32],
-          lineWidthCols: [10, 2],
-          lineWidthColsMax: 10,
-          lineSources: [1, 1],
-          lineWraps: [0, 1],
-        } satisfies LineInfo,
+        layout: {
+          sourceLines: [lineIndex(1), lineIndex(1)],
+          lineStartColumns: [displayColumn(22), displayColumn(32)],
+          lineWidths: [displayColumn(10), displayColumn(2)],
+        },
         scrollY: 0,
         viewportHeight: 20,
       }),
@@ -100,13 +95,11 @@ describe("buffer viewport controller", () => {
         geometry: createTestGeometry(Document.create(text)),
         visualRow: 1,
         visualCol: 2,
-        lineInfo: {
-          lineStartCols: [22, 32],
-          lineWidthCols: [10, 10],
-          lineWidthColsMax: 10,
-          lineSources: [1, 1],
-          lineWraps: [0, 1],
-        } satisfies LineInfo,
+        layout: {
+          sourceLines: [lineIndex(1), lineIndex(1)],
+          lineStartColumns: [displayColumn(22), displayColumn(32)],
+          lineWidths: [displayColumn(10), displayColumn(10)],
+        },
       }),
     ).toBe(docCharOffset("ignored\nabcdefghijkl".length))
   })
@@ -119,13 +112,11 @@ describe("buffer viewport controller", () => {
         geometry: createTestGeometry(Document.create(text)),
         visualRow: 1,
         visualCol: 12,
-        lineInfo: {
-          lineStartCols: [22, 32],
-          lineWidthCols: [10, 10],
-          lineWidthColsMax: 10,
-          lineSources: [1, 1],
-          lineWraps: [0, 1],
-        } satisfies LineInfo,
+        layout: {
+          sourceLines: [lineIndex(1), lineIndex(1)],
+          lineStartColumns: [displayColumn(22), displayColumn(32)],
+          lineWidths: [displayColumn(10), displayColumn(10)],
+        },
       }),
     ).toBe(docCharOffset("ignored\nabcdefghijklmnopqrst".length))
   })

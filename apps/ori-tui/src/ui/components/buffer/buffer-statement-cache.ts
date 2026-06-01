@@ -1,7 +1,8 @@
-import type { LineInfo, SyntaxStyle } from "@opentui/core"
+import type { SyntaxStyle } from "@opentui/core"
 import { buildLineStarts, offsetToLine } from "@utils/line-offsets"
 import type { SyntaxHighlightSpan } from "@utils/syntax-highlighter"
 import { buildChangedStatementReuse } from "./buffer-highlight-reuse"
+import type { BufferTextareaVisualLayout } from "./buffer-textarea-adapter"
 import { type DocCharOffset, type DocumentVersion, docCharOffset, type LineIndex, lineIndex } from "./coords"
 import type { BufferTextChange, Document } from "./document"
 
@@ -483,7 +484,7 @@ export function hasDirtyStatements(cache: StatementCache | undefined) {
 
 export function collectVisibleStatementIndices(
   cache: StatementCache | undefined,
-  info: LineInfo,
+  layout: BufferTextareaVisualLayout,
   scrollY: number,
   height: number,
   focusedRow: LineIndex,
@@ -494,7 +495,7 @@ export function collectVisibleStatementIndices(
   }
 
   const startRow = Math.max(0, scrollY - overscan)
-  const endRow = Math.min(info.lineSources.length, scrollY + height + overscan)
+  const endRow = Math.min(layout.sourceLines.length, scrollY + height + overscan)
   const seen = new Set<number>()
   const indices: number[] = []
   const pushIndex = (index: number | undefined) => {
@@ -507,7 +508,7 @@ export function collectVisibleStatementIndices(
   }
 
   for (let row = startRow; row < endRow; row += 1) {
-    const line = info.lineSources[row]
+    const line = layout.sourceLines[row]
     if (line === undefined) {
       continue
     }
@@ -520,7 +521,7 @@ export function collectVisibleStatementIndices(
 
 export function collectVisibleStatements(
   cache: StatementCache | undefined,
-  info: LineInfo,
+  layout: BufferTextareaVisualLayout,
   scrollY: number,
   height: number,
   focusedRow: LineIndex,
@@ -530,7 +531,7 @@ export function collectVisibleStatements(
     return [] as StatementEntry[]
   }
 
-  return collectVisibleStatementIndices(cache, info, scrollY, height, focusedRow, overscan)
+  return collectVisibleStatementIndices(cache, layout, scrollY, height, focusedRow, overscan)
     .map((index) => cache.statements[index])
     .filter((statement): statement is StatementEntry => !!statement)
 }

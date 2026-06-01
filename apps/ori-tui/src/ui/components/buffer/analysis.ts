@@ -15,7 +15,7 @@ import {
 import { type DocCharOffset, type DocCharRange, type DocumentVersion, docCharOffset, type LineIndex } from "./coords"
 import type { BufferTextChange, Document } from "./document"
 import type { RenderTarget } from "./render-target"
-import { type Viewport, viewportRenderRange } from "./viewport"
+import { type ViewportSnapshot, viewportSnapshotRenderRange } from "./viewport-snapshot"
 
 export type BufferAnalysisRange = {
   start: DocCharOffset
@@ -47,18 +47,18 @@ export type BufferAnalysis = {
 }
 
 type AnalysisHost = {
-  getViewport: () => Viewport | undefined
+  getViewport: () => ViewportSnapshot | undefined
   getRenderTarget: () => RenderTarget | undefined
   getDocument: () => Document
   setSyntaxStyle: (style: SyntaxStyle | null) => void
-  requestSync: () => void
+  queueViewportRender: () => void
 }
 
 type AnalysisHighlightLayer = {
   rebuild: (document: Document, change?: BufferTextChange) => void
   reset: () => void
   invalidate: () => void
-  sync: (options?: { scheduleUpdate?: boolean }) => void
+  renderVisibleStatements: (options?: { continueHighlighting?: boolean }) => void
   dispose: () => void
 }
 
@@ -79,7 +79,7 @@ function createNoopAnalysisHighlightLayer(): AnalysisHighlightLayer {
     rebuild: () => {},
     reset: () => {},
     invalidate: () => {},
-    sync: () => {},
+    renderVisibleStatements: () => {},
     dispose: () => {},
   }
 }
@@ -200,10 +200,10 @@ export function createAnalysisHighlightLayer(params: {
     )
   }
 
-  const syncStatementHighlights = (options: {
+  const renderStatementIfNeeded = (options: {
     target: RenderTarget
     statement: StatementEntry
-    viewport: Viewport
+    viewport: ViewportSnapshot
     renderRange?: DocCharRange
   }) => {
     const { target, statement, viewport, renderRange } = options
@@ -292,14 +292,14 @@ export function createAnalysisHighlightLayer(params: {
       return undefined
     }
     const document = host.getDocument()
-    const renderRange = viewportRenderRange(viewport, WARM_OVERSCAN_ROWS)
+    const renderRange = viewportSnapshotRenderRange(viewport, WARM_OVERSCAN_ROWS)
     if (!renderRange) {
       return undefined
     }
 
     const indices = collectVisibleStatementIndices(
       statementCache,
-      viewport.lineInfo,
+      viewport.layout,
       viewport.scrollY,
       viewport.height,
       viewport.focusedLine,
@@ -472,11 +472,11 @@ export function createAnalysisHighlightLayer(params: {
         const nextStatement = currentCache.statements[index]
         const context = readRenderContext()
         if (nextStatement && context) {
-          const renderedImmediately = syncStatementHighlights({
+          const renderedImmediately = renderStatementIfNeeded({
             target: context.target,
             statement: nextStatement,
             viewport: context.viewport,
-            renderRange: viewportRenderRange(context.viewport, VISIBLE_OVERSCAN_ROWS),
+            renderRange: viewportSnapshotRenderRange(context.viewport, VISIBLE_OVERSCAN_ROWS),
           })
           if (renderedImmediately) {
             if (options.streamStatements) {
@@ -487,7 +487,7 @@ export function createAnalysisHighlightLayer(params: {
         }
 
         if (options.streamStatements) {
-          host.requestSync()
+          host.queueViewportRender()
         }
       }
 
@@ -515,7 +515,7 @@ export function createAnalysisHighlightLayer(params: {
         highlightBackfillCursor = Math.min(lastCompletedIndex + 1, Math.max(0, statementCache.statements.length - 1))
       }
       if (!options.streamStatements && lastCompletedIndex >= batch.startIndex) {
-        host.requestSync()
+        host.queueViewportRender()
       }
     } catch (err) {
       if (!disposed && updateVersion === highlightUpdateVersion) {
@@ -557,7 +557,7 @@ export function createAnalysisHighlightLayer(params: {
     void runHighlightBatch(backfillBatch, { streamStatements: false })
   }
 
-  const syncRenderedHighlights = () => {
+  const renderVisibleStatements = () => {
     const context = readRenderContext()
     if (!context || !statementCache) {
       clearRenderedHighlights(false)
@@ -575,14 +575,14 @@ export function createAnalysisHighlightLayer(params: {
 
     const statements = collectVisibleStatements(
       statementCache,
-      context.viewport.lineInfo,
+      context.viewport.layout,
       context.viewport.scrollY,
       context.viewport.height,
       context.viewport.focusedLine,
       VISIBLE_OVERSCAN_ROWS,
     )
     const visibleIds = new Set(statements.map((statement) => statement.id))
-    const renderRange = viewportRenderRange(context.viewport, VISIBLE_OVERSCAN_ROWS)
+    const renderRange = viewportSnapshotRenderRange(context.viewport, VISIBLE_OVERSCAN_ROWS)
 
     for (const [id, entry] of renderedStatementHighlights) {
       if (visibleIds.has(id)) {
@@ -595,7 +595,7 @@ export function createAnalysisHighlightLayer(params: {
     }
 
     for (const statement of statements) {
-      if (syncStatementHighlights({ target: context.target, statement, viewport: context.viewport, renderRange })) {
+      if (renderStatementIfNeeded({ target: context.target, statement, viewport: context.viewport, renderRange })) {
         changed = true
       }
     }
@@ -640,9 +640,9 @@ export function createAnalysisHighlightLayer(params: {
       refreshSnapshot(undefined, host.getDocument().lineStarts.length)
     },
     invalidate: invalidateRenderedHighlights,
-    sync: (options = {}) => {
-      syncRenderedHighlights()
-      if (options.scheduleUpdate ?? true) {
+    renderVisibleStatements: (options = {}) => {
+      renderVisibleStatements()
+      if (options.continueHighlighting ?? true) {
         scheduleUpdate()
       }
     },

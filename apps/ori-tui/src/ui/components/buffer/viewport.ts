@@ -1,34 +1,513 @@
-import type { LineInfo } from "@opentui/core"
-import { type DocCharRange, docCharRange, type LineIndex, lineIndex } from "./coords"
+import type { ScrollBoxRenderable, Selection } from "@opentui/core"
+import { getViewportBandY, getViewportInsetY, getViewportRect } from "@ui/components/ori-scrollbox"
+import { createSignal } from "solid-js"
+import type { BufferTextarea, BufferTextareaViewportChange } from "./buffer-textarea-adapter"
+import { type DocCharOffset, lineIndex } from "./coords"
 import type { TextGeometry } from "./text-geometry"
+import { resolveViewportOffsetPoint, resolveVisualCursorDocOffset } from "./viewport-geometry"
+import type { ViewportSnapshot } from "./viewport-snapshot"
 
-export type Viewport = {
-  geometry: TextGeometry
-  lineInfo: LineInfo
-  scrollY: number
-  height: number
-  focusedLine: LineIndex
+export type { ViewportPoint } from "./viewport-geometry"
+
+const DEFAULT_SELECTION_DRAG_SCROLL_SPEED = 16
+const SELECTION_DRAG_MEDIUM_DISTANCE = 2
+const SELECTION_DRAG_FAST_DISTANCE = 3
+
+type CursorStateUpdateMode = "queued" | "inline"
+
+type CursorStateCaptureOptions = {
+  keepStickyVisualColumn?: boolean
 }
 
-export function viewportRenderRange(viewport: Viewport, overscan: number): DocCharRange | undefined {
-  const startRow = Math.max(0, viewport.scrollY - overscan)
-  const endRow = Math.min(viewport.lineInfo.lineSources.length, viewport.scrollY + viewport.height + overscan)
-  let startLine: number | undefined
-  let endLine: number | undefined
-  for (let row = startRow; row < endRow; row += 1) {
-    const line = viewport.lineInfo.lineSources[row]
-    if (line === undefined) {
-      continue
-    }
-    startLine = startLine === undefined ? line : Math.min(startLine, line)
-    endLine = endLine === undefined ? line : Math.max(endLine, line)
-  }
-  if (startLine === undefined || endLine === undefined) {
-    return undefined
+export type ViewportCursorState = {
+  row: number
+  offset: DocCharOffset | undefined
+}
+
+type ViewportChange = {
+  applied: boolean
+  cursorChanged: boolean
+}
+
+type CreateViewportOptions = {
+  textarea: BufferTextarea
+  geometry: TextGeometry
+  queueRender: () => void
+  defer: (callback: () => void) => void
+  isDisposed: () => boolean
+  setCursorStateUpdateMode: (mode: CursorStateUpdateMode) => void
+  updateCursorFromTextarea: (mode: CursorStateUpdateMode, options?: CursorStateCaptureOptions) => void
+  renderVisibleAnalysis: (options?: { continueHighlighting?: boolean }) => void
+}
+
+export function createViewport(options: CreateViewportOptions) {
+  const [rows, setRows] = createSignal({ viewport: 1, content: 1 })
+  let scrollboxRef: ScrollBoxRenderable | undefined
+  let pendingTextareaTop: number | undefined
+  let pendingUserScroll = false
+  let scrollboxWidth = 0
+  let scrollboxRows = 0
+  let stickyVisualColumn: number | undefined
+  let scrollStickyVisualColumn: number | undefined
+  let scrollStickyVisualColumnResetTimer: ReturnType<typeof setTimeout> | undefined
+
+  const measureContentRows = (viewportRows: number) => {
+    return Math.max(viewportRows, options.textarea.measureContentRows(viewportRows))
   }
 
-  return docCharRange(
-    viewport.geometry.document.lineStart(lineIndex(startLine)),
-    viewport.geometry.document.nextLineStart(lineIndex(endLine)),
-  )
+  const resizeRows = (viewportRows: number, contentRows: number) => {
+    setRows((current) => {
+      if (current.viewport === viewportRows && current.content === contentRows) {
+        return current
+      }
+
+      return { viewport: viewportRows, content: contentRows }
+    })
+  }
+
+  const updateScrollbarMetrics = () => {
+    if (!scrollboxRef) {
+      return
+    }
+
+    scrollboxRef.verticalScrollBar.scrollSize = scrollboxRef.scrollHeight
+    scrollboxRef.verticalScrollBar.viewportSize = scrollboxRef.viewport.height
+    scrollboxRef.horizontalScrollBar.scrollSize = scrollboxRef.scrollWidth
+    scrollboxRef.horizontalScrollBar.viewportSize = scrollboxRef.viewport.width
+  }
+
+  const moveScrollboxToTextareaTop = (top: number) => {
+    if (!scrollboxRef) {
+      return
+    }
+    // Textarea owns the rendered rows; scrollbox only supplies scrollbar input/chrome.
+    scrollboxRef.content.translateY = 0
+    if ((scrollboxRef.scrollTop ?? 0) === top) {
+      return
+    }
+
+    scrollboxRef.scrollTo({ x: 0, y: top })
+    scrollboxRef.content.translateY = 0
+  }
+
+  const clearScrollStickyVisualColumn = () => {
+    if (scrollStickyVisualColumnResetTimer !== undefined) {
+      clearTimeout(scrollStickyVisualColumnResetTimer)
+      scrollStickyVisualColumnResetTimer = undefined
+    }
+    scrollStickyVisualColumn = undefined
+  }
+
+  const resetCursorTracking = () => {
+    clearScrollStickyVisualColumn()
+    stickyVisualColumn = undefined
+  }
+
+  const rememberScrollStickyColumn = () => {
+    const cursor = options.textarea.readCursor()
+    if (!cursor) {
+      return
+    }
+
+    scrollStickyVisualColumn ??= stickyVisualColumn ?? cursor.visualCol
+    if (scrollStickyVisualColumnResetTimer !== undefined) {
+      clearTimeout(scrollStickyVisualColumnResetTimer)
+    }
+    scrollStickyVisualColumnResetTimer = setTimeout(() => {
+      scrollStickyVisualColumnResetTimer = undefined
+      scrollStickyVisualColumn = undefined
+    }, 120)
+  }
+
+  const applyViewportChange = (x: number, y: number, width: number, height: number, moveCursor = false) => {
+    let cursorChanged = false
+    const viewport = options.textarea.readViewport()
+    const cursor = options.textarea.readCursor()
+    if (!viewport || !cursor) {
+      return cursorChanged
+    }
+
+    const currentRow = viewport.top + cursor.visualRow
+    const targetVisualCol = scrollStickyVisualColumn ?? stickyVisualColumn ?? cursor.visualCol
+
+    if (!moveCursor) {
+      return Boolean(options.textarea.moveViewport({ left: x, top: y, width, rows: height }, false)?.cursorChanged)
+    }
+
+    const firstLayout = options.textarea.readVisualLayout()
+    if (!firstLayout) {
+      return cursorChanged
+    }
+    if (firstLayout.sourceLines.length === options.geometry.document.lineStarts.length) {
+      return Boolean(options.textarea.moveViewport({ left: x, top: y, width, rows: height }, true)?.cursorChanged)
+    }
+
+    cursorChanged =
+      cursorChanged ||
+      Boolean(options.textarea.moveViewport({ left: x, top: y, width, rows: height }, false)?.cursorChanged)
+
+    let nextViewport = options.textarea.readViewport()
+    if (!nextViewport) {
+      return cursorChanged
+    }
+    if (nextViewport.top !== y) {
+      const layout = firstLayout
+      const proxyOffset = resolveVisualCursorDocOffset({
+        geometry: options.geometry,
+        visualRow: Math.max(0, Math.min(y + cursor.visualRow, layout.sourceLines.length - 1)),
+        visualCol: targetVisualCol,
+        layout,
+      })
+      if (proxyOffset !== undefined) {
+        const document = options.geometry.document
+        const proxy = document.positionAtOffset(proxyOffset)
+        const nextCursor = options.textarea.readCursor()
+        if (!nextCursor || nextCursor.logicalRow !== proxy.line || nextCursor.logicalCol !== proxy.offset) {
+          options.textarea.setCursor(proxy.line, proxy.offset)
+          cursorChanged = true
+        }
+      }
+      const viewportChange = options.textarea.moveViewport({ left: x, top: y, width, rows: height }, false)
+      cursorChanged = cursorChanged || Boolean(viewportChange?.cursorChanged)
+      nextViewport = options.textarea.readViewport()
+      if (!nextViewport) {
+        return cursorChanged
+      }
+    }
+
+    const bandY = getViewportBandY({ height })
+    const nextVisualRow = currentRow - nextViewport.top
+    const layout = options.textarea.readVisualLayout()
+    if (!layout) {
+      return cursorChanged
+    }
+    const maxRow = Math.max(0, layout.sourceLines.length - 1)
+    const targetRow = Math.max(
+      0,
+      Math.min(
+        nextVisualRow < bandY.start
+          ? nextViewport.top + bandY.start
+          : nextVisualRow > bandY.end
+            ? nextViewport.top + bandY.end
+            : currentRow,
+        maxRow,
+      ),
+    )
+    const resolvedRow =
+      targetRow === currentRow && nextViewport.top !== y
+        ? Math.max(0, Math.min(currentRow + (y - nextViewport.top), maxRow))
+        : targetRow
+
+    if (resolvedRow === currentRow) {
+      return cursorChanged
+    }
+
+    const nextOffset = resolveVisualCursorDocOffset({
+      geometry: options.geometry,
+      visualRow: resolvedRow,
+      visualCol: targetVisualCol,
+      layout,
+    })
+    if (nextOffset === undefined) {
+      return cursorChanged
+    }
+
+    const document = options.geometry.document
+    const next = document.positionAtOffset(nextOffset)
+    const nextCursor = options.textarea.readCursor()
+    if (!nextCursor || nextCursor.logicalRow !== next.line || nextCursor.logicalCol !== next.offset) {
+      options.textarea.setCursor(next.line, next.offset)
+      cursorChanged = true
+      const cursorViewport = options.textarea.readViewport()
+      if (cursorViewport && cursorViewport.top !== nextViewport.top) {
+        const viewportChange = options.textarea.moveViewport(
+          { left: x, top: nextViewport.top, width, rows: height },
+          false,
+        )
+        cursorChanged = cursorChanged || Boolean(viewportChange?.cursorChanged)
+      }
+    }
+    return cursorChanged
+  }
+
+  const captureCursorState = (captureOptions: CursorStateCaptureOptions = {}) => {
+    const cursor = options.textarea.readCursor()
+    if (!cursor) {
+      return undefined
+    }
+
+    if (!captureOptions.keepStickyVisualColumn && scrollStickyVisualColumn === undefined) {
+      stickyVisualColumn = cursor.visualCol
+    }
+    const document = options.geometry.document
+    return {
+      row: cursor.logicalRow,
+      offset: document.offsetAtLineChar(cursor.logicalRow, cursor.logicalCol),
+    } satisfies ViewportCursorState
+  }
+
+  const snapshot = () => {
+    const box = options.textarea.readBox()
+    const cursor = options.textarea.readCursor()
+    const layout = options.textarea.readVisualLayout()
+    if (!box || !cursor || !layout) {
+      return undefined
+    }
+
+    return {
+      geometry: options.geometry,
+      layout,
+      scrollY: box.top,
+      height: box.rows,
+      focusedLine: lineIndex(cursor.logicalRow),
+    } satisfies ViewportSnapshot
+  }
+
+  const moveViewport = (x: number, y: number, width: number, height: number, moveCursor = false): ViewportChange => {
+    const viewport = options.textarea.readViewport()
+    if (!viewport) {
+      return { applied: false, cursorChanged: false }
+    }
+
+    if (viewport.width !== width) {
+      options.textarea.clearVisualLayout()
+    }
+    return {
+      applied: true,
+      cursorChanged: applyViewportChange(x, y, width, height, moveCursor),
+    }
+  }
+
+  const resolveViewportPoint = (offset: DocCharOffset) => {
+    const box = options.textarea.readBox()
+    const layout = options.textarea.readVisualLayout()
+    if (!box || !layout) {
+      return null
+    }
+
+    return resolveViewportOffsetPoint({
+      geometry: options.geometry,
+      offset,
+      layout,
+      scrollY: box.top,
+      viewportHeight: box.rows,
+    })
+  }
+
+  const resizeTextareaViewport = (
+    top: number,
+    nextRows = options.textarea.readBox()?.rows ?? 1,
+    moveCursor = false,
+  ) => {
+    const box = options.textarea.readBox()
+    const textareaViewport = options.textarea.readViewport()
+    if (!box || !textareaViewport) {
+      return
+    }
+
+    const viewportRows = Math.max(1, nextRows)
+    const margin = getViewportInsetY({ height: viewportRows }) / viewportRows
+    options.textarea.setScrollMargin(margin)
+    const nextTop = Math.max(0, Math.min(top, Math.max(0, measureContentRows(viewportRows) - viewportRows)))
+    if (
+      textareaViewport.top === nextTop &&
+      textareaViewport.width === box.width &&
+      textareaViewport.rows === viewportRows
+    ) {
+      pendingTextareaTop = undefined
+      resizeRows(viewportRows, measureContentRows(viewportRows))
+      moveScrollboxToTextareaTop(box.top)
+      return
+    }
+
+    pendingTextareaTop = moveCursor ? nextTop : undefined
+    const mode = moveCursor ? "inline" : "queued"
+    options.setCursorStateUpdateMode(mode)
+    const change = moveViewport(textareaViewport.left, nextTop, Math.max(1, box.width), viewportRows, moveCursor)
+    if (moveCursor || change.cursorChanged) {
+      options.updateCursorFromTextarea(mode, { keepStickyVisualColumn: moveCursor })
+    }
+    options.setCursorStateUpdateMode("queued")
+    options.textarea.requestRender()
+    const nextBox = options.textarea.readBox()
+    if (!moveCursor && scrollboxRef && nextBox && (scrollboxRef.scrollTop ?? 0) !== nextBox.top) {
+      scrollboxRef.scrollTo({ x: 0, y: nextBox.top })
+    }
+  }
+
+  const renderScrollboxFromTextarea = () => {
+    const box = options.textarea.readBox()
+    if (!scrollboxRef || !box) {
+      return
+    }
+
+    updateScrollbarMetrics()
+    const viewport = getViewportRect(scrollboxRef)
+    const viewportRows = Math.max(1, viewport.height)
+    const maxTop = Math.max(0, measureContentRows(viewportRows) - viewportRows)
+    if (pendingTextareaTop !== undefined && box.top === pendingTextareaTop) {
+      pendingTextareaTop = undefined
+    }
+    if (box.top > maxTop) {
+      resizeTextareaViewport(maxTop, viewportRows)
+      return
+    }
+
+    const margin = getViewportInsetY({ height: viewportRows }) / viewportRows
+    options.textarea.setScrollMargin(margin)
+    resizeRows(viewportRows, measureContentRows(viewportRows))
+    moveScrollboxToTextareaTop(box.top)
+  }
+
+  const applyUserScroll = () => {
+    pendingUserScroll = false
+    if (!scrollboxRef) {
+      return
+    }
+
+    updateScrollbarMetrics()
+    const viewport = getViewportRect(scrollboxRef)
+    const viewportRows = Math.max(1, viewport.height)
+    resizeRows(viewportRows, measureContentRows(viewportRows))
+    const nextTop = scrollboxRef.scrollTop ?? 0
+    let moveCursor = true
+    const textareaViewport = options.textarea.readViewport()
+    const cursor = options.textarea.readCursor()
+    if (textareaViewport && cursor) {
+      const currentRow = textareaViewport.top + cursor.visualRow
+      const band = getViewportBandY({ height: viewport.height })
+      moveCursor = currentRow < nextTop + band.start || currentRow > nextTop + band.end
+    }
+    resizeTextareaViewport(nextTop, viewport.height, moveCursor)
+    options.renderVisibleAnalysis({ continueHighlighting: false })
+    scrollboxRef.content.translateY = 0
+  }
+
+  const attachScrollbox = (node: ScrollBoxRenderable | undefined) => {
+    scrollboxRef = node
+    const viewport = node ? getViewportRect(node) : null
+    scrollboxWidth = viewport?.width ?? 0
+    scrollboxRows = viewport?.height ?? 0
+    options.queueRender()
+    if (node) {
+      setTimeout(() => {
+        if (options.isDisposed() || scrollboxRef !== node) {
+          return
+        }
+        options.queueRender()
+      }, 0)
+    }
+  }
+
+  const requestUserScroll = () => {
+    if (pendingUserScroll) {
+      return
+    }
+
+    pendingUserScroll = true
+    options.defer(applyUserScroll)
+  }
+
+  const handleScrollboxStateChange = () => {
+    if (!scrollboxRef) {
+      return
+    }
+
+    // Scrollbox can also receive drag events; textarea owns selection autoscroll here.
+    scrollboxRef.stopAutoScroll()
+    scrollboxRef.content.translateY = 0
+    updateScrollbarMetrics()
+    if (pendingUserScroll) {
+      return
+    }
+
+    const viewport = getViewportRect(scrollboxRef)
+    if (viewport.width !== scrollboxWidth || viewport.height !== scrollboxRows) {
+      scrollboxWidth = viewport.width
+      scrollboxRows = viewport.height
+      options.queueRender()
+      return
+    }
+
+    const box = options.textarea.readBox()
+    if (!box) {
+      return
+    }
+
+    if (pendingTextareaTop !== undefined) {
+      if (box.top === pendingTextareaTop) {
+        pendingTextareaTop = undefined
+        options.queueRender()
+      }
+      if ((scrollboxRef.scrollTop ?? 0) === pendingTextareaTop) {
+        return
+      }
+      pendingTextareaTop = undefined
+    }
+
+    if ((scrollboxRef.scrollTop ?? 0) !== box.top) {
+      moveScrollboxToTextareaTop(box.top)
+    }
+  }
+
+  const handleTextareaViewportChange = (event: BufferTextareaViewportChange) => {
+    moveScrollboxToTextareaTop(event.top)
+    options.renderVisibleAnalysis()
+  }
+
+  const adjustSelectionDragSpeed = (selection: Selection) => {
+    const box = options.textarea.readBox()
+    if (!box) {
+      return
+    }
+
+    const focus = selection.focus
+    const maxY = box.y + Math.max(0, box.rows - 1)
+    const distance = Math.max(box.y - focus.y, focus.y - maxY, 0)
+    const speed =
+      distance >= SELECTION_DRAG_FAST_DISTANCE
+        ? DEFAULT_SELECTION_DRAG_SCROLL_SPEED * 4
+        : distance >= SELECTION_DRAG_MEDIUM_DISTANCE
+          ? DEFAULT_SELECTION_DRAG_SCROLL_SPEED * 2
+          : DEFAULT_SELECTION_DRAG_SCROLL_SPEED
+    options.textarea.setScrollSpeed(speed)
+  }
+
+  const clampSelectionDragFocus = (selection: Selection) => {
+    const box = options.textarea.readBox()
+    if (!box) {
+      return
+    }
+
+    const focus = selection.focus
+    selection.focus = {
+      x: Math.max(box.x, Math.min(focus.x, box.x + Math.max(0, box.width - 1))),
+      y: Math.max(box.y, Math.min(focus.y, box.y + Math.max(0, box.rows - 1))),
+    }
+  }
+
+  const dispose = () => {
+    pendingUserScroll = false
+  }
+
+  return {
+    viewportRows: () => rows().viewport,
+    contentRows: () => rows().content,
+    isSelecting: () => Boolean(scrollboxRef?.ctx.getSelection()?.isDragging),
+    attachScrollbox,
+    captureCursorState,
+    snapshot,
+    rememberScrollStickyColumn,
+    resetCursorTracking,
+    moveViewport,
+    requestUserScroll,
+    handleScrollboxStateChange,
+    handleTextareaViewportChange,
+    renderScrollboxFromTextarea,
+    moveScrollboxToTextareaTop,
+    adjustSelectionDragSpeed,
+    clampSelectionDragFocus,
+    resolveViewportPoint,
+    dispose,
+  }
 }

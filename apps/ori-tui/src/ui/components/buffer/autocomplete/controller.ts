@@ -27,7 +27,7 @@ type BufferAutocompleteViewModel = {
   viewModel: Accessor<SelectPopupViewModel<BufferAutocompleteItem> | undefined>
   close: () => void
   refresh: () => void
-  syncAnchor: () => void
+  repositionPopup: () => void
 }
 
 export function createBufferAutocomplete(options: CreateBufferAutocompleteOptions) {
@@ -171,7 +171,7 @@ export function createBufferAutocomplete(options: CreateBufferAutocompleteOption
     onCleanup(unsubscribe)
   })
 
-  const syncAnchor = () => {
+  const repositionPopup = () => {
     const range = replace()
     if (!range) {
       return
@@ -202,6 +202,6 @@ export function createBufferAutocomplete(options: CreateBufferAutocompleteOption
     viewModel,
     close,
     refresh,
-    syncAnchor,
+    repositionPopup,
   } satisfies BufferAutocompleteViewModel
 }

@@ -1,4 +1,5 @@
-import type { LineInfo, SyntaxStyle, TextareaRenderable, WidthMethod } from "@opentui/core"
+import type { SyntaxStyle, TextareaRenderable, WidthMethod } from "@opentui/core"
+import { type DisplayColumn, displayColumn, type LineIndex, lineIndex } from "./coords"
 import { installCursorMovementHooks } from "./opentui-textarea-extensions/cursor-movement-hooks"
 import { disableScroll } from "./opentui-textarea-extensions/disable-scroll"
 import { enableLargeTextRead } from "./opentui-textarea-extensions/large-text-read"
@@ -7,7 +8,6 @@ import { installSelectionHooks, type SelectionChangeEvent } from "./opentui-text
 import {
   installSetViewportHooks,
   type SetViewport,
-  type SetViewportAfterEvent,
   type SetViewportResult,
 } from "./opentui-textarea-extensions/set-viewport-hooks"
 import { installViewportSizeHooks } from "./opentui-textarea-extensions/viewport-size-hooks"
@@ -17,11 +17,12 @@ import { applyRefTabWidth } from "./text-metrics"
 
 type CreateBufferTextareaAdapterOptions = {
   tabWidth: number
-  onLineInfoChange: () => void
-  onTextareaCursorChanged: () => void
+  onVisualLayoutChange: () => void
+  onTextareaCursorChanged: (options?: { keepStickyVisualColumn?: boolean }) => void
   onTextareaSelectionChange: (event: SelectionChangeEvent) => void
-  onTextareaViewportChange: (event: SetViewportAfterEvent) => void
-  onBeforeVisualCursorMove: () => void
+  onTextareaViewportChange: (event: BufferTextareaViewportChange) => void
+  onVisualCursorMoveStart: () => void
+  onVisualCursorMoveEnd: () => void
 }
 
 export type BufferTextareaAdapterCursor = {
@@ -31,18 +32,37 @@ export type BufferTextareaAdapterCursor = {
   visualCol: number
 }
 
-export type BufferTextareaAdapterMetrics = {
+export type BufferTextareaBox = {
   x: number
   y: number
   width: number
-  height: number
-  scrollY: number
+  rows: number
+  top: number
 }
 
-export type BufferTextareaAdapterViewport = ReturnType<TextareaRenderable["editorView"]["getViewport"]>
+export type BufferTextareaViewport = {
+  left: number
+  top: number
+  width: number
+  rows: number
+}
+
+export type BufferTextareaViewportChange = {
+  top: number
+  cursorMoved: boolean
+}
+
+export type BufferTextareaVisualLayout = {
+  sourceLines: readonly LineIndex[]
+  lineStartColumns: readonly DisplayColumn[]
+  lineWidths: readonly DisplayColumn[]
+}
 
 export function createBufferTextareaAdapter(options: CreateBufferTextareaAdapterOptions) {
   let editorRef: TextareaRenderable | undefined
+  let measuredRowWidth = 0
+  let measuredRowHeight = 0
+  let measuredRowCount = 1
 
   const ref = () => {
     if (!editorRef || editorRef.isDestroyed) {
@@ -54,14 +74,41 @@ export function createBufferTextareaAdapter(options: CreateBufferTextareaAdapter
 
   const lineInfo = createTextareaLineInfoCache(ref)
 
+  const resetMeasurements = () => {
+    measuredRowWidth = 0
+    measuredRowHeight = 0
+    measuredRowCount = 1
+  }
+
+  const measureContentRows = (viewportRows: number) => {
+    const node = ref()
+    if (!node) {
+      return 1
+    }
+
+    const width = Math.max(1, node.width)
+    const height = Math.max(1, viewportRows)
+    if (measuredRowWidth === width && measuredRowHeight === height) {
+      return measuredRowCount
+    }
+
+    const measured = node.editorView.measureForDimensions(width, height)?.lineCount
+    measuredRowWidth = width
+    measuredRowHeight = height
+    measuredRowCount = Math.max(1, measured ?? node.editorView.getTotalVirtualLineCount() ?? 0)
+    return measuredRowCount
+  }
+
   const handleLineInfoChange = () => {
     lineInfo.clear()
-    options.onLineInfoChange()
+    resetMeasurements()
+    options.onVisualLayoutChange()
   }
 
   const detachFromCurrentRef = (node: TextareaRenderable) => {
     node.off("line-info-change", handleLineInfoChange)
     lineInfo.clear(node)
+    resetMeasurements()
   }
 
   const installLineInfo = (node: TextareaRenderable) => {
@@ -74,6 +121,7 @@ export function createBufferTextareaAdapter(options: CreateBufferTextareaAdapter
       beforeSetViewport: (event) => {
         if (event.previousViewport.width !== event.width) {
           lineInfo.clear(event.ref)
+          resetMeasurements()
         }
       },
       afterSetViewport: (event) => {
@@ -81,7 +129,10 @@ export function createBufferTextareaAdapter(options: CreateBufferTextareaAdapter
           return
         }
 
-        options.onTextareaViewportChange(event)
+        options.onTextareaViewportChange({
+          top: event.y,
+          cursorMoved: event.moveCursor || event.cursorChanged,
+        })
         if (event.moveCursor || event.cursorChanged) {
           options.onTextareaCursorChanged()
         }
@@ -91,6 +142,7 @@ export function createBufferTextareaAdapter(options: CreateBufferTextareaAdapter
       beforeViewportSizeChange: (event) => {
         if (event.previousViewport.width !== event.width) {
           lineInfo.clear(event.ref)
+          resetMeasurements()
         }
       },
       afterViewportSizeChange: () => {
@@ -102,10 +154,11 @@ export function createBufferTextareaAdapter(options: CreateBufferTextareaAdapter
   const installCursorHooks = (node: TextareaRenderable) => {
     installCursorMovementHooks(node, {
       beforeVisualMove: () => {
-        options.onBeforeVisualCursorMove()
+        options.onVisualCursorMoveStart()
       },
       afterVisualMove: () => {
-        options.onTextareaCursorChanged()
+        options.onTextareaCursorChanged({ keepStickyVisualColumn: true })
+        options.onVisualCursorMoveEnd()
       },
     })
     installSelectionHooks(node, {
@@ -156,20 +209,14 @@ export function createBufferTextareaAdapter(options: CreateBufferTextareaAdapter
     editorRef = undefined
   }
 
-  const setViewport = (
-    x: number,
-    y: number,
-    width: number,
-    height: number,
-    moveCursor = false,
-  ): SetViewportResult | undefined => {
+  const moveViewport = (viewport: BufferTextareaViewport, moveCursor = false): SetViewportResult | undefined => {
     const node = ref()
     if (!node) {
       return undefined
     }
 
     const set = node.editorView.setViewport as SetViewport
-    return set(x, y, width, height, moveCursor, { source: "buffer" })
+    return set(viewport.left, viewport.top, viewport.width, viewport.rows, moveCursor, { source: "buffer" })
   }
 
   return {
@@ -196,8 +243,14 @@ export function createBufferTextareaAdapter(options: CreateBufferTextareaAdapter
         node.scrollSpeed = speed
       }
     },
-    setText: (text: string) => ref()?.setText(text),
-    insertText: (text: string) => ref()?.insertText(text),
+    setText: (text: string) => {
+      resetMeasurements()
+      ref()?.setText(text)
+    },
+    insertText: (text: string) => {
+      resetMeasurements()
+      ref()?.insertText(text)
+    },
     requestRender: () => ref()?.requestRender(),
     setSyntaxStyle: (style: SyntaxStyle | null) => {
       const node = ref()
@@ -206,11 +259,23 @@ export function createBufferTextareaAdapter(options: CreateBufferTextareaAdapter
       }
     },
     readText: () => ref()?.plainText,
-    readLineInfo: (): LineInfo | undefined => {
+    readVisualLayout: (): BufferTextareaVisualLayout | undefined => {
       const node = ref()
-      return node ? lineInfo.read(node) : undefined
+      const info = node ? lineInfo.read(node) : undefined
+      if (!info) {
+        return undefined
+      }
+
+      return {
+        sourceLines: info.lineSources.map(lineIndex),
+        lineStartColumns: info.lineStartCols.map(displayColumn),
+        lineWidths: info.lineWidthCols.map(displayColumn),
+      }
     },
-    clearLineInfo: () => lineInfo.clear(),
+    clearVisualLayout: () => {
+      lineInfo.clear()
+      resetMeasurements()
+    },
     readCursor: (): BufferTextareaAdapterCursor | undefined => {
       const node = ref()
       if (!node) {
@@ -224,7 +289,7 @@ export function createBufferTextareaAdapter(options: CreateBufferTextareaAdapter
         visualCol: node.visualCursor.visualCol,
       }
     },
-    readMetrics: (): BufferTextareaAdapterMetrics | undefined => {
+    readBox: (): BufferTextareaBox | undefined => {
       const node = ref()
       if (!node) {
         return undefined
@@ -234,23 +299,36 @@ export function createBufferTextareaAdapter(options: CreateBufferTextareaAdapter
         x: node.x,
         y: node.y,
         width: node.width,
-        height: node.height,
-        scrollY: node.scrollY,
+        rows: node.height,
+        top: node.scrollY,
       }
     },
-    readViewport: (): BufferTextareaAdapterViewport | undefined => ref()?.editorView.getViewport(),
+    readViewport: (): BufferTextareaViewport | undefined => {
+      const viewport = ref()?.editorView.getViewport()
+      return viewport
+        ? {
+            left: viewport.offsetX,
+            top: viewport.offsetY,
+            width: viewport.width,
+            rows: viewport.height,
+          }
+        : undefined
+    },
     getWidthMethod: (): WidthMethod | undefined => ref()?.ctx?.widthMethod,
-    getTotalVirtualRows: () => ref()?.editorView.getTotalVirtualLineCount(),
-    measureRows: (width: number, height: number) => ref()?.editorView.measureForDimensions(width, height)?.lineCount,
+    measureContentRows,
+    resetMeasurements,
     setScrollMargin: (margin: number) => ref()?.editorView.setScrollMargin(margin),
     setCursor: (row: number, col: number) => ref()?.editBuffer.setCursor(row, col),
     deleteRange: (startRow: number, startCol: number, endRow: number, endCol: number) => {
+      resetMeasurements()
       ref()?.editBuffer.deleteRange(startRow, startCol, endRow, endCol)
     },
     createRenderTarget: (): RenderTarget | undefined => {
       const node = ref()
       return node ? createTextareaRenderTarget(node) : undefined
     },
-    setViewport,
+    moveViewport,
   }
 }
+
+export type BufferTextarea = ReturnType<typeof createBufferTextareaAdapter>

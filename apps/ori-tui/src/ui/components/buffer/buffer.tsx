@@ -41,7 +41,7 @@ export function Buffer(props: BufferProps) {
     >
       {/* biome-ignore lint/a11y/noStaticElementInteractions: root terminates drag selection when release lands outside textarea */}
       <box
-        ref={controller.refs.setRoot}
+        ref={controller.refs.attachRoot}
         position="relative"
         flexDirection="column"
         flexGrow={1}
@@ -53,8 +53,8 @@ export function Buffer(props: BufferProps) {
           marginTop={1}
           stickyScroll={false}
           scrollX={false}
-          onReady={controller.refs.setScrollbox}
-          onSync={controller.scrollbox.handleSync}
+          onReady={controller.refs.attachScrollbox}
+          onSync={controller.scrollbox.handleStateChange}
           onUserScroll={controller.scrollbox.handleUserScroll}
           height="100%"
           horizontalScrollbarOptions={{
@@ -82,7 +82,7 @@ export function Buffer(props: BufferProps) {
             />
             <line_number
               ref={(node: LineNumberRenderable | undefined) => {
-                controller.refs.setGutter(node)
+                controller.refs.attachGutter(node)
               }}
               position="absolute"
               top={0}
@@ -98,7 +98,7 @@ export function Buffer(props: BufferProps) {
             >
               <textarea
                 ref={(node: TextareaRenderable | undefined) => {
-                  controller.refs.setTextarea(node)
+                  controller.refs.attachTextarea(node)
                 }}
                 height={viewportHeight()}
                 minHeight={viewportHeight()}

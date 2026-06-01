@@ -127,11 +127,11 @@ function busyWait(ms: number) {
   }
 }
 
-function createBlockingAnalysis(syncMs: number): BufferAnalysis {
+function createBlockingAnalysis(blockMs: number): BufferAnalysis {
   const syntaxStyle = SyntaxStyle.create()
   return {
     syntaxStyle: () => {
-      busyWait(syncMs)
+      busyWait(blockMs)
       return syntaxStyle
     },
     collectRanges: (text, lineStarts) => [
@@ -214,7 +214,7 @@ function captureCursorState(
   } satisfies CursorState
 }
 
-function expectCursorContextSync(state: CursorState) {
+function expectCursorContextMatchesTextarea(state: CursorState) {
   expect(state.contextOffset).toBe(state.cursorOffset)
   expect(state.focusedRow).toBe(state.cursorLogicalRow)
 }
@@ -396,7 +396,7 @@ GO`
       await app.waitFor(() => (getStateCursorOffset(latestState) ?? -1) === textarea.cursorOffset)
       const stateAfterClick = captureCursorState(textarea, scrollbox, latestState)
 
-      expectCursorContextSync(stateAfterClick)
+      expectCursorContextMatchesTextarea(stateAfterClick)
 
       for (let i = 0; i < arrowDownPresses; i += 1) {
         app.setup.mockInput.pressArrow("down")
@@ -406,7 +406,7 @@ GO`
       const stateAfterKeyScroll = captureCursorState(textarea, scrollbox, latestState)
 
       expect(stateAfterKeyScroll.editorScrollY).toBe(stateAfterKeyScroll.scrollboxTop)
-      expectCursorContextSync(stateAfterKeyScroll)
+      expectCursorContextMatchesTextarea(stateAfterKeyScroll)
 
       await app.setup.mockMouse.click(textarea.x + clickColumnOffset, textarea.y + scrolledClickRowOffset)
       await app.waitFor(() => textarea.visualCursor.visualRow === 1)
@@ -415,7 +415,7 @@ GO`
 
       expect(stateAfterScrolledClick.editorScrollY).toBe(stateAfterScrolledClick.scrollboxTop)
       expect(stateAfterScrolledClick.cursorVisualRow).toBe(1)
-      expectCursorContextSync(stateAfterScrolledClick)
+      expectCursorContextMatchesTextarea(stateAfterScrolledClick)
     } finally {
       app.destroy()
     }
@@ -697,7 +697,7 @@ GO`
     }
   })
 
-  test("keeps split sgr mouse tails out of text when scroll sync is slow", async () => {
+  test("keeps split sgr mouse tails out of text when viewport render is slow", async () => {
     const text = Array.from({ length: 20 }, (_, i) => `line-${i}`).join("\n")
     const app = await mountBuffer({ text, width: 24, height: 8, analysis: createBlockingAnalysis(40) })
 
