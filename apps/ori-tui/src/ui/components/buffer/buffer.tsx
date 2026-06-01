@@ -1,7 +1,6 @@
 import type { BoxRenderable, LineNumberRenderable, MouseEvent, TextareaRenderable } from "@opentui/core"
 import { OriScrollbox } from "@ui/components/ori-scrollbox"
 import { SelectPopup } from "@ui/components/select-popup"
-import type { SelectPopupAnchor } from "@ui/components/select-popup-model"
 import { useTheme } from "@ui/providers/theme"
 import { type KeyBinding, KeyScope } from "@ui/services/key-scopes"
 import { debounce } from "@utils/debounce"
@@ -217,7 +216,24 @@ export function Buffer(props: BufferProps) {
     isFocused: props.isFocused,
     getText: () => doc().text,
     getCursorOffset: () => cursorState()?.offset,
-    resolveAnchor: (replaceStart) => getAnchor(replaceStart),
+    resolveAnchor: (replaceStart) => {
+      const box = textareaAdapter.readBox()
+      if (!bufferRootRef || !box) {
+        return null
+      }
+
+      const point = viewport.resolveViewportPoint(replaceStart)
+      if (!point) {
+        return null
+      }
+
+      return {
+        x: Math.max(0, box.x + point.x - bufferRootRef.x - 1),
+        y: Math.max(0, box.y + point.y - bufferRootRef.y),
+        containerWidth: bufferRootRef.width,
+        containerHeight: bufferRootRef.height,
+      }
+    },
     accept: (item, range) => replaceDocumentRange(range.start, range.end, item.insertText, item.cursorOffset),
   })
 
@@ -228,25 +244,6 @@ export function Buffer(props: BufferProps) {
     getMarkers: () => props.gutterMarkers?.(),
     queueRender,
   })
-
-  function getAnchor(replaceStart: DocCharOffset): SelectPopupAnchor | null {
-    const box = textareaAdapter.readBox()
-    if (!bufferRootRef || !box) {
-      return null
-    }
-
-    const point = viewport.resolveViewportPoint(replaceStart)
-    if (!point) {
-      return null
-    }
-
-    return {
-      x: Math.max(0, box.x + point.x - bufferRootRef.x - 1),
-      y: Math.max(0, box.y + point.y - bufferRootRef.y),
-      containerWidth: bufferRootRef.width,
-      containerHeight: bufferRootRef.height,
-    }
-  }
 
   const replaceDocumentRange = (
     start: DocCharOffset,
