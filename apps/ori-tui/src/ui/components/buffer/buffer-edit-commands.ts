@@ -2,8 +2,10 @@ import { type DocCharOffset, docCharOffset } from "./coords"
 import { Document } from "./document"
 import type { TextGeometry } from "./text-geometry"
 
+export type BufferEditOrigin = "user" | "autocomplete"
+
 type TextareaEditBridge = {
-  readCursor: () => unknown
+  readCursor: () => { logicalRow: number; logicalCol: number } | undefined
   setCursor: (row: number, col: number) => void
   deleteRange: (startRow: number, startCol: number, endRow: number, endCol: number) => void
   insertText: (text: string) => void
@@ -15,6 +17,7 @@ type CreateBufferEditCommandsOptions = {
   textarea: TextareaEditBridge
   geometry: TextGeometry
   resetCursorTracking: () => void
+  onTextareaTextChange?: (origin: BufferEditOrigin, remainingEvents: number) => void
 }
 
 export type BufferReplaceEdit = {
@@ -24,7 +27,7 @@ export type BufferReplaceEdit = {
   cursorOffsetFromStart?: number
 }
 
-export function getDeleteToLineStartEdit(document: Document, offset: DocCharOffset): BufferReplaceEdit | undefined {
+function getDeleteToLineStartEdit(document: Document, offset: DocCharOffset): BufferReplaceEdit | undefined {
   const text = document.text
   const cursor = document.positionAtOffset(offset)
   const lineStart = document.lineStart(cursor.line)
@@ -86,12 +89,19 @@ export function createBufferEditCommands(options: CreateBufferEditCommandsOption
     return true
   }
 
-  const replaceDocRange = (start: DocCharOffset, end: DocCharOffset, insertText: string, nextCursorOffset?: number) => {
+  const replaceDocRange = (
+    start: DocCharOffset,
+    end: DocCharOffset,
+    insertText: string,
+    nextCursorOffset?: number,
+    origin: BufferEditOrigin = "autocomplete",
+  ) => {
     const text = options.textarea.readText()
     if (text === undefined) {
       return false
     }
 
+    options.onTextareaTextChange?.(origin, start === end ? 1 : 2)
     const document = options.geometry.document
     const from = document.positionAtOffset(start)
     const to = document.positionAtOffset(end)
@@ -112,8 +122,25 @@ export function createBufferEditCommands(options: CreateBufferEditCommandsOption
     return true
   }
 
+  const deleteToLineStart = () => {
+    const cursor = options.textarea.readCursor()
+    if (!cursor) {
+      return false
+    }
+
+    const document = options.geometry.document
+    const offset = document.offsetAtLineChar(cursor.logicalRow, cursor.logicalCol)
+    const edit = getDeleteToLineStartEdit(document, offset)
+    if (!edit) {
+      return true
+    }
+
+    return replaceDocRange(edit.start, edit.end, edit.insertText, edit.cursorOffsetFromStart, "user")
+  }
+
   return {
     setCursorDocOffset,
     replaceDocRange,
+    deleteToLineStart,
   }
 }

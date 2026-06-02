@@ -16,6 +16,7 @@ type MountBufferOptions = {
   autocomplete?: BufferAutocompleteProvider
   analysis?: BufferAnalysis
   onStateChange?: (state: BufferState) => void
+  focusSelf?: () => void
 }
 
 export type MountedBufferWithApi = {
@@ -45,7 +46,7 @@ function renderBuffer(options: MountBufferOptions, registerApi?: (api: BufferApi
           initialText: options.text ?? "",
           isFocused: () => true,
           onTextChange: () => {},
-          focusSelf: () => {},
+          focusSelf: options.focusSelf ?? (() => {}),
           onStateChange: options.onStateChange,
           autocomplete: options.autocomplete,
           analysis,

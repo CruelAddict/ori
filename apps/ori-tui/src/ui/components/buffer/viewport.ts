@@ -8,6 +8,7 @@ import type {
   BufferTextareaViewportChange,
 } from "./buffer-textarea-adapter"
 import { type DocCharOffset, lineIndex } from "./coords"
+import type { SelectionChangeEvent } from "./opentui-textarea-extensions/selection-hooks"
 import type { TextGeometry } from "./text-geometry"
 import { resolveViewportOffsetPoint, resolveVisualCursorDocOffset } from "./viewport-geometry"
 import type { ViewportSnapshot } from "./viewport-snapshot"
@@ -35,11 +36,7 @@ type ViewportChange = {
 type CreateViewportOptions = {
   textarea: BufferTextarea
   geometry: TextGeometry
-  queueRender: () => void
-  defer: (callback: () => void) => void
-  isDisposed: () => boolean
   updateCursorFromTextarea: (event: BufferTextareaCursorChangeEvent) => void
-  renderVisibleAnalysis: (options?: { continueHighlighting?: boolean }) => void
 }
 
 export function createViewport(options: CreateViewportOptions) {
@@ -382,10 +379,14 @@ export function createViewport(options: CreateViewportOptions) {
     moveScrollboxToTextareaTop(box.top)
   }
 
-  const applyUserScroll = () => {
+  const applyPendingUserScroll = () => {
+    if (!pendingUserScroll) {
+      return false
+    }
+
     pendingUserScroll = false
     if (!scrollboxRef) {
-      return
+      return false
     }
 
     updateScrollbarMetrics()
@@ -402,8 +403,8 @@ export function createViewport(options: CreateViewportOptions) {
       moveCursor = currentRow < nextTop + band.start || currentRow > nextTop + band.end
     }
     resizeTextareaViewport(nextTop, viewport.height, moveCursor)
-    options.renderVisibleAnalysis({ continueHighlighting: false })
     scrollboxRef.content.translateY = 0
+    return true
   }
 
   const attachScrollbox = (node: ScrollBoxRenderable | undefined) => {
@@ -411,29 +412,27 @@ export function createViewport(options: CreateViewportOptions) {
     const viewport = node ? getViewportRect(node) : null
     scrollboxWidth = viewport?.width ?? 0
     scrollboxRows = viewport?.height ?? 0
-    options.queueRender()
-    if (node) {
-      setTimeout(() => {
-        if (options.isDisposed() || scrollboxRef !== node) {
-          return
-        }
-        options.queueRender()
-      }, 0)
-    }
   }
+
+  const isScrollboxAttached = (node: ScrollBoxRenderable) => scrollboxRef === node
 
   const requestUserScroll = () => {
     if (pendingUserScroll) {
-      return
+      return false
     }
 
+    rememberScrollStickyColumn()
     pendingUserScroll = true
-    options.defer(applyUserScroll)
+    return true
+  }
+
+  const handleTextareaMouseScroll = () => {
+    rememberScrollStickyColumn()
   }
 
   const handleScrollboxStateChange = () => {
     if (!scrollboxRef) {
-      return
+      return false
     }
 
     // Scrollbox can also receive drag events; textarea owns selection autoscroll here.
@@ -441,29 +440,28 @@ export function createViewport(options: CreateViewportOptions) {
     scrollboxRef.content.translateY = 0
     updateScrollbarMetrics()
     if (pendingUserScroll) {
-      return
+      return false
     }
 
     const viewport = getViewportRect(scrollboxRef)
     if (viewport.width !== scrollboxWidth || viewport.height !== scrollboxRows) {
       scrollboxWidth = viewport.width
       scrollboxRows = viewport.height
-      options.queueRender()
-      return
+      return true
     }
 
     const box = options.textarea.readBox()
     if (!box) {
-      return
+      return false
     }
 
     if (pendingTextareaTop !== undefined) {
       if (box.top === pendingTextareaTop) {
         pendingTextareaTop = undefined
-        options.queueRender()
+        return true
       }
       if ((scrollboxRef.scrollTop ?? 0) === pendingTextareaTop) {
-        return
+        return false
       }
       pendingTextareaTop = undefined
     }
@@ -471,11 +469,11 @@ export function createViewport(options: CreateViewportOptions) {
     if ((scrollboxRef.scrollTop ?? 0) !== box.top) {
       moveScrollboxToTextareaTop(box.top)
     }
+    return false
   }
 
   const handleTextareaViewportChange = (event: BufferTextareaViewportChange) => {
     moveScrollboxToTextareaTop(event.top)
-    options.renderVisibleAnalysis()
   }
 
   const adjustSelectionDragSpeed = (selection: Selection) => {
@@ -509,8 +507,47 @@ export function createViewport(options: CreateViewportOptions) {
     }
   }
 
+  const finishSelectionDrag = () => {
+    const box = options.textarea.readBox()
+    if (box) {
+      moveScrollboxToTextareaTop(box.top)
+    }
+    options.textarea.setCursorVisible(true)
+    options.textarea.setLive(false)
+    options.textarea.setScrollSpeed(DEFAULT_SELECTION_DRAG_SCROLL_SPEED)
+    options.updateCursorFromTextarea({ cause: "input" })
+  }
+
+  const handleTextareaSelectionChange = (event: SelectionChangeEvent) => {
+    const before = event.result === undefined
+    const selection = event.selection
+    if (before && selection?.isDragging) {
+      adjustSelectionDragSpeed(selection)
+      clampSelectionDragFocus(selection)
+    }
+
+    const dragging = Boolean(selection?.isDragging)
+    if (before) {
+      if (!dragging) {
+        return
+      }
+
+      // OpenTUI applies selection autoscroll from onUpdate, so it must stay live while the mouse is held.
+      options.textarea.setLive(true)
+      options.textarea.setCursorVisible(false)
+      return
+    }
+
+    if (!dragging) {
+      finishSelectionDrag()
+    }
+  }
+
   const dispose = () => {
     pendingUserScroll = false
+    clearScrollStickyVisualColumn()
+    options.textarea.setLive(false)
+    options.textarea.setScrollSpeed(DEFAULT_SELECTION_DRAG_SCROLL_SPEED)
   }
 
   return {
@@ -518,20 +555,21 @@ export function createViewport(options: CreateViewportOptions) {
     contentRows: () => rows().content,
     isSelecting: () => Boolean(scrollboxRef?.ctx.getSelection()?.isDragging),
     attachScrollbox,
+    isScrollboxAttached,
     captureCursorState,
     snapshot,
     startVisualCursorMove,
     endVisualCursorMove,
-    rememberScrollStickyColumn,
     resetCursorTracking,
     moveViewport,
     requestUserScroll,
+    applyPendingUserScroll,
+    handleTextareaMouseScroll,
     handleScrollboxStateChange,
     handleTextareaViewportChange,
+    handleTextareaSelectionChange,
+    finishSelectionDrag,
     renderScrollboxFromTextarea,
-    moveScrollboxToTextareaTop,
-    adjustSelectionDragSpeed,
-    clampSelectionDragFocus,
     resolveViewportPoint,
     dispose,
   }

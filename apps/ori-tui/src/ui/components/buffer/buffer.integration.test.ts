@@ -421,6 +421,34 @@ GO`
     }
   })
 
+  test("does not focus buffer on mouse wheel scroll", async () => {
+    const text = Array.from({ length: 24 }, (_, i) => `line-${i}`).join("\n")
+    let focusCalls = 0
+    const app = await mountBuffer({
+      text,
+      width: 24,
+      height: 8,
+      focusSelf: () => {
+        focusCalls += 1
+      },
+    })
+
+    try {
+      const textarea = getBufferTextarea(app)
+
+      await app.setup.mockMouse.scroll(textarea.x + 1, textarea.y + 1, "down")
+      await app.renderOnce()
+
+      expect(focusCalls).toBe(0)
+
+      await app.setup.mockMouse.click(textarea.x + 1, textarea.y + 1)
+
+      expect(focusCalls).toBe(1)
+    } finally {
+      app.destroy()
+    }
+  })
+
   test("keeps drag selection near the current viewport when released above the buffer", async () => {
     const text = `${Array.from({ length: 200 }, (_, i) => `line-${i}`).join("\n")}\n`
     const app = await mountBuffer({ text, width: 40, height: 8 })

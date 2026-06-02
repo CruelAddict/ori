@@ -3,27 +3,27 @@ import { OriScrollbox } from "@ui/components/ori-scrollbox"
 import { SelectPopup } from "@ui/components/select-popup"
 import { useTheme } from "@ui/providers/theme"
 import { type KeyBinding, KeyScope } from "@ui/services/key-scopes"
-import { debounce } from "@utils/debounce"
 import { type Accessor, createEffect, createSignal, on, onCleanup, onMount } from "solid-js"
 import { type BufferAnalysis, createAnalysisHighlightLayer } from "./analysis"
 import { createBufferAutocomplete } from "./autocomplete/controller"
 import type { BufferAutocompleteProvider } from "./autocomplete/types"
-import { createBufferEditCommands, getDeleteToLineStartEdit } from "./buffer-edit-commands"
+import { type BufferEditOrigin, createBufferEditCommands } from "./buffer-edit-commands"
 import { type BufferTextareaCursorChangeEvent, createBufferTextareaAdapter } from "./buffer-textarea-adapter"
 import { type DocCharOffset, docCharOffset, type LineIndex, lineIndex } from "./coords"
 import { type BufferTextChange, Document, findTextChange, normalizeDocumentText } from "./document"
-import type { SelectionChangeEvent } from "./opentui-textarea-extensions/selection-hooks"
 import { createTextGeometry } from "./text-geometry"
 import { createViewport } from "./viewport"
 
-const DEBOUNCE_MS = 200
 const DEFAULT_TAB_WIDTH = 2
-const DEFAULT_SELECTION_DRAG_SCROLL_SPEED = 16
 const EMPTY_GUTTER_MARKERS = new Map<number, string>()
 
 type PendingChangeOrigin = {
-  origin: "user" | "autocomplete"
+  origin: BufferEditOrigin
   remainingEvents: number
+}
+
+type DecorationsRenderOptions = {
+  eventSource?: "scrollbox"
 }
 
 export type BufferApi = {
@@ -91,22 +91,28 @@ export function Buffer(props: BufferProps) {
     })
   }
 
-  const queueRender = () => {
+  const queueDecorationsRender = () => {
     if (renderQueued) {
       return
     }
 
     renderQueued = true
     defer(() => {
+      if (!renderQueued) {
+        return
+      }
       renderQueued = false
-      renderFrame()
+      renderDecorations()
     })
   }
 
-  function renderFrame() {
-    viewport.renderScrollboxFromTextarea()
+  function renderDecorations(options: DecorationsRenderOptions = {}) {
+    const fromScrollbox = options.eventSource === "scrollbox"
+    if (!fromScrollbox) {
+      viewport.renderScrollboxFromTextarea()
+    }
     renderGutter()
-    analysisHighlightLayer?.renderVisibleStatements()
+    analysisHighlightLayer?.renderVisibleStatements({ continueHighlighting: !fromScrollbox })
     autocomplete.repositionPopup()
   }
 
@@ -159,16 +165,20 @@ export function Buffer(props: BufferProps) {
   const textareaAdapter = createBufferTextareaAdapter({
     tabWidth,
     onVisualLayoutChange: () => {
-      queueRender()
+      queueDecorationsRender()
     },
     onTextareaCursorChanged: (options) => {
       updateCursorStateFromTextarea(options)
     },
     onTextareaSelectionChange: (event) => {
-      handleTextareaSelectionChange(event)
+      if (event.result === undefined && event.selection?.isDragging) {
+        autocomplete.close()
+      }
+      viewport.handleTextareaSelectionChange(event)
     },
     onTextareaViewportChange: (event) => {
       viewport.handleTextareaViewportChange(event)
+      renderDecorations({ eventSource: "scrollbox" })
     },
     onVisualCursorMoveStart: () => {
       viewport.startVisualCursorMove()
@@ -185,20 +195,20 @@ export function Buffer(props: BufferProps) {
   const viewport = createViewport({
     textarea: textareaAdapter,
     geometry: textGeometry,
-    queueRender,
-    defer,
-    isDisposed: () => disposed,
     updateCursorFromTextarea: (options) => {
       updateCursorStateFromTextarea(options)
-    },
-    renderVisibleAnalysis: (options) => {
-      analysisHighlightLayer?.renderVisibleStatements(options)
     },
   })
   const editCommands = createBufferEditCommands({
     textarea: textareaAdapter,
     geometry: textGeometry,
     resetCursorTracking: viewport.resetCursorTracking,
+    onTextareaTextChange: (origin, remainingEvents) => {
+      pendingChangeOrigin = {
+        origin,
+        remainingEvents,
+      }
+    },
   })
 
   function updateCursorStateFromTextarea(options?: CursorStateSyncOptions) {
@@ -222,17 +232,8 @@ export function Buffer(props: BufferProps) {
       line: lineIndex(next.row),
       offset: next.offset,
     })
-    if (options?.cause === "scroll") {
-      renderGutter({ layout: false, markers: false })
-      return
-    }
-
-    queueRender()
+    queueDecorationsRender()
   }
-
-  const debouncedPush = debounce(() => {
-    props.onTextChange(doc().text, { modified: doc().modified })
-  }, DEBOUNCE_MS)
 
   analysisHighlightLayer = props.analysis
     ? createAnalysisHighlightLayer({
@@ -242,7 +243,7 @@ export function Buffer(props: BufferProps) {
           getRenderTarget: () => textareaAdapter.createRenderTarget(),
           getDocument: doc,
           setSyntaxStyle: (style) => textareaAdapter.setSyntaxStyle(style),
-          queueViewportRender: queueRender,
+          queueViewportRender: queueDecorationsRender,
         },
       })
     : undefined
@@ -278,13 +279,9 @@ export function Buffer(props: BufferProps) {
     end: DocCharOffset,
     insertText: string,
     nextCursorOffset?: number,
-    origin: PendingChangeOrigin["origin"] = "autocomplete",
+    origin: BufferEditOrigin = "autocomplete",
   ) => {
-    pendingChangeOrigin = {
-      origin,
-      remainingEvents: start === end ? 1 : 2,
-    }
-    const replaced = editCommands.replaceDocRange(start, end, insertText, nextCursorOffset)
+    const replaced = editCommands.replaceDocRange(start, end, insertText, nextCursorOffset, origin)
     if (!replaced) {
       return false
     }
@@ -292,25 +289,6 @@ export function Buffer(props: BufferProps) {
       updateCursorStateFromTextarea()
     })
     return true
-  }
-
-  const deleteToLineStart = () => {
-    const currentOffset = cursorState()?.offset
-    if (currentOffset === undefined) {
-      return false
-    }
-
-    const edit = getDeleteToLineStartEdit(doc(), currentOffset)
-    if (!edit) {
-      return true
-    }
-
-    return replaceDocumentRange(edit.start, edit.end, edit.insertText, edit.cursorOffsetFromStart, "user")
-  }
-
-  const flush = () => {
-    debouncedPush.clear()
-    props.onTextChange(doc().text, { modified: doc().modified })
   }
 
   const applyTextChange = (nextText: string, modified: boolean, change?: BufferTextChange) => {
@@ -323,7 +301,7 @@ export function Buffer(props: BufferProps) {
     analysisHighlightLayer?.rebuild(next, change ?? edit.change)
     setDoc(next)
     textareaAdapter.resetMeasurements()
-    debouncedPush()
+    props.onTextChange(next.text, { modified: next.modified })
   }
 
   const focus = () => {
@@ -342,7 +320,7 @@ export function Buffer(props: BufferProps) {
       editCommands.setCursorDocOffset(docCharOffset(0))
     }
     setCursorState({ line: lineIndex(0), offset: docCharOffset(0) })
-    queueRender()
+    queueDecorationsRender()
   }
 
   const handleContentChange = () => {
@@ -368,7 +346,6 @@ export function Buffer(props: BufferProps) {
     const modified = change ? true : doc().modified
     if (!change && nextText === doc().text && modified === doc().modified) {
       updateCursorStateFromTextarea()
-      queueRender()
       if (origin === "user") {
         defer(() => {
           autocomplete.refresh()
@@ -378,7 +355,6 @@ export function Buffer(props: BufferProps) {
     }
     applyTextChange(nextText, modified, change)
     updateCursorStateFromTextarea()
-    queueRender()
     if (origin === "user") {
       defer(() => {
         autocomplete.refresh()
@@ -392,13 +368,13 @@ export function Buffer(props: BufferProps) {
       return
     }
     textareaAdapter.setSyntaxStyle(props.analysis?.syntaxStyle() ?? null)
-    queueRender()
+    queueDecorationsRender()
     setTimeout(() => {
       if (disposed || !textareaAdapter.isAttached(node)) {
         return
       }
       node.flexShrink = 1
-      queueRender()
+      queueDecorationsRender()
     }, 0)
     if (props.isFocused()) {
       defer(() => {
@@ -408,9 +384,38 @@ export function Buffer(props: BufferProps) {
   }
 
   const handleScrollboxUserScroll = () => {
-    viewport.rememberScrollStickyColumn()
     autocomplete.close()
-    viewport.requestUserScroll()
+    if (!viewport.requestUserScroll()) {
+      return
+    }
+
+    defer(() => {
+      if (viewport.applyPendingUserScroll()) {
+        renderQueued = false
+        renderDecorations({ eventSource: "scrollbox" })
+      }
+    })
+  }
+
+  const attachScrollbox = (node: Parameters<typeof viewport.attachScrollbox>[0]) => {
+    viewport.attachScrollbox(node)
+    queueDecorationsRender()
+    if (!node) {
+      return
+    }
+
+    setTimeout(() => {
+      if (disposed || !viewport.isScrollboxAttached(node)) {
+        return
+      }
+      queueDecorationsRender()
+    }, 0)
+  }
+
+  const handleScrollboxStateChange = () => {
+    if (viewport.handleScrollboxStateChange()) {
+      queueDecorationsRender()
+    }
   }
 
   const handleTextareaMouseDown = (event: MouseEvent) => {
@@ -418,51 +423,7 @@ export function Buffer(props: BufferProps) {
     props.focusSelf()
   }
 
-  const handleTextareaMouseScroll = () => {
-    viewport.rememberScrollStickyColumn()
-    props.focusSelf()
-  }
-
-  const finishSelectionDrag = () => {
-    const box = textareaAdapter.readBox()
-    if (box) {
-      viewport.moveScrollboxToTextareaTop(box.top)
-    }
-    textareaAdapter.setCursorVisible(true)
-    textareaAdapter.setLive(false)
-    textareaAdapter.setScrollSpeed(DEFAULT_SELECTION_DRAG_SCROLL_SPEED)
-    updateCursorStateFromTextarea()
-  }
-
-  const handleTextareaSelectionChange = (event: SelectionChangeEvent) => {
-    const before = event.result === undefined
-    const selection = event.selection
-    if (before && selection?.isDragging) {
-      viewport.adjustSelectionDragSpeed(selection)
-      viewport.clampSelectionDragFocus(selection)
-    }
-
-    const dragging = Boolean(selection?.isDragging)
-    if (before) {
-      if (!dragging) {
-        return
-      }
-
-      // OpenTUI applies selection autoscroll from onUpdate, so it must stay live while the mouse is held.
-      textareaAdapter.setLive(true)
-      textareaAdapter.setCursorVisible(false)
-      autocomplete.close()
-      return
-    }
-
-    if (!dragging) {
-      finishSelectionDrag()
-      return
-    }
-  }
-
   const handleEscape = () => {
-    flush()
     props.onUnfocus?.()
   }
 
@@ -478,11 +439,8 @@ export function Buffer(props: BufferProps) {
     disposed = true
     renderQueued = false
     viewport.dispose()
-    debouncedPush.clear()
     autocomplete.close()
     analysisHighlightLayer?.dispose()
-    textareaAdapter.setLive(false)
-    textareaAdapter.setScrollSpeed(DEFAULT_SELECTION_DRAG_SCROLL_SPEED)
     textareaAdapter.detach()
   })
 
@@ -496,20 +454,12 @@ export function Buffer(props: BufferProps) {
 
   createEffect(() => {
     props.analysis?.syntaxStyle()
-    queueRender()
-  })
-
-  createEffect(() => {
     props.gutterMarkers?.()
     theme().get("text_muted")
-    renderGutter({ layout: false, cursor: false })
-  })
-
-  createEffect(() => {
     props.isFocused()
     cursorState()?.line
     theme().get("editor_active_line_background")
-    renderGutter({ layout: false, markers: false })
+    queueDecorationsRender()
   })
 
   createEffect(
@@ -523,7 +473,7 @@ export function Buffer(props: BufferProps) {
         }
         defer(() => {
           textareaAdapter.focus()
-          queueRender()
+          queueDecorationsRender()
         })
       },
       { defer: true },
@@ -541,7 +491,7 @@ export function Buffer(props: BufferProps) {
     {
       pattern: "ctrl+u",
       handler: () => {
-        deleteToLineStart()
+        editCommands.deleteToLineStart()
       },
       preventDefault: true,
     },
@@ -561,15 +511,15 @@ export function Buffer(props: BufferProps) {
         flexDirection="column"
         flexGrow={1}
         backgroundColor={background()}
-        onMouseUp={finishSelectionDrag}
-        onMouseDragEnd={finishSelectionDrag}
+        onMouseUp={viewport.finishSelectionDrag}
+        onMouseDragEnd={viewport.finishSelectionDrag}
       >
         <OriScrollbox
           marginTop={1}
           stickyScroll={false}
           scrollX={false}
-          onReady={viewport.attachScrollbox}
-          onSync={viewport.handleScrollboxStateChange}
+          onReady={attachScrollbox}
+          onSync={handleScrollboxStateChange}
           onUserScroll={handleScrollboxUserScroll}
           height="100%"
           horizontalScrollbarOptions={{
@@ -598,7 +548,7 @@ export function Buffer(props: BufferProps) {
             <line_number
               ref={(node: LineNumberRenderable | undefined) => {
                 gutterRef = node
-                queueRender()
+                queueDecorationsRender()
               }}
               position="absolute"
               top={0}
@@ -632,7 +582,7 @@ export function Buffer(props: BufferProps) {
                 selectable={true}
                 keyBindings={[]}
                 onMouseDown={handleTextareaMouseDown}
-                onMouseScroll={handleTextareaMouseScroll}
+                onMouseScroll={viewport.handleTextareaMouseScroll}
                 onContentChange={handleContentChange}
               />
             </line_number>
