@@ -7,7 +7,7 @@ import { type Accessor, createEffect, createSignal, on, onCleanup, onMount } fro
 import { type BufferAnalysis, createAnalysisHighlightLayer } from "./analysis"
 import { createBufferAutocomplete } from "./autocomplete/controller"
 import type { BufferAutocompleteProvider } from "./autocomplete/types"
-import { type BufferEditOrigin, createBufferEditCommands } from "./buffer-edit-commands"
+import { type BufferAppliedEdit, createBufferEditCommands } from "./buffer-edit-commands"
 import { type BufferTextareaCursorChangeEvent, createBufferTextareaAdapter } from "./buffer-textarea-adapter"
 import { type DocCharOffset, docCharOffset, type LineIndex, lineIndex } from "./coords"
 import { type BufferTextChange, Document, findTextChange, normalizeDocumentText } from "./document"
@@ -16,11 +16,6 @@ import { createViewport } from "./viewport"
 
 const DEFAULT_TAB_WIDTH = 2
 const EMPTY_GUTTER_MARKERS = new Map<number, string>()
-
-type PendingChangeOrigin = {
-  origin: BufferEditOrigin
-  remainingEvents: number
-}
 
 type DecorationsRenderOptions = {
   eventSource?: "scrollbox"
@@ -77,7 +72,6 @@ export function Buffer(props: BufferProps) {
   let gutterRef: LineNumberRenderable | undefined
   let disposed = false
   let renderQueued = false
-  let pendingChangeOrigin: PendingChangeOrigin | undefined
   let analysisHighlightLayer: ReturnType<typeof createAnalysisHighlightLayer> | undefined
 
   const background = () => theme().get("editor_background")
@@ -203,12 +197,6 @@ export function Buffer(props: BufferProps) {
     textarea: textareaAdapter,
     geometry: textGeometry,
     resetCursorTracking: viewport.resetCursorTracking,
-    onTextareaTextChange: (origin, remainingEvents) => {
-      pendingChangeOrigin = {
-        origin,
-        remainingEvents,
-      }
-    },
   })
 
   function updateCursorStateFromTextarea(options?: CursorStateSyncOptions) {
@@ -217,6 +205,7 @@ export function Buffer(props: BufferProps) {
       return
     }
 
+    const previousOffset = cursorState()?.offset
     const next = viewport.captureCursorState(options)
     if (!next) {
       setCursorState(undefined)
@@ -233,6 +222,9 @@ export function Buffer(props: BufferProps) {
       offset: next.offset,
     })
     queueDecorationsRender()
+    if (options?.cause === "input" && previousOffset !== next.offset) {
+      autocomplete.refresh()
+    }
   }
 
   analysisHighlightLayer = props.analysis
@@ -271,20 +263,18 @@ export function Buffer(props: BufferProps) {
         containerHeight: bufferRootRef.height,
       }
     },
-    accept: (item, range) => replaceDocumentRange(range.start, range.end, item.insertText, item.cursorOffset),
+    accept: (item, range) =>
+      applyProgrammaticEdit(editCommands.replaceDocRange(range.start, range.end, item.insertText, item.cursorOffset)),
   })
 
-  const replaceDocumentRange = (
-    start: DocCharOffset,
-    end: DocCharOffset,
-    insertText: string,
-    nextCursorOffset?: number,
-    origin: BufferEditOrigin = "autocomplete",
-  ) => {
-    const replaced = editCommands.replaceDocRange(start, end, insertText, nextCursorOffset, origin)
-    if (!replaced) {
+  const applyProgrammaticEdit = (edit: BufferAppliedEdit | undefined) => {
+    if (!edit) {
       return false
     }
+
+    applyTextChange(edit.text, true)
+    textareaAdapter.setText(edit.text, "buffer")
+    editCommands.setCursorDocOffset(edit.cursorOffset)
     defer(() => {
       updateCursorStateFromTextarea()
     })
@@ -316,7 +306,7 @@ export function Buffer(props: BufferProps) {
     }
     applyTextChange(normalizedText, false)
     if (hasTextarea) {
-      textareaAdapter.setText(normalizedText)
+      textareaAdapter.setText(normalizedText, "buffer")
       editCommands.setCursorDocOffset(docCharOffset(0))
     }
     setCursorState({ line: lineIndex(0), offset: docCharOffset(0) })
@@ -331,35 +321,16 @@ export function Buffer(props: BufferProps) {
 
     const nextText = normalizeDocumentText(textValue)
     const change = findTextChange(doc().text, nextText)
-    const pending = pendingChangeOrigin
-    const origin = pending?.origin ?? "user"
-    if (pending && pending.remainingEvents > 1) {
-      pendingChangeOrigin = {
-        origin: pending.origin,
-        remainingEvents: pending.remainingEvents - 1,
-      }
-    }
-    if (!pending || pending.remainingEvents <= 1) {
-      pendingChangeOrigin = undefined
-    }
-
     const modified = change ? true : doc().modified
     if (!change && nextText === doc().text && modified === doc().modified) {
       updateCursorStateFromTextarea()
-      if (origin === "user") {
-        defer(() => {
-          autocomplete.refresh()
-        })
-      }
       return
     }
     applyTextChange(nextText, modified, change)
     updateCursorStateFromTextarea()
-    if (origin === "user") {
-      defer(() => {
-        autocomplete.refresh()
-      })
-    }
+    defer(() => {
+      autocomplete.refresh()
+    })
   }
 
   const attachTextarea = (node: TextareaRenderable | undefined) => {
@@ -491,7 +462,8 @@ export function Buffer(props: BufferProps) {
     {
       pattern: "ctrl+u",
       handler: () => {
-        editCommands.deleteToLineStart()
+        autocomplete.close()
+        applyProgrammaticEdit(editCommands.deleteToLineStart())
       },
       preventDefault: true,
     },

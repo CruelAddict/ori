@@ -52,7 +52,7 @@ export type BufferTextareaViewportChange = {
   cursorMoved: boolean
 }
 
-export type BufferTextareaCursorChangeCause = "input" | "scroll"
+export type BufferTextareaCursorChangeCause = "input" | "scroll" | "buffer"
 
 export type BufferTextareaCursorChangeEvent = {
   cause: BufferTextareaCursorChangeCause
@@ -71,6 +71,7 @@ export function createBufferTextareaAdapter(options: CreateBufferTextareaAdapter
   let measuredRowHeight = 0
   let measuredRowCount = 1
   let cursorChangeCause: BufferTextareaCursorChangeCause = "input"
+  let deferredCursorChangeCause: BufferTextareaCursorChangeCause | undefined
 
   const ref = () => {
     if (!editorRef || editorRef.isDestroyed) {
@@ -85,15 +86,27 @@ export function createBufferTextareaAdapter(options: CreateBufferTextareaAdapter
   const withCursorChangeCause = <T>(cause: BufferTextareaCursorChangeCause, callback: () => T) => {
     const previous = cursorChangeCause
     cursorChangeCause = cause
+    // OpenTUI forwards native edit-buffer events through queueMicrotask after the FFI call.
+    // Keep the cause available for those deferred cursor events as well as synchronous ones.
+    deferredCursorChangeCause = cause
     const result = callback()
     cursorChangeCause = previous
+    // This cleanup is queued after callback(), so OpenTUI's own event microtasks get to read
+    // deferredCursorChangeCause first. If no cursor event is emitted, the marker does not leak.
+    queueMicrotask(() => {
+      if (deferredCursorChangeCause === cause) {
+        deferredCursorChangeCause = undefined
+      }
+    })
     return result
   }
 
   const emitCursorChange = (event: Omit<BufferTextareaCursorChangeEvent, "cause"> = {}) => {
+    const cause = deferredCursorChangeCause ?? cursorChangeCause
+    deferredCursorChangeCause = undefined
     options.onTextareaCursorChanged({
       ...event,
-      cause: cursorChangeCause,
+      cause,
     })
   }
 
@@ -276,9 +289,9 @@ export function createBufferTextareaAdapter(options: CreateBufferTextareaAdapter
         node.scrollSpeed = speed
       }
     },
-    setText: (text: string) => {
+    setText: (text: string, cause: BufferTextareaCursorChangeCause = "input") => {
       resetMeasurements()
-      ref()?.setText(text)
+      withCursorChangeCause(cause, () => ref()?.setText(text))
     },
     insertText: (text: string) => {
       resetMeasurements()
