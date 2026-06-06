@@ -26,7 +26,9 @@ type CreateBufferAutocompleteOptions = {
 type BufferAutocompleteViewModel = {
   viewModel: Accessor<SelectPopupViewModel<BufferAutocompleteItem> | undefined>
   close: () => void
-  refresh: () => void
+  isOpen: () => boolean
+  openFromEdit: () => void
+  refreshOpenOnly: () => void
   repositionPopup: () => void
 }
 
@@ -120,7 +122,7 @@ export function createBufferAutocomplete(options: CreateBufferAutocompleteOption
     applyResult(result)
   }
 
-  const refresh = () => {
+  const requestCompletions = () => {
     if (!options.provider() || !options.isFocused()) {
       cancelRefresh()
       popup.close()
@@ -154,6 +156,20 @@ export function createBufferAutocomplete(options: CreateBufferAutocompleteOption
     }, AUTOCOMPLETE_COALESCE_MS)
   }
 
+  const isOpen = () => replace() !== undefined
+
+  const openFromEdit = () => {
+    requestCompletions()
+  }
+
+  const refreshOpenOnly = () => {
+    if (!isOpen()) {
+      return
+    }
+
+    requestCompletions()
+  }
+
   const close = () => {
     cancelRefresh()
     popup.close()
@@ -166,7 +182,7 @@ export function createBufferAutocomplete(options: CreateBufferAutocompleteOption
     }
 
     const unsubscribe = provider.subscribeState(() => {
-      refresh()
+      refreshOpenOnly()
     })
     onCleanup(unsubscribe)
   })
@@ -201,7 +217,9 @@ export function createBufferAutocomplete(options: CreateBufferAutocompleteOption
   return {
     viewModel,
     close,
-    refresh,
+    isOpen,
+    openFromEdit,
+    refreshOpenOnly,
     repositionPopup,
   } satisfies BufferAutocompleteViewModel
 }

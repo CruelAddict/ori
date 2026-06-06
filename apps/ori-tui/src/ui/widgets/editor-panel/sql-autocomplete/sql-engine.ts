@@ -1281,7 +1281,7 @@ function shouldOpenImplicit(beforeCursor: string, token: string, mode: "word" | 
   if (token.length > 0) {
     return true
   }
-  return /\b(?:from|join)[ \t]+$/i.test(beforeCursor)
+  return /\b(?:from|join)(?:[ \t]+|(?:[ \t]*\r?\n)+[ \t]+)$/i.test(beforeCursor)
 }
 
 function shouldSuppressExactKeyword(token: string, mode: "word" | "member", clause: SqlClause, dialect: SqlDialect) {
@@ -1451,10 +1451,6 @@ export function getSqlAutocompleteResult(input: SqlAutocompleteInput): BufferAut
   const selectFollowUps = clause === "select" ? getSelectFollowUpOptions(beforeCursor) : []
   const clauseFollowUpsOnly = shouldShowClauseFollowUpsOnly(beforeCursor, clause, span.token, clauseFollowUps)
   const exactClauseFollowUp = clauseFollowUps.some((keyword) => normalize(keyword) === normalize(span.token))
-  const useUnfilteredRelationFallback =
-    expectsTableSuggestions(clause) &&
-    (EXACT_COMPLETED_KEYWORDS.has(normalize(span.token)) ||
-      input.dialect.keywords.some((keyword) => normalize(keyword) === normalize(span.token)))
   if (shouldSuppressExactKeyword(span.token, span.mode, clause, input.dialect) && !exactClauseFollowUp) {
     return undefined
   }
@@ -1591,7 +1587,7 @@ export function getSqlAutocompleteResult(input: SqlAutocompleteInput): BufferAut
     addFunctionItems(items, input.dialect, 1, sqlCasePreference)
   }
 
-  const filtered = sortItems(useUnfilteredRelationFallback ? "" : span.token, items)
+  const filtered = sortItems(span.token, items)
     .filter((item) => !usedColumns.includes(normalize(item.label)))
     .filter((item) => !isNoOpCompletion(statement.text, statement.cursorOffset, item))
     .slice(0, 50)

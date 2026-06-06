@@ -48,7 +48,7 @@ function catalog(shape: CatalogShape = DEFAULT_CATALOG, engine = "postgres"): Te
 
   for (const [schemaName, tables] of Object.entries(shape)) {
     const schemaId = `schema:${schemaName}`
-      ; (nodes[0] as Extract<Node, { type: "database" }>).edges.schemas.items.push(schemaId)
+    ;(nodes[0] as Extract<Node, { type: "database" }>).edges.schemas.items.push(schemaId)
     nodes.push({
       id: schemaId,
       name: schemaName,
@@ -222,12 +222,26 @@ describe("sql autocomplete", () => {
       expectIncludes(result, ["users", "orders", "books"])
     })
 
+    test("stays closed after a completed FROM keyword without trailing whitespace", () => {
+      expect(complete("select * from|")).toBeUndefined()
+    })
+
     test("stays closed after FROM newline without a typed prefix", () => {
       expect(complete("select * from\n|")).toBeUndefined()
     })
 
+    test("opens after FROM newline followed by indentation", () => {
+      const result = complete("select * from\n |")
+      expectIncludes(result, ["users", "orders", "books"])
+    })
+
     test("stays closed after JOIN newline without a typed prefix", () => {
       expect(complete("select * from users join\n|")).toBeUndefined()
+    })
+
+    test("opens after JOIN newline followed by indentation", () => {
+      const result = complete("select * from users join\n\t|")
+      expectIncludes(result, ["users", "orders", "books"])
     })
 
     test("stays closed after INSERT space", () => {
@@ -263,14 +277,15 @@ describe("sql autocomplete", () => {
       expectIncludes(result, ["selectables"])
     })
 
-    test("falls back to relation suggestions for exact sql keywords in FROM clause", () => {
-      const result = complete(
-        "select * from all|",
-        catalog({
-          public: { users: ["id", "email"], orders: ["id"], books: ["id"] },
-        }),
-      )
-      expectIncludes(result, ["users", "orders", "books"])
+    test("does not ignore an exact keyword-shaped token in FROM clause", () => {
+      expect(
+        complete(
+          "select * from all|",
+          catalog({
+            public: { users: ["id", "email"], orders: ["id"], books: ["id"] },
+          }),
+        ),
+      ).toBeUndefined()
     })
 
     test("does not suggest an exact relation match as a no-op completion", () => {

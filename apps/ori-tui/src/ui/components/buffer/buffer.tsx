@@ -1,4 +1,4 @@
-import type { BoxRenderable, MouseEvent, TextareaRenderable } from "@opentui/core"
+import type { BoxRenderable, KeyEvent, MouseEvent, PasteEvent, TextareaRenderable } from "@opentui/core"
 import { OriScrollbox } from "@ui/components/ori-scrollbox"
 import { SelectPopup } from "@ui/components/select-popup"
 import { useTheme } from "@ui/providers/theme"
@@ -33,9 +33,9 @@ export type BufferApi = {
 
 export type BufferCursor =
   | {
-      line: LineIndex
-      offset: DocCharOffset
-    }
+    line: LineIndex
+    offset: DocCharOffset
+  }
   | undefined
 
 export type BufferState = {
@@ -61,9 +61,31 @@ type CursorStateSyncOptions = {
   keepStickyVisualColumn?: boolean
 }
 
+function shouldTriggerAutocompleteOnKeyDown(event: KeyEvent) {
+  if (event.defaultPrevented || event.ctrl || event.meta || event.super || event.hyper) {
+    return false
+  }
+
+  if (event.name === "space") {
+    return true
+  }
+
+  if (!event.sequence) {
+    return false
+  }
+
+  const firstCharCode = event.sequence.charCodeAt(0)
+  if (firstCharCode < 32 || firstCharCode === 127) {
+    return false
+  }
+
+  return true
+}
+
 export function Buffer(props: BufferProps) {
   const { theme } = useTheme()
   const tabWidth = Math.max(1, props.tabWidth ?? DEFAULT_TAB_WIDTH)
+  const tabText = " ".repeat(tabWidth)
   const [doc, setDoc] = createSignal(Document.create(props.initialText))
 
   const [cursorState, setCursorState] = createSignal<BufferCursor>({
@@ -155,7 +177,6 @@ export function Buffer(props: BufferProps) {
       return
     }
 
-    const previousOffset = cursorState()?.offset
     const next = viewport.captureCursorState(options)
     if (!next) {
       setCursorState(undefined)
@@ -172,9 +193,6 @@ export function Buffer(props: BufferProps) {
       offset: next.offset,
     })
     queueDecorationsRender()
-    if (options?.cause === "input" && previousOffset !== next.offset) {
-      autocomplete.refresh()
-    }
   }
 
   extensions = attachBufferExtensions(props.extensions ?? [], {
@@ -326,7 +344,9 @@ export function Buffer(props: BufferProps) {
     applyTextChange(nextText, modified, change)
     updateCursorStateFromTextarea()
     defer(() => {
-      autocomplete.refresh()
+      if (autocomplete.isOpen()) {
+        autocomplete.refreshOpenOnly()
+      }
     })
   }
 
@@ -387,7 +407,31 @@ export function Buffer(props: BufferProps) {
 
   const handleTextareaMouseDown = (event: MouseEvent) => {
     event.stopPropagation()
+    autocomplete.close()
     props.focusSelf()
+  }
+
+  const handleTextareaKeyDown = (event: KeyEvent) => {
+    if (event.defaultPrevented || autocomplete.isOpen()) {
+      return
+    }
+
+    if (event.name === "tab") {
+      event.preventDefault()
+      textareaAdapter.insertTextWithCause(tabText, "input")
+      defer(() => {
+        autocomplete.openFromEdit()
+      })
+      return
+    }
+
+    if (!shouldTriggerAutocompleteOnKeyDown(event)) {
+      return
+    }
+
+    defer(() => {
+      autocomplete.openFromEdit()
+    })
   }
 
   const handleEscape = () => {
@@ -536,8 +580,10 @@ export function Buffer(props: BufferProps) {
                 wrapMode="char"
                 selectable={true}
                 keyBindings={[]}
+                onKeyDown={handleTextareaKeyDown}
                 onMouseDown={handleTextareaMouseDown}
                 onMouseScroll={viewport.handleTextareaMouseScroll}
+                onPaste={() => autocomplete.close()}
                 onContentChange={handleContentChange}
               />
             </line_number>

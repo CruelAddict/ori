@@ -100,6 +100,18 @@ function endOffset(text: string): DocCharOffset {
   return docCharOffset(text.length)
 }
 
+function createStaticAutocomplete(label: string, insertText = label) {
+  return {
+    getCompletions: async ({ text, cursor }: { text: string; cursor: number }) => ({
+      replace: docCharRange(
+        docCharOffset(cursor - (text.slice(0, cursor).match(/[A-Za-z_][A-Za-z0-9_$]*$/)?.[0].length ?? 0)),
+        docCharOffset(cursor),
+      ),
+      items: [{ id: label, label, insertText }],
+    }),
+  }
+}
+
 describe("buffer autocomplete integration", () => {
   test("opens relations after typing prefix", async () => {
     const worker = createWorkerProvider()
@@ -124,7 +136,7 @@ describe("buffer autocomplete integration", () => {
     }
   })
 
-  test("reopens autocomplete when schema finishes loading after typing an exact sql keyword", async () => {
+  test("does not reopen autocomplete when schema finishes loading after no popup was opened", async () => {
     const databaseId = "db"
     const provider = createMutableWorkerProvider()
     const mounted = await mountBufferWithApi({ width: 80, height: 20, autocomplete: provider.worker.autocomplete })
@@ -141,9 +153,9 @@ describe("buffer autocomplete integration", () => {
       await mounted.app.waitFor(() => textarea.plainText === nextText)
 
       provider.setState(createSchemaState(databaseId))
+      await mounted.app.renderOnce()
 
-      await waitForCompletion(mounted.app, "authors")
-      expect(readFrameText(mounted.app)).toContain("books")
+      expect(popupBox(mounted.app)).toBeUndefined()
     } finally {
       provider.worker.dispose()
       mounted.app.destroy()
@@ -152,8 +164,9 @@ describe("buffer autocomplete integration", () => {
 
   test("positions popup under the replace range start on a later line", async () => {
     const linePrefix = "select * "
-    const text = `select * from authors\n${linePrefix}fr`
-    const replaceStart = text.lastIndexOf("fr")
+    const text = `select * from authors\n${linePrefix}f`
+    const nextText = `select * from authors\n${linePrefix}fr`
+    const replaceStart = nextText.lastIndexOf("fr")
     const mounted = await mountBufferWithApi({
       width: 80,
       height: 20,
@@ -170,6 +183,8 @@ describe("buffer autocomplete integration", () => {
 
       await mountText(mounted, textarea, text)
       await moveCursor(mounted.app, textarea, 1, -1)
+      await mounted.app.setup.mockInput.typeText("r")
+      await mounted.app.waitFor(() => textarea.plainText === nextText)
       await waitForCompletion(mounted.app, "from")
 
       const popup = popupBox(mounted.app)
@@ -244,11 +259,14 @@ describe("buffer autocomplete integration", () => {
 
     try {
       const textarea = getBufferTextarea(mounted.app)
-      const text = "\tfoo\n\tbar\nselect * from auth"
+      const text = "\tfoo\n\tbar\nselect * from aut"
+      const nextText = "\tfoo\n\tbar\nselect * from auth"
       const expected = "\tfoo\n\tbar\nselect * from authors"
 
       await mountText(mounted, textarea, text)
       await moveCursor(mounted.app, textarea, 2, -1)
+      await mounted.app.setup.mockInput.typeText("h")
+      await mounted.app.waitFor(() => textarea.plainText === nextText)
       await waitForCompletion(mounted.app, "authors")
 
       mounted.app.setup.mockInput.pressEnter()
@@ -267,12 +285,14 @@ describe("buffer autocomplete integration", () => {
 
     try {
       const textarea = getBufferTextarea(mounted.app)
-      const text = "\tfoo\n\tbar\nselect * from "
+      const text = "\tfoo\n\tbar\nselect * from"
       const expectedLine = "select * from authors"
       const expectedText = "\tfoo\n\tbar\nselect * from authors"
 
       await mountText(mounted, textarea, text)
       await moveCursor(mounted.app, textarea, 2, -1)
+      await mounted.app.setup.mockInput.typeText(" ")
+      await mounted.app.waitFor(() => textarea.plainText === "\tfoo\n\tbar\nselect * from ")
       await waitForCompletion(mounted.app, "authors")
 
       mounted.app.setup.mockInput.pressEnter()
@@ -284,6 +304,76 @@ describe("buffer autocomplete integration", () => {
       expect(textarea.logicalCursor.col).toBe(expectedLine.length)
     } finally {
       worker.dispose()
+      mounted.app.destroy()
+    }
+  })
+
+  test("does not open autocomplete on mouse click after moving the cursor", async () => {
+    const mounted = await mountBufferWithApi({
+      width: 80,
+      height: 20,
+      autocomplete: createStaticAutocomplete("select"),
+    })
+
+    try {
+      const textarea = getBufferTextarea(mounted.app)
+      const text = "selec"
+
+      await mountText(mounted, textarea, text)
+      await moveCursor(mounted.app, textarea, 0, -1)
+      await mounted.app.setup.mockMouse.click(textarea.x + text.length, textarea.y)
+      await mounted.app.renderOnce()
+
+      expect(popupBox(mounted.app)).toBeUndefined()
+    } finally {
+      mounted.app.destroy()
+    }
+  })
+
+  test("does not open autocomplete after paste", async () => {
+    const mounted = await mountBufferWithApi({
+      width: 80,
+      height: 20,
+      autocomplete: createStaticAutocomplete("from"),
+    })
+
+    try {
+      const textarea = getBufferTextarea(mounted.app)
+      const text = "select * "
+      const nextText = "select * fro"
+
+      await mountText(mounted, textarea, text)
+      await moveCursor(mounted.app, textarea, 0, -1)
+      await mounted.app.setup.mockInput.pasteBracketedText("fro")
+      await mounted.app.waitFor(() => textarea.plainText === nextText)
+      await mounted.app.renderOnce()
+
+      expect(popupBox(mounted.app)).toBeUndefined()
+    } finally {
+      mounted.app.destroy()
+    }
+  })
+
+  test("opens autocomplete after tab inserts the configured indentation", async () => {
+    const mounted = await mountBufferWithApi({
+      width: 100,
+      height: 24,
+      autocomplete: createStaticAutocomplete("authors"),
+    })
+
+    try {
+      const textarea = getBufferTextarea(mounted.app)
+      const text = "select * from"
+      const nextText = "select * from  "
+
+      await mountText(mounted, textarea, text)
+      await moveCursor(mounted.app, textarea, 0, -1)
+      mounted.app.setup.mockInput.pressTab()
+      await mounted.app.waitFor(() => textarea.plainText === nextText)
+
+      await waitForCompletion(mounted.app, "authors")
+      expect(readFrameText(mounted.app)).toContain("authors")
+    } finally {
       mounted.app.destroy()
     }
   })
