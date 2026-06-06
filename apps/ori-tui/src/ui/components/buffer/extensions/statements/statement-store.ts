@@ -150,6 +150,16 @@ function matchStatementEntries(params: {
   return entries
 }
 
+/**
+ * Matches incrementally recollected statement ranges back to previous entries so
+ * stable statement ids survive local edits.
+ *
+ * The matcher reuses an unchanged prefix, reuses a shifted unchanged suffix, and
+ * then decides whether the first middle statement is still the same statement
+ * after the edit. That middle reuse also covers boundary edits where the
+ * collector grows or shrinks a neighbouring statement to absorb newly typed or
+ * deleted text just outside the old range.
+ */
 function matchIncrementalStatementEntries(params: {
   previous: readonly StatementEntry[]
   previousText: string
@@ -162,6 +172,7 @@ function matchIncrementalStatementEntries(params: {
   const entries = new Array<StatementEntry>(params.ranges.length)
   let prefix = 0
 
+  // Reuse the unchanged prefix exactly as-is.
   for (; prefix < params.previous.length && prefix < params.ranges.length; prefix += 1) {
     const entry = params.previous[prefix]
     const range = params.ranges[prefix]
@@ -182,6 +193,8 @@ function matchIncrementalStatementEntries(params: {
   }
 
   let suffix = 0
+
+  // Reuse the unchanged suffix after shifting it by the text delta.
   for (; suffix < params.previous.length - prefix && suffix < params.ranges.length - prefix; suffix += 1) {
     const previousIndex = params.previous.length - 1 - suffix
     const nextIndex = params.ranges.length - 1 - suffix
@@ -203,16 +216,47 @@ function matchIncrementalStatementEntries(params: {
     entries[nextIndex] = buildReusedEntry(entry, range)
   }
 
+  // Everything between prefix and suffix is the only ambiguous zone. In practice we
+  // can preserve one "middle" statement id either when the edit overlaps both the
+  // old and new ranges, or when the edit happens right outside the old range and the
+  // collector grows/shrinks the neighbouring statement to absorb that boundary text.
   const middlePreviousEnd = params.previous.length - suffix
   const middleNextEnd = params.ranges.length - suffix
   let middleStart = prefix
   const middleEntry = prefix < middlePreviousEnd ? params.previous[prefix] : undefined
   const middleRange = prefix < middleNextEnd ? params.ranges[prefix] : undefined
-  const canReuseChangedEntry =
+
+  const middleEntryText = middleEntry ? params.previousText.slice(middleEntry.start, middleEntry.end) : undefined
+  const middleRangeText = middleRange ? params.text.slice(middleRange.start, middleRange.end) : undefined
+
+  const previousTouchesChange =
+    !!middleEntry && touchesChangeWindow(middleEntry, params.change.start, params.change.previousEnd)
+  const nextTouchesChange =
+    !!middleRange && touchesChangeWindow(middleRange, params.change.start, params.change.nextEnd)
+
+  const overlappingChange = previousTouchesChange && nextTouchesChange
+
+  const nextExpandsPreviousAtBoundary =
+    !!middleEntryText &&
+    !!middleRangeText &&
+    middleRangeText.includes(middleEntryText) &&
+    (middleRangeText.startsWith(middleEntryText) || middleRangeText.endsWith(middleEntryText))
+
+  const nextShrinksPreviousAtBoundary =
+    !!middleEntryText &&
+    !!middleRangeText &&
+    middleEntryText.includes(middleRangeText) &&
+    (middleEntryText.startsWith(middleRangeText) || middleEntryText.endsWith(middleRangeText))
+
+  // Reuse the same statement id when an edit happens just outside the old range,
+  // but the new collected statement grows or shrinks to absorb that boundary text.
+  const boundaryResize =
     !!middleEntry &&
     !!middleRange &&
-    touchesChangeWindow(middleEntry, params.change.start, params.change.previousEnd) &&
-    touchesChangeWindow(middleRange, params.change.start, params.change.nextEnd)
+    previousTouchesChange !== nextTouchesChange &&
+    (nextExpandsPreviousAtBoundary || nextShrinksPreviousAtBoundary)
+
+  const canReuseChangedEntry = !!middleEntry && !!middleRange && (overlappingChange || boundaryResize)
 
   if (canReuseChangedEntry && middleEntry && middleRange) {
     entries[prefix] = buildChangedEntry({

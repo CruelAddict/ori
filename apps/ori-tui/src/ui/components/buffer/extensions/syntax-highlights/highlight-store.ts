@@ -54,7 +54,7 @@ function sharedSuffixCount(previousText: string, nextText: string, prefix: numbe
 
 function isTouchedSpan(span: LocalHighlightSpan, start: number, end: number) {
   if (start === end) {
-    return span.start <= start && start < span.end
+    return span.start < start && start < span.end
   }
 
   return span.start < end && span.end > start

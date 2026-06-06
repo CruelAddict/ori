@@ -76,6 +76,12 @@ export function createRenderedHighlights() {
       return false
     }
     if (statement.dirty && statement.spans.length === 0) {
+      if (current) {
+        target.removeHighlightsByRef(current.highlightGroupId)
+        rendered.delete(statement.id)
+        return true
+      }
+
       return false
     }
 

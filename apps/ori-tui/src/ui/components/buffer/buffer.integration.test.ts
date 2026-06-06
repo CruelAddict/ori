@@ -6,8 +6,10 @@ import {
   SyntaxStyle,
   type TextareaRenderable,
 } from "@opentui/core"
+import { collectSqlQueries } from "@ui/widgets/editor-panel/sql-statement-detector"
 import type { MountedTuiApp } from "../../../test/opentui-harness"
-import { findRequiredNode, readFrameLines, readFrameLineTokens } from "../../../test/opentui-test-tools"
+import { findRequiredNode, readFrameLines, readFrameLineTokens, readFrameText } from "../../../test/opentui-test-tools"
+import type { BufferAutocompleteProvider } from "./autocomplete/types"
 import type { BufferState } from "./buffer"
 import {
   type BufferTestLanguage,
@@ -16,7 +18,7 @@ import {
   mountBuffer,
   moveCursor,
 } from "./buffer.test-tools"
-import { docCharOffset, lineIndex } from "./coords"
+import { docCharOffset, docCharRange, lineIndex } from "./coords"
 import type { BufferStatementRange } from "./extensions/statements"
 
 type HighlightState = {
@@ -48,6 +50,24 @@ type ScrollState = {
   thumbVisible: boolean
   totalVirtualLineCount: number
   textareaWidth: number
+}
+
+type PendingKeywordHighlight = {
+  text: string
+  resolve: (spans: ReturnType<typeof keywordHighlightSpans>) => void
+}
+
+type PreparedHighlightEdit = {
+  text: string
+  cursor: number
+  didApply: (text: string) => boolean
+  autocomplete?: BufferAutocompleteProvider
+  run: (context: { app: MountedTuiApp; textarea: TextareaRenderable }) => Promise<void> | void
+}
+
+type HighlightEditAction = {
+  name: string
+  prepare: (text: string, offset: number) => PreparedHighlightEdit
 }
 
 function getHighlightedLines(textarea: TextareaRenderable, limit = 8) {
@@ -140,6 +160,219 @@ function busyWait(ms: number) {
     elapsed = performance.now() - started
   }
 }
+
+function keywordHighlightSpans(text: string) {
+  const spans = [] as Array<{ start: number; end: number; styleId: number }>
+  for (const match of text.matchAll(/\b(select|from|where|join)\b/g)) {
+    const start = match.index
+    if (start === undefined) {
+      continue
+    }
+
+    spans.push({ start, end: start + match[0].length, styleId: 1 })
+  }
+  return spans
+}
+
+function flushMicrotasks() {
+  return Promise.resolve().then(() => Promise.resolve())
+}
+
+async function expectStatementLinesHighlightedImmediately(
+  textarea: TextareaRenderable,
+  lines: readonly number[],
+  text: string,
+) {
+  expect(textarea.plainText).toBe(text)
+  for (const line of lines) {
+    expect(textarea.getLineHighlights(line).length).toBeGreaterThan(0)
+  }
+}
+
+function createControlledKeywordAnalysis(): BufferTestLanguage & {
+  pendingCount: () => number
+  resolveNextHighlight: () => void
+} {
+  const syntaxStyle = SyntaxStyle.create()
+  const pending: PendingKeywordHighlight[] = []
+
+  return {
+    id: "controlled-keyword-analysis",
+    syntaxStyle: () => syntaxStyle,
+    detect: (text, lineStarts) => [
+      {
+        start: docCharOffset(0),
+        end: docCharOffset(text.length),
+        startLine: lineIndex(0),
+        endLine: lineIndex(Math.max(0, lineStarts.length - 1)),
+      },
+    ],
+    highlightText: (text) =>
+      new Promise((resolve) => {
+        pending.push({ text, resolve })
+      }),
+    pendingCount: () => pending.length,
+    resolveNextHighlight: () => {
+      const next = pending.shift()
+      if (!next) {
+        throw new Error("No pending highlight request")
+      }
+
+      next.resolve(keywordHighlightSpans(next.text))
+    },
+  }
+}
+
+function createControlledSqlKeywordAnalysis(): BufferTestLanguage & {
+  pendingCount: () => number
+  resolveNextHighlight: () => void
+} {
+  const syntaxStyle = SyntaxStyle.create()
+  const pending: PendingKeywordHighlight[] = []
+
+  return {
+    id: "controlled-sql-keyword-analysis",
+    syntaxStyle: () => syntaxStyle,
+    detect: (text, lineStarts) => collectSqlQueries(text, lineStarts),
+    highlightText: (text) =>
+      new Promise((resolve) => {
+        pending.push({ text, resolve })
+      }),
+    pendingCount: () => pending.length,
+    resolveNextHighlight: () => {
+      const next = pending.shift()
+      if (!next) {
+        throw new Error("No pending highlight request")
+      }
+
+      next.resolve(keywordHighlightSpans(next.text))
+    },
+  }
+}
+
+function insertAt(text: string, offset: number, value: string) {
+  return `${text.slice(0, offset)}${value}${text.slice(offset)}`
+}
+
+function textOffsetRowCol(text: string, offset: number) {
+  const lines = text.slice(0, offset).split("\n")
+  return {
+    row: lines.length - 1,
+    col: lines.at(-1)?.length ?? 0,
+  }
+}
+
+async function moveCursorToTextOffset(app: MountedTuiApp, textarea: TextareaRenderable, text: string, offset: number) {
+  const cursor = textOffsetRowCol(text, offset)
+  await moveCursor(app, textarea, cursor.row, cursor.col)
+}
+
+async function drainPendingKeywordHighlights(
+  app: MountedTuiApp,
+  analysis: { pendingCount: () => number; resolveNextHighlight: () => void },
+) {
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    await app.renderOnce()
+    if (analysis.pendingCount() === 0) {
+      return
+    }
+
+    analysis.resolveNextHighlight()
+  }
+
+  throw new Error("Timed out draining pending keyword highlights")
+}
+
+function createAutocompleteProvider(): BufferAutocompleteProvider {
+  return {
+    getCompletions: async (request) => ({
+      replace: docCharRange(docCharOffset(request.cursor - 2), request.cursor),
+      items: [{ id: "keyword:join", label: "join keyword", insertText: "join" }],
+    }),
+  }
+}
+
+const highlightEditPositions = [
+  { name: "beginning", offset: () => 0 },
+  { name: "middle", offset: (text: string) => text.indexOf("from ") + "from ".length },
+  { name: "end", offset: (text: string) => text.length },
+]
+
+const highlightEditActions: HighlightEditAction[] = [
+  {
+    name: "typing plain text",
+    prepare: (text, offset) => {
+      const value = offset === text.length ? " asdf" : "asdf "
+      const expected = insertAt(text, offset, value)
+      return {
+        text,
+        cursor: offset,
+        didApply: (next) => next === expected,
+        run: ({ app }) => app.setup.mockInput.typeText(value),
+      }
+    },
+  },
+  {
+    name: "typing a keyword",
+    prepare: (text, offset) => {
+      const value = offset === text.length ? " join" : "join "
+      const expected = insertAt(text, offset, value)
+      return {
+        text,
+        cursor: offset,
+        didApply: (next) => next === expected,
+        run: ({ app }) => app.setup.mockInput.typeText(value),
+      }
+    },
+  },
+  {
+    name: "backspace deletion",
+    prepare: (text, offset) => {
+      const value = offset === text.length ? " x" : "x "
+      const initial = insertAt(text, offset, value)
+      return {
+        text: initial,
+        cursor: offset + (offset === text.length ? value.length : 1),
+        didApply: (next) => next !== initial && !next.includes("x"),
+        run: ({ app }) => {
+          app.setup.mockInput.pressBackspace()
+        },
+      }
+    },
+  },
+  {
+    name: "autocomplete replacement",
+    prepare: (text, offset) => {
+      const value = offset === text.length ? " jo" : "jo "
+      const expected = insertAt(text, offset, offset === text.length ? " join" : "join ")
+      return {
+        text: insertAt(text, offset, value),
+        cursor: offset + (offset === text.length ? value.length : 2),
+        autocomplete: createAutocompleteProvider(),
+        didApply: (next) => next === expected,
+        run: async ({ app }) => {
+          await app.waitFor(() => readFrameText(app).includes("join keyword"))
+          app.setup.mockInput.pressEnter()
+        },
+      }
+    },
+  },
+  {
+    name: "ctrl-w deletion",
+    prepare: (text, offset) => {
+      const value = offset === text.length ? " asdf" : "asdf "
+      const initial = insertAt(text, offset, value)
+      return {
+        text: initial,
+        cursor: offset + (offset === text.length ? value.length : 4),
+        didApply: (next) => next !== initial && !next.includes("asdf"),
+        run: ({ app }) => {
+          app.setup.mockInput.pressKey("w", { ctrl: true })
+        },
+      }
+    },
+  },
+]
 
 function createBlockingAnalysis(blockMs: number): BufferTestLanguage {
   const syntaxStyle = SyntaxStyle.create()
@@ -259,6 +492,183 @@ function expectScrollStateAligned(state: ScrollState) {
 }
 
 describe("buffer integration", () => {
+  test("keeps existing statement highlights while typing below a trailing newline-terminated statement", async () => {
+    const sql = "select a\nfrom b\nwhere c\n"
+    const analysis = createControlledSqlKeywordAnalysis()
+    const app = await mountBuffer({ text: sql, width: 40, height: 8, language: analysis })
+
+    try {
+      const textarea = getBufferTextarea(app)
+
+      await app.waitFor(() => analysis.pendingCount() > 0)
+      await drainPendingKeywordHighlights(app, analysis)
+      await app.waitFor(() => hasHighlightedLines(textarea, [0, 1, 2]))
+
+      await moveCursor(app, textarea, 3, 0)
+      await app.setup.mockInput.typeText("l")
+      await flushMicrotasks()
+
+      expect(textarea.plainText).toBe("select a\nfrom b\nwhere c\nl")
+      expect(textarea.getLineHighlights(0).length).toBeGreaterThan(0)
+      expect(textarea.getLineHighlights(1).length).toBeGreaterThan(0)
+      expect(textarea.getLineHighlights(2).length).toBeGreaterThan(0)
+    } finally {
+      app.destroy()
+    }
+  })
+
+  test("keeps existing statement highlights while typing above a statement from the blank line before it", async () => {
+    const sql = "\nselect a\nfrom b\nwhere c\n"
+    const analysis = createControlledSqlKeywordAnalysis()
+    const app = await mountBuffer({ text: sql, width: 40, height: 8, language: analysis })
+
+    try {
+      const textarea = getBufferTextarea(app)
+
+      await app.waitFor(() => analysis.pendingCount() > 0)
+      await drainPendingKeywordHighlights(app, analysis)
+      await app.waitFor(() => hasHighlightedLines(textarea, [1, 2, 3]))
+
+      await moveCursor(app, textarea, 0, 0)
+      await app.setup.mockInput.typeText("l")
+      await flushMicrotasks()
+
+      expect(textarea.plainText).toBe("l\nselect a\nfrom b\nwhere c\n")
+      expect(textarea.getLineHighlights(1).length).toBeGreaterThan(0)
+      expect(textarea.getLineHighlights(2).length).toBeGreaterThan(0)
+      expect(textarea.getLineHighlights(3).length).toBeGreaterThan(0)
+    } finally {
+      app.destroy()
+    }
+  })
+
+  test("keeps existing statement highlights while ctrl-w deletes the word below a trailing newline-terminated statement", async () => {
+    const sql = "select a\nfrom b\nwhere c\nasdf"
+    const analysis = createControlledSqlKeywordAnalysis()
+    const app = await mountBuffer({ text: sql, width: 40, height: 8, language: analysis })
+
+    try {
+      const textarea = getBufferTextarea(app)
+
+      await app.waitFor(() => analysis.pendingCount() > 0)
+      await drainPendingKeywordHighlights(app, analysis)
+      await app.waitFor(() => hasHighlightedLines(textarea, [0, 1, 2]))
+
+      await moveCursor(app, textarea, 3, 4)
+      app.setup.mockInput.pressKey("w", { ctrl: true })
+      await flushMicrotasks()
+
+      await expectStatementLinesHighlightedImmediately(textarea, [0, 1, 2], "select a\nfrom b\nwhere c")
+    } finally {
+      app.destroy()
+    }
+  })
+
+  test("keeps existing statement highlights while ctrl-w deletes the word above a statement from the blank line before it", async () => {
+    const sql = "asdf\nselect a\nfrom b\nwhere c\n"
+    const analysis = createControlledSqlKeywordAnalysis()
+    const app = await mountBuffer({ text: sql, width: 40, height: 8, language: analysis })
+
+    try {
+      const textarea = getBufferTextarea(app)
+
+      await app.waitFor(() => analysis.pendingCount() > 0)
+      await drainPendingKeywordHighlights(app, analysis)
+      await app.waitFor(() => hasHighlightedLines(textarea, [1, 2, 3]))
+
+      await moveCursor(app, textarea, 0, 4)
+      app.setup.mockInput.pressKey("w", { ctrl: true })
+      await flushMicrotasks()
+
+      await expectStatementLinesHighlightedImmediately(textarea, [1, 2, 3], "\nselect a\nfrom b\nwhere c\n")
+    } finally {
+      app.destroy()
+    }
+  })
+
+  test("keeps existing statement highlights while ctrl-u deletes the line below a trailing newline-terminated statement", async () => {
+    const sql = "select a\nfrom b\nwhere c\nasdf"
+    const analysis = createControlledSqlKeywordAnalysis()
+    const app = await mountBuffer({ text: sql, width: 40, height: 8, language: analysis })
+
+    try {
+      const textarea = getBufferTextarea(app)
+
+      await app.waitFor(() => analysis.pendingCount() > 0)
+      await drainPendingKeywordHighlights(app, analysis)
+      await app.waitFor(() => hasHighlightedLines(textarea, [0, 1, 2]))
+
+      await moveCursor(app, textarea, 3, 4)
+      app.setup.mockInput.pressKey("u", { ctrl: true })
+      await flushMicrotasks()
+
+      await expectStatementLinesHighlightedImmediately(textarea, [0, 1, 2], "select a\nfrom b\nwhere c\n")
+    } finally {
+      app.destroy()
+    }
+  })
+
+  test("keeps existing statement highlights while ctrl-u deletes the word above a statement from the blank line before it", async () => {
+    const sql = "asdf\nselect a\nfrom b\nwhere c\n"
+    const analysis = createControlledSqlKeywordAnalysis()
+    const app = await mountBuffer({ text: sql, width: 40, height: 8, language: analysis })
+
+    try {
+      const textarea = getBufferTextarea(app)
+
+      await app.waitFor(() => analysis.pendingCount() > 0)
+      await drainPendingKeywordHighlights(app, analysis)
+      await app.waitFor(() => hasHighlightedLines(textarea, [1, 2, 3]))
+
+      await moveCursor(app, textarea, 0, 4)
+      app.setup.mockInput.pressKey("u", { ctrl: true })
+      await flushMicrotasks()
+
+      await expectStatementLinesHighlightedImmediately(textarea, [1, 2, 3], "\nselect a\nfrom b\nwhere c\n")
+    } finally {
+      app.destroy()
+    }
+  })
+
+  for (const position of highlightEditPositions) {
+    for (const action of highlightEditActions) {
+      test(`keeps visible highlights while ${action.name} at statement ${position.name}`, async () => {
+        const sql = "select a\nfrom b\nwhere c"
+        const visibleStatementLines = [0, 1, 2]
+        const prepared = action.prepare(sql, position.offset(sql))
+        const analysis = createControlledKeywordAnalysis()
+        const app = await mountBuffer({
+          text: prepared.text,
+          width: 40,
+          height: 8,
+          language: analysis,
+          autocomplete: prepared.autocomplete,
+        })
+
+        try {
+          const textarea = getBufferTextarea(app)
+
+          await app.waitFor(() => analysis.pendingCount() > 0)
+          await drainPendingKeywordHighlights(app, analysis)
+          await app.waitFor(() => hasHighlightedLines(textarea, visibleStatementLines))
+
+          await moveCursorToTextOffset(app, textarea, prepared.text, prepared.cursor)
+          await prepared.run({ app, textarea })
+          await app.waitFor(() => prepared.didApply(textarea.plainText))
+          await app.waitFor(() => analysis.pendingCount() > 0)
+
+          expectHighlightedLines(captureHighlightState(textarea, visibleStatementLines), visibleStatementLines)
+
+          await drainPendingKeywordHighlights(app, analysis)
+          await app.waitFor(() => hasHighlightedLines(textarea, visibleStatementLines))
+          expectHighlightedLines(captureHighlightState(textarea, visibleStatementLines), visibleStatementLines)
+        } finally {
+          app.destroy()
+        }
+      })
+    }
+  }
+
   test("renders visible statement highlights on mount and keeps them through local edits", async () => {
     const sql =
       "select * from authors;\nselect * from books limit 10;\nselect * from authors a\njoin books b on a.id = b.author_id\n"

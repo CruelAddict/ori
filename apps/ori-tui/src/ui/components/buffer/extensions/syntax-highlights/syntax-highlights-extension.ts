@@ -365,11 +365,11 @@ function createSyntaxHighlightsRuntime(params: SyntaxHighlightsOptions & { host:
         highlightBackfillCursor = 0
         clearBackfillTimer()
         store.reset()
+        highlights.clear(host.getRenderTarget(), false)
       }
       store.sync(params.statements.read(), document)
       highlightUpdateVersion += 1
       lastEditAt = performance.now()
-      highlights.clear(host.getRenderTarget(), false)
       host.requestDecorationsRender()
       scheduleUpdate()
     },
