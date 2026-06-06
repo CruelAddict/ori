@@ -12,10 +12,6 @@ export type BufferDocumentChangeEvent = {
   reason: BufferDocumentChangeReason
 }
 
-export type BufferDecorationsRenderEvent = {
-  allowAsyncWork: boolean
-}
-
 export type BufferExtensionCursor =
   | {
       line: LineIndex
@@ -35,7 +31,7 @@ export type BufferExtensionHost = {
   setSyntaxStyle: (style: SyntaxStyle | null) => void
   requestDecorationsRender: () => void
   onDocumentChange: (listener: Listener<BufferDocumentChangeEvent>) => Unsubscribe
-  onDecorationsRender: (listener: Listener<BufferDecorationsRenderEvent>) => Unsubscribe
+  onDecorationsRender: (listener: () => void) => Unsubscribe
 }
 
 export type BufferExtension = {
@@ -47,7 +43,7 @@ type BufferExtensionHostInput = Omit<BufferExtensionHost, "onDocumentChange" | "
 
 export function attachBufferExtensions(extensions: readonly BufferExtension[], host: BufferExtensionHostInput) {
   const documentChangeListeners = new Set<Listener<BufferDocumentChangeEvent>>()
-  const decorationsRenderListeners = new Set<Listener<BufferDecorationsRenderEvent>>()
+  const decorationsRenderListeners = new Set<() => void>()
 
   const subscribe = <T>(listeners: Set<Listener<T>>, listener: Listener<T>) => {
     listeners.add(listener)
@@ -56,10 +52,17 @@ export function attachBufferExtensions(extensions: readonly BufferExtension[], h
     }
   }
 
+  const subscribeRender = (listener: () => void) => {
+    decorationsRenderListeners.add(listener)
+    return () => {
+      decorationsRenderListeners.delete(listener)
+    }
+  }
+
   const extensionHost: BufferExtensionHost = {
     ...host,
     onDocumentChange: (listener) => subscribe(documentChangeListeners, listener),
-    onDecorationsRender: (listener) => subscribe(decorationsRenderListeners, listener),
+    onDecorationsRender: subscribeRender,
   }
 
   const disposers = extensions.map((extension) => extension.setup(extensionHost)).filter((dispose) => !!dispose)
@@ -74,8 +77,10 @@ export function attachBufferExtensions(extensions: readonly BufferExtension[], h
     emitDocumentChange: (event: BufferDocumentChangeEvent) => {
       emit(documentChangeListeners, event)
     },
-    emitDecorationsRender: (event: BufferDecorationsRenderEvent) => {
-      emit(decorationsRenderListeners, event)
+    emitDecorationsRender: () => {
+      for (const listener of decorationsRenderListeners) {
+        listener()
+      }
     },
     dispose: () => {
       for (const dispose of disposers) {

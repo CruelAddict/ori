@@ -373,11 +373,8 @@ function createSyntaxHighlightsRuntime(params: SyntaxHighlightsOptions & { host:
       host.requestDecorationsRender()
       scheduleUpdate()
     },
-    render: (allowAsyncWork: boolean) => {
+    render: () => {
       renderVisibleStatements()
-      if (allowAsyncWork) {
-        scheduleUpdate()
-      }
     },
     dispose: () => {
       disposed = true
@@ -396,9 +393,7 @@ export function createSyntaxHighlightsExtension(options: SyntaxHighlightsOptions
       const unsubscribeDocument = host.onDocumentChange(({ document, reason }) => {
         runtime.documentChanged(document, reason)
       })
-      const unsubscribeRender = host.onDecorationsRender(({ allowAsyncWork }) => {
-        runtime.render(allowAsyncWork)
-      })
+      const unsubscribeRender = host.onDecorationsRender(runtime.render)
 
       return () => {
         unsubscribeDocument()

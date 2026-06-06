@@ -3,6 +3,7 @@ import { OriScrollbox } from "@ui/components/ori-scrollbox"
 import { SelectPopup } from "@ui/components/select-popup"
 import { useTheme } from "@ui/providers/theme"
 import { type KeyBinding, KeyScope } from "@ui/services/key-scopes"
+import { createDeferredCallback } from "@utils/deferred-callback"
 import { type Accessor, createEffect, createSignal, on, onCleanup, onMount } from "solid-js"
 import { createBufferAutocomplete } from "./autocomplete/controller"
 import type { BufferAutocompleteProvider } from "./autocomplete/types"
@@ -69,7 +70,6 @@ export function Buffer(props: BufferProps) {
 
   let bufferRootRef: BoxRenderable | undefined
   let disposed = false
-  let renderQueued = false
   let extensions: ReturnType<typeof attachBufferExtensions>
 
   const background = () => theme().get("editor_background")
@@ -83,27 +83,20 @@ export function Buffer(props: BufferProps) {
     })
   }
 
-  const queueDecorationsRender = () => {
-    if (renderQueued) {
+  const queueDecorationsRender = createDeferredCallback(() => {
+    if (disposed) {
       return
     }
 
-    renderQueued = true
-    defer(() => {
-      if (!renderQueued) {
-        return
-      }
-      renderQueued = false
-      renderDecorations()
-    })
-  }
+    renderDecorations()
+  })
 
   function renderDecorations(options: DecorationsRenderOptions = {}) {
     const fromScrollbox = options.eventSource === "scrollbox"
     if (!fromScrollbox) {
       viewport.renderScrollboxFromTextarea()
     }
-    extensions.emitDecorationsRender({ allowAsyncWork: !fromScrollbox })
+    extensions.emitDecorationsRender()
     gutter.render()
     autocomplete.repositionPopup()
   }
@@ -318,7 +311,7 @@ export function Buffer(props: BufferProps) {
 
     defer(() => {
       if (viewport.applyPendingUserScroll()) {
-        renderQueued = false
+        queueDecorationsRender.cancel()
         renderDecorations({ eventSource: "scrollbox" })
       }
     })
@@ -364,7 +357,7 @@ export function Buffer(props: BufferProps) {
 
   onCleanup(() => {
     disposed = true
-    renderQueued = false
+    queueDecorationsRender.cancel()
     viewport.dispose()
     autocomplete.close()
     extensions.dispose()
