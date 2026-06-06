@@ -1,12 +1,11 @@
 import type { Renderable, TextareaRenderable } from "@opentui/core"
 import { testRender } from "@opentui/solid"
-import { Buffer, type BufferState } from "@ui/components/buffer"
+import { Buffer, createStatementGutterMarkersExtension, createStatementsExtension } from "@ui/components/buffer"
 import { LoggerProvider } from "@ui/providers/logger"
 import { ThemeProvider } from "@ui/providers/theme"
 import { KeymapProvider } from "@ui/services/key-scopes"
-import { analyzeSqlDocument, type SqlDocumentAnalysis } from "@ui/widgets/editor-panel/sql-statement-detector"
+import { analyzeSqlDocument } from "@ui/widgets/editor-panel/sql-statement-detector"
 import pino from "pino"
-import { createMemo, createSignal } from "solid-js"
 
 type BenchCase = {
   name: string
@@ -19,7 +18,6 @@ const RUNS = 40
 const WARMUP = 5
 const WIDTH = 120
 const HEIGHT = 34
-const EMPTY_MARKERS = new Map<number, string>()
 const SETTLE_MS = Number(Bun.env.ORI_BENCH_SETTLE_MS ?? "0")
 
 const query = `WITH RECURSIVE seq(n) AS (
@@ -60,36 +58,22 @@ function collectTextareas(node: Renderable): TextareaRenderable[] {
   return [...own, ...node.getChildren().flatMap((child) => collectTextareas(child))]
 }
 
-function makeMarkers(analysis: SqlDocumentAnalysis | undefined, cursorLine: number, hasCursor: boolean) {
-  if (!analysis || analysis.queries.length < 2) {
-    return EMPTY_MARKERS
-  }
-
-  const activeLine = hasCursor ? (analysis.queryStartLineByLine[cursorLine] ?? -1) : -1
-  const markers = new Map<number, string>(analysis.queries.map((query) => [query.startLine, "• "]))
-  if (activeLine >= 0) {
-    markers.set(activeLine, "󰻃 ")
-  }
-  return markers
-}
-
 function BenchBuffer(props: { text: string; context: boolean }) {
-  const [state, setState] = createSignal<BufferState>()
-  const [analysis, setAnalysis] = createSignal<SqlDocumentAnalysis>()
-  const markers = createMemo(() => {
-    const current = state()
-    const cursor = current?.cursor
-    return makeMarkers(analysis(), cursor?.kind === "present" ? cursor.line : -1, cursor?.kind === "present")
-  })
-
-  const handleState = (next: BufferState) => {
-    if (!props.context) {
-      return
-    }
-
-    setState(next)
-    setAnalysis(analyzeSqlDocument(next.document.text, next.document.lineStarts))
-  }
+  const statementsExtension = props.context
+    ? createStatementsExtension({
+        id: "bench-sql-statements",
+        detect: (text, lineStarts) => analyzeSqlDocument(text, lineStarts).queries,
+      })
+    : undefined
+  const extensions = statementsExtension
+    ? [
+        statementsExtension.extension,
+        createStatementGutterMarkersExtension({
+          id: "bench-sql-statement-gutter-markers",
+          statements: statementsExtension.source,
+        }),
+      ]
+    : []
 
   return (
     <Buffer
@@ -97,8 +81,7 @@ function BenchBuffer(props: { text: string; context: boolean }) {
       isFocused={() => true}
       onTextChange={() => {}}
       focusSelf={() => {}}
-      onStateChange={props.context ? handleState : undefined}
-      gutterMarkers={props.context ? markers : undefined}
+      extensions={extensions}
     />
   )
 }

@@ -1,4 +1,5 @@
 import type { SyntaxStyle } from "@opentui/core"
+import type { DocCharOffset, LineIndex } from "./coords"
 import type { BufferTextChange, Document } from "./document"
 import type { RenderTarget } from "./render-target"
 import type { ViewportSnapshot } from "./viewport-snapshot"
@@ -15,13 +16,22 @@ export type BufferDecorationsRenderEvent = {
   allowAsyncWork: boolean
 }
 
+export type BufferExtensionCursor =
+  | {
+      line: LineIndex
+      offset: DocCharOffset
+    }
+  | undefined
+
 type Listener<T> = (event: T) => void
 type Unsubscribe = () => void
 
 export type BufferExtensionHost = {
   getDocument: () => Document
+  getCursor: () => BufferExtensionCursor
   getViewport: () => ViewportSnapshot | undefined
   getRenderTarget: () => RenderTarget | undefined
+  setGutterMarkers: (markers: ReadonlyMap<number, string>) => void
   setSyntaxStyle: (style: SyntaxStyle | null) => void
   requestDecorationsRender: () => void
   onDocumentChange: (listener: Listener<BufferDocumentChangeEvent>) => Unsubscribe

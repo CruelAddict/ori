@@ -1,4 +1,4 @@
-import type { BoxRenderable, LineNumberRenderable, MouseEvent, TextareaRenderable } from "@opentui/core"
+import type { BoxRenderable, MouseEvent, TextareaRenderable } from "@opentui/core"
 import { OriScrollbox } from "@ui/components/ori-scrollbox"
 import { SelectPopup } from "@ui/components/select-popup"
 import { useTheme } from "@ui/providers/theme"
@@ -11,11 +11,11 @@ import { type BufferTextareaCursorChangeEvent, createBufferTextareaAdapter } fro
 import { type DocCharOffset, docCharOffset, type LineIndex, lineIndex } from "./coords"
 import { type BufferTextChange, Document, findTextChange, normalizeDocumentText } from "./document"
 import { attachBufferExtensions, type BufferExtension } from "./extension"
+import { createGutter } from "./gutter"
 import { createTextGeometry } from "./text-geometry"
 import { createViewport } from "./viewport"
 
 const DEFAULT_TAB_WIDTH = 2
-const EMPTY_GUTTER_MARKERS = new Map<number, string>()
 
 type DecorationsRenderOptions = {
   eventSource?: "scrollbox"
@@ -47,7 +47,6 @@ export type BufferProps = {
   onUnfocus?: () => void
   registerApi?: (api: BufferApi) => void
   focusSelf: () => void
-  gutterMarkers?: Accessor<ReadonlyMap<number, string>>
   onStateChange?: (state: BufferState) => void
   autocomplete?: BufferAutocompleteProvider
   extensions?: readonly BufferExtension[]
@@ -69,7 +68,6 @@ export function Buffer(props: BufferProps) {
   })
 
   let bufferRootRef: BoxRenderable | undefined
-  let gutterRef: LineNumberRenderable | undefined
   let disposed = false
   let renderQueued = false
   let extensions: ReturnType<typeof attachBufferExtensions>
@@ -105,55 +103,9 @@ export function Buffer(props: BufferProps) {
     if (!fromScrollbox) {
       viewport.renderScrollboxFromTextarea()
     }
-    renderGutter()
     extensions.emitDecorationsRender({ allowAsyncWork: !fromScrollbox })
+    gutter.render()
     autocomplete.repositionPopup()
-  }
-
-  function renderGutter(options: { layout?: boolean; markers?: boolean; cursor?: boolean } = {}) {
-    const node = gutterRef
-    if (!node || node.isDestroyed) {
-      return
-    }
-
-    const renderLayout = options.layout ?? true
-    const renderMarkers = options.markers ?? true
-    const renderCursor = options.cursor ?? true
-
-    if (renderLayout) {
-      const rows = viewport.viewportRows()
-      node.height = rows
-      node.minHeight = rows
-      node.maxHeight = rows
-    }
-
-    if (renderMarkers) {
-      const signs = new Map<number, { before: string; beforeColor: string }>()
-      for (const [line, marker] of props.gutterMarkers?.() ?? EMPTY_GUTTER_MARKERS) {
-        if (!marker) {
-          continue
-        }
-        signs.set(line, {
-          before: marker,
-          beforeColor: theme().get("text_muted"),
-        })
-      }
-      node.setLineSigns(signs)
-    }
-
-    if (!renderCursor) {
-      return
-    }
-
-    const colors = new Map<number, { gutter: string; content: string }>()
-    if (props.isFocused()) {
-      const color = theme().get("editor_active_line_background")
-      colors.set(cursorState()?.line ?? lineIndex(0), {
-        gutter: color,
-        content: color,
-      })
-    }
-    node.setLineColors(colors)
   }
 
   const textareaAdapter = createBufferTextareaAdapter({
@@ -198,6 +150,13 @@ export function Buffer(props: BufferProps) {
     geometry: textGeometry,
     resetCursorTracking: viewport.resetCursorTracking,
   })
+  const gutter = createGutter({
+    theme,
+    rows: () => viewport.viewportRows(),
+    isFocused: props.isFocused,
+    cursorLine: () => cursorState()?.line,
+    requestRender: queueDecorationsRender,
+  })
 
   function updateCursorStateFromTextarea(options?: CursorStateSyncOptions) {
     if (viewport.isSelecting()) {
@@ -228,9 +187,11 @@ export function Buffer(props: BufferProps) {
   }
 
   extensions = attachBufferExtensions(props.extensions ?? [], {
+    getCursor: () => cursorState(),
     getViewport: () => viewport.snapshot(),
     getRenderTarget: () => textareaAdapter.createRenderTarget(),
     getDocument: doc,
+    setGutterMarkers: gutter.setMarkers,
     setSyntaxStyle: (style) => textareaAdapter.setSyntaxStyle(style),
     requestDecorationsRender: queueDecorationsRender,
   })
@@ -418,15 +379,6 @@ export function Buffer(props: BufferProps) {
     props.onStateChange?.(state)
   })
 
-  createEffect(() => {
-    props.gutterMarkers?.()
-    theme().get("text_muted")
-    props.isFocused()
-    cursorState()?.line
-    theme().get("editor_active_line_background")
-    queueDecorationsRender()
-  })
-
   createEffect(
     on(
       props.isFocused,
@@ -512,10 +464,7 @@ export function Buffer(props: BufferProps) {
               maxHeight={viewport.contentRows()}
             />
             <line_number
-              ref={(node: LineNumberRenderable | undefined) => {
-                gutterRef = node
-                queueDecorationsRender()
-              }}
+              ref={gutter.attach}
               position="absolute"
               top={0}
               left={0}

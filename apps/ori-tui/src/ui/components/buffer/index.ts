@@ -22,6 +22,7 @@ export type {
 } from "./coords"
 export { Document } from "./document"
 export type { BufferExtension, BufferExtensionHost } from "./extension"
+export { createStatementGutterMarkersExtension } from "./extensions/statement-gutter-markers"
 export { type BufferStatementDetector, createStatementsExtension } from "./extensions/statements"
 export { createSyntaxHighlightsExtension } from "./extensions/syntax-highlights"
 export type { RenderTarget } from "./render-target"

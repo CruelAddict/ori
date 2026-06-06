@@ -1,5 +1,6 @@
 import type { DocCharOffset } from "@ui/components/buffer/coords"
 import type { BufferExtension } from "@ui/components/buffer/extension"
+import { createStatementGutterMarkersExtension } from "@ui/components/buffer/extensions/statement-gutter-markers"
 import { createStatementsExtension } from "@ui/components/buffer/extensions/statements"
 import { createSyntaxHighlightsExtension } from "@ui/components/buffer/extensions/syntax-highlights"
 import type { SyntaxThemePalette } from "@utils/syntax-highlighter"
@@ -37,6 +38,10 @@ export function createSqlSupport(options: {
     logger: options.logger,
   })
   const statementsExtension = createStatementsExtension(analysis.detector)
+  const gutterMarkersExtension = createStatementGutterMarkersExtension({
+    id: "sql-statement-gutter-markers",
+    statements: statementsExtension.source,
+  })
   const highlightsExtension = createSyntaxHighlightsExtension({
     id: "sql-highlights",
     statements: statementsExtension.source,
@@ -51,7 +56,7 @@ export function createSqlSupport(options: {
   })
 
   return {
-    extensions: [statementsExtension.extension, highlightsExtension],
+    extensions: [statementsExtension.extension, gutterMarkersExtension, highlightsExtension],
     autocomplete: worker.autocomplete,
     snapshot: analysis.snapshot,
     resolveQueryAtOffset: (text, lineStarts, offset) =>
