@@ -295,7 +295,11 @@ export function createBufferTextareaAdapter(options: CreateBufferTextareaAdapter
     },
     insertText: (text: string) => {
       resetMeasurements()
-      ref()?.insertText(text)
+      withCursorChangeCause("input", () => ref()?.insertText(text))
+    },
+    insertTextWithCause: (text: string, cause: BufferTextareaCursorChangeCause = "input") => {
+      resetMeasurements()
+      withCursorChangeCause(cause, () => ref()?.insertText(text))
     },
     requestRender: () => ref()?.requestRender(),
     setSyntaxStyle: (style: SyntaxStyle | null) => {
@@ -370,6 +374,18 @@ export function createBufferTextareaAdapter(options: CreateBufferTextareaAdapter
     deleteRange: (startRow: number, startCol: number, endRow: number, endCol: number) => {
       resetMeasurements()
       ref()?.editBuffer.deleteRange(startRow, startCol, endRow, endCol)
+    },
+    deleteCharBackward: (cause: BufferTextareaCursorChangeCause = "input") => {
+      resetMeasurements()
+      return withCursorChangeCause(cause, () => ref()?.deleteCharBackward() ?? false)
+    },
+    deleteChar: (cause: BufferTextareaCursorChangeCause = "input") => {
+      resetMeasurements()
+      return withCursorChangeCause(cause, () => ref()?.deleteChar() ?? false)
+    },
+    deleteToLineStart: (cause: BufferTextareaCursorChangeCause = "input") => {
+      resetMeasurements()
+      return withCursorChangeCause(cause, () => ref()?.deleteToLineStart() ?? false)
     },
     createRenderTarget: (): RenderTarget | undefined => {
       const node = ref()

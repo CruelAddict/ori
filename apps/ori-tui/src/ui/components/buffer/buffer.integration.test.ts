@@ -439,6 +439,30 @@ function createWrappedScrollLockFixture() {
   }
 }
 
+function createProgrammaticEditScrollFixture(line = "jo") {
+  const longLine = `INSERT INTO "Products" VALUES ('${"x".repeat(140)}')`
+  return {
+    text: [longLine, longLine, "go", line, longLine, longLine].join("\n"),
+    focusRow: 3,
+  }
+}
+
+async function scrollBufferDownWithoutMovingCursor(app: MountedTuiApp, textarea: TextareaRenderable) {
+  const startScrollY = textarea.scrollY
+  const startRow = textarea.logicalCursor.row
+  const startCol = textarea.logicalCursor.col
+
+  for (let i = 0; i < 6; i += 1) {
+    await app.setup.mockMouse.scroll(textarea.x + 1, textarea.y + 1, "down")
+    await app.renderOnce()
+    if (textarea.scrollY > startScrollY && textarea.logicalCursor.row === startRow && textarea.logicalCursor.col === startCol) {
+      return
+    }
+  }
+
+  throw new Error("Failed to scroll the viewport without moving the cursor")
+}
+
 function getBufferLineNumber(app: MountedTuiApp) {
   return findRequiredNode(
     app,
@@ -1361,55 +1385,55 @@ VALUES (1,N'alpha',N'one')`
     }
   })
 
-  // Working around opentui bug
-  test("keeps the final blank line stable after ctrl+e ctrl+u on the last line", async () => {
-    const text =
-      "select * from authors;\n\nselect * from books limit 10;\n\n\nselect * from authors a\njoin books b on a.id = b.author_id "
-    const expected = "select * from authors;\n\nselect * from books limit 10;\n\n\nselect * from authors a\n"
-    const app = await mountBuffer({ text, width: 80, height: 20 })
+  test("preserves the final blank line after ctrl+u at EOF on a non-empty last line", async () => {
+    const text = "ab\ncd"
+    const expected = "ab\n"
+    const app = await mountBuffer({ text, width: 24, height: 8 })
 
     try {
       const textarea = getBufferTextarea(app)
 
-      textarea.gotoLine(6)
-      await app.waitFor(() => textarea.logicalCursor.row === 6)
-      textarea.gotoLineEnd()
-      await app.waitFor(() => textarea.logicalCursor.row === 6 && textarea.logicalCursor.col === 35)
-
-      app.setup.mockInput.pressKey("e", { ctrl: true })
-      await app.renderOnce()
+      await moveCursor(app, textarea, 1, 2)
       app.setup.mockInput.pressKey("u", { ctrl: true })
 
       await app.waitFor(() => textarea.plainText === expected)
-      await app.waitFor(() => textarea.logicalCursor.row === 6 && textarea.logicalCursor.col === 0)
-      await app.waitFor(() => textarea.visualCursor.logicalRow === 6 && textarea.visualCursor.logicalCol === 0)
+      await app.waitFor(() => textarea.logicalCursor.row === 1 && textarea.logicalCursor.col === 0)
+      await app.waitFor(() => textarea.lineCount === 2 && textarea.virtualLineCount === 2)
+      await app.waitFor(() => textarea.lineInfo.lineSources.join(",") === "0,1")
 
-      expect(textarea.lineCount).toBe(7)
-      expect(textarea.virtualLineCount).toBe(7)
-      expect(textarea.lineInfo.lineSources).toEqual([0, 1, 2, 3, 4, 5, 6])
-      expect(textarea.cursorOffset).toBe(expected.length)
-      expect(readFrameLines(app).some((line) => line.trimStart().startsWith("7"))).toBe(true)
-
-      app.setup.mockInput.pressArrow("down")
-      await app.renderOnce()
-
-      expect(textarea.logicalCursor.row).toBe(6)
-      expect(textarea.logicalCursor.col).toBe(0)
-      expect(textarea.visualCursor.logicalRow).toBe(6)
-      expect(textarea.visualCursor.logicalCol).toBe(0)
-
-      app.setup.mockInput.pressArrow("right", { meta: true })
-      await app.renderOnce()
-
-      expect(textarea.logicalCursor.row).toBe(6)
-      expect(textarea.logicalCursor.col).toBe(0)
+      expect(textarea.lineCount).toBe(2)
+      expect(textarea.virtualLineCount).toBe(2)
+      expect(textarea.lineInfo.lineSources).toEqual([0, 1])
       expect(textarea.cursorOffset).toBe(expected.length)
     } finally {
       app.destroy()
     }
   })
 
-  // Should be removed once we have fix for ctrl-u bug on last line in opentui core
+  test("joins the previous line after ctrl+u on a blank final line at EOF", async () => {
+    const text = "ab\n"
+    const app = await mountBuffer({ text, width: 24, height: 8 })
+
+    try {
+      const textarea = getBufferTextarea(app)
+
+      await moveCursor(app, textarea, 1, 0)
+      app.setup.mockInput.pressKey("u", { ctrl: true })
+
+      await app.waitFor(() => textarea.plainText === "ab")
+      await app.waitFor(() => textarea.logicalCursor.row === 0 && textarea.logicalCursor.col === 2)
+      await app.waitFor(() => textarea.lineCount === 1 && textarea.virtualLineCount === 1)
+      await app.waitFor(() => textarea.lineInfo.lineSources.join(",") === "0")
+
+      expect(textarea.lineCount).toBe(1)
+      expect(textarea.virtualLineCount).toBe(1)
+      expect(textarea.lineInfo.lineSources).toEqual([0])
+      expect(textarea.cursorOffset).toBe(2)
+    } finally {
+      app.destroy()
+    }
+  })
+
   test("preserves repeated ctrl+u behavior away from EOF", async () => {
     const text = "Line 1\nLine 2\nLine 3\nLine 4"
     const app = await mountBuffer({ text, width: 40, height: 12 })
@@ -1436,27 +1460,59 @@ VALUES (1,N'alpha',N'one')`
     }
   })
 
-  test("does not scroll downward after ctrl+u at the end of a long wrapped line", async () => {
-    const fixture = createWrappedScrollLockFixture()
-    const app = await mountBuffer({ text: fixture.text, width: 48, height: 8 })
+  test("keeps scroll position after ctrl+u in a scrolled wrapped buffer", async () => {
+    const fixture = createProgrammaticEditScrollFixture()
+    const app = await mountBuffer({ text: fixture.text, width: 36, height: 8 })
 
     try {
       const textarea = getBufferTextarea(app)
       const scrollbox = getBufferScrollbox(app)
-      const beforeLine = fixture.text.split("\n")[fixture.longLineRow] ?? ""
 
-      await moveCursor(app, textarea, fixture.longLineRow, beforeLine.length)
-      await app.waitFor(() => textarea.logicalCursor.row === fixture.longLineRow)
-      const beforeScrollY = textarea.scrollY
+      await moveCursor(app, textarea, fixture.focusRow, -1)
+      await scrollBufferDownWithoutMovingCursor(app, textarea)
+      const before = captureScrollState(textarea, scrollbox)
 
       app.setup.mockInput.pressKey("u", { ctrl: true })
-      await app.waitFor(() => textarea.logicalCursor.row === fixture.longLineRow && textarea.logicalCursor.col === 0)
+      await app.waitFor(() => textarea.logicalCursor.row === fixture.focusRow && textarea.logicalCursor.col === 0)
+      await app.waitFor(() => textarea.plainText.split("\n")[fixture.focusRow] === "")
 
-      const state = captureScrollState(textarea, scrollbox)
-      expect(state.editorScrollY).toBe(state.scrollboxTop)
-      expect(state.editorScrollY).toBeLessThanOrEqual(beforeScrollY)
-      expect(state.cursorVisualRow).toBeGreaterThanOrEqual(0)
-      expect(state.cursorVisualRow).toBeLessThan(state.editorHeight)
+      const after = captureScrollState(textarea, scrollbox)
+      expect(after.editorScrollY).toBe(after.scrollboxTop)
+      expect(after.editorScrollY).toBe(before.editorScrollY)
+      expect(after.scrollboxTop).toBe(before.scrollboxTop)
+    } finally {
+      app.destroy()
+    }
+  })
+
+  test("keeps scroll position after accepting autocomplete in a scrolled wrapped buffer", async () => {
+    const fixture = createProgrammaticEditScrollFixture("j")
+    const app = await mountBuffer({
+      text: fixture.text,
+      width: 36,
+      height: 8,
+      autocomplete: createAutocompleteProvider(),
+    })
+
+    try {
+      const textarea = getBufferTextarea(app)
+      const scrollbox = getBufferScrollbox(app)
+
+      await moveCursor(app, textarea, fixture.focusRow, -1)
+      await scrollBufferDownWithoutMovingCursor(app, textarea)
+
+      await app.setup.mockInput.typeText("o")
+      await app.waitFor(() => textarea.plainText.split("\n")[fixture.focusRow] === "jo")
+      await app.waitFor(() => readFrameText(app).includes("join keyword"))
+      const before = captureScrollState(textarea, scrollbox)
+
+      app.setup.mockInput.pressEnter()
+      await app.waitFor(() => textarea.plainText.split("\n")[fixture.focusRow] === "join")
+
+      const after = captureScrollState(textarea, scrollbox)
+      expect(after.editorScrollY).toBe(after.scrollboxTop)
+      expect(after.editorScrollY).toBe(before.editorScrollY)
+      expect(after.scrollboxTop).toBe(before.scrollboxTop)
     } finally {
       app.destroy()
     }

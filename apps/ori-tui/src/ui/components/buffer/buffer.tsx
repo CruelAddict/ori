@@ -7,8 +7,11 @@ import { createDeferredCallback } from "@utils/deferred-callback"
 import { type Accessor, createEffect, createSignal, on, onCleanup, onMount } from "solid-js"
 import { createBufferAutocomplete } from "./autocomplete/controller"
 import type { BufferAutocompleteProvider } from "./autocomplete/types"
-import { type BufferAppliedEdit, createBufferEditCommands } from "./buffer-edit-commands"
-import { type BufferTextareaCursorChangeEvent, createBufferTextareaAdapter } from "./buffer-textarea-adapter"
+import {
+  type BufferTextareaCursorChangeCause,
+  type BufferTextareaCursorChangeEvent,
+  createBufferTextareaAdapter,
+} from "./buffer-textarea-adapter"
 import { type DocCharOffset, docCharOffset, type LineIndex, lineIndex } from "./coords"
 import { type BufferTextChange, Document, findTextChange, normalizeDocumentText } from "./document"
 import { attachBufferExtensions, type BufferExtension } from "./extension"
@@ -138,11 +141,6 @@ export function Buffer(props: BufferProps) {
       updateCursorStateFromTextarea(options)
     },
   })
-  const editCommands = createBufferEditCommands({
-    textarea: textareaAdapter,
-    geometry: textGeometry,
-    resetCursorTracking: viewport.resetCursorTracking,
-  })
   const gutter = createGutter({
     theme,
     rows: () => viewport.viewportRows(),
@@ -212,22 +210,71 @@ export function Buffer(props: BufferProps) {
         containerHeight: bufferRootRef.height,
       }
     },
-    accept: (item, range) =>
-      applyProgrammaticEdit(editCommands.replaceDocRange(range.start, range.end, item.insertText, item.cursorOffset)),
+    accept: (item, range) => applyRangeEdit(range.start, range.end, item.insertText, item.cursorOffset),
   })
 
-  const applyProgrammaticEdit = (edit: BufferAppliedEdit | undefined) => {
-    if (!edit) {
+  const setCursorDocOffset = (offset: DocCharOffset, cause: BufferTextareaCursorChangeCause = "buffer") => {
+    if (!textareaAdapter.readCursor()) {
       return false
     }
 
-    applyTextChange(edit.text, true)
-    textareaAdapter.setText(edit.text, "buffer")
-    editCommands.setCursorDocOffset(edit.cursorOffset)
-    defer(() => {
-      updateCursorStateFromTextarea()
-    })
+    viewport.resetCursorTracking()
+    const next = doc().positionAtOffset(offset)
+    textareaAdapter.setCursor(next.line, next.offset, cause)
+    textareaAdapter.requestRender()
     return true
+  }
+
+  const applyRangeEdit = (
+    start: DocCharOffset,
+    end: DocCharOffset,
+    insertText: string,
+    nextCursorOffset = insertText.length,
+  ) => {
+    const document = doc()
+    const from = document.positionAtOffset(start)
+    const to = document.positionAtOffset(end)
+    textareaAdapter.deleteRange(from.line, from.offset, to.line, to.offset)
+    textareaAdapter.setCursor(from.line, from.offset, "buffer")
+    textareaAdapter.insertTextWithCause(insertText, "buffer")
+    if (nextCursorOffset !== insertText.length) {
+      const prefix = insertText.slice(0, nextCursorOffset)
+      const lines = prefix.split("\n")
+      const lastLine = lines.at(-1) ?? ""
+      viewport.resetCursorTracking()
+      textareaAdapter.setCursor(
+        from.line + lines.length - 1,
+        lines.length === 1 ? from.offset + lastLine.length : lastLine.length,
+        "buffer",
+      )
+    }
+    return true
+  }
+
+  const deleteToLineStart = () => {
+    const cursor = textareaAdapter.readCursor()
+    if (!cursor) {
+      return false
+    }
+
+    const document = doc()
+    const offset = document.offsetAtLineChar(cursor.logicalRow, cursor.logicalCol)
+    const atEof = cursor.logicalRow === document.lineStarts.length - 1 && offset === document.text.length
+    if (!atEof) {
+      return textareaAdapter.deleteToLineStart("buffer")
+    }
+    if (cursor.logicalCol > 0) {
+      textareaAdapter.setCursor(cursor.logicalRow, 0, "buffer")
+      let applied = false
+      for (let i = 0; i < cursor.logicalCol; i += 1) {
+        applied = textareaAdapter.deleteChar("buffer") || applied
+      }
+      return applied
+    }
+    if (cursor.logicalRow > 0) {
+      return textareaAdapter.deleteCharBackward("buffer")
+    }
+    return false
   }
 
   const applyTextChange = (nextText: string, modified: boolean, change?: BufferTextChange) => {
@@ -257,7 +304,7 @@ export function Buffer(props: BufferProps) {
     applyTextChange(normalizedText, false)
     if (hasTextarea) {
       textareaAdapter.setText(normalizedText, "buffer")
-      editCommands.setCursorDocOffset(docCharOffset(0))
+      setCursorDocOffset(docCharOffset(0))
     }
     setCursorState({ line: lineIndex(0), offset: docCharOffset(0) })
     queueDecorationsRender()
@@ -402,7 +449,7 @@ export function Buffer(props: BufferProps) {
       pattern: "ctrl+u",
       handler: () => {
         autocomplete.close()
-        applyProgrammaticEdit(editCommands.deleteToLineStart())
+        deleteToLineStart()
       },
       preventDefault: true,
     },
