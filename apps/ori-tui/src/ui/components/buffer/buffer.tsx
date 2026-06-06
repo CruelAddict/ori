@@ -4,13 +4,13 @@ import { SelectPopup } from "@ui/components/select-popup"
 import { useTheme } from "@ui/providers/theme"
 import { type KeyBinding, KeyScope } from "@ui/services/key-scopes"
 import { type Accessor, createEffect, createSignal, on, onCleanup, onMount } from "solid-js"
-import { type BufferAnalysis, createAnalysisHighlightLayer } from "./analysis"
 import { createBufferAutocomplete } from "./autocomplete/controller"
 import type { BufferAutocompleteProvider } from "./autocomplete/types"
 import { type BufferAppliedEdit, createBufferEditCommands } from "./buffer-edit-commands"
 import { type BufferTextareaCursorChangeEvent, createBufferTextareaAdapter } from "./buffer-textarea-adapter"
 import { type DocCharOffset, docCharOffset, type LineIndex, lineIndex } from "./coords"
 import { type BufferTextChange, Document, findTextChange, normalizeDocumentText } from "./document"
+import { attachBufferExtensions, type BufferExtension } from "./extension"
 import { createTextGeometry } from "./text-geometry"
 import { createViewport } from "./viewport"
 
@@ -50,7 +50,7 @@ export type BufferProps = {
   gutterMarkers?: Accessor<ReadonlyMap<number, string>>
   onStateChange?: (state: BufferState) => void
   autocomplete?: BufferAutocompleteProvider
-  analysis?: BufferAnalysis
+  extensions?: readonly BufferExtension[]
 }
 
 type CursorStateSyncOptions = {
@@ -72,7 +72,7 @@ export function Buffer(props: BufferProps) {
   let gutterRef: LineNumberRenderable | undefined
   let disposed = false
   let renderQueued = false
-  let analysisHighlightLayer: ReturnType<typeof createAnalysisHighlightLayer> | undefined
+  let extensions: ReturnType<typeof attachBufferExtensions>
 
   const background = () => theme().get("editor_background")
 
@@ -106,7 +106,7 @@ export function Buffer(props: BufferProps) {
       viewport.renderScrollboxFromTextarea()
     }
     renderGutter()
-    analysisHighlightLayer?.renderVisibleStatements({ continueHighlighting: !fromScrollbox })
+    extensions.emitDecorationsRender({ allowAsyncWork: !fromScrollbox })
     autocomplete.repositionPopup()
   }
 
@@ -227,18 +227,13 @@ export function Buffer(props: BufferProps) {
     }
   }
 
-  analysisHighlightLayer = props.analysis
-    ? createAnalysisHighlightLayer({
-        analysis: props.analysis,
-        host: {
-          getViewport: () => viewport.snapshot(),
-          getRenderTarget: () => textareaAdapter.createRenderTarget(),
-          getDocument: doc,
-          setSyntaxStyle: (style) => textareaAdapter.setSyntaxStyle(style),
-          queueViewportRender: queueDecorationsRender,
-        },
-      })
-    : undefined
+  extensions = attachBufferExtensions(props.extensions ?? [], {
+    getViewport: () => viewport.snapshot(),
+    getRenderTarget: () => textareaAdapter.createRenderTarget(),
+    getDocument: doc,
+    setSyntaxStyle: (style) => textareaAdapter.setSyntaxStyle(style),
+    requestDecorationsRender: queueDecorationsRender,
+  })
 
   const autocomplete = createBufferAutocomplete({
     provider: () => props.autocomplete,
@@ -288,9 +283,13 @@ export function Buffer(props: BufferProps) {
       return
     }
 
-    analysisHighlightLayer?.rebuild(next, change ?? edit.change)
     setDoc(next)
     textareaAdapter.resetMeasurements()
+    extensions.emitDocumentChange({
+      document: next,
+      change: change ?? edit.change,
+      reason: modified ? "edit" : "replace",
+    })
     props.onTextChange(next.text, { modified: next.modified })
   }
 
@@ -301,9 +300,6 @@ export function Buffer(props: BufferProps) {
   const setText = (nextText: string) => {
     const normalizedText = normalizeDocumentText(nextText)
     const hasTextarea = textareaAdapter.readText() !== undefined
-    if (normalizedText !== doc().text) {
-      analysisHighlightLayer?.reset()
-    }
     applyTextChange(normalizedText, false)
     if (hasTextarea) {
       textareaAdapter.setText(normalizedText, "buffer")
@@ -338,7 +334,6 @@ export function Buffer(props: BufferProps) {
     if (!node) {
       return
     }
-    textareaAdapter.setSyntaxStyle(props.analysis?.syntaxStyle() ?? null)
     queueDecorationsRender()
     setTimeout(() => {
       if (disposed || !textareaAdapter.isAttached(node)) {
@@ -411,7 +406,7 @@ export function Buffer(props: BufferProps) {
     renderQueued = false
     viewport.dispose()
     autocomplete.close()
-    analysisHighlightLayer?.dispose()
+    extensions.dispose()
     textareaAdapter.detach()
   })
 
@@ -424,7 +419,6 @@ export function Buffer(props: BufferProps) {
   })
 
   createEffect(() => {
-    props.analysis?.syntaxStyle()
     props.gutterMarkers?.()
     theme().get("text_muted")
     props.isFocused()
@@ -451,7 +445,7 @@ export function Buffer(props: BufferProps) {
     ),
   )
 
-  analysisHighlightLayer?.rebuild(doc())
+  extensions.emitDocumentChange({ document: doc(), reason: "initial" })
 
   const bindings: KeyBinding[] = [
     {

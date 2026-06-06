@@ -1,5 +1,7 @@
-import type { BufferAnalysis } from "@ui/components/buffer/analysis"
 import type { DocCharOffset } from "@ui/components/buffer/coords"
+import type { BufferExtension } from "@ui/components/buffer/extension"
+import { createStatementsExtension } from "@ui/components/buffer/extensions/statements"
+import { createSyntaxHighlightsExtension } from "@ui/components/buffer/extensions/syntax-highlights"
 import type { SyntaxThemePalette } from "@utils/syntax-highlighter"
 import type { Logger } from "pino"
 import type { Accessor } from "solid-js"
@@ -13,7 +15,7 @@ import { createSqlEditorBgWorkerAdapter } from "./sql-editor-bg-worker-adapter"
 import type { SqlEditorSchemaState } from "./sql-editor-protocol"
 
 export type SqlSupport = {
-  analysis: BufferAnalysis
+  extensions: readonly BufferExtension[]
   autocomplete: ReturnType<typeof createSqlEditorBgWorkerAdapter>["autocomplete"]
   snapshot: Accessor<SqlAnalysisSnapshot>
   resolveQueryAtOffset: (
@@ -34,6 +36,14 @@ export function createSqlSupport(options: {
     theme: options.theme,
     logger: options.logger,
   })
+  const statementsExtension = createStatementsExtension(analysis.detector)
+  const highlightsExtension = createSyntaxHighlightsExtension({
+    id: "sql-highlights",
+    statements: statementsExtension.source,
+    syntaxStyle: analysis.syntaxStyle,
+    highlightText: analysis.highlightText,
+    onHighlightError: analysis.onHighlightError,
+  })
   const worker = createSqlEditorBgWorkerAdapter({
     getState: options.getSchemaState,
     subscribeState: options.subscribeSchemaState,
@@ -41,7 +51,7 @@ export function createSqlSupport(options: {
   })
 
   return {
-    analysis: analysis.analysis,
+    extensions: [statementsExtension.extension, highlightsExtension],
     autocomplete: worker.autocomplete,
     snapshot: analysis.snapshot,
     resolveQueryAtOffset: (text, lineStarts, offset) =>

@@ -118,7 +118,7 @@ export function EditorPanel(props: EditorPanelProps) {
           onStateChange={handleStateChange}
           gutterMarkers={gutterMarkers}
           autocomplete={support.autocomplete}
-          analysis={support.analysis}
+          extensions={support.extensions}
         />
       </box>
     </KeyScope>

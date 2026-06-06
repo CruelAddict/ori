@@ -5,16 +5,22 @@ import { createSqlAnalysis } from "@ui/widgets/editor-panel/sql-analysis"
 import { createComponent, onCleanup } from "solid-js"
 import { type MountedTuiApp, mountInTui } from "../../../test/opentui-harness"
 import { findRequiredNode, requirePresent } from "../../../test/opentui-test-tools"
-import type { BufferAnalysis } from "./analysis"
 import type { BufferAutocompleteProvider } from "./autocomplete/types"
 import { Buffer, type BufferApi, type BufferState } from "./buffer"
+import type { BufferExtension } from "./extension"
+import { type BufferStatementDetector, createStatementsExtension } from "./extensions/statements"
+import { createSyntaxHighlightsExtension, type SyntaxHighlightsOptions } from "./extensions/syntax-highlights"
+
+export type BufferTestLanguage = BufferStatementDetector &
+  Pick<SyntaxHighlightsOptions, "syntaxStyle" | "highlightText" | "onHighlightError">
 
 type MountBufferOptions = {
   text?: string
   width: number
   height: number
   autocomplete?: BufferAutocompleteProvider
-  analysis?: BufferAnalysis
+  language?: BufferTestLanguage
+  extensions?: readonly BufferExtension[]
   onStateChange?: (state: BufferState) => void
   focusSelf?: () => void
 }
@@ -30,13 +36,38 @@ function renderBuffer(options: MountBufferOptions, registerApi?: (api: BufferApi
       createComponent(() => {
         const { theme } = useTheme()
         const logger = useLogger()
-        const ownedAnalysis = options.analysis
-          ? undefined
-          : createSqlAnalysis({
-              theme,
-              logger,
-            })
-        const analysis = options.analysis ?? ownedAnalysis?.analysis
+        const ownedAnalysis =
+          options.language || options.extensions
+            ? undefined
+            : createSqlAnalysis({
+                theme,
+                logger,
+              })
+        const language =
+          options.language ??
+          (ownedAnalysis
+            ? {
+                ...ownedAnalysis.detector,
+                syntaxStyle: ownedAnalysis.syntaxStyle,
+                highlightText: ownedAnalysis.highlightText,
+                onHighlightError: ownedAnalysis.onHighlightError,
+              }
+            : undefined)
+        const statementsExtension = language ? createStatementsExtension(language) : undefined
+        const extensions =
+          options.extensions ??
+          (statementsExtension && language
+            ? [
+                statementsExtension.extension,
+                createSyntaxHighlightsExtension({
+                  id: `${language.id}-highlights`,
+                  statements: statementsExtension.source,
+                  syntaxStyle: language.syntaxStyle,
+                  highlightText: language.highlightText,
+                  onHighlightError: language.onHighlightError,
+                }),
+              ]
+            : [])
 
         onCleanup(() => {
           ownedAnalysis?.dispose()
@@ -49,7 +80,7 @@ function renderBuffer(options: MountBufferOptions, registerApi?: (api: BufferApi
           focusSelf: options.focusSelf ?? (() => {}),
           onStateChange: options.onStateChange,
           autocomplete: options.autocomplete,
-          analysis,
+          extensions,
           registerApi,
         })
       }, {}),

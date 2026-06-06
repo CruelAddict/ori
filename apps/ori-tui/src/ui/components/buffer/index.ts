@@ -1,4 +1,3 @@
-export type { BufferAnalysis } from "./analysis"
 export type {
   BufferAutocompleteItem,
   BufferAutocompleteProvider,
@@ -22,6 +21,9 @@ export type {
   ViewportTop,
 } from "./coords"
 export { Document } from "./document"
+export type { BufferExtension, BufferExtensionHost } from "./extension"
+export { type BufferStatementDetector, createStatementsExtension } from "./extensions/statements"
+export { createSyntaxHighlightsExtension } from "./extensions/syntax-highlights"
 export type { RenderTarget } from "./render-target"
 export type { TextDisplayPoint, TextGeometry, TextLineGeometry, TextLinePosition } from "./text-geometry"
 export type { ViewportCursorState } from "./viewport"

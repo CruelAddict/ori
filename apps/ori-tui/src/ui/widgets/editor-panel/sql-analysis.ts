@@ -1,5 +1,5 @@
-import type { BufferAnalysis, BufferAnalysisSnapshot } from "@ui/components/buffer/analysis"
 import type { DocCharOffset, LineIndex } from "@ui/components/buffer/coords"
+import type { BufferStatementDetector, BufferStatementSnapshot } from "@ui/components/buffer/extensions/statements"
 import { offsetToLineCol } from "@utils/line-offsets"
 import { syntaxHighlighter } from "@utils/syntax-highlighter"
 import type { Logger } from "pino"
@@ -25,7 +25,7 @@ type SyntaxThemePalette = {
   get(group: string): string
 }
 
-function mapQuery(query: BufferAnalysisSnapshot["entries"][number]): SqlQuery {
+function mapQuery(query: BufferStatementSnapshot["entries"][number]): SqlQuery {
   return {
     id: query.id,
     start: query.start,
@@ -101,27 +101,27 @@ export function createSqlAnalysis(params: { theme: Accessor<SyntaxThemePalette>;
     queryStartLineByLine: [],
   })
 
-  const refreshSnapshot = (analysisSnapshot: BufferAnalysisSnapshot | undefined, lineCount: number) => {
-    const queries = analysisSnapshot?.entries.map((entry) => mapQuery(entry)) ?? []
+  const refreshSnapshot = (statementSnapshot: BufferStatementSnapshot | undefined, lineCount: number) => {
+    const queries = statementSnapshot?.entries.map((entry) => mapQuery(entry)) ?? []
     setSnapshot({
       queries,
       queryStartLineByLine: buildQueryStartLineByLine(queries, lineCount),
     })
   }
 
-  const analysis: BufferAnalysis = {
-    languageId: "sql",
-    syntaxStyle: () => highlighter.highlightResult().syntaxStyle,
-    collectRanges: (text, lineStarts) => collectSqlQueries(text, lineStarts),
-    highlightText: (text) => highlighter.highlightText(text),
+  const detector: BufferStatementDetector = {
+    id: "sql-analysis",
+    detect: (text, lineStarts) => collectSqlQueries(text, lineStarts),
     onSnapshotChange: refreshSnapshot,
-    onHighlightError: (err, updateVersion) => {
-      params.logger.error({ err, updateVersion }, "sql-analysis: statement highlight failed")
-    },
   }
 
   return {
-    analysis,
+    detector,
+    syntaxStyle: () => highlighter.highlightResult().syntaxStyle,
+    highlightText: (text: string) => highlighter.highlightText(text),
+    onHighlightError: (err: unknown, updateVersion: number) => {
+      params.logger.error({ err, updateVersion }, "sql-analysis: statement highlight failed")
+    },
     snapshot,
     dispose: () => {
       highlighter.dispose()

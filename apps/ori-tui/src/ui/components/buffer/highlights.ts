@@ -1,8 +1,13 @@
 import type { SyntaxHighlightSpan } from "@utils/syntax-highlighter"
-import type { StatementEntry } from "./buffer-statement-cache"
 import { type DocCharOffset, type DocCharRange, docCharOffset, type LineIndex, lineIndex } from "./coords"
 import type { RenderTarget } from "./render-target"
 import type { TextGeometry, TextLineGeometry } from "./text-geometry"
+
+export type BufferHighlightSource = {
+  start: DocCharOffset
+  end: DocCharOffset
+  spans: readonly SyntaxHighlightSpan[]
+}
 
 function getCachedLineGeometry(params: {
   geometry: TextGeometry
@@ -19,15 +24,15 @@ function getCachedLineGeometry(params: {
   return value
 }
 
-function collectStatementHighlightSpanLines(params: {
+function renderHighlightSpanLines(params: {
   target: RenderTarget
   span: SyntaxHighlightSpan
   geometry: TextGeometry
-  highlightGroupId: number
+  groupId: number
   lineGeometryCache: Map<LineIndex, TextLineGeometry>
   renderRange: DocCharRange
 }) {
-  const { target, span, geometry, highlightGroupId, lineGeometryCache, renderRange } = params
+  const { target, span, geometry, groupId, lineGeometryCache, renderRange } = params
   if (span.end <= span.start) {
     return
   }
@@ -58,7 +63,7 @@ function collectStatementHighlightSpanLines(params: {
       start: displayRange.start,
       end: displayRange.end,
       styleId: span.styleId,
-      groupId: highlightGroupId,
+      groupId,
     })
   }
 }
@@ -85,32 +90,28 @@ function findFirstHighlightSpanIndex(spans: readonly SyntaxHighlightSpan[], star
 }
 
 /**
- * Renders syntax-highlight spans for the visible part of a parsed statement.
+ * Renders highlight spans for the visible part of a buffer source.
  *
- * This first clips the statement to `renderRange`, jumps to the first
+ * This first clips the source to `renderRange`, jumps to the first
  * possibly-overlapping span, and then renders each overlapping span line-by-line.
  */
-export function renderStatementHighlightRange(params: {
+export function renderHighlights(params: {
   target: RenderTarget
-  statement: StatementEntry
+  source: BufferHighlightSource
   geometry: TextGeometry
-  highlightGroupId: number
+  groupId: number
   renderRange: DocCharRange
 }) {
-  const { target, statement, geometry, highlightGroupId, renderRange } = params
+  const { target, source, geometry, groupId, renderRange } = params
   const lineGeometryCache = new Map<LineIndex, TextLineGeometry>()
-  const rangeStart = docCharOffset(Math.max(statement.start, renderRange.start))
-  const rangeEnd = docCharOffset(Math.min(statement.end, renderRange.end))
+  const rangeStart = docCharOffset(Math.max(source.start, renderRange.start))
+  const rangeEnd = docCharOffset(Math.min(source.end, renderRange.end))
   if (rangeEnd <= rangeStart) {
     return
   }
 
-  for (
-    let index = findFirstHighlightSpanIndex(statement.spans, rangeStart);
-    index < statement.spans.length;
-    index += 1
-  ) {
-    const span = statement.spans[index]
+  for (let index = findFirstHighlightSpanIndex(source.spans, rangeStart); index < source.spans.length; index += 1) {
+    const span = source.spans[index]
     if (!span) {
       continue
     }
@@ -121,11 +122,11 @@ export function renderStatementHighlightRange(params: {
       break
     }
 
-    collectStatementHighlightSpanLines({
+    renderHighlightSpanLines({
       target,
       span,
       geometry,
-      highlightGroupId,
+      groupId,
       lineGeometryCache,
       renderRange: {
         start: rangeStart,

@@ -8,10 +8,16 @@ import {
 } from "@opentui/core"
 import type { MountedTuiApp } from "../../../test/opentui-harness"
 import { findRequiredNode, readFrameLines, readFrameLineTokens } from "../../../test/opentui-test-tools"
-import type { BufferAnalysis, BufferAnalysisRange } from "./analysis"
 import type { BufferState } from "./buffer"
-import { getBufferScrollbox, getBufferTextarea, mountBuffer, moveCursor } from "./buffer.test-tools"
+import {
+  type BufferTestLanguage,
+  getBufferScrollbox,
+  getBufferTextarea,
+  mountBuffer,
+  moveCursor,
+} from "./buffer.test-tools"
 import { docCharOffset, lineIndex } from "./coords"
+import type { BufferStatementRange } from "./extensions/statements"
 
 type HighlightState = {
   plainText: string
@@ -82,6 +88,14 @@ function hasHighlightedLines(textarea: TextareaRenderable, lines: number[]) {
   return getHighlightedLines(textarea).join(",") === lines.join(",")
 }
 
+function captureLineHighlightRanges(textarea: TextareaRenderable, line: number) {
+  return textarea.getLineHighlights(line).map((highlight) => ({
+    start: highlight.start,
+    end: highlight.end,
+    styleId: highlight.styleId,
+  }))
+}
+
 function stripRenderedLineNumberPrefix(text: string) {
   const withoutIndent = text.trimStart()
   const firstSpace = withoutIndent.indexOf(" ")
@@ -127,14 +141,15 @@ function busyWait(ms: number) {
   }
 }
 
-function createBlockingAnalysis(blockMs: number): BufferAnalysis {
+function createBlockingAnalysis(blockMs: number): BufferTestLanguage {
   const syntaxStyle = SyntaxStyle.create()
   return {
+    id: "blocking-analysis",
     syntaxStyle: () => {
       busyWait(blockMs)
       return syntaxStyle
     },
-    collectRanges: (text, lineStarts) => [
+    detect: (text, lineStarts) => [
       {
         start: docCharOffset(0),
         end: docCharOffset(text.length),
@@ -146,12 +161,13 @@ function createBlockingAnalysis(blockMs: number): BufferAnalysis {
   }
 }
 
-function createLineHighlightAnalysis(): BufferAnalysis {
+function createLineHighlightAnalysis(): BufferTestLanguage {
   const syntaxStyle = SyntaxStyle.create()
   return {
+    id: "line-highlight-analysis",
     syntaxStyle: () => syntaxStyle,
-    collectRanges: (text, lineStarts) => {
-      const ranges = [] as BufferAnalysisRange[]
+    detect: (text, lineStarts) => {
+      const ranges = [] as BufferStatementRange[]
       for (let index = 0; index < lineStarts.length; index += 1) {
         const start = lineStarts[index] ?? docCharOffset(0)
         const nextStart = lineStarts[index + 1] ?? docCharOffset(text.length)
@@ -259,10 +275,12 @@ describe("buffer integration", () => {
       expect(stateAfterInitialHighlight.cursorOffset).toBe(0)
       expect(stateAfterInitialHighlight.lineCount).toBe(5)
       expectHighlightedLines(stateAfterInitialHighlight, visibleStatementLines)
+      const secondStatementRanges = captureLineHighlightRanges(textarea, 1)
+      expect(secondStatementRanges.length).toBeGreaterThan(0)
 
       await app.setup.mockInput.typeText("a")
       // Typing at the start of the first statement should update the text,
-      // but keep the same visible lines highlighted while the statement is reprocessed.
+      // but keep neighbouring statement highlight columns stable while the first statement is reprocessed.
       await app.waitFor(() => textarea.plainText === `a${sql}`)
       await app.waitFor(() => hasHighlightedLines(textarea, visibleStatementLines))
       const stateAfterType = captureHighlightState(textarea, visibleStatementLines)
@@ -270,6 +288,7 @@ describe("buffer integration", () => {
       expect(stateAfterType.plainText).toBe(`a${sql}`)
       expect(stateAfterType.cursorOffset).toBe(1)
       expectHighlightedLines(stateAfterType, visibleStatementLines)
+      expect(captureLineHighlightRanges(textarea, 1)).toEqual(secondStatementRanges)
 
       app.setup.mockInput.pressBackspace()
       await app.waitFor(() => textarea.plainText === sql)
@@ -279,6 +298,7 @@ describe("buffer integration", () => {
       expect(stateAfterBackspace.plainText).toBe(sql)
       expect(stateAfterBackspace.cursorOffset).toBe(0)
       expectHighlightedLines(stateAfterBackspace, visibleStatementLines)
+      expect(captureLineHighlightRanges(textarea, 1)).toEqual(secondStatementRanges)
     } finally {
       app.destroy()
     }
@@ -524,7 +544,7 @@ GO`
 
   test("highlights lines revealed by drag selection autoscroll", async () => {
     const text = Array.from({ length: 80 }, (_, i) => `select ${i} as value`).join("\n")
-    const app = await mountBuffer({ text, width: 40, height: 8, analysis: createLineHighlightAnalysis() })
+    const app = await mountBuffer({ text, width: 40, height: 8, language: createLineHighlightAnalysis() })
 
     try {
       const textarea = getBufferTextarea(app)
@@ -773,7 +793,7 @@ GO`
 
   test("keeps split sgr mouse tails out of text when viewport render is slow", async () => {
     const text = Array.from({ length: 20 }, (_, i) => `line-${i}`).join("\n")
-    const app = await mountBuffer({ text, width: 24, height: 8, analysis: createBlockingAnalysis(40) })
+    const app = await mountBuffer({ text, width: 24, height: 8, language: createBlockingAnalysis(40) })
 
     try {
       const textarea = getBufferTextarea(app)
