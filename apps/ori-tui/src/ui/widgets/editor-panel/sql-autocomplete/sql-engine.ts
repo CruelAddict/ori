@@ -1284,11 +1284,13 @@ function shouldOpenImplicit(beforeCursor: string, token: string, mode: "word" | 
   return /\b(?:from|join)(?:[ \t]+|(?:[ \t]*\r?\n)+[ \t]+)$/i.test(beforeCursor)
 }
 
+function isExactCompletedKeyword(token: string, dialect: SqlDialect) {
+  const exact = normalize(token)
+  return EXACT_COMPLETED_KEYWORDS.has(exact) || dialect.keywords.some((keyword) => normalize(keyword) === exact)
+}
+
 function shouldSuppressExactKeyword(token: string, mode: "word" | "member", clause: SqlClause, dialect: SqlDialect) {
   if (mode !== "word" || !token) {
-    return false
-  }
-  if (expectsTableSuggestions(clause)) {
     return false
   }
 
@@ -1296,11 +1298,14 @@ function shouldSuppressExactKeyword(token: string, mode: "word" | "member", clau
   if (EXACT_CLAUSE_KEYWORDS.has(exact)) {
     return true
   }
+  if (expectsTableSuggestions(clause)) {
+    return isExactCompletedKeyword(token, dialect)
+  }
   if (!expectsColumnSuggestions(clause)) {
     return false
   }
 
-  return EXACT_COMPLETED_KEYWORDS.has(exact) || dialect.keywords.some((keyword) => normalize(keyword) === exact)
+  return isExactCompletedKeyword(token, dialect)
 }
 
 function shouldSuppressExactScopedQualifier(

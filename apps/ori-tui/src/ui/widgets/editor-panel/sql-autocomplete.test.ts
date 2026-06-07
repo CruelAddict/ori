@@ -223,7 +223,16 @@ describe("sql autocomplete", () => {
     })
 
     test("stays closed after a completed FROM keyword without trailing whitespace", () => {
-      expect(complete("select * from|")).toBeUndefined()
+      expect(
+        complete(
+          "select * from|",
+          catalog({
+            public: {
+              forecast_ad_hoc_tracking_reporting_form_0139_snapshot_entry: ["id"],
+            },
+          }),
+        ),
+      ).toBeUndefined()
     })
 
     test("stays closed after FROM newline without a typed prefix", () => {
@@ -282,7 +291,10 @@ describe("sql autocomplete", () => {
         complete(
           "select * from all|",
           catalog({
-            public: { users: ["id", "email"], orders: ["id"], books: ["id"] },
+            public: {
+              allocation_rollup: ["id"],
+              allocations_ad_hoc_tracking_: ["id"],
+            },
           }),
         ),
       ).toBeUndefined()
