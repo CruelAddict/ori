@@ -286,18 +286,28 @@ describe("sql autocomplete", () => {
       expectIncludes(result, ["selectables"])
     })
 
-    test("does not ignore an exact keyword-shaped token in FROM clause", () => {
-      expect(
-        complete(
-          "select * from all|",
-          catalog({
-            public: {
-              allocation_rollup: ["id"],
-              allocations_ad_hoc_tracking_: ["id"],
-            },
-          }),
-        ),
-      ).toBeUndefined()
+    test("suggests relations for an exact select-keyword-shaped token in FROM clause", () => {
+      const result = complete(
+        "select * from all|",
+        catalog({
+          public: {
+            allocation_rollup: ["id"],
+            allocations_ad_hoc_tracking_: ["id"],
+          },
+        }),
+      )
+
+      expectIncludes(result, ["allocation_rollup", "allocations_ad_hoc_tracking_"])
+    })
+
+    test("suggests relations for an exact clause-keyword-shaped token in FROM clause", () => {
+      const result = complete("select * from order|")
+
+      expectIncludes(result, ["orders"])
+    })
+
+    test("keeps exact follow-up keywords closed after a completed relation", () => {
+      expect(complete("select * from users where|")).toBeUndefined()
     })
 
     test("does not suggest an exact relation match as a no-op completion", () => {

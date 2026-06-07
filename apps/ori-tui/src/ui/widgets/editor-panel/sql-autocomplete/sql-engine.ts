@@ -1308,6 +1308,14 @@ function shouldSuppressExactKeyword(token: string, mode: "word" | "member", clau
   return isExactCompletedKeyword(token, dialect)
 }
 
+function shouldAllowExactRelationPrefix(clause: SqlClause, token: string, postRelationKeywords: readonly string[]) {
+  if (!expectsTableSuggestions(clause) || postRelationKeywords.length > 0) {
+    return false
+  }
+
+  return normalize(token) !== clause
+}
+
 function shouldSuppressExactScopedQualifier(
   token: string,
   mode: "word" | "member",
@@ -1456,7 +1464,9 @@ export function getSqlAutocompleteResult(input: SqlAutocompleteInput): BufferAut
   const selectFollowUps = clause === "select" ? getSelectFollowUpOptions(beforeCursor) : []
   const clauseFollowUpsOnly = shouldShowClauseFollowUpsOnly(beforeCursor, clause, span.token, clauseFollowUps)
   const exactClauseFollowUp = clauseFollowUps.some((keyword) => normalize(keyword) === normalize(span.token))
-  if (shouldSuppressExactKeyword(span.token, span.mode, clause, input.dialect) && !exactClauseFollowUp) {
+  const suppressExactKeyword = shouldSuppressExactKeyword(span.token, span.mode, clause, input.dialect)
+  const allowExactRelationPrefix = shouldAllowExactRelationPrefix(clause, span.token, postRelationKeywords)
+  if (suppressExactKeyword && !allowExactRelationPrefix && !exactClauseFollowUp) {
     return undefined
   }
   const items: RankedItem[] = []
