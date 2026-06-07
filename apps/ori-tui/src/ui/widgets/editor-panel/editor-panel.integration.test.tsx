@@ -248,9 +248,9 @@ describe("editor panel integration", () => {
 
       const signs = lineNumber.getLineSigns()
 
-      expect(signs.get(0)?.before).toBe("• ")
-      expect(signs.get(1)?.before).toBe("• ")
-      expect(signs.get(2)?.before).toBe("󰻃 ")
+      expect(signs.get(0)?.before).toBe(" •")
+      expect(signs.get(1)?.before).toBe(" •")
+      expect(signs.get(2)?.before).toBe(" 󰻃")
       expect(getHighlightedLines(textarea)).toEqual(visibleStatementLines)
     } finally {
       app.destroy()
@@ -300,9 +300,9 @@ ADD FOREIGN KEY (
 
       const signs = lineNumber.getLineSigns()
 
-      expect(signs.get(0)?.before).toBe("• ")
-      expect(signs.get(3)?.before).toBe("• ")
-      expect(signs.get(9)?.before).toBe("󰻃 ")
+      expect(signs.get(0)?.before).toBe(" •")
+      expect(signs.get(3)?.before).toBe(" •")
+      expect(signs.get(9)?.before).toBe(" 󰻃")
     } finally {
       app.destroy()
     }
@@ -342,14 +342,14 @@ ADD FOREIGN KEY (
 
       await moveCursor(app, textarea, lastStatementStartLine, 0)
       await app.waitFor(() => textarea.logicalCursor.row === lastStatementStartLine, 5_000)
-      await app.waitFor(() => lineNumber.getLineSigns().get(lastStatementStartLine)?.before === "󰻃 ", 5_000)
+      await app.waitFor(() => lineNumber.getLineSigns().get(lastStatementStartLine)?.before === " 󰻃", 5_000)
       await app.waitFor(() => textarea.getLineHighlights(lastStatementStartLine).length > 0, 5_000)
 
       const signs = lineNumber.getLineSigns()
 
-      expect(signs.get(firstStatementStartLine)?.before).toBe("• ")
-      expect(signs.get(middleStatementStartLine)?.before).toBe("• ")
-      expect(signs.get(lastStatementStartLine)?.before).toBe("󰻃 ")
+      expect(signs.get(firstStatementStartLine)?.before).toBe(" •")
+      expect(signs.get(middleStatementStartLine)?.before).toBe(" •")
+      expect(signs.get(lastStatementStartLine)?.before).toBe(" 󰻃")
       expect(textarea.plainText.slice(-fixture.tail.length)).toBe(fixture.tail)
     } finally {
       app.destroy()
@@ -515,9 +515,9 @@ ADD FOREIGN KEY (
 
       const signs = lineNumber.getLineSigns()
 
-      expect(signs.get(0)?.before).toBe("• ")
-      expect(signs.get(3)?.before).toBe("• ")
-      expect(signs.get(6)?.before).toBe("󰻃 ")
+      expect(signs.get(0)?.before).toBe(" •")
+      expect(signs.get(3)?.before).toBe(" •")
+      expect(signs.get(6)?.before).toBe(" 󰻃")
     } finally {
       app.destroy()
     }

@@ -7,6 +7,7 @@ import { createDeferredCallback } from "@utils/deferred-callback"
 import { type Accessor, createEffect, createSignal, on, onCleanup, onMount } from "solid-js"
 import { createBufferAutocomplete } from "./autocomplete/controller"
 import type { BufferAutocompleteProvider } from "./autocomplete/types"
+import "./buffer-line-number-renderable"
 import {
   type BufferTextareaCursorChangeCause,
   type BufferTextareaCursorChangeEvent,
@@ -547,7 +548,7 @@ export function Buffer(props: BufferProps) {
               minHeight={viewport.contentRows()}
               maxHeight={viewport.contentRows()}
             />
-            <line_number
+            <buffer_line_number
               ref={gutter.attach}
               position="absolute"
               top={0}
@@ -586,7 +587,7 @@ export function Buffer(props: BufferProps) {
                 onPaste={() => autocomplete.close()}
                 onContentChange={handleContentChange}
               />
-            </line_number>
+            </buffer_line_number>
           </box>
         </OriScrollbox>
         <SelectPopup viewModel={autocomplete.viewModel} />

@@ -1,8 +1,8 @@
 import type { BufferExtension } from "../../extension"
 import type { StatementSource } from "../statements"
 
-const DEFAULT_MARKER = "• "
-const DEFAULT_ACTIVE_MARKER = "󰻃 "
+const DEFAULT_MARKER = " •"
+const DEFAULT_ACTIVE_MARKER = " 󰻃"
 
 export type StatementGutterMarkersOptions = {
   id: string
