@@ -30,6 +30,7 @@ type BufferAutocompleteViewModel = {
   openFromEdit: () => void
   refreshOpenOnly: () => void
   repositionPopup: () => void
+  closeIfCursorLeftRange: (cursor?: DocCharOffset) => void
 }
 
 export function createBufferAutocomplete(options: CreateBufferAutocompleteOptions) {
@@ -203,6 +204,18 @@ export function createBufferAutocomplete(options: CreateBufferAutocompleteOption
     popup.close()
   }
 
+  const closeIfCursorLeftRange = (cursor?: DocCharOffset) => {
+    const range = replace()
+    if (!range) {
+      return
+    }
+    if (cursor !== undefined && range.start <= cursor && cursor <= range.end) {
+      return
+    }
+
+    close()
+  }
+
   const viewModel = createMemo<SelectPopupViewModel<BufferAutocompleteItem> | undefined>(() => {
     if (!replace()) {
       return
@@ -221,5 +234,6 @@ export function createBufferAutocomplete(options: CreateBufferAutocompleteOption
     openFromEdit,
     refreshOpenOnly,
     repositionPopup,
+    closeIfCursorLeftRange,
   } satisfies BufferAutocompleteViewModel
 }

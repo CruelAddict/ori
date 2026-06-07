@@ -6,10 +6,10 @@ import type { ViewportSnapshot } from "../../viewport-snapshot"
 import type { CollectStatements, StatementEntry, StatementRange, StatementSnapshot } from "./statement-types"
 
 function buildStatementLineMap(entries: readonly StatementRange[], lineCount: number) {
-  const lines = Array.from({ length: lineCount }, () => -1)
+  const lines = Array.from({ length: lineCount }, () => [] as number[])
   entries.forEach((entry, index) => {
     for (let line = Number(entry.startLine); line <= entry.endLine; line += 1) {
-      lines[line] = index
+      lines[line]?.push(index)
     }
   })
   return lines
@@ -386,7 +386,7 @@ function buildStatementSnapshot(params: {
   return {
     version: params.document.version,
     entries,
-    lineToStatement: buildStatementLineMap(entries, lineStarts.length),
+    lineToStatements: buildStatementLineMap(entries, lineStarts.length),
   }
 }
 
@@ -406,13 +406,19 @@ function collectVisibleStatementIndices(
   const endRow = Math.min(layout.sourceLines.length, scrollY + height + overscan)
   const seen = new Set<number>()
   const indices: number[] = []
-  const pushIndex = (index: number | undefined) => {
-    if (index === undefined || index < 0 || seen.has(index)) {
+  const pushIndices = (line: readonly number[] | undefined) => {
+    if (!line) {
       return
     }
 
-    seen.add(index)
-    indices.push(index)
+    for (const index of line) {
+      if (seen.has(index)) {
+        continue
+      }
+
+      seen.add(index)
+      indices.push(index)
+    }
   }
 
   for (let row = startRow; row < endRow; row += 1) {
@@ -420,10 +426,10 @@ function collectVisibleStatementIndices(
     if (line === undefined) {
       continue
     }
-    pushIndex(snapshot.lineToStatement[line])
+    pushIndices(snapshot.lineToStatements[line])
   }
 
-  pushIndex(snapshot.lineToStatement[focusedRow])
+  pushIndices(snapshot.lineToStatements[focusedRow])
   return indices
 }
 

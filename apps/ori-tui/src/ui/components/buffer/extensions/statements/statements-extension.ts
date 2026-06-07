@@ -19,7 +19,7 @@ export type BufferStatementEntry = BufferStatementRange & {
 export type BufferStatementSnapshot = {
   version: Document["version"] | string
   entries: readonly BufferStatementEntry[]
-  lineToStatement: readonly number[]
+  lineToStatements: readonly number[][]
 }
 
 export type BufferStatementDetector = {
@@ -51,7 +51,7 @@ export function createStatementsExtension(detector: BufferStatementDetector): {
         ? {
             version: snapshot.version,
             entries: snapshot.entries,
-            lineToStatement: snapshot.lineToStatement,
+            lineToStatements: snapshot.lineToStatements,
           }
         : undefined,
       lineCount,

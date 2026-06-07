@@ -257,6 +257,42 @@ describe("editor panel integration", () => {
     }
   })
 
+  test("shows question mark gutter marker only on the ambiguous cursor line", async () => {
+    const text = "SELECT 1; SELECT 2;\nSELECT 3;"
+    const viewModel = createViewModel(text)
+    const app = await mountInTui(
+      () =>
+        createComponent(NotificationsProvider, {
+          get children() {
+            return createComponent(StatuslineProvider, {
+              resourceName: "test",
+              get children() {
+                return createComponent(EditorPanel, { viewModel })
+              },
+            })
+          },
+        }),
+      { width: 100, height: 12 },
+    )
+
+    try {
+      const textarea = getBufferTextarea(app)
+      const lineNumber = getBufferLineNumber(app)
+
+      textarea.focus()
+      await moveCursor(app, textarea, 0, 10)
+      await app.waitFor(() => lineNumber.getLineSigns().get(0)?.before === " ?")
+      await app.waitFor(() => lineNumber.getLineSigns().get(1)?.before === " •")
+
+      const signs = lineNumber.getLineSigns()
+
+      expect(signs.get(0)?.before).toBe(" ?")
+      expect(signs.get(1)?.before).toBe(" •")
+    } finally {
+      app.destroy()
+    }
+  })
+
   test("splits standalone GO batches into separate statements after paste", async () => {
     const insertedText = `if exists (select 1)
 drop procedure old_proc

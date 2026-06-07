@@ -3,6 +3,7 @@ import type { StatementSource } from "../statements"
 
 const DEFAULT_MARKER = " •"
 const DEFAULT_ACTIVE_MARKER = " 󰻃"
+const DEFAULT_AMBIGUOUS_MARKER = " ?"
 
 export type StatementGutterMarkersOptions = {
   id: string
@@ -25,13 +26,20 @@ export function createStatementGutterMarkersExtension(options: StatementGutterMa
         const marker = options.marker ?? DEFAULT_MARKER
         const activeMarker = options.activeMarker ?? DEFAULT_ACTIVE_MARKER
         const markers = new Map<number, string>()
+        const line = host.getCursor()?.line
         for (const statement of statements.entries) {
           markers.set(statement.startLine, marker)
         }
 
-        const line = host.getCursor()?.line
-        const activeIndex = line === undefined ? -1 : (statements.lineToStatement[line] ?? -1)
-        const activeStatement = statements.entries[activeIndex]
+        const activeIndices = line === undefined ? undefined : statements.lineToStatements[line]
+        if (line !== undefined && (activeIndices?.length ?? 0) > 1) {
+          markers.set(line, DEFAULT_AMBIGUOUS_MARKER)
+          host.setGutterMarkers(markers)
+          return
+        }
+
+        const activeStatement =
+          activeIndices && activeIndices.length > 0 ? statements.entries[activeIndices[0] ?? -1] : undefined
         if (activeStatement) {
           markers.set(activeStatement.startLine, activeMarker)
         }

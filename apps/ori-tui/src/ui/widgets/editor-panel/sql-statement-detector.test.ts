@@ -261,7 +261,7 @@ SELECT 2`,
     })
 
     const analysis = analyzeSqlDocument(sql, buildLineStarts(sql))
-    expect(analysis.queryStartLineByLine).toEqual([0, -1, 2])
+    expect(analysis.queryIndicesByLine).toEqual([[0], [], [1]])
   })
 
   test("splits USE batches from the preceding select", () => {

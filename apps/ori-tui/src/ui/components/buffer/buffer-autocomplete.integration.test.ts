@@ -377,4 +377,34 @@ describe("buffer autocomplete integration", () => {
       mounted.app.destroy()
     }
   })
+
+  test("closes autocomplete when the cursor leaves the active replace range", async () => {
+    const mounted = await mountBufferWithApi({
+      width: 100,
+      height: 24,
+      autocomplete: createStaticAutocomplete("authors"),
+    })
+
+    try {
+      const textarea = getBufferTextarea(mounted.app)
+      const text = "select * from aut"
+      const nextText = "select * from auth"
+      const replaceStart = nextText.lastIndexOf("auth")
+
+      await mountText(mounted, textarea, text)
+      await moveCursor(mounted.app, textarea, 0, -1)
+      await mounted.app.setup.mockInput.typeText("h")
+      await mounted.app.waitFor(() => textarea.plainText === nextText)
+      await waitForCompletion(mounted.app, "authors")
+
+      for (let i = 0; i < 5; i += 1) {
+        mounted.app.setup.mockInput.pressArrow("left")
+      }
+
+      await mounted.app.waitFor(() => textarea.logicalCursor.col < replaceStart)
+      await mounted.app.waitFor(() => popupBox(mounted.app) === undefined)
+    } finally {
+      mounted.app.destroy()
+    }
+  })
 })

@@ -16,7 +16,7 @@ export type HighlightEntry = StatementEntry & {
 
 export type HighlightSnapshot = {
   entries: HighlightEntry[]
-  lineToStatement: readonly number[]
+  lineToStatements: readonly number[][]
 }
 
 export type HighlightBatch = {
@@ -223,7 +223,7 @@ export function createHighlightStore() {
     )
     snapshot = {
       entries,
-      lineToStatement: statements.lineToStatement,
+      lineToStatements: statements.lineToStatements,
     }
     previousEntries = entries
     previousText = document.text

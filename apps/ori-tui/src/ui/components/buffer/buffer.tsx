@@ -133,7 +133,8 @@ export function Buffer(props: BufferProps) {
       queueDecorationsRender()
     },
     onTextareaCursorChanged: (options) => {
-      updateCursorStateFromTextarea(options)
+      const cursor = updateCursorStateFromTextarea(options)
+      autocomplete.closeIfCursorLeftRange(cursor)
     },
     onTextareaSelectionChange: (event) => {
       if (event.result === undefined && event.selection?.isDragging) {
@@ -161,7 +162,8 @@ export function Buffer(props: BufferProps) {
     textarea: textareaAdapter,
     geometry: textGeometry,
     updateCursorFromTextarea: (options) => {
-      updateCursorStateFromTextarea(options)
+      const cursor = updateCursorStateFromTextarea(options)
+      autocomplete.closeIfCursorLeftRange(cursor)
     },
   })
   const gutter = createGutter({
@@ -175,18 +177,18 @@ export function Buffer(props: BufferProps) {
   function updateCursorStateFromTextarea(options?: CursorStateSyncOptions) {
     if (viewport.isSelecting()) {
       // OpenTUI mutates cursor/viewport while selection autoscrolls; feeding that back here makes both render loops race.
-      return
+      return cursorState()?.offset
     }
 
     const next = viewport.captureCursorState(options)
     if (!next) {
       setCursorState(undefined)
-      return
+      return undefined
     }
 
     if (next.offset === undefined) {
       setCursorState(undefined)
-      return
+      return undefined
     }
 
     setCursorState({
@@ -194,6 +196,7 @@ export function Buffer(props: BufferProps) {
       offset: next.offset,
     })
     queueDecorationsRender()
+    return next.offset
   }
 
   extensions = attachBufferExtensions(props.extensions ?? [], {
@@ -339,7 +342,8 @@ export function Buffer(props: BufferProps) {
     const change = findTextChange(doc().text, nextText)
     const modified = change ? true : doc().modified
     if (!change && nextText === doc().text && modified === doc().modified) {
-      updateCursorStateFromTextarea()
+      const cursor = updateCursorStateFromTextarea()
+      autocomplete.closeIfCursorLeftRange(cursor)
       return
     }
     applyTextChange(nextText, modified, change)

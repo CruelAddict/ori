@@ -18,7 +18,7 @@ export type SqlQueryResolution = { kind: "query"; query: SqlQuery } | { kind: "a
 
 export type SqlAnalysisSnapshot = {
   queries: SqlQuery[]
-  queryStartLineByLine: number[]
+  queryIndicesByLine: number[][]
 }
 
 type SyntaxThemePalette = {
@@ -35,22 +35,14 @@ function mapQuery(query: BufferStatementSnapshot["entries"][number]): SqlQuery {
   }
 }
 
-function buildQueryStartLineByLine(queries: readonly SqlQuery[], lineCount: number) {
-  const lines = Array.from({ length: lineCount }, () => -1)
+function buildQueryIndicesByLine(queries: readonly SqlQuery[], lineCount: number) {
+  const lines = Array.from({ length: lineCount }, () => [] as number[])
 
-  for (const query of queries) {
+  queries.forEach((query, index) => {
     for (let line = Number(query.startLine); line <= query.endLine; line += 1) {
-      const current = lines[line]
-      if (current === -1) {
-        lines[line] = query.startLine
-        continue
-      }
-      if (current === query.startLine) {
-        continue
-      }
-      lines[line] = -2
+      lines[line]?.push(index)
     }
-  }
+  })
 
   return lines
 }
@@ -72,17 +64,15 @@ export function resolveSqlQueryAtOffset(
   offset: DocCharOffset,
 ): SqlQueryResolution {
   const line = resolveCursorLine(text, lineStarts, offset)
-  const startLine = snapshot.queryStartLineByLine[line] ?? -1
-  if (startLine === -2) {
-    return { kind: "ambiguous" }
-  }
-  if (startLine < 0) {
+  const indices = snapshot.queryIndicesByLine[line] ?? []
+  if (!indices.length) {
     return { kind: "none" }
   }
+  if (indices.length > 1) {
+    return { kind: "ambiguous" }
+  }
 
-  const query = snapshot.queries.find(
-    (item) => item.startLine === startLine && item.startLine <= line && line <= item.endLine,
-  )
+  const query = snapshot.queries[indices[0] ?? -1]
   if (!query) {
     return { kind: "none" }
   }
@@ -98,14 +88,14 @@ export function createSqlAnalysis(params: { theme: Accessor<SyntaxThemePalette>;
   })
   const [snapshot, setSnapshot] = createSignal<SqlAnalysisSnapshot>({
     queries: [],
-    queryStartLineByLine: [],
+    queryIndicesByLine: [],
   })
 
   const refreshSnapshot = (statementSnapshot: BufferStatementSnapshot | undefined, lineCount: number) => {
     const queries = statementSnapshot?.entries.map((entry) => mapQuery(entry)) ?? []
     setSnapshot({
       queries,
-      queryStartLineByLine: buildQueryStartLineByLine(queries, lineCount),
+      queryIndicesByLine: statementSnapshot?.lineToStatements ?? buildQueryIndicesByLine(queries, lineCount),
     })
   }
 

@@ -101,15 +101,13 @@ function createSyntaxHighlightsRuntime(params: SyntaxHighlightsOptions & { host:
       return undefined
     }
 
-    const focusedIndex = statements.lineToStatement[viewport.focusedLine]
     if (
       preferFocusedStatement &&
       dirtyIndicesNeedingRender.length === 1 &&
-      focusedIndex !== undefined &&
-      focusedIndex >= 0 &&
-      dirtyIndicesNeedingRender.includes(focusedIndex)
+      statements.lineToStatements[viewport.focusedLine]?.includes(dirtyIndicesNeedingRender[0] ?? -1)
     ) {
-      return store.buildBatch(document, focusedIndex, focusedIndex)
+      const index = dirtyIndicesNeedingRender[0] ?? 0
+      return store.buildBatch(document, index, index)
     }
 
     return store.buildBatch(

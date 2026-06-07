@@ -361,23 +361,6 @@ const highlightEditActions: HighlightEditAction[] = [
     },
   },
   {
-    name: "autocomplete replacement",
-    prepare: (text, offset) => {
-      const value = offset === text.length ? " jo" : "jo "
-      const expected = insertAt(text, offset, offset === text.length ? " join" : "join ")
-      return {
-        text: insertAt(text, offset, value),
-        cursor: offset + (offset === text.length ? value.length : 2),
-        autocomplete: createAutocompleteProvider(),
-        didApply: (next) => next === expected,
-        run: async ({ app }) => {
-          await app.waitFor(() => readFrameText(app).includes("join keyword"))
-          app.setup.mockInput.pressEnter()
-        },
-      }
-    },
-  },
-  {
     name: "ctrl-w deletion",
     prepare: (text, offset) => {
       const value = offset === text.length ? " asdf" : "asdf "
@@ -544,6 +527,28 @@ function expectScrollStateAligned(state: ScrollState) {
 }
 
 describe("buffer integration", () => {
+  test("highlights both statements when two SQL statements share one visible line", async () => {
+    const sql = "select 1; select 2;\nselect 3;"
+    const analysis = createControlledSqlKeywordAnalysis()
+    const app = await mountBuffer({ text: sql, width: 40, height: 8, language: analysis })
+
+    try {
+      const textarea = getBufferTextarea(app)
+
+      await app.waitFor(() => analysis.pendingCount() > 0)
+      await drainPendingKeywordHighlights(app, analysis)
+      await app.waitFor(() => captureLineHighlightRanges(textarea, 0).length === 2)
+
+      expect(captureLineHighlightRanges(textarea, 0)).toEqual([
+        { start: 0, end: 6, styleId: 1 },
+        { start: 10, end: 16, styleId: 1 },
+      ])
+      expect(captureLineHighlightRanges(textarea, 1)).toEqual([{ start: 0, end: 6, styleId: 1 }])
+    } finally {
+      app.destroy()
+    }
+  })
+
   test("keeps existing statement highlights while typing below a trailing newline-terminated statement", async () => {
     const sql = "select a\nfrom b\nwhere c\n"
     const analysis = createControlledSqlKeywordAnalysis()

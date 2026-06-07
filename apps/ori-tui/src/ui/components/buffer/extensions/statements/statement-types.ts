@@ -21,5 +21,5 @@ export type StatementEntry = StatementRange & {
 export type StatementSnapshot = {
   version: DocumentVersion | string
   entries: StatementEntry[]
-  lineToStatement: number[]
+  lineToStatements: number[][]
 }

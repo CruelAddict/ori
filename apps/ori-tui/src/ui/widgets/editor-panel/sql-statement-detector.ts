@@ -15,7 +15,7 @@ export type SqlQueryResolution =
 
 export type SqlDocumentAnalysis = {
   queries: SqlStatement[]
-  queryStartLineByLine: number[]
+  queryIndicesByLine: number[][]
 }
 
 type Span = { start: number; end: number }
@@ -155,22 +155,14 @@ function hasNonWhitespace(text: string, start: number, end: number): boolean {
   return false
 }
 
-function buildQueryStartLineByLine(queries: SqlStatement[], lineCount: number) {
-  const lines = Array.from({ length: lineCount }, () => -1)
+function buildQueryIndicesByLine(queries: SqlStatement[], lineCount: number) {
+  const lines = Array.from({ length: lineCount }, () => [] as number[])
 
-  for (const query of queries) {
+  queries.forEach((query, index) => {
     for (let line = Number(query.startLine); line <= query.endLine; line += 1) {
-      const current = lines[line]
-      if (current === -1) {
-        lines[line] = query.startLine
-        continue
-      }
-      if (current === query.startLine) {
-        continue
-      }
-      lines[line] = -2
+      lines[line]?.push(index)
     }
-  }
+  })
 
   return lines
 }
@@ -811,7 +803,7 @@ export function analyzeSqlDocument(text: string, lineStarts: readonly number[]):
   const queries = collectSqlQueries(text, lineStarts)
   return {
     queries,
-    queryStartLineByLine: buildQueryStartLineByLine(queries, lineStarts.length),
+    queryIndicesByLine: buildQueryIndicesByLine(queries, lineStarts.length),
   }
 }
 

@@ -154,18 +154,24 @@ export function createRenderedHighlights() {
     let changed = false
     const statements: HighlightEntry[] = []
     const seen = new Set<number>()
-    const pushIndex = (index: number | undefined) => {
-      if (index === undefined || index < 0 || seen.has(index)) {
+    const pushIndices = (indices: readonly number[] | undefined) => {
+      if (!indices) {
         return
       }
 
-      const statement = snapshot.entries[index]
-      if (!statement) {
-        return
-      }
+      for (const index of indices) {
+        if (seen.has(index)) {
+          continue
+        }
 
-      seen.add(index)
-      statements.push(statement)
+        const statement = snapshot.entries[index]
+        if (!statement) {
+          continue
+        }
+
+        seen.add(index)
+        statements.push(statement)
+      }
     }
 
     const startRow = Math.max(0, viewport.scrollY - overscan)
@@ -175,10 +181,10 @@ export function createRenderedHighlights() {
       if (line === undefined) {
         continue
       }
-      pushIndex(snapshot.lineToStatement[line])
+      pushIndices(snapshot.lineToStatements[line])
     }
 
-    pushIndex(snapshot.lineToStatement[viewport.focusedLine])
+    pushIndices(snapshot.lineToStatements[viewport.focusedLine])
     const visibleIds = new Set(statements.map((statement) => statement.id))
 
     for (const [id, entry] of rendered) {
