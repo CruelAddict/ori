@@ -52,6 +52,20 @@ type ScrollState = {
   textareaWidth: number
 }
 
+type InternalLineNumber = LineNumberRenderable & {
+  gutter?: {
+    width: number
+    visible: boolean
+  }
+  target?: {
+    position: string
+    x: number
+    y: number
+    width: number
+    height: number
+  }
+}
+
 type PendingKeywordHighlight = {
   text: string
   resolve: (spans: ReturnType<typeof keywordHighlightSpans>) => void
@@ -139,6 +153,12 @@ function readVisibleLines(app: MountedTuiApp) {
     .map((line) => line.replace(/\s+$/, ""))
     .filter((line) => line.trim().length > 0)
     .map(stripRenderedLineNumberPrefix)
+}
+
+function readWrappedBufferText(app: MountedTuiApp) {
+  return readVisibleLines(app)
+    .filter((line) => line.length > 0 && !/^\d+$/.test(line))
+    .join("")
 }
 
 function waitForImmediate() {
@@ -455,7 +475,11 @@ async function scrollBufferDownWithoutMovingCursor(app: MountedTuiApp, textarea:
   for (let i = 0; i < 6; i += 1) {
     await app.setup.mockMouse.scroll(textarea.x + 1, textarea.y + 1, "down")
     await app.renderOnce()
-    if (textarea.scrollY > startScrollY && textarea.logicalCursor.row === startRow && textarea.logicalCursor.col === startCol) {
+    if (
+      textarea.scrollY > startScrollY &&
+      textarea.logicalCursor.row === startRow &&
+      textarea.logicalCursor.col === startCol
+    ) {
       return
     }
   }
@@ -469,6 +493,10 @@ function getBufferLineNumber(app: MountedTuiApp) {
     (node): node is LineNumberRenderable => node instanceof LineNumberRenderable,
     "Buffer line number was not rendered",
   )
+}
+
+function readInternalLineNumber(node: LineNumberRenderable) {
+  return node as InternalLineNumber
 }
 
 function captureCursorState(
@@ -765,13 +793,55 @@ GO`
 
     try {
       await app.waitFor(() => readVisibleLines(app).length > 0)
-      const visibleLines = readVisibleLines(app)
+      expect(readWrappedBufferText(app)).toBe(line)
+    } finally {
+      app.destroy()
+    }
+  })
 
-      // The wrapped tail should keep the full trailing fragment visible.
-      expect(visibleLines).toContain("IPT */")
-      // A clipped tail would leave only the very end of the token visible.
-      expect(visibleLines).not.toContain("*/")
-      expect(visibleLines).not.toContain("/")
+  test("renders wrapped SQL without losing text between visual lines", async () => {
+    const line =
+      'INSERT "Products"("ProductID","ProductName","SupplierID","CategoryID","QuantityPerUnit","UnitPrice","UnitsInStock","UnitsOnOrder","ReorderLevel","Discontinued") VALUES(11,\'Queso Cabrales\',5,4,\'1 kg pkg.\',21,22,30,30,0)'
+    for (const size of [
+      { width: 110, height: 8 },
+      { width: 44, height: 10 },
+    ]) {
+      const app = await mountBuffer({ text: `${line}\n`, width: size.width, height: size.height })
+
+      try {
+        await app.waitFor(() => readVisibleLines(app).length > 0)
+        expect(readWrappedBufferText(app)).toBe(line)
+      } finally {
+        app.destroy()
+      }
+    }
+  })
+
+  test("pins textarea geometry to the gutter content area after resize and scrollbar changes", async () => {
+    const line =
+      'INSERT "Products"("ProductID","ProductName","SupplierID","CategoryID","QuantityPerUnit","UnitPrice","UnitsInStock","UnitsOnOrder","ReorderLevel","Discontinued") VALUES(11,\'Queso Cabrales\',5,4,\'1 kg pkg.\',21,22,30,30,0)'
+    const text = Array.from({ length: 8 }, () => line).join("\n") + "\n"
+    const app = await mountBuffer({ text, width: 110, height: 8 })
+
+    try {
+      const textarea = getBufferTextarea(app)
+      const scrollbox = getBufferScrollbox(app)
+      const lineNumber = readInternalLineNumber(getBufferLineNumber(app))
+
+      await app.waitFor(() => scrollbox.verticalScrollBar.visible)
+      app.setup.resize(44, 8)
+      await app.waitFor(() => textarea.width <= 37)
+      await app.waitFor(
+        () =>
+          lineNumber.gutter !== undefined &&
+          lineNumber.target !== undefined &&
+          lineNumber.target.x === lineNumber.gutter.width &&
+          lineNumber.target.width === lineNumber.width - lineNumber.gutter.width - 1,
+      )
+
+      expect(lineNumber.target?.y).toBe(textarea.y)
+      expect(lineNumber.target?.height).toBe(lineNumber.height)
+      expect(textarea.editorView.getViewport().width).toBe(textarea.width)
     } finally {
       app.destroy()
     }
@@ -1003,8 +1073,8 @@ GO`
   test("keeps cursor visible and scroll state aligned across scrollbar appearance and burst enter", async () => {
     const line =
       'select author_id, book_id, created_at, updated_at from books where title like "very long wrapped title" and status = "published" order by created_at desc;'
-    const widthBeforeScrollbar = 30
-    const widthAfterScrollbar = 29
+    const widthBeforeScrollbar = 27
+    const widthAfterScrollbar = 27
     const enterPressesBeforeScrollbar = 2
     const burstEnterPresses = 16
     const cursorOffsetAfterBurst = 18

@@ -328,12 +328,13 @@ export function createViewport(options: CreateViewportOptions) {
     }
 
     const viewportRows = Math.max(1, nextRows)
+    const viewportWidth = Math.max(1, box.width)
     const margin = getViewportInsetY({ height: viewportRows }) / viewportRows
     options.textarea.setScrollMargin(margin)
     const nextTop = Math.max(0, Math.min(top, Math.max(0, measureContentRows(viewportRows) - viewportRows)))
     if (
       textareaViewport.top === nextTop &&
-      textareaViewport.width === box.width &&
+      textareaViewport.width === viewportWidth &&
       textareaViewport.rows === viewportRows
     ) {
       pendingTextareaTop = undefined
@@ -344,7 +345,7 @@ export function createViewport(options: CreateViewportOptions) {
 
     pendingTextareaTop = moveCursor ? nextTop : undefined
     const cause = moveCursor ? "scroll" : "input"
-    const change = moveViewport(textareaViewport.left, nextTop, Math.max(1, box.width), viewportRows, moveCursor, cause)
+    const change = moveViewport(textareaViewport.left, nextTop, viewportWidth, viewportRows, moveCursor, cause)
     if (moveCursor || change.cursorChanged) {
       options.updateCursorFromTextarea({ cause, keepStickyVisualColumn: moveCursor })
     }

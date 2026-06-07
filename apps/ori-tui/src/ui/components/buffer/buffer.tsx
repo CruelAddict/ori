@@ -1,4 +1,4 @@
-import type { BoxRenderable, KeyEvent, MouseEvent, PasteEvent, TextareaRenderable } from "@opentui/core"
+import type { BoxRenderable, KeyEvent, MouseEvent, TextareaRenderable } from "@opentui/core"
 import { OriScrollbox } from "@ui/components/ori-scrollbox"
 import { SelectPopup } from "@ui/components/select-popup"
 import { useTheme } from "@ui/providers/theme"
@@ -34,9 +34,9 @@ export type BufferApi = {
 
 export type BufferCursor =
   | {
-    line: LineIndex
-    offset: DocCharOffset
-  }
+      line: LineIndex
+      offset: DocCharOffset
+    }
   | undefined
 
 export type BufferState = {
