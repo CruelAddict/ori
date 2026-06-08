@@ -84,6 +84,10 @@ const SQL_START_KEYWORDS = new Set(
   ].map((word) => word.toLowerCase()),
 )
 
+function isGoBatchLine(line: string) {
+  return /^go(?:\s*--.*)?$/i.test(line)
+}
+
 function startsDollarTag(text: string, index: number): string | undefined {
   if (text[index] !== "$") {
     return undefined
@@ -416,7 +420,7 @@ function findLikelyKeywordAfterNewline(text: string, start: number, end: number)
       i = lineBreak + 1
       continue
     }
-    if (/^go$/i.test(line) || line.startsWith("--")) {
+    if (isGoBatchLine(line) || line.startsWith("--")) {
       if (lineBreak === -1 || lineBreak >= end) {
         return undefined
       }
@@ -455,7 +459,7 @@ function findStandaloneGoLineEnd(text: string, start: number, end: number) {
     lineEnd += 1
   }
 
-  if (!/^go$/i.test(text.slice(start, lineEnd).trim())) {
+  if (!isGoBatchLine(text.slice(start, lineEnd).trim())) {
     return undefined
   }
 
@@ -678,7 +682,7 @@ function trimExecutablePrefix(text: string, span: Span) {
       start = lineBreak === -1 || lineBreak >= span.end ? span.end : lineBreak + 1
       continue
     }
-    if (/^go$/i.test(line)) {
+    if (isGoBatchLine(line)) {
       start = lineBreak === -1 || lineBreak >= span.end ? span.end : lineBreak + 1
       continue
     }
@@ -712,7 +716,7 @@ function trimExecutableSuffix(text: string, span: Span, start: number) {
       end = lineStart
       continue
     }
-    if (/^go$/i.test(line)) {
+    if (isGoBatchLine(line)) {
       end = lineStart
       continue
     }

@@ -147,6 +147,16 @@ ADD FOREIGN KEY (
     ])
   })
 
+  test("treats GO lines with trailing comments as gaps between executable queries", () => {
+    const sql = "SELECT 1\nGO -- next batch\nSELECT 2"
+    const queries = collectSqlQueries(sql, buildLineStarts(sql)).map((query) => sql.slice(query.start, query.end))
+
+    expect(queries).toEqual(["SELECT 1", "SELECT 2"])
+
+    const goLine = withCursor("SELECT 1\n|GO -- next batch\nSELECT 2")
+    expect(resolveSqlQueryAtOffset(goLine.text, buildLineStarts(goLine.text), goLine.cursor)).toEqual({ kind: "none" })
+  })
+
   test("splits consecutive multiline insert statements without semicolons", () => {
     const sql = `INSERT INTO "Records"
 ("Id","Code","Label")

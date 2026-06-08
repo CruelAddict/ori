@@ -43,6 +43,7 @@ function createSyntaxHighlightsRuntime(params: SyntaxHighlightsOptions & { host:
   createEffect(() => {
     trackSyntaxStyleDependency()
     host.requestDecorationsRender()
+    scheduleUpdate()
   })
 
   const clearBackfillTimer = () => {
@@ -203,6 +204,7 @@ function createSyntaxHighlightsRuntime(params: SyntaxHighlightsOptions & { host:
     const updateVersion = highlightUpdateVersion
     let lastCompletedIndex = batch.startIndex - 1
     let batchRenderedHighlights = false
+    let failedCurrentVersion = false
     if (!store.read()) {
       return
     }
@@ -286,10 +288,14 @@ function createSyntaxHighlightsRuntime(params: SyntaxHighlightsOptions & { host:
       }
     } catch (err) {
       if (!disposed && updateVersion === highlightUpdateVersion) {
+        failedCurrentVersion = true
         params.onHighlightError?.(err, updateVersion)
       }
     } finally {
       isHighlightRunning = false
+      if (failedCurrentVersion) {
+        return
+      }
       scheduleUpdate()
     }
   }
