@@ -27,7 +27,7 @@ function createSyntaxHighlightsRuntime(params: SyntaxHighlightsOptions & { host:
   const host = params.host
   const highlights = createRenderedHighlights()
   const store = createHighlightStore()
-  let appliedHighlightStyle = params.syntaxStyle()
+  let appliedHighlightStyle: SyntaxStyle | null = null
   let highlightUpdateVersion = 0
   let isHighlightQueued = false
   let isHighlightRunning = false

@@ -219,6 +219,19 @@ SELECT id FROM src`,
     ])
   })
 
+  test("keeps CREATE TABLE AS parenthesized query bodies attached without semicolons", () => {
+    const sql = `CREATE TABLE recent AS
+(SELECT 1)
+SELECT 2`
+    const queries = collectSqlQueries(sql, buildLineStarts(sql)).map((query) => sql.slice(query.start, query.end))
+
+    expect(queries).toEqual([
+      `CREATE TABLE recent AS
+(SELECT 1)`,
+      `SELECT 2`,
+    ])
+  })
+
   test("keeps EXPLAIN ANALYZE target statements attached without semicolons", () => {
     const sql = `EXPLAIN
 ANALYZE
@@ -245,6 +258,21 @@ SELECT 3`
       `SELECT 1
 UNION ALL
 SELECT 2`,
+      `SELECT 3`,
+    ])
+  })
+
+  test("keeps compound queries attached when the next branch is parenthesized", () => {
+    const sql = `SELECT 1
+UNION
+(SELECT 2)
+SELECT 3`
+    const queries = collectSqlQueries(sql, buildLineStarts(sql)).map((query) => sql.slice(query.start, query.end))
+
+    expect(queries).toEqual([
+      `SELECT 1
+UNION
+(SELECT 2)`,
       `SELECT 3`,
     ])
   })

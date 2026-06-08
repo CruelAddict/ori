@@ -364,6 +364,10 @@ function shouldKeepStatementContinuation(state: StatementScanState, nextToken: s
   return false
 }
 
+function shouldConsumeNestedQueryStart(state: StatementScanState) {
+  return state.continuation?.kind === "query-root" || state.continuation?.kind === "create-as-query"
+}
+
 function readWordToken(text: string, start: number) {
   const first = text[start]
   if (!first || !/[A-Za-z_]/.test(first)) {
@@ -540,13 +544,13 @@ function collectStatementSpans(text: string): Span[] {
         i++
         continue
       }
-      if (depth === 0) {
-        const word = readWordToken(text, i)
-        if (word) {
+      const word = readWordToken(text, i)
+      if (word) {
+        if (depth === 0 || shouldConsumeNestedQueryStart(statementState)) {
           updateStatementScanState(statementState, word.token)
-          i = word.end
-          continue
         }
+        i = word.end
+        continue
       }
       if (ch === "\n" && depth === 0) {
         const next = findLikelyKeywordAfterNewline(text, i + 1, spanEnd)
