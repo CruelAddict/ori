@@ -7,8 +7,8 @@ import (
 )
 
 const (
-	DefaultMaxRows = 200
-	HardMaxRows    = 1000
+	DefaultMaxRows = 100000
+	HardMaxRows    = 100000
 )
 
 // ResultStore manages storage and cleanup of query results
@@ -23,7 +23,7 @@ type ResultStore struct {
 func NewResultStore() *ResultStore {
 	return &ResultStore{
 		results:           make(map[string]*QueryResult),
-		maxCumulativeRows: 1000,             // Maximum cumulative rows
+		maxCumulativeRows: 100000,           // Maximum cumulative rows
 		minAge:            10 * time.Minute, // Minimum age before cleanup
 	}
 }

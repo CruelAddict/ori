@@ -18,6 +18,8 @@ import type { Logger } from "pino"
 type BunRequest = Request & { timeout?: boolean }
 type BunRequestInit = RequestInit & { unix?: string }
 
+const QUERY_MAX_ROWS = 100000
+
 export type ResourceConnectResult = {
   result: "success" | "fail" | "connecting"
   userMessage?: string
@@ -139,7 +141,12 @@ export class RestOriClient implements OriClient {
     query: string,
     params?: Record<string, unknown>,
   ): Promise<QueryExecResult> {
-    const request: QueryExecRequest = { resourceName, jobId, query }
+    const request: QueryExecRequest = {
+      resourceName,
+      jobId,
+      query,
+      options: { maxRows: QUERY_MAX_ROWS },
+    }
     if (params !== undefined) {
       request.params = params
     }
