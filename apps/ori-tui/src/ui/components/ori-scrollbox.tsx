@@ -74,7 +74,7 @@ export type OriScrollboxProps = ScrollboxBaseProps & {
   minHorizontalThumbWidth?: number
   minVerticalThumbHeight?: number
   scrollSpeed?: ScrollSpeedMultipliers
-  onSync?: () => void
+  onViewportChange?: () => void
   onUserScroll?: (context: OriScrollboxUserScrollContext) => void
 }
 
@@ -108,7 +108,7 @@ export function OriScrollbox(props: OriScrollboxProps) {
     "minHorizontalThumbWidth",
     "minVerticalThumbHeight",
     "scrollSpeed",
-    "onSync",
+    "onViewportChange",
     "onUserScroll",
     "children",
     "scrollX",
@@ -148,7 +148,8 @@ export function OriScrollbox(props: OriScrollboxProps) {
       installCoupledOverflowPatch(node)
     }
 
-    const needsEventSyncPatch = Boolean(local.scrollSpeed) || Boolean(local.onSync) || Boolean(local.onUserScroll)
+    const needsEventSyncPatch =
+      Boolean(local.scrollSpeed) || Boolean(local.onViewportChange) || Boolean(local.onUserScroll)
 
     if (!needsEventSyncPatch) {
       return
@@ -171,10 +172,10 @@ export function OriScrollbox(props: OriScrollboxProps) {
       }
 
       lastSyncState = nextState
-      local.onSync?.()
+      local.onViewportChange?.()
     }
 
-    installScrollbarUserScrollPatch(node, local.onUserScroll, local.onSync)
+    installScrollbarUserScrollPatch(node, local.onUserScroll, local.onViewportChange)
 
     // @ts-expect-error onUpdate is protected in typings
     node.onUpdate = (deltaTime: number) => {
@@ -215,7 +216,7 @@ export function OriScrollbox(props: OriScrollboxProps) {
 
     process.nextTick(() => {
       lastSyncState = readScrollSyncState(node)
-      local.onSync?.()
+      local.onViewportChange?.()
     })
   }
 
@@ -386,7 +387,7 @@ function sameScrollSyncState(a: ScrollSyncState, b: ScrollSyncState) {
 function installScrollbarUserScrollPatch(
   node: ScrollBoxRenderable,
   onUserScroll: ((context: OriScrollboxUserScrollContext) => void) | undefined,
-  onSync: (() => void) | undefined,
+  onViewportChange: (() => void) | undefined,
 ) {
   type State = {
     active: boolean
@@ -418,7 +419,7 @@ function installScrollbarUserScrollPatch(
       scrollTop,
     })
 
-    onSync?.()
+    onViewportChange?.()
   }
 
   const verticalState: State = {

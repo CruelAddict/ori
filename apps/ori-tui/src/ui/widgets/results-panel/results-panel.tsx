@@ -1,16 +1,20 @@
-import {
-  type BoxRenderable,
-  type KeyEvent,
-  type MouseEvent,
-  type ScrollBoxRenderable,
-  TextAttributes,
-} from "@opentui/core"
-import { getViewportRect, OriScrollbox, scrollIntoView } from "@ui/components/ori-scrollbox"
+import { type KeyEvent, type MouseEvent, type Selection as OpenTuiSelection, TextAttributes } from "@opentui/core"
+import { OriScrollbox } from "@ui/components/ori-scrollbox"
 import { useTheme } from "@ui/providers/theme"
-import "./table-cell"
 import { type KeyBinding, KeyScope } from "@ui/services/key-scopes"
 import { setSelectionOverride } from "@utils/clipboard"
 import { createEffect, createMemo, createSignal, For, onCleanup, Show } from "solid-js"
+import {
+  type CellRef,
+  type CellSelection,
+  createResultsGrid,
+  dataRow,
+  formatResultCell,
+  gridCol,
+  type ResultsGrid,
+} from "./results-grid"
+import { createResultsViewport } from "./results-viewport"
+import "./table-cell"
 import type { ResultsPaneViewModel } from "./view-model/create-vm"
 
 export type ResultsPanelProps = {
@@ -28,174 +32,140 @@ export function ResultsPanel(props: ResultsPanelProps) {
   const pane = props.viewModel
   const { theme } = useTheme()
 
-  let scrollRef: ScrollBoxRenderable | undefined
-  let rowScrollRef: ScrollBoxRenderable | undefined
-  let rowNumberBottomPadding: 0 | 1 = 0
-  let bodyViewportSize: { width: number; height: number } | null = null
-  const rowRenderables = new Map<number, BoxRenderable>()
-  const [rowVersion, setRowVersion] = createSignal(0)
-
-  const [scrollLeft, setScrollLeft] = createSignal(0)
-
   const [cursorRow, setCursorRow] = createSignal(0)
   const [cursorCol, setCursorCol] = createSignal(0)
-  const [selectionCount, setSelectionCount] = createSignal(0)
-
-  const selectedHeaderCols = new Set<number>()
-  const selectedRowCols = new Map<number, Set<number>>()
+  const [selectionStart, setSelectionStart] = createSignal<CellRef | null>(null)
+  const [selectionEnd, setSelectionEnd] = createSignal<CellRef | null>(null)
 
   const resultRows = () => pane.job()?.result?.rows ?? []
   const resultColumns = () => pane.job()?.result?.columns ?? []
-
+  const rowsAffected = () => pane.job()?.result?.rowsAffected
   const hasResults = createMemo(() => {
     const current = pane.job()
     return current?.status === "success" && current?.result && resultRows().length > 0
   })
-
-  const rowsAffected = () => pane.job()?.result?.rowsAffected
-
-  const formatCell = (value: unknown): string => {
-    return value === null || value === undefined ? "NULL" : String(value)
-  }
-
-  const columnWidths = createMemo(() => {
-    if (!hasResults()) return []
-    const widths = resultColumns().map((column) => column.name.length)
-    for (const row of resultRows()) {
-      for (let i = 0; i < row.length; i++) {
-        widths[i] = Math.max(widths[i], formatCell(row[i]).length)
-      }
-    }
-    return widths
+  const grid = createMemo<ResultsGrid | null>(() => {
+    if (!hasResults()) return null
+    return createResultsGrid({ columns: resultColumns(), rows: resultRows() })
   })
+  const viewport = createResultsViewport({ grid })
 
   const rowNumberWidth = createMemo(() => String(resultRows().length).length)
   const rowNumberCellWidth = createMemo(() => rowNumberWidth() + 2)
-  const rowNumberLaneWidth = createMemo(() => rowNumberCellWidth())
+  const selectedCells = createMemo<CellSelection | null>(() => {
+    const start = selectionStart()
+    const end = selectionEnd()
+    return start && end ? { start, end } : null
+  })
+  const cursorCellBackground = createMemo(() => theme().get("primary"))
+  const hasSelection = () => Boolean(selectedCells())
+  const showCursor = () => pane.isFocused() && !hasSelection()
+  const cursorCell = (): CellRef => ({ kind: "body", row: dataRow(cursorRow()), col: gridCol(cursorCol()) })
 
   const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value))
 
-  const ensureRowVisible = (rowIndex: number) => {
-    rowVersion()
-    const renderable = rowRenderables.get(rowIndex)
-    if (!renderable) {
-      return
-    }
-    scrollIntoView(
-      scrollRef,
-      {
-        x: renderable.x,
-        y: renderable.y,
-      },
-      {
-        trackX: false,
-      },
-    )
+  const sameCell = (left: CellRef | null, right: CellRef | null) => {
+    if (!left || !right) return left === right
+    if (left.kind !== right.kind || left.col !== right.col) return false
+    if (left.kind === "header") return true
+    return right.kind === "body" && left.row === right.row
   }
 
-  const ensureColumnVisible = (colIndex: number) => {
-    if (!scrollRef) return
-    const viewport = getViewportRect(scrollRef)
-    if (!viewport) return
+  const setSelectionEndIfChanged = (cell: CellRef | null) => {
+    setSelectionEnd((current) => (sameCell(current, cell) ? current : cell))
+  }
 
-    const widths = columnWidths()
-    // Calculate the x position of the column (sum of previous column widths + separators)
-    let colLeft = 1 // Initial separator
-    for (let i = 0; i < colIndex; i++) {
-      colLeft += widths[i] + 2 + 1 // width + padding + separator
+  const clearSelection = () => {
+    setSelectionStart(null)
+    setSelectionEnd(null)
+  }
+
+  const processMouseDragSelection = (selection: OpenTuiSelection | null) => {
+    if (!selection?.isActive) return
+    if (selection.isStart) {
+      setSelectionEndIfChanged(null)
+      return
     }
-    const colWidth = widths[colIndex] + 2
-    const colRight = colLeft + colWidth
+    setSelectionEndIfChanged(viewport.cellAtScreenPoint(selection.focus))
+  }
 
-    const viewportWidth = viewport.width
-    const currentScrollLeft = scrollRef.scrollLeft ?? 0
-    const viewportLeft = currentScrollLeft
-    const viewportRight = currentScrollLeft + viewportWidth
+  setSelectionOverride(() => grid()?.cellSelectionText(selectedCells()))
+  onCleanup(() => {
+    setSelectionOverride()
+  })
 
-    if (colRight > viewportRight) {
-      const delta = colRight - viewportRight
-      scrollRef.scrollBy({ x: delta, y: 0 })
-      syncScrollState()
-    } else if (colLeft < viewportLeft) {
-      const delta = colLeft - viewportLeft
-      scrollRef.scrollBy({ x: delta, y: 0 })
-      syncScrollState()
+  createEffect(() => {
+    pane.job()
+    setCursorRow(0)
+    setCursorCol(0)
+    clearSelection()
+    viewport.reset()
+  })
+
+  createEffect(() => {
+    if (!grid()) return
+    viewport.scrollCellIntoView(cursorCell())
+  })
+
+  const moveSelection = (rowDelta: number, colDelta: number, event?: KeyEvent) => {
+    const current = grid()
+    if (!current) return
+
+    event?.preventDefault()
+    if (!pane.isFocused()) {
+      pane.focusSelf()
     }
+
+    const previous = cursorCell()
+    const nextRow = clamp(cursorRow() + rowDelta, 0, current.rowCount() - 1)
+    const nextCol = clamp(cursorCol() + colDelta, 0, current.columnCount() - 1)
+    const next = { kind: "body", row: dataRow(nextRow), col: gridCol(nextCol) } satisfies CellRef
+    setCursorRow(nextRow)
+    setCursorCol(nextCol)
+    if (event?.shift) {
+      setSelectionStart((start) => start ?? previous)
+      setSelectionEnd(next)
+    } else {
+      clearSelection()
+    }
+    viewport.scrollCellIntoView(next)
   }
 
   const handleManualHorizontalScroll = (direction: "left" | "right") => {
-    if (!hasResults()) return
-    const delta = direction === "left" ? -HORIZONTAL_SCROLL_STEP : HORIZONTAL_SCROLL_STEP
-    scrollRef?.scrollBy({ x: delta, y: 0 })
-    syncScrollState()
+    if (!grid()) return
+    viewport.scrollHorizontally(direction === "left" ? -HORIZONTAL_SCROLL_STEP : HORIZONTAL_SCROLL_STEP)
   }
 
-  const hasResultData = () => hasResults() && pane.job()?.result
-  const isActive = () => pane.isFocused()
-  const hasSelection = () => selectionCount() > 0
-  const cursorCellBackground = createMemo(() => theme().get("primary"))
+  const bindings: KeyBinding[] = [
+    { pattern: "up", handler: (event) => moveSelection(-1, 0, event), preventDefault: true },
+    { pattern: "k", handler: (event) => moveSelection(-1, 0, event), preventDefault: true },
+    { pattern: "shift+up", handler: (event) => moveSelection(-1, 0, event), preventDefault: true },
+    { pattern: "down", handler: (event) => moveSelection(1, 0, event), preventDefault: true },
+    { pattern: "j", handler: (event) => moveSelection(1, 0, event), preventDefault: true },
+    { pattern: "shift+down", handler: (event) => moveSelection(1, 0, event), preventDefault: true },
+    { pattern: "left", handler: (event) => moveSelection(0, -1, event), preventDefault: true },
+    { pattern: "h", handler: (event) => moveSelection(0, -1, event), preventDefault: true },
+    { pattern: "shift+left", handler: (event) => moveSelection(0, -1, event), preventDefault: true },
+    { pattern: ["ctrl+h", "backspace"], handler: () => handleManualHorizontalScroll("left"), preventDefault: true },
+    { pattern: "right", handler: (event) => moveSelection(0, 1, event), preventDefault: true },
+    { pattern: "l", handler: (event) => moveSelection(0, 1, event), preventDefault: true },
+    { pattern: "shift+right", handler: (event) => moveSelection(0, 1, event), preventDefault: true },
+    { pattern: "ctrl+l", handler: () => handleManualHorizontalScroll("right"), preventDefault: true },
+    { pattern: "escape", handler: clearSelection, preventDefault: true },
+  ]
 
-  const handleHeaderSelectionChange = (colIndex: number, selected: boolean) => {
-    if (selected) {
-      selectedHeaderCols.add(colIndex)
-    } else {
-      selectedHeaderCols.delete(colIndex)
+  const startCellSelection = (cell: CellRef, event: MouseEvent) => {
+    pane.focusSelf()
+    event.preventDefault()
+    setSelectionStart(cell)
+    setSelectionEnd(null)
+    if (cell.kind === "body") {
+      setCursorRow(cell.row)
+      setCursorCol(cell.col)
     }
-    setSelectionCount((count) => Math.max(0, count + (selected ? 1 : -1)))
   }
 
-  const handleRowSelectionChange = (rowIndex: number, colIndex: number, selected: boolean) => {
-    if (selected) {
-      let rowSelection = selectedRowCols.get(rowIndex)
-      if (!rowSelection) {
-        rowSelection = new Set()
-        selectedRowCols.set(rowIndex, rowSelection)
-      }
-      rowSelection.add(colIndex)
-    } else {
-      const rowSelection = selectedRowCols.get(rowIndex)
-      rowSelection?.delete(colIndex)
-      if (rowSelection && rowSelection.size === 0) {
-        selectedRowCols.delete(rowIndex)
-      }
-    }
-    setSelectionCount((count) => Math.max(0, count + (selected ? 1 : -1)))
-  }
-
-  const buildSelectedTsv = (): string | undefined => {
-    if (selectedHeaderCols.size === 0 && selectedRowCols.size === 0) {
-      return
-    }
-    const columnIndexes = resultColumns()
-      .map((_, index) => index)
-      .filter((index) => {
-        if (selectedHeaderCols.has(index)) return true
-        for (const cols of selectedRowCols.values()) {
-          if (cols.has(index)) return true
-        }
-        return false
-      })
-    if (columnIndexes.length === 0) {
-      return
-    }
-    const lines: string[] = []
-    if (selectedHeaderCols.size > 0) {
-      const header = columnIndexes.map((index) => String(resultColumns()[index]?.name ?? "")).join("\t")
-      lines.push(header)
-    }
-    const rowIndexes = Array.from(selectedRowCols.keys()).sort((a, b) => a - b)
-    for (const rowIndex of rowIndexes) {
-      const row = resultRows()[rowIndex] ?? []
-      const line = columnIndexes.map((colIndex) => String(row[colIndex])).join("\t")
-      lines.push(line)
-    }
-    if (lines.length === 0) {
-      return
-    }
-    return lines.join("\n")
-  }
-
-  const SeparatorCell = (props: { selectionBg: string; bg?: string; fg?: string }) => (
+  const SeparatorCell = (props: { selected?: boolean; bg?: string; fg?: string }) => (
     <table_cell
       width={1}
       display="│"
@@ -203,120 +173,13 @@ export function ResultsPanel(props: ResultsPanelProps) {
       defaultFg={theme().get("border")}
       backgroundColor={props.bg}
       attributes={TextAttributes.BOLD}
-      selectionBg={props.selectionBg}
+      selectionBg={theme().get("results_selection_background")}
       paddingLeft={0}
       paddingRight={0}
+      selectable={false}
+      selected={props.selected}
     />
   )
-
-  const syncScrollState = () => {
-    const left = scrollRef?.scrollLeft ?? 0
-    const top = scrollRef?.scrollTop ?? 0
-    const nextRowNumberBottomPadding: 0 | 1 = scrollRef?.horizontalScrollBar.visible ? 1 : 0
-
-    if (scrollLeft() !== left) {
-      setScrollLeft(left)
-    }
-    if (rowScrollRef && rowNumberBottomPadding !== nextRowNumberBottomPadding) {
-      rowNumberBottomPadding = nextRowNumberBottomPadding
-      rowScrollRef.paddingBottom = nextRowNumberBottomPadding
-    }
-    if (rowScrollRef && rowScrollRef.scrollTop !== top) {
-      rowScrollRef.scrollTo({ x: 0, y: top })
-    }
-  }
-
-  const handleBodySync = () => {
-    syncScrollState()
-    if (!scrollRef) {
-      bodyViewportSize = null
-      return
-    }
-    const viewport = getViewportRect(scrollRef)
-    if (bodyViewportSize && bodyViewportSize.width === viewport.width && bodyViewportSize.height === viewport.height) {
-      return
-    }
-    bodyViewportSize = {
-      width: viewport.width,
-      height: viewport.height,
-    }
-    ensureRowVisible(cursorRow())
-  }
-
-  const resetScroll = () => {
-    setScrollLeft(0)
-    if (scrollRef) {
-      scrollRef.scrollTo({ x: 0, y: 0 })
-    }
-    if (rowScrollRef) {
-      rowScrollRef.scrollTo({ x: 0, y: 0 })
-    }
-  }
-
-  const resetPaneState = () => {
-    setCursorRow(0)
-    setCursorCol(0)
-    setSelectionCount(0)
-    resetScroll()
-    selectedHeaderCols.clear()
-    selectedRowCols.clear()
-  }
-
-  createEffect(() => {
-    pane.job()
-    resultRows().length === 0
-    resetPaneState()
-  })
-
-  createEffect(() => {
-    if (!hasResultData()) return
-    rowVersion()
-    ensureRowVisible(cursorRow())
-  })
-
-  setSelectionOverride(() => buildSelectedTsv())
-  onCleanup(() => {
-    setSelectionOverride()
-  })
-
-  const moveSelection = (rowDelta: number, colDelta: number, event?: KeyEvent) => {
-    if (!hasResultData()) return
-    event?.preventDefault()
-    if (!pane.isFocused()) {
-      pane.focusSelf()
-    }
-    const result = pane.job()?.result
-    if (!result) return
-
-    const nextRow = clamp(cursorRow() + rowDelta, 0, resultRows().length - 1)
-    const nextCol = clamp(cursorCol() + colDelta, 0, resultColumns().length - 1)
-
-    setCursorRow(nextRow)
-    setCursorCol(nextCol)
-    if (colDelta !== 0) {
-      ensureColumnVisible(nextCol)
-    }
-  }
-
-  const bindings: KeyBinding[] = [
-    { pattern: "up", handler: (event) => moveSelection(-1, 0, event), preventDefault: true },
-    { pattern: "k", handler: (event) => moveSelection(-1, 0, event), preventDefault: true },
-    { pattern: "down", handler: (event) => moveSelection(1, 0, event), preventDefault: true },
-    { pattern: "j", handler: (event) => moveSelection(1, 0, event), preventDefault: true },
-    { pattern: "left", handler: (event) => moveSelection(0, -1, event), preventDefault: true },
-    { pattern: "h", handler: (event) => moveSelection(0, -1, event), preventDefault: true },
-    { pattern: ["ctrl+h", "backspace"], handler: () => handleManualHorizontalScroll("left"), preventDefault: true },
-    { pattern: "right", handler: (event) => moveSelection(0, 1, event), preventDefault: true },
-    { pattern: "l", handler: (event) => moveSelection(0, 1, event), preventDefault: true },
-    { pattern: "ctrl+l", handler: () => handleManualHorizontalScroll("right"), preventDefault: true },
-  ]
-
-  const handleCellMouseDown = (rowIndex: number, colIndex: number, event: MouseEvent) => {
-    pane.focusSelf()
-    event.preventDefault()
-    setCursorRow(rowIndex)
-    setCursorCol(colIndex)
-  }
 
   return (
     <KeyScope
@@ -350,275 +213,284 @@ export function ResultsPanel(props: ResultsPanelProps) {
           </box>
         </Show>
 
-        <Show when={hasResults()}>
-          <box
-            flexDirection="column"
-            justifyContent="flex-start"
-            onMouseDown={pane.focusSelf}
-            paddingRight={1}
-          >
-            {/* Header */}
+        <Show
+          when={grid()}
+          keyed
+        >
+          {(current: ResultsGrid) => (
+            /* biome-ignore lint/a11y/noStaticElementInteractions: results panel focuses itself on mouse down */
             <box
-              flexDirection="row"
-              overflow="hidden"
-              backgroundColor={theme().get("results_header_background")}
-              minHeight={1}
+              flexDirection="column"
+              justifyContent="flex-start"
+              flexGrow={1}
+              onMouseDown={pane.focusSelf}
+              paddingRight={1}
             >
               <box
                 flexDirection="row"
-                backgroundColor={theme().get("panel_background")}
-                zIndex={1}
-                width={rowNumberLaneWidth()}
-                minWidth={rowNumberLaneWidth()}
-                maxWidth={rowNumberLaneWidth()}
-                flexShrink={0}
-              >
-                <table_cell
-                  width={rowNumberCellWidth()}
-                  display={""}
-                  backgroundColor={theme().get("panel_background")}
-                  fg={theme().get("panel_background")}
-                  defaultFg={theme().get("panel_background")}
-                  attributes={TextAttributes.DIM}
-                  selectionBg={theme().get("results_selection_background")}
-                />
-              </box>
-              <box
-                flexGrow={1}
-                flexShrink={1}
-                minWidth={0}
                 overflow="hidden"
                 backgroundColor={theme().get("results_header_background")}
+                minHeight={1}
               >
                 <box
                   flexDirection="row"
-                  marginLeft={-scrollLeft()}
-                  backgroundColor={theme().get("results_header_background")}
+                  backgroundColor={theme().get("panel_background")}
+                  zIndex={1}
+                  width={rowNumberCellWidth()}
+                  minWidth={rowNumberCellWidth()}
+                  maxWidth={rowNumberCellWidth()}
+                  flexShrink={0}
                 >
-                  <SeparatorCell
-                    fg={theme().get("border")}
-                    bg={theme().get("results_header_background")}
+                  <table_cell
+                    width={rowNumberCellWidth()}
+                    display=""
+                    backgroundColor={theme().get("panel_background")}
+                    fg={theme().get("panel_background")}
+                    defaultFg={theme().get("panel_background")}
+                    attributes={TextAttributes.DIM}
                     selectionBg={theme().get("results_selection_background")}
-                  />
-                  <For each={resultColumns()}>
-                    {(column, index) => (
-                      <>
-                        {index() > 0 && (
-                          <SeparatorCell
-                            fg={theme().get("border")}
-                            bg={theme().get("results_header_background")}
-                            selectionBg={theme().get("results_selection_background")}
-                          />
-                        )}
-
-                        <table_cell
-                          width={columnWidths()[index()] + 2}
-                          display={formatCell(column.name)}
-                          backgroundColor={theme().get("results_header_background")}
-                          fg={theme().get("results_column_title")}
-                          defaultFg={theme().get("results_column_title")}
-                          attributes={TextAttributes.BOLD}
-                          selectionBg={theme().get("results_selection_background")}
-                          value={String(column.name)}
-                          onSelectionChange={(selected: boolean) => handleHeaderSelectionChange(index(), selected)}
-                        />
-                      </>
-                    )}
-                  </For>
-                  <SeparatorCell
-                    fg={theme().get("border")}
-                    bg={theme().get("results_header_background")}
-                    selectionBg={theme().get("results_selection_background")}
+                    selectable={false}
                   />
                 </box>
+                <box
+                  flexGrow={1}
+                  flexShrink={1}
+                  minWidth={0}
+                  overflow="hidden"
+                  backgroundColor={theme().get("results_header_background")}
+                >
+                  <box
+                    flexDirection="row"
+                    marginLeft={-viewport.scrollLeft()}
+                    backgroundColor={theme().get("results_header_background")}
+                  >
+                    <SeparatorCell
+                      bg={theme().get("results_header_background")}
+                      selected={current.isSeparatorSelected(selectedCells(), "header", null)}
+                    />
+                    <For each={current.columns}>
+                      {(column, index) => {
+                        const col = () => gridCol(index())
+                        const selected = () => current.isCellSelected(selectedCells(), { kind: "header", col: col() })
+                        return (
+                          <>
+                            {index() > 0 && (
+                              <SeparatorCell
+                                bg={theme().get("results_header_background")}
+                                selected={current.isSeparatorSelected(selectedCells(), "header", gridCol(index() - 1))}
+                              />
+                            )}
+
+                            {/* biome-ignore lint/a11y/noStaticElementInteractions: header cells start table selection */}
+                            <table_cell
+                              width={current.columnRanges[index()]?.width ?? 1}
+                              display={formatResultCell(column.name)}
+                              backgroundColor={theme().get("results_header_background")}
+                              fg={theme().get("results_column_title")}
+                              defaultFg={theme().get("results_column_title")}
+                              attributes={TextAttributes.BOLD}
+                              selectionBg={theme().get("results_selection_background")}
+                              value={String(column.name)}
+                              selected={selected()}
+                              onMouseDown={(event: MouseEvent) =>
+                                startCellSelection({ kind: "header", col: col() }, event)
+                              }
+                              onSelectionUpdate={(selection: OpenTuiSelection | null) =>
+                                processMouseDragSelection(selection)
+                              }
+                            />
+                          </>
+                        )
+                      }}
+                    </For>
+                    <SeparatorCell
+                      bg={theme().get("results_header_background")}
+                      selected={current.isTrailingSeparatorSelected(
+                        selectedCells(),
+                        "header",
+                        gridCol(current.columnCount() - 1),
+                      )}
+                    />
+                  </box>
+                </box>
               </box>
-            </box>
-            {/* Rows */}
-            <box flexDirection="row">
-              <OriScrollbox
-                onReady={(node: ScrollBoxRenderable | undefined) => {
-                  rowScrollRef = node ?? undefined
-                  if (!rowScrollRef) return
-                  rowNumberBottomPadding = 0
-                  rowScrollRef.paddingBottom = 0
-                  rowScrollRef.scrollTo({ x: 0, y: scrollRef?.scrollTop ?? 0 })
-                }}
-                flexDirection="column"
-                height="100%"
-                width={rowNumberLaneWidth()}
-                scrollX={false}
-                scrollY={false}
-                scrollbarOptions={{ visible: false }}
-                minHorizontalThumbWidth={5}
-                minVerticalThumbHeight={2}
-                backgroundColor={theme().get("panel_background")}
-                contentOptions={{
-                  maxWidth: rowNumberCellWidth(),
-                  width: rowNumberCellWidth(),
-                  minHeight: "100%",
-                }}
+
+              <box
+                flexDirection="row"
+                flexGrow={1}
               >
                 <box
-                  flexDirection="column"
+                  position="relative"
+                  width={rowNumberCellWidth()}
+                  minWidth={rowNumberCellWidth()}
+                  maxWidth={rowNumberCellWidth()}
+                  height="100%"
+                  flexShrink={0}
                   backgroundColor={theme().get("panel_background")}
-                  minHeight="100%"
+                  overflow="hidden"
                 >
-                  <For each={resultRows()}>
-                    {(_, rowIndex) => {
+                  <For each={viewport.visibleRows()}>
+                    {(item) => {
+                      const row = () => item.row
                       const rowNumberColor = () =>
-                        isActive() && cursorRow() === rowIndex()
+                        pane.isFocused() && cursorRow() === row()
                           ? theme().get("results_row_number_cursor")
                           : theme().get("results_row_number")
-
                       return (
                         <box
+                          position="absolute"
+                          top={item.top - viewport.scrollTop()}
+                          left={0}
                           flexDirection="row"
                           backgroundColor={theme().get("panel_background")}
                         >
                           <table_cell
                             width={rowNumberCellWidth()}
-                            display={String(rowIndex() + 1)}
+                            display={String(row() + 1)}
                             align="right"
                             backgroundColor={theme().get("panel_background")}
                             fg={rowNumberColor()}
                             defaultFg={rowNumberColor()}
                             selectionBg={theme().get("results_selection_background")}
+                            selectable={false}
                           />
                         </box>
                       )
                     }}
                   </For>
                 </box>
-              </OriScrollbox>
-              <OriScrollbox
-                onReady={(node: ScrollBoxRenderable | undefined) => {
-                  scrollRef = node ?? undefined
-                  if (!scrollRef) return
-                  scrollRef.scrollTo({ x: 0, y: 0 })
-                  setScrollLeft(0)
-                  const viewport = getViewportRect(scrollRef)
-                  bodyViewportSize = viewport
-                    ? {
-                      width: viewport.width,
-                      height: viewport.height,
+                <OriScrollbox
+                  onReady={viewport.attach}
+                  onViewportChange={() => {
+                    viewport.updateFromScrollbox()
+                    if (selectionStart()) {
+                      processMouseDragSelection(viewport.nativeSelection())
                     }
-                    : null
-                  syncScrollState()
-                  ensureRowVisible(cursorRow())
-                }}
-                onSync={handleBodySync}
-                scrollSpeed={resultsScrollSpeed}
-                minHorizontalThumbWidth={5}
-                minVerticalThumbHeight={2}
-                flexGrow={1}
-                onMouseDown={pane.focusSelf}
-                contentOptions={{
-                  maxWidth: undefined,
-                  width: "auto",
-                }}
-              >
-                <box
-                  flexDirection="column"
-                  width={"auto"}
+                  }}
+                  scrollSpeed={resultsScrollSpeed}
+                  minHorizontalThumbWidth={5}
+                  minVerticalThumbHeight={2}
+                  flexGrow={1}
+                  onMouseDown={pane.focusSelf}
+                  contentOptions={{
+                    maxWidth: undefined,
+                    width: "auto",
+                  }}
                 >
-                  <For each={resultRows()}>
-                    {(row, rowIndex) => {
-                      const rowBackground = () =>
-                        rowIndex() % 2 === 0
-                          ? theme().get("panel_background")
-                          : theme().get("results_row_alt_background")
-                      return (
-                        <box
-                          flexDirection="row"
-                          backgroundColor={rowBackground()}
-                          ref={(ref: BoxRenderable | undefined) => {
-                            if (!ref) {
-                              rowRenderables.delete(rowIndex())
-                              setRowVersion((value) => value + 1)
-                              return
-                            }
-                            rowRenderables.set(rowIndex(), ref)
-                            setRowVersion((value) => value + 1)
-                          }}
-                        >
-                          <SeparatorCell
-                            bg={
-                              isActive() && cursorRow() === rowIndex() && cursorCol() === 0 && !hasSelection()
-                                ? cursorCellBackground()
-                                : rowBackground()
-                            }
-                            fg={
-                              isActive() && cursorRow() === rowIndex() && cursorCol() === 0 && !hasSelection()
-                                ? cursorCellBackground()
-                                : theme().get("border")
-                            }
-                            selectionBg={theme().get("results_selection_background")}
-                          />
-                          <For each={row}>
-                            {(cell, colIndex) => {
-                              const isCursor = () =>
-                                isActive() &&
-                                cursorRow() === rowIndex() &&
-                                cursorCol() === colIndex() &&
-                                !hasSelection()
-                              const isCursorOnLeftCell = () =>
-                                colIndex() > 0 &&
-                                isActive() &&
-                                !hasSelection() &&
-                                cursorRow() === rowIndex() &&
-                                cursorCol() === colIndex() - 1
-                              const cursorBackground = () => cursorCellBackground()
-                              return (
-                                <>
-                                  {colIndex() > 0 && (
-                                    <SeparatorCell
-                                      bg={isCursor() || isCursorOnLeftCell() ? cursorBackground() : undefined}
-                                      fg={
-                                        isCursor() || isCursorOnLeftCell() ? cursorBackground() : theme().get("border")
-                                      }
-                                      selectionBg={theme().get("results_selection_background")}
-                                    />
-                                  )}
-                                  <table_cell
-                                    backgroundColor={isCursor() ? cursorBackground() : undefined}
-                                    flexDirection="row"
-                                    width={columnWidths()[colIndex()] + 2}
-                                    align={typeof cell === "number" ? "right" : "left"}
-                                    onMouseDown={(event: MouseEvent) =>
-                                      handleCellMouseDown(rowIndex(), colIndex(), event)
-                                    }
-                                    selectionBg={theme().get("results_selection_background")}
-                                    value={String(cell)}
-                                    display={formatCell(cell)}
-                                    fg={
-                                      isCursor() && !hasSelection()
-                                        ? theme().get("selection_foreground")
-                                        : theme().get("text")
-                                    }
-                                    defaultFg={theme().get("text")}
-                                    onSelectionChange={(selected: boolean) =>
-                                      handleRowSelectionChange(rowIndex(), colIndex(), selected)
-                                    }
-                                  />
-                                  {colIndex() === row.length - 1 && (
-                                    <SeparatorCell
-                                      bg={isCursor() ? cursorBackground() : undefined}
-                                      fg={isCursor() ? cursorBackground() : theme().get("border")}
-                                      selectionBg={theme().get("results_selection_background")}
-                                    />
-                                  )}
-                                </>
-                              )
-                            }}
-                          </For>
-                        </box>
-                      )
-                    }}
-                  </For>
-                </box>
-              </OriScrollbox>
+                  <box
+                    position="relative"
+                    width={viewport.metricWidth()}
+                    minWidth={viewport.metricWidth()}
+                    maxWidth={viewport.metricWidth()}
+                    height={viewport.metricHeight()}
+                    minHeight={viewport.metricHeight()}
+                    maxHeight={viewport.metricHeight()}
+                  >
+                    <box
+                      width={viewport.metricWidth()}
+                      minWidth={viewport.metricWidth()}
+                      maxWidth={viewport.metricWidth()}
+                      height={viewport.metricHeight()}
+                      minHeight={viewport.metricHeight()}
+                      maxHeight={viewport.metricHeight()}
+                    />
+                    <box
+                      position="absolute"
+                      top={0}
+                      left={0}
+                      width={current.totalWidth}
+                      minWidth={current.totalWidth}
+                      maxWidth={current.totalWidth}
+                      height={viewport.height()}
+                      minHeight={viewport.height()}
+                      maxHeight={viewport.height()}
+                    >
+                      <For each={viewport.visibleRows()}>
+                        {(item) => {
+                          const row = () => item.row
+                          const rowBackground = () =>
+                            row() % 2 === 0
+                              ? theme().get("panel_background")
+                              : theme().get("results_row_alt_background")
+                          const activeCursorCol = () => (showCursor() && cursorRow() === row() ? cursorCol() : -1)
+
+                          return (
+                            <box
+                              position="absolute"
+                              top={current.rowVisualRange(row()).top - viewport.scrollTop()}
+                              left={0}
+                              flexDirection="row"
+                              backgroundColor={rowBackground()}
+                            >
+                              <SeparatorCell
+                                bg={activeCursorCol() === 0 ? cursorCellBackground() : rowBackground()}
+                                fg={activeCursorCol() === 0 ? cursorCellBackground() : theme().get("border")}
+                                selected={current.isSeparatorSelected(selectedCells(), row(), null)}
+                              />
+                              <For each={current.rows[row()] ?? []}>
+                                {(cell, index) => {
+                                  const col = () => gridCol(index())
+                                  const isCursor = () => activeCursorCol() === index()
+                                  const isCursorOnLeftCell = () => index() > 0 && activeCursorCol() === index() - 1
+                                  const selected = () =>
+                                    current.isCellSelected(selectedCells(), { kind: "body", row: row(), col: col() })
+                                  return (
+                                    <>
+                                      {index() > 0 && (
+                                        <SeparatorCell
+                                          bg={isCursor() || isCursorOnLeftCell() ? cursorCellBackground() : undefined}
+                                          fg={
+                                            isCursor() || isCursorOnLeftCell()
+                                              ? cursorCellBackground()
+                                              : theme().get("border")
+                                          }
+                                          selected={current.isSeparatorSelected(
+                                            selectedCells(),
+                                            row(),
+                                            gridCol(index() - 1),
+                                          )}
+                                        />
+                                      )}
+                                      {/* biome-ignore lint/a11y/noStaticElementInteractions: body cells start table selection */}
+                                      <table_cell
+                                        backgroundColor={isCursor() ? cursorCellBackground() : undefined}
+                                        flexDirection="row"
+                                        width={current.columnRanges[index()]?.width ?? 1}
+                                        align={typeof cell === "number" ? "right" : "left"}
+                                        onMouseDown={(event: MouseEvent) =>
+                                          startCellSelection({ kind: "body", row: row(), col: col() }, event)
+                                        }
+                                        selectionBg={theme().get("results_selection_background")}
+                                        value={formatResultCell(cell)}
+                                        display={formatResultCell(cell)}
+                                        fg={isCursor() ? theme().get("selection_foreground") : theme().get("text")}
+                                        defaultFg={theme().get("text")}
+                                        selected={selected()}
+                                        onSelectionUpdate={(selection: OpenTuiSelection | null) =>
+                                          processMouseDragSelection(selection)
+                                        }
+                                      />
+                                      {index() === (current.rows[row()]?.length ?? 0) - 1 && (
+                                        <SeparatorCell
+                                          bg={isCursor() ? cursorCellBackground() : undefined}
+                                          fg={isCursor() ? cursorCellBackground() : theme().get("border")}
+                                          selected={current.isTrailingSeparatorSelected(selectedCells(), row(), col())}
+                                        />
+                                      )}
+                                    </>
+                                  )
+                                }}
+                              </For>
+                            </box>
+                          )
+                        }}
+                      </For>
+                    </box>
+                  </box>
+                </OriScrollbox>
+              </box>
             </box>
-          </box>
+          )}
         </Show>
 
         <Show when={pane.job()?.status === "success" && !hasResults()}>

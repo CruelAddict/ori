@@ -22,12 +22,16 @@ export type TableCellOptions = BoxOptions & {
   selectionBg?: string
   paddingLeft?: number
   paddingRight?: number
+  selectable?: boolean
+  selected?: boolean
   onSelectionChange?: (selected: boolean) => void
+  onSelectionUpdate?: (selection: Selection | null) => void
 }
 
 export class TableCellRenderable extends BoxRenderable {
   public selectable = true
-  private selected = false
+  private nativeSelected = false
+  private forcedSelected: boolean | undefined
   private valueText = ""
   private displayText = ""
   private textColor: RGBA | undefined
@@ -38,6 +42,7 @@ export class TableCellRenderable extends BoxRenderable {
   private paddingRightValue = 0
   private selectionColor: RGBA | undefined
   private onSelectionChange?: (selected: boolean) => void
+  private onSelectionUpdate?: (selection: Selection | null) => void
 
   constructor(ctx: RenderContext, options: TableCellOptions) {
     const {
@@ -50,7 +55,10 @@ export class TableCellRenderable extends BoxRenderable {
       selectionBg,
       paddingLeft,
       paddingRight,
+      selectable,
+      selected,
       onSelectionChange,
+      onSelectionUpdate,
       ...renderableOptions
     } = options
     const height = renderableOptions.height ?? 1
@@ -65,7 +73,10 @@ export class TableCellRenderable extends BoxRenderable {
     this.selectionBg = selectionBg
     this.paddingLeft = paddingLeft ?? 1
     this.paddingRight = paddingRight ?? 1
+    this.selectable = selectable ?? true
+    this.selected = selected
     this.onSelectionChange = onSelectionChange
+    this.onSelectionUpdate = onSelectionUpdate
   }
 
   set value(value: string) {
@@ -111,7 +122,7 @@ export class TableCellRenderable extends BoxRenderable {
     const next = value ? parseColor(value) : undefined
     if (this.selectionColor === next) return
     this.selectionColor = next
-    if (this.selected) {
+    if (this.hasVisualSelection()) {
       this.requestRender()
     }
   }
@@ -128,6 +139,15 @@ export class TableCellRenderable extends BoxRenderable {
     if (this.paddingRightValue === next) return
     this.paddingRightValue = next
     this.requestRender()
+  }
+
+  set selected(value: boolean | undefined) {
+    if (this.forcedSelected === value) return
+    const prev = this.hasVisualSelection()
+    this.forcedSelected = value
+    if (prev !== this.hasVisualSelection()) {
+      this.requestRender()
+    }
   }
 
   set bg(value: string | RGBA | undefined) {
@@ -156,42 +176,53 @@ export class TableCellRenderable extends BoxRenderable {
   }
 
   onSelectionChanged(selection: Selection | null) {
+    this.onSelectionUpdate?.(selection)
+
     if (!selection?.isActive) {
-      const hadSelection = this.selected
-      if (hadSelection) {
-        this.selected = false
+      const prev = this.hasVisualSelection()
+      this.nativeSelected = false
+      if (prev !== this.hasVisualSelection()) {
         this.requestRender()
-        this.onSelectionChange?.(false)
       }
+      this.onSelectionChange?.(false)
       return false
     }
+
     const bounds = selection.bounds
     const overlaps =
       bounds.x < this.x + this.width &&
       bounds.x + bounds.width > this.x &&
       bounds.y < this.y + this.height &&
       bounds.y + bounds.height > this.y
-    const changed = this.selected !== overlaps
-    this.selected = overlaps
-    if (changed) {
+    const prev = this.hasVisualSelection()
+    const changed = this.nativeSelected !== overlaps
+    this.nativeSelected = overlaps
+    if (prev !== this.hasVisualSelection()) {
       this.requestRender()
-      this.onSelectionChange?.(this.selected)
+    }
+    if (changed) {
+      this.onSelectionChange?.(overlaps)
     }
     return overlaps
   }
 
   getSelectedText() {
-    if (!this.selected) return ""
+    if (!this.nativeSelected) return ""
     if (this.valueText.length === 0) return ""
     return this.valueText
   }
 
   hasSelection() {
-    return this.selected
+    return this.hasVisualSelection()
+  }
+
+  private hasVisualSelection() {
+    return this.forcedSelected ?? this.nativeSelected
   }
 
   protected renderSelf(buffer: OptimizedBuffer) {
-    const backgroundColor = this.selected && this.selectionColor ? this.selectionColor : this._backgroundColor
+    const backgroundColor =
+      this.hasVisualSelection() && this.selectionColor ? this.selectionColor : this._backgroundColor
     const borderColor = this._focused ? this._focusedBorderColor : this._borderColor
     buffer.drawBox({
       x: this.x,

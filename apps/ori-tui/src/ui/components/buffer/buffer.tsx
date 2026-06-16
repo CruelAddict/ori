@@ -526,7 +526,7 @@ export function Buffer(props: BufferProps) {
           stickyScroll={false}
           scrollX={false}
           onReady={attachScrollbox}
-          onSync={handleScrollboxStateChange}
+          onViewportChange={handleScrollboxStateChange}
           onUserScroll={handleScrollboxUserScroll}
           height="100%"
           horizontalScrollbarOptions={{
