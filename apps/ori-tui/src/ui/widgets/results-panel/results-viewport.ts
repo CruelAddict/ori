@@ -28,6 +28,7 @@ export function createResultsViewport(options: { grid: Accessor<ResultsGrid | nu
       if (untrack(width) !== viewport.width) setWidth(viewport.width)
       if (untrack(height) !== viewport.height) setHeight(visualRowHeight(Math.max(1, viewport.height)))
     })
+    ref.content.translateY = 0
   }
 
   const attach = (node: ScrollBoxRenderable | undefined) => {
@@ -53,6 +54,70 @@ export function createResultsViewport(options: { grid: Accessor<ResultsGrid | nu
 
   const metricHeight = createMemo(() => Math.max(height(), options.grid()?.totalVisualRows ?? 0))
   const metricWidth = createMemo(() => Math.max(width(), options.grid()?.totalWidth ?? 0))
+
+  const debugSnapshot = () => {
+    const grid = options.grid()
+    const rows = visibleRows()
+    const viewport = ref ? getViewportRect(ref) : null
+    const scrollbox = ref
+      ? {
+          scrollLeft: ref.scrollLeft ?? 0,
+          scrollTop: ref.scrollTop ?? 0,
+          scrollWidth: ref.scrollWidth,
+          scrollHeight: ref.scrollHeight,
+          maxScrollLeft: Math.max(0, ref.scrollWidth - ref.viewport.width),
+          maxScrollTop: Math.max(0, ref.scrollHeight - ref.viewport.height),
+          viewport,
+          content: {
+            x: ref.content.x,
+            y: ref.content.y,
+            width: ref.content.width,
+            height: ref.content.height,
+            translateX: ref.content.translateX,
+            translateY: ref.content.translateY,
+          },
+          horizontalScrollbar: {
+            visible: ref.horizontalScrollBar.visible,
+            position: ref.horizontalScrollBar.scrollPosition,
+            size: ref.horizontalScrollBar.scrollSize,
+            viewportSize: ref.horizontalScrollBar.viewportSize,
+          },
+          verticalScrollbar: {
+            visible: ref.verticalScrollBar.visible,
+            position: ref.verticalScrollBar.scrollPosition,
+            size: ref.verticalScrollBar.scrollSize,
+            viewportSize: ref.verticalScrollBar.viewportSize,
+          },
+        }
+      : null
+
+    return {
+      attached: Boolean(ref),
+      scrollLeft: scrollLeft(),
+      scrollTop: scrollTop(),
+      width: width(),
+      height: height(),
+      metricWidth: metricWidth(),
+      metricHeight: metricHeight(),
+      overscan,
+      grid: grid
+        ? {
+            rowCount: grid.rowCount(),
+            columnCount: grid.columnCount(),
+            totalWidth: grid.totalWidth,
+            totalVisualRows: grid.totalVisualRows,
+          }
+        : null,
+      visibleRows: rows.map((item) => ({
+        row: item.row,
+        rowNumber: Number(item.row) + 1,
+        top: item.top,
+        height: item.height,
+        renderedTop: item.top - scrollTop(),
+      })),
+      scrollbox,
+    }
+  }
 
   const cellAtScreenPoint = (point: { x: number; y: number }): CellRef | null => {
     const grid = options.grid()
@@ -120,6 +185,7 @@ export function createResultsViewport(options: { grid: Accessor<ResultsGrid | nu
     metricHeight,
     metricWidth,
     visibleRows,
+    debugSnapshot,
     nativeSelection: () => ref?.ctx.getSelection() ?? null,
     cellAtScreenPoint,
     scrollCellIntoView,
