@@ -65,7 +65,6 @@ export function createOriTableVM(options: CreateOriTableVMOptions) {
   })
   const hasSelectedRange = () => selectedRange() !== null
   const showCursor = () => options.isFocused() && !hasSelectedRange()
-  const cursorCell = (): CellRef => ({ kind: "body", row: tableRow(cursorRow()), col: tableCol(cursorCol()) })
   const visibleRows = createMemo(() => {
     return visibleRowsForScrollWindow(options.rows().length, scrollTop(), height(), overscan)
   })
@@ -103,7 +102,11 @@ export function createOriTableVM(options: CreateOriTableVMOptions) {
     const viewport = getViewportRect(scrollbox)
     const x = tableX(point.x - viewport.x + scrollLeft())
     if (point.y < viewport.y) {
-      return layout.headerCellAt(x)
+      if (selection()?.start.kind === "header") {
+        return layout.headerCellAt(x)
+      }
+
+      return layout.bodyCellAt(x, scrollTop())
     }
 
     return layout.bodyCellAt(x, visualRow(point.y - viewport.y + scrollTop()))
@@ -201,17 +204,12 @@ export function createOriTableVM(options: CreateOriTableVMOptions) {
       options.focusSelf()
     }
 
-    const previous = cursorCell()
     const nextRow = Math.min(rowCount - 1, Math.max(0, cursorRow() + rowDelta))
     const nextCol = Math.min(colCount - 1, Math.max(0, cursorCol() + colDelta))
     const next = { kind: "body", row: tableRow(nextRow), col: tableCol(nextCol) } satisfies CellRef
     setCursorRow(nextRow)
     setCursorCol(nextCol)
-    if (event?.shift) {
-      setSelection((current) => ({ start: current?.start ?? previous, end: next }))
-    } else {
-      clearSelection()
-    }
+    clearSelection()
     scrollCellIntoView(next)
   }
 
@@ -240,17 +238,13 @@ export function createOriTableVM(options: CreateOriTableVMOptions) {
   const keyBindings = (): KeyBinding[] => [
     { pattern: "up", handler: (event) => moveCursor(-1, 0, event), preventDefault: true },
     { pattern: "k", handler: (event) => moveCursor(-1, 0, event), preventDefault: true },
-    { pattern: "shift+up", handler: (event) => moveCursor(-1, 0, event), preventDefault: true },
     { pattern: "down", handler: (event) => moveCursor(1, 0, event), preventDefault: true },
     { pattern: "j", handler: (event) => moveCursor(1, 0, event), preventDefault: true },
-    { pattern: "shift+down", handler: (event) => moveCursor(1, 0, event), preventDefault: true },
     { pattern: "left", handler: (event) => moveCursor(0, -1, event), preventDefault: true },
     { pattern: "h", handler: (event) => moveCursor(0, -1, event), preventDefault: true },
-    { pattern: "shift+left", handler: (event) => moveCursor(0, -1, event), preventDefault: true },
     { pattern: ["ctrl+h", "backspace"], handler: () => handleHorizontalScrollShortcut("left"), preventDefault: true },
     { pattern: "right", handler: (event) => moveCursor(0, 1, event), preventDefault: true },
     { pattern: "l", handler: (event) => moveCursor(0, 1, event), preventDefault: true },
-    { pattern: "shift+right", handler: (event) => moveCursor(0, 1, event), preventDefault: true },
     { pattern: "ctrl+l", handler: () => handleHorizontalScrollShortcut("right"), preventDefault: true },
     { pattern: "escape", handler: clearSelection, preventDefault: true },
   ]

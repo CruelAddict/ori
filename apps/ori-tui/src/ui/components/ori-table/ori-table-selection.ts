@@ -14,16 +14,18 @@ export type CellSelectionRange = {
 }
 
 export function cellSelectionRange(selection: CellSelection): CellSelectionRange {
-  const firstOrder = Math.min(cellOrder(selection.start), cellOrder(selection.end))
-  const lastOrder = Math.max(cellOrder(selection.start), cellOrder(selection.end))
+  const includeHeader = selection.start.kind === "header"
   const firstCol = tableCol(Math.min(selection.start.col, selection.end.col))
   const lastCol = tableCol(Math.max(selection.start.col, selection.end.col))
-  const firstBody = Math.max(0, firstOrder)
-  const lastBody = lastOrder
+  const bodyRows = [selection.start, selection.end]
+    .filter((cell): cell is Extract<CellRef, { kind: "body" }> => cell.kind === "body")
+    .map((cell) => cell.row)
+  const firstBodyRow = bodyRows.length > 0 ? tableRow(includeHeader ? 0 : Math.min(...bodyRows)) : null
+  const lastBodyRow = bodyRows.length > 0 ? tableRow(Math.max(...bodyRows)) : null
   return {
-    includeHeader: firstOrder === -1,
-    firstBodyRow: lastBody >= firstBody ? tableRow(firstBody) : null,
-    lastBodyRow: lastBody >= firstBody ? tableRow(lastBody) : null,
+    includeHeader,
+    firstBodyRow,
+    lastBodyRow,
     firstCol,
     lastCol,
   }
@@ -50,10 +52,6 @@ export function isSeparatorSelected(
   if (!isRowInSelectionRange(range, row)) return false
   if (separator.afterCol === null) return range.firstCol === 0
   return separator.afterCol >= range.firstCol && separator.afterCol <= range.lastCol
-}
-
-function cellOrder(cell: CellRef): number {
-  return cell.kind === "header" ? -1 : cell.row
 }
 
 function isRowInSelectionRange(range: CellSelectionRange, row: TableRow | "header") {
