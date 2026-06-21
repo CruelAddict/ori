@@ -10,8 +10,6 @@ import {
 } from "@opentui/core"
 import { extend } from "@opentui/solid"
 
-/* Note: 100% vibe-coded; TODO: review the slop */
-
 export type TableCellOptions = BoxOptions & {
   value?: string
   display?: string
