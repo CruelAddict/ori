@@ -18,7 +18,6 @@ export function createResultsViewport(options: { grid: Accessor<ResultsGrid | nu
   const updateFromScrollbox = () => {
     if (!ref) return
 
-    ref.content.translateY = 0
     const viewport = getViewportRect(ref)
     const left = tableX(ref.scrollLeft ?? 0)
     const top = visualRow(ref.scrollTop ?? 0)
@@ -28,13 +27,11 @@ export function createResultsViewport(options: { grid: Accessor<ResultsGrid | nu
       if (untrack(width) !== viewport.width) setWidth(viewport.width)
       if (untrack(height) !== viewport.height) setHeight(visualRowHeight(Math.max(1, viewport.height)))
     })
-    ref.content.translateY = 0
   }
 
   const attach = (node: ScrollBoxRenderable | undefined) => {
     ref = node
     if (!ref) return
-    ref.content.translateY = 0
     updateFromScrollbox()
   }
 
@@ -42,9 +39,6 @@ export function createResultsViewport(options: { grid: Accessor<ResultsGrid | nu
     setScrollLeft(tableX(0))
     setScrollTop(visualRow(0))
     ref?.scrollTo({ x: 0, y: 0 })
-    if (ref) {
-      ref.content.translateY = 0
-    }
   }
 
   const visibleRows = createMemo(() => {

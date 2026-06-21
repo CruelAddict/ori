@@ -4,7 +4,7 @@ import { useLogger } from "@ui/providers/logger"
 import { useTheme } from "@ui/providers/theme"
 import { type KeyBinding, KeyScope } from "@ui/services/key-scopes"
 import { setSelectionOverride } from "@utils/clipboard"
-import { createEffect, createMemo, createSignal, For, onCleanup, Show, untrack } from "solid-js"
+import { createEffect, createMemo, createSignal, For, Index, onCleanup, Show, untrack } from "solid-js"
 import {
   type CellRef,
   type CellSelection,
@@ -156,9 +156,6 @@ export function ResultsPanel(props: ResultsPanelProps) {
       const scrollbox = snapshot.scrollbox
       const problems: string[] = []
 
-      if (scrollbox?.content.translateY !== 0) {
-        problems.push("content.translateY is not zero while results panel applies manual vertical row offsets")
-      }
       if (!Number.isInteger(Number(snapshot.scrollTop))) {
         problems.push("viewport scrollTop is not an integer visual row")
       }
@@ -427,41 +424,32 @@ export function ResultsPanel(props: ResultsPanelProps) {
                       bg={theme().get("results_header_background")}
                       selected={current.isSeparatorSelected(selectedCells(), "header", null)}
                     />
-                    <For each={current.columns}>
-                      {(column, index) => {
-                        const col = () => gridCol(index())
-                        const selected = () => current.isCellSelected(selectedCells(), { kind: "header", col: col() })
-                        return (
-                          <>
-                            {index() > 0 && (
-                              <SeparatorCell
-                                bg={theme().get("results_header_background")}
-                                selected={current.isSeparatorSelected(selectedCells(), "header", gridCol(index() - 1))}
-                              />
-                            )}
+                    {current.columns.map((column, columnIndex) => {
+                      const col = () => gridCol(columnIndex)
+                      const selected = () => current.isCellSelected(selectedCells(), { kind: "header", col: col() })
+                      return [
+                        columnIndex > 0 && (
+                          <SeparatorCell
+                            bg={theme().get("results_header_background")}
+                            selected={current.isSeparatorSelected(selectedCells(), "header", gridCol(columnIndex - 1))}
+                          />
+                        ),
 
-                            {/* biome-ignore lint/a11y/noStaticElementInteractions: header cells start table selection */}
-                            <table_cell
-                              width={current.columnRanges[index()]?.width ?? 1}
-                              display={formatResultCell(column.name)}
-                              backgroundColor={theme().get("results_header_background")}
-                              fg={theme().get("results_column_title")}
-                              defaultFg={theme().get("results_column_title")}
-                              attributes={TextAttributes.BOLD}
-                              selectionBg={theme().get("results_selection_background")}
-                              value={String(column.name)}
-                              selected={selected()}
-                              onMouseDown={(event: MouseEvent) =>
-                                startCellSelection({ kind: "header", col: col() }, event)
-                              }
-                              onSelectionUpdate={(selection: OpenTuiSelection | null) =>
-                                processMouseDragSelection(selection)
-                              }
-                            />
-                          </>
-                        )
-                      }}
-                    </For>
+                        <table_cell
+                          width={current.columnRanges[columnIndex]?.width ?? 1}
+                          display={formatResultCell(column.name)}
+                          backgroundColor={theme().get("results_header_background")}
+                          fg={theme().get("results_column_title")}
+                          defaultFg={theme().get("results_column_title")}
+                          attributes={TextAttributes.BOLD}
+                          selectionBg={theme().get("results_selection_background")}
+                          value={String(column.name)}
+                          selected={selected()}
+                          onMouseDown={(event: MouseEvent) => startCellSelection({ kind: "header", col: col() }, event)}
+                          onSelectionUpdate={(selection: OpenTuiSelection | null) => processMouseDragSelection(selection)}
+                        />,
+                      ]
+                    })}
                     <SeparatorCell
                       bg={theme().get("results_header_background")}
                       selected={current.isTrailingSeparatorSelected(
@@ -488,10 +476,9 @@ export function ResultsPanel(props: ResultsPanelProps) {
                   backgroundColor={theme().get("panel_background")}
                   overflow="hidden"
                 >
-                  <For each={visibleRowIds()}>
-                    {(row) => {
-                      const currentRow = () => row
-                      const rowRange = () => current.rowVisualRange(currentRow())
+                  <Index each={viewport.visibleRows()}>
+                    {(item) => {
+                      const currentRow = () => item().row
                       const rowNumberColor = () =>
                         pane.isFocused() && cursorRow() === currentRow()
                           ? theme().get("results_row_number_cursor")
@@ -499,7 +486,7 @@ export function ResultsPanel(props: ResultsPanelProps) {
                       return (
                         <box
                           position="absolute"
-                          top={rowRange().top - viewport.scrollTop()}
+                          top={item().top - viewport.scrollTop()}
                           left={0}
                           flexDirection="row"
                           backgroundColor={theme().get("panel_background")}
@@ -517,13 +504,12 @@ export function ResultsPanel(props: ResultsPanelProps) {
                         </box>
                       )
                     }}
-                  </For>
+                  </Index>
                 </box>
                 <OriScrollbox
                   onReady={viewport.attach}
                   onViewportChange={handleViewportChange}
                   onUserScroll={handleUserScroll}
-                  manualVerticalContentOffset={true}
                   scrollSpeed={resultsScrollSpeed}
                   minHorizontalThumbWidth={5}
                   minVerticalThumbHeight={2}
@@ -558,10 +544,9 @@ export function ResultsPanel(props: ResultsPanelProps) {
                       width={current.totalWidth}
                       minWidth={current.totalWidth}
                       maxWidth={current.totalWidth}
-                      height={viewport.height()}
-                      minHeight={viewport.height()}
-                      maxHeight={viewport.height()}
-                      overflow="hidden"
+                      height={viewport.metricHeight()}
+                      minHeight={viewport.metricHeight()}
+                      maxHeight={viewport.metricHeight()}
                     >
                       <For each={visibleRowIds()}>
                         {(row) => {
@@ -576,7 +561,7 @@ export function ResultsPanel(props: ResultsPanelProps) {
                           return (
                             <box
                               position="absolute"
-                              top={current.rowVisualRange(currentRow()).top - viewport.scrollTop()}
+                              top={current.rowVisualRange(currentRow()).top}
                               left={0}
                               flexDirection="row"
                               backgroundColor={rowBackground()}
@@ -586,68 +571,57 @@ export function ResultsPanel(props: ResultsPanelProps) {
                                 fg={activeCursorCol() === 0 ? cursorCellBackground() : theme().get("border")}
                                 selected={current.isSeparatorSelected(selectedCells(), currentRow(), null)}
                               />
-                              <For each={current.rows[currentRow()] ?? []}>
-                                {(cell, index) => {
-                                  const col = () => gridCol(index())
-                                  const isCursor = () => activeCursorCol() === index()
-                                  const isCursorOnLeftCell = () => index() > 0 && activeCursorCol() === index() - 1
-                                  const selected = () =>
-                                    current.isCellSelected(selectedCells(), {
-                                      kind: "body",
-                                      row: currentRow(),
-                                      col: col(),
-                                    })
-                                  return (
-                                    <>
-                                      {index() > 0 && (
-                                        <SeparatorCell
-                                          bg={isCursor() || isCursorOnLeftCell() ? cursorCellBackground() : undefined}
-                                          fg={
-                                            isCursor() || isCursorOnLeftCell()
-                                              ? cursorCellBackground()
-                                              : theme().get("border")
-                                          }
-                                          selected={current.isSeparatorSelected(
-                                            selectedCells(),
-                                            currentRow(),
-                                            gridCol(index() - 1),
-                                          )}
-                                        />
+                              {(current.rows[currentRow()] ?? []).map((cell, columnIndex) => {
+                                const col = () => gridCol(columnIndex)
+                                const isCursor = () => activeCursorCol() === columnIndex
+                                const isCursorOnLeftCell = () => columnIndex > 0 && activeCursorCol() === columnIndex - 1
+                                const selected = () =>
+                                  current.isCellSelected(selectedCells(), {
+                                    kind: "body",
+                                    row: currentRow(),
+                                    col: col(),
+                                  })
+                                return [
+                                  columnIndex > 0 && (
+                                    <SeparatorCell
+                                      bg={isCursor() || isCursorOnLeftCell() ? cursorCellBackground() : undefined}
+                                      fg={
+                                        isCursor() || isCursorOnLeftCell() ? cursorCellBackground() : theme().get("border")
+                                      }
+                                      selected={current.isSeparatorSelected(
+                                        selectedCells(),
+                                        currentRow(),
+                                        gridCol(columnIndex - 1),
                                       )}
-                                      {/* biome-ignore lint/a11y/noStaticElementInteractions: body cells start table selection */}
-                                      <table_cell
-                                        backgroundColor={isCursor() ? cursorCellBackground() : undefined}
-                                        flexDirection="row"
-                                        width={current.columnRanges[index()]?.width ?? 1}
-                                        align={typeof cell === "number" ? "right" : "left"}
-                                        onMouseDown={(event: MouseEvent) =>
-                                          startCellSelection({ kind: "body", row: currentRow(), col: col() }, event)
-                                        }
-                                        selectionBg={theme().get("results_selection_background")}
-                                        value={formatResultCell(cell)}
-                                        display={formatResultCell(cell)}
-                                        fg={isCursor() ? theme().get("selection_foreground") : theme().get("text")}
-                                        defaultFg={theme().get("text")}
-                                        selected={selected()}
-                                        onSelectionUpdate={(selection: OpenTuiSelection | null) =>
-                                          processMouseDragSelection(selection)
-                                        }
-                                      />
-                                      {index() === (current.rows[currentRow()]?.length ?? 0) - 1 && (
-                                        <SeparatorCell
-                                          bg={isCursor() ? cursorCellBackground() : undefined}
-                                          fg={isCursor() ? cursorCellBackground() : theme().get("border")}
-                                          selected={current.isTrailingSeparatorSelected(
-                                            selectedCells(),
-                                            currentRow(),
-                                            col(),
-                                          )}
-                                        />
-                                      )}
-                                    </>
-                                  )
-                                }}
-                              </For>
+                                    />
+                                  ),
+                                  <table_cell
+                                    backgroundColor={isCursor() ? cursorCellBackground() : undefined}
+                                    flexDirection="row"
+                                    width={current.columnRanges[columnIndex]?.width ?? 1}
+                                    align={typeof cell === "number" ? "right" : "left"}
+                                    onMouseDown={(event: MouseEvent) =>
+                                      startCellSelection({ kind: "body", row: currentRow(), col: col() }, event)
+                                    }
+                                    selectionBg={theme().get("results_selection_background")}
+                                    value={formatResultCell(cell)}
+                                    display={formatResultCell(cell)}
+                                    fg={isCursor() ? theme().get("selection_foreground") : theme().get("text")}
+                                    defaultFg={theme().get("text")}
+                                    selected={selected()}
+                                    onSelectionUpdate={(selection: OpenTuiSelection | null) =>
+                                      processMouseDragSelection(selection)
+                                    }
+                                  />,
+                                  columnIndex === (current.rows[currentRow()]?.length ?? 0) - 1 && (
+                                    <SeparatorCell
+                                      bg={isCursor() ? cursorCellBackground() : undefined}
+                                      fg={isCursor() ? cursorCellBackground() : theme().get("border")}
+                                      selected={current.isTrailingSeparatorSelected(selectedCells(), currentRow(), col())}
+                                    />
+                                  ),
+                                ]
+                              })}
                             </box>
                           )
                         }}

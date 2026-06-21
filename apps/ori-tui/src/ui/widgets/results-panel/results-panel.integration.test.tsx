@@ -92,82 +92,141 @@ function parseVisibleRow(line: string): ParsedVisibleRow | null {
   }
 }
 
-function expectedVisibleRow(rowNumber: number) {
-  const token = rowToken(rowNumber)
-  return {
-    left: `LEFT-${token}`,
-    mid: `MID-${token}`,
-    view: `VIEW-${token}`,
-    right: `RIGHT-${token}`,
+function rowTokenFromCell(value: string, prefix: string) {
+  if (!value.startsWith(prefix)) return null
+  return value.slice(prefix.length)
+}
+
+function inconsistentVisibleRowReason(row: ParsedVisibleRow) {
+  const leftToken = rowTokenFromCell(row.left, "LEFT-")
+  const midToken = rowTokenFromCell(row.mid, "MID-")
+  const viewToken = rowTokenFromCell(row.view, "VIEW-")
+  const rightToken = rowTokenFromCell(row.right, "RIGHT-")
+
+  if (!leftToken || !midToken || !viewToken || !rightToken) {
+    return "column prefixes do not match expected row shape"
   }
+
+  const tokens = new Set([leftToken, midToken, viewToken, rightToken])
+  if (tokens.size !== 1) {
+    return "visible row cells do not agree on the same row token"
+  }
+
+  return null
+}
+
+async function captureDragAutoscrollFrames(
+  app: MountedTuiApp,
+  scrollbox: ScrollBoxRenderable,
+  options: {
+    startScrollTop: number
+    dragHoldY: number
+    cycleCount: number
+    framesPerCycle: number
+  },
+) {
+  const dragX = scrollbox.viewport.x + 1
+  const dragStartY = scrollbox.viewport.y + 2
+  const capturedFrames = [] as CapturedRowFrame[]
+
+  for (const cycle of Array.from({ length: options.cycleCount }, (_, index) => index)) {
+    scrollbox.scrollTo({ x: 0, y: options.startScrollTop })
+    await app.waitFor(() => (scrollbox.scrollTop ?? 0) === options.startScrollTop)
+
+    await app.setup.mockMouse.pressDown(dragX, dragStartY)
+    await app.setup.mockMouse.moveTo(dragX, options.dragHoldY)
+
+    // Mock mouse drag does not kick off ScrollBox autoscroll in the test renderer,
+    // so drive the same OpenTUI autoscroll primitive directly after a real selection start.
+    scrollbox.startAutoScroll(dragX, options.dragHoldY)
+
+    try {
+      for (const frame of Array.from({ length: options.framesPerCycle }, (_, index) => index)) {
+        await sleep(25)
+        await app.renderOnce()
+        capturedFrames.push({
+          cycle,
+          frame,
+          scrollTop: scrollbox.scrollTop ?? 0,
+          lineIndex: scrollbox.viewport.y,
+          line: readFrameLines(app)[scrollbox.viewport.y] ?? "",
+        })
+      }
+    } finally {
+      await app.setup.mockMouse.release(dragX, options.dragHoldY)
+      await app.waitFor(() => !app.setup.renderer.getSelection()?.isDragging)
+    }
+  }
+
+  return capturedFrames
 }
 
 describe("results panel integration", () => {
-  test("keeps the first visible row aligned while upward drag autoscroll is active", async () => {
-      const app = await mountInTui(
-        () => createComponent(ResultsPanel, { viewModel: createViewModel(createResultsJob(80)) }),
+  test("keeps visible rows internally consistent during upward drag autoscroll", async () => {
+    const app = await mountInTui(
+      () => createComponent(ResultsPanel, { viewModel: createViewModel(createResultsJob(80)) }),
       { width: 48, height: 8 },
     )
 
     try {
       const scrollbox = getResultsScrollbox(app)
-      const dragX = scrollbox.viewport.x + 1
-      const dragStartY = scrollbox.viewport.y + 2
-      const dragHoldY = scrollbox.y - 1
+      const capturedFrames = await captureDragAutoscrollFrames(app, scrollbox, {
+        startScrollTop: 20,
+        dragHoldY: scrollbox.y - 1,
+        cycleCount: 12,
+        framesPerCycle: 10,
+      })
 
-      const capturedFrames = [] as CapturedRowFrame[]
-      const cycleCount = 12
-      const framesPerCycle = 10
-
-      for (const cycle of Array.from({ length: cycleCount }, (_, index) => index)) {
-        scrollbox.scrollTo({ x: 0, y: 20 })
-        await app.waitFor(() => (scrollbox.scrollTop ?? 0) === 20)
-
-        await app.setup.mockMouse.pressDown(dragX, dragStartY)
-        await app.setup.mockMouse.moveTo(dragX, dragHoldY)
-
-        // Mock mouse drag does not kick off ScrollBox autoscroll in the test renderer,
-        // so drive the same OpenTUI autoscroll primitive directly after a real selection start.
-        scrollbox.startAutoScroll(dragX, dragHoldY)
-
-        try {
-          for (const frame of Array.from({ length: framesPerCycle }, (_, index) => index)) {
-            await sleep(25)
-            await app.renderOnce()
-            capturedFrames.push({
-              cycle,
-              frame,
-              scrollTop: scrollbox.scrollTop ?? 0,
-              lineIndex: scrollbox.viewport.y,
-              line: readFrameLines(app)[scrollbox.viewport.y] ?? "",
-            })
-          }
-        } finally {
-          await app.setup.mockMouse.release(dragX, dragHoldY)
-          await app.waitFor(() => !app.setup.renderer.getSelection()?.isDragging)
-        }
-      }
-
-      const glitches = capturedFrames.flatMap((item) => {
+      const inconsistentFrames = capturedFrames.flatMap((item) => {
         const parsed = parseVisibleRow(item.line)
         if (!parsed) {
           return [{ ...item, reason: "could not parse visible row" }]
         }
 
-        const expected = expectedVisibleRow(parsed.rowNumber)
-        if (
-          parsed.left === expected.left &&
-          parsed.mid === expected.mid &&
-          parsed.view === expected.view &&
-          parsed.right === expected.right
-        ) {
+        const reason = inconsistentVisibleRowReason(parsed)
+        if (!reason) {
           return []
         }
 
-        return [{ ...item, actual: parsed, expected }]
+        return [{ ...item, parsed, reason }]
       })
 
-      expect(glitches).toEqual([])
+      expect(inconsistentFrames).toEqual([])
+    } finally {
+      app.destroy()
+    }
+  })
+
+  test("keeps visible rows internally consistent during downward drag autoscroll", async () => {
+    const app = await mountInTui(
+      () => createComponent(ResultsPanel, { viewModel: createViewModel(createResultsJob(80)) }),
+      { width: 48, height: 8 },
+    )
+
+    try {
+      const scrollbox = getResultsScrollbox(app)
+      const capturedFrames = await captureDragAutoscrollFrames(app, scrollbox, {
+        startScrollTop: 0,
+        dragHoldY: scrollbox.y + scrollbox.height + 1,
+        cycleCount: 8,
+        framesPerCycle: 10,
+      })
+
+      const inconsistentFrames = capturedFrames.flatMap((item) => {
+        const parsed = parseVisibleRow(item.line)
+        if (!parsed) {
+          return [{ ...item, reason: "could not parse visible row" }]
+        }
+
+        const reason = inconsistentVisibleRowReason(parsed)
+        if (reason) {
+          return [{ ...item, parsed, reason }]
+        }
+
+        return []
+      })
+
+      expect(inconsistentFrames).toEqual([])
     } finally {
       app.destroy()
     }
