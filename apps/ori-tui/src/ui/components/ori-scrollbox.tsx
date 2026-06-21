@@ -74,7 +74,6 @@ export type OriScrollboxProps = ScrollboxBaseProps & {
   minHorizontalThumbWidth?: number
   minVerticalThumbHeight?: number
   scrollSpeed?: ScrollSpeedMultipliers
-  manualVerticalContentOffset?: boolean
   onViewportChange?: () => void
   onUserScroll?: (context: OriScrollboxUserScrollContext) => void
 }
@@ -109,7 +108,6 @@ export function OriScrollbox(props: OriScrollboxProps) {
     "minHorizontalThumbWidth",
     "minVerticalThumbHeight",
     "scrollSpeed",
-    "manualVerticalContentOffset",
     "onViewportChange",
     "onUserScroll",
     "children",
@@ -151,10 +149,7 @@ export function OriScrollbox(props: OriScrollboxProps) {
     }
 
     const needsEventSyncPatch =
-      Boolean(local.scrollSpeed) ||
-      Boolean(local.manualVerticalContentOffset) ||
-      Boolean(local.onViewportChange) ||
-      Boolean(local.onUserScroll)
+      Boolean(local.scrollSpeed) || Boolean(local.onViewportChange) || Boolean(local.onUserScroll)
 
     if (!needsEventSyncPatch) {
       return
@@ -169,16 +164,8 @@ export function OriScrollbox(props: OriScrollboxProps) {
         ? createScrollSpeedHandler(originalOnMouseEvent, local.scrollSpeed)
         : originalOnMouseEvent
     let lastSyncState = readScrollSyncState(node)
-    const syncManualVerticalContentOffset = () => {
-      if (!local.manualVerticalContentOffset) {
-        return
-      }
-
-      node.content.translateY = 0
-    }
 
     const maybeSync = () => {
-      syncManualVerticalContentOffset()
       const nextState = readScrollSyncState(node)
       if (sameScrollSyncState(lastSyncState, nextState)) {
         return
@@ -188,12 +175,11 @@ export function OriScrollbox(props: OriScrollboxProps) {
       local.onViewportChange?.()
     }
 
-    installScrollbarUserScrollPatch(node, local.onUserScroll, local.onViewportChange, syncManualVerticalContentOffset)
+    installScrollbarUserScrollPatch(node, local.onUserScroll, local.onViewportChange)
 
     // @ts-expect-error onUpdate is protected in typings
     node.onUpdate = (deltaTime: number) => {
       originalOnUpdate?.(deltaTime)
-      syncManualVerticalContentOffset()
       maybeSync()
     }
 
@@ -203,7 +189,6 @@ export function OriScrollbox(props: OriScrollboxProps) {
       const prevTop = node.scrollTop ?? 0
       let skippedNoopScrollSync = false
       handleMouseEvent?.(event)
-      syncManualVerticalContentOffset()
       if (event.type === "scroll") {
         const newLeft = node.scrollLeft ?? 0
         const newTop = node.scrollTop ?? 0
@@ -230,7 +215,6 @@ export function OriScrollbox(props: OriScrollboxProps) {
     }
 
     process.nextTick(() => {
-      syncManualVerticalContentOffset()
       lastSyncState = readScrollSyncState(node)
       local.onViewportChange?.()
     })
@@ -404,7 +388,6 @@ function installScrollbarUserScrollPatch(
   node: ScrollBoxRenderable,
   onUserScroll: ((context: OriScrollboxUserScrollContext) => void) | undefined,
   onViewportChange: (() => void) | undefined,
-  syncManualVerticalContentOffset: () => void,
 ) {
   type State = {
     active: boolean
@@ -414,7 +397,6 @@ function installScrollbarUserScrollPatch(
   }
 
   const emitUserScroll = (state: State) => {
-    syncManualVerticalContentOffset()
     const scrollLeft = node.scrollLeft ?? 0
     const scrollTop = node.scrollTop ?? 0
     const delta = {

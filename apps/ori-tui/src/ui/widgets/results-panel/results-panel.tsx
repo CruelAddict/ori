@@ -1,10 +1,9 @@
 import { type KeyEvent, type MouseEvent, type Selection as OpenTuiSelection, TextAttributes } from "@opentui/core"
-import { OriScrollbox, type OriScrollboxUserScrollContext } from "@ui/components/ori-scrollbox"
-import { useLogger } from "@ui/providers/logger"
+import { OriScrollbox } from "@ui/components/ori-scrollbox"
 import { useTheme } from "@ui/providers/theme"
 import { type KeyBinding, KeyScope } from "@ui/services/key-scopes"
 import { setSelectionOverride } from "@utils/clipboard"
-import { createEffect, createMemo, createSignal, For, Index, onCleanup, Show, untrack } from "solid-js"
+import { createEffect, createMemo, createSignal, For, Index, onCleanup, Show } from "solid-js"
 import {
   type CellRef,
   type CellSelection,
@@ -32,7 +31,6 @@ const HORIZONTAL_SCROLL_STEP = 6
 export function ResultsPanel(props: ResultsPanelProps) {
   const pane = props.viewModel
   const { theme } = useTheme()
-  const logger = useLogger()
 
   const [cursorRow, setCursorRow] = createSignal(0)
   const [cursorCol, setCursorCol] = createSignal(0)
@@ -51,11 +49,6 @@ export function ResultsPanel(props: ResultsPanelProps) {
     return createResultsGrid({ columns: resultColumns(), rows: resultRows() })
   })
   const viewport = createResultsViewport({ grid })
-  const jobResetKey = createMemo(() => {
-    const job = pane.job()
-    if (!job) return ""
-    return `${job.jobId}:${job.status}`
-  })
 
   const rowNumberWidth = createMemo(() => String(resultRows().length).length)
   const rowNumberCellWidth = createMemo(() => rowNumberWidth() + 2)
@@ -88,113 +81,14 @@ export function ResultsPanel(props: ResultsPanelProps) {
     setSelectionEnd(null)
   }
 
-  const describeCell = (cell: CellRef | null) => {
-    if (!cell) return null
-    if (cell.kind === "header") return { kind: cell.kind, col: Number(cell.col) }
-    return { kind: cell.kind, row: Number(cell.row), rowNumber: Number(cell.row) + 1, col: Number(cell.col) }
-  }
-
-  const describeNativeSelection = (selection: OpenTuiSelection | null) => {
-    if (!selection) return null
-    return {
-      isActive: selection.isActive,
-      isDragging: selection.isDragging,
-      isStart: selection.isStart,
-      anchor: selection.anchor,
-      focus: selection.focus,
-      bounds: selection.bounds,
-      selectedRenderables: selection.selectedRenderables.length,
-      touchedRenderables: selection.touchedRenderables.length,
-    }
-  }
-
-  const displayedRows = (current: ResultsGrid | null) =>
-    viewport.visibleRows().map((item) => ({
-      row: Number(item.row),
-      rowNumber: Number(item.row) + 1,
-      top: Number(item.top),
-      renderedTop: Number(item.top - viewport.scrollTop()),
-      height: Number(item.height),
-      values: (current?.rows[item.row] ?? []).slice(0, 8).map(formatResultCell),
-      hiddenCellCount: Math.max(0, (current?.rows[item.row]?.length ?? 0) - 8),
-    }))
-
-  const logDisplayedState = (cause: string, extra: Record<string, unknown> = {}) => {
-    if (!logger.isLevelEnabled("debug")) return
-
-    untrack(() => {
-      const current = grid()
-      const selection = selectedCells()
-      logger.debug(
-        {
-          cause,
-          jobId: pane.job()?.jobId,
-          focused: pane.isFocused(),
-          cursor: { row: cursorRow(), rowNumber: cursorRow() + 1, col: cursorCol() },
-          selection: {
-            start: describeCell(selectionStart()),
-            end: describeCell(selectionEnd()),
-            bounds: selection && current ? current.cellSelectionBounds(selection) : null,
-            native: describeNativeSelection(viewport.nativeSelection()),
-          },
-          rowNumberWidth: rowNumberWidth(),
-          rowNumberCellWidth: rowNumberCellWidth(),
-          viewport: viewport.debugSnapshot(),
-          displayedRows: displayedRows(current),
-          ...extra,
-        },
-        "results panel: displayed state",
-      )
-    })
-  }
-
-  const warnBrokenInvariants = (cause: string) => {
-    if (!logger.isLevelEnabled("warn")) return
-
-    untrack(() => {
-      const snapshot = viewport.debugSnapshot()
-      const scrollbox = snapshot.scrollbox
-      const problems: string[] = []
-
-      if (!Number.isInteger(Number(snapshot.scrollTop))) {
-        problems.push("viewport scrollTop is not an integer visual row")
-      }
-      if (scrollbox && Number(snapshot.scrollTop) > scrollbox.maxScrollTop) {
-        problems.push("viewport scrollTop is beyond scrollbox maxScrollTop")
-      }
-      for (const row of snapshot.visibleRows) {
-        if (!Number.isInteger(Number(row.renderedTop))) {
-          problems.push("visible row renderedTop is not an integer terminal row")
-          break
-        }
-      }
-
-      if (problems.length === 0) return
-
-      logger.warn({ cause, problems, snapshot }, "results panel: broken viewport invariants")
-    })
-  }
-
   const processMouseDragSelection = (selection: OpenTuiSelection | null) => {
-    const before = selectionEnd()
     if (!selection?.isActive) return
     if (selection.isStart) {
       setSelectionEndIfChanged(null)
-      logDisplayedState("selection-start", {
-        nativeSelection: describeNativeSelection(selection),
-        previousSelectionEnd: describeCell(before),
-        nextSelectionEnd: null,
-      })
       return
     }
     const next = viewport.cellAtScreenPoint(selection.focus)
     setSelectionEndIfChanged(next)
-    logDisplayedState("selection-drag", {
-      nativeSelection: describeNativeSelection(selection),
-      previousSelectionEnd: describeCell(before),
-      nextSelectionEnd: describeCell(next),
-    })
-    warnBrokenInvariants("selection-drag")
   }
 
   setSelectionOverride(() => grid()?.cellSelectionText(selectedCells()))
@@ -203,23 +97,16 @@ export function ResultsPanel(props: ResultsPanelProps) {
   })
 
   createEffect(() => {
-    jobResetKey()
+    pane.job()
     setCursorRow(0)
     setCursorCol(0)
     clearSelection()
     viewport.reset()
-    logDisplayedState("job-reset")
   })
 
   createEffect(() => {
     if (!grid()) return
     viewport.scrollCellIntoView(cursorCell())
-  })
-
-  createEffect(() => {
-    if (!grid()) return
-    logDisplayedState("displayed-rows-change")
-    warnBrokenInvariants("displayed-rows-change")
   })
 
   const moveSelection = (rowDelta: number, colDelta: number, event?: KeyEvent) => {
@@ -249,36 +136,13 @@ export function ResultsPanel(props: ResultsPanelProps) {
   const handleManualHorizontalScroll = (direction: "left" | "right") => {
     if (!grid()) return
     viewport.scrollHorizontally(direction === "left" ? -HORIZONTAL_SCROLL_STEP : HORIZONTAL_SCROLL_STEP)
-    logDisplayedState("manual-horizontal-scroll", { direction })
   }
 
   const handleViewportChange = () => {
-    const before = viewport.debugSnapshot()
     viewport.updateFromScrollbox()
-    const after = viewport.debugSnapshot()
-    logDisplayedState("viewport-change", { before, after })
-    warnBrokenInvariants("viewport-change")
     if (selectionStart()) {
       processMouseDragSelection(viewport.nativeSelection())
     }
-  }
-
-  const handleUserScroll = (context: OriScrollboxUserScrollContext) => {
-    logDisplayedState("user-scroll", {
-      event: {
-        type: context.event.type,
-        x: context.event.x,
-        y: context.event.y,
-        scroll: context.event.scroll,
-        isDragging: context.event.isDragging,
-        button: context.event.button,
-        modifiers: context.event.modifiers,
-      },
-      delta: context.delta,
-      scrollLeft: context.scrollLeft,
-      scrollTop: context.scrollTop,
-    })
-    warnBrokenInvariants("user-scroll")
   }
 
   const bindings: KeyBinding[] = [
@@ -308,17 +172,6 @@ export function ResultsPanel(props: ResultsPanelProps) {
       setCursorRow(cell.row)
       setCursorCol(cell.col)
     }
-    logDisplayedState("selection-mousedown", {
-      cell: describeCell(cell),
-      event: {
-        type: event.type,
-        x: event.x,
-        y: event.y,
-        button: event.button,
-        isDragging: event.isDragging,
-        modifiers: event.modifiers,
-      },
-    })
   }
 
   const SeparatorCell = (props: { selected?: boolean; bg?: string; fg?: string }) => (
@@ -446,7 +299,9 @@ export function ResultsPanel(props: ResultsPanelProps) {
                           value={String(column.name)}
                           selected={selected()}
                           onMouseDown={(event: MouseEvent) => startCellSelection({ kind: "header", col: col() }, event)}
-                          onSelectionUpdate={(selection: OpenTuiSelection | null) => processMouseDragSelection(selection)}
+                          onSelectionUpdate={(selection: OpenTuiSelection | null) =>
+                            processMouseDragSelection(selection)
+                          }
                         />,
                       ]
                     })}
@@ -509,7 +364,6 @@ export function ResultsPanel(props: ResultsPanelProps) {
                 <OriScrollbox
                   onReady={viewport.attach}
                   onViewportChange={handleViewportChange}
-                  onUserScroll={handleUserScroll}
                   scrollSpeed={resultsScrollSpeed}
                   minHorizontalThumbWidth={5}
                   minVerticalThumbHeight={2}
@@ -574,7 +428,8 @@ export function ResultsPanel(props: ResultsPanelProps) {
                               {(current.rows[currentRow()] ?? []).map((cell, columnIndex) => {
                                 const col = () => gridCol(columnIndex)
                                 const isCursor = () => activeCursorCol() === columnIndex
-                                const isCursorOnLeftCell = () => columnIndex > 0 && activeCursorCol() === columnIndex - 1
+                                const isCursorOnLeftCell = () =>
+                                  columnIndex > 0 && activeCursorCol() === columnIndex - 1
                                 const selected = () =>
                                   current.isCellSelected(selectedCells(), {
                                     kind: "body",
@@ -586,7 +441,9 @@ export function ResultsPanel(props: ResultsPanelProps) {
                                     <SeparatorCell
                                       bg={isCursor() || isCursorOnLeftCell() ? cursorCellBackground() : undefined}
                                       fg={
-                                        isCursor() || isCursorOnLeftCell() ? cursorCellBackground() : theme().get("border")
+                                        isCursor() || isCursorOnLeftCell()
+                                          ? cursorCellBackground()
+                                          : theme().get("border")
                                       }
                                       selected={current.isSeparatorSelected(
                                         selectedCells(),
@@ -617,7 +474,11 @@ export function ResultsPanel(props: ResultsPanelProps) {
                                     <SeparatorCell
                                       bg={isCursor() ? cursorCellBackground() : undefined}
                                       fg={isCursor() ? cursorCellBackground() : theme().get("border")}
-                                      selected={current.isTrailingSeparatorSelected(selectedCells(), currentRow(), col())}
+                                      selected={current.isTrailingSeparatorSelected(
+                                        selectedCells(),
+                                        currentRow(),
+                                        col(),
+                                      )}
                                     />
                                   ),
                                 ]
