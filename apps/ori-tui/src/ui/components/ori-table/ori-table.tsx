@@ -68,6 +68,8 @@ export function OriTable(props: OriTableProps) {
         justifyContent="flex-start"
         flexGrow={1}
         onMouseDown={props.focusSelf}
+        onMouseUp={table.handleMouseUp}
+        onMouseDragEnd={table.handleMouseUp}
         paddingRight={1}
       >
         <box

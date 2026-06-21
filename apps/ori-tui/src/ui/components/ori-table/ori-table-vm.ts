@@ -292,6 +292,7 @@ export function createOriTableVM(options: CreateOriTableVMOptions) {
     attachScrollbox,
     handleViewportChange,
     handleCellMouseDown,
+    handleMouseUp: () => queueMicrotask(clearSelection),
     handleNativeSelectionUpdate: processNativeSelection,
     headerSegments: () => geometry().headerSegments(),
     rowSegments: (row: TableRow) => geometry().rowSegments(row),
