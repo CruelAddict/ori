@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test"
-import { ScrollBoxRenderable } from "@opentui/core"
 import type { QueryResultView } from "@adapters/ori/client"
+import { ScrollBoxRenderable } from "@opentui/core"
 import type { QueryJob } from "@usecase/query/usecase"
+import { getSelectionOverrideText } from "@utils/clipboard"
 import { createComponent } from "solid-js"
 import { type MountedTuiApp, mountInTui } from "../../../test/opentui-harness"
 import { findRequiredNode, readFrameLines } from "../../../test/opentui-test-tools"
@@ -162,6 +163,68 @@ async function captureDragAutoscrollFrames(
 }
 
 describe("results panel integration", () => {
+  test("keeps table selection while dragging over the scrollbar edge", async () => {
+    const app = await mountInTui(
+      () => createComponent(ResultsPanel, { viewModel: createViewModel(createResultsJob(20)) }),
+      { width: 48, height: 8 },
+    )
+
+    try {
+      const scrollbox = getResultsScrollbox(app)
+      const dragX = scrollbox.viewport.x + 2
+      const dragStartY = scrollbox.viewport.y + 1
+      const dragEndY = scrollbox.viewport.y + 3
+      const scrollbarEdgeX = scrollbox.x + scrollbox.width - 1
+
+      await app.setup.mockMouse.pressDown(dragX, dragStartY)
+      await app.setup.mockMouse.moveTo(dragX, dragEndY)
+      await app.waitFor(() => getSelectionOverrideText() !== undefined)
+      await app.setup.mockMouse.moveTo(scrollbarEdgeX, dragEndY)
+      await app.renderOnce()
+
+      expect(app.setup.renderer.getSelection()?.isDragging).toBe(true)
+      expect(getSelectionOverrideText()).not.toBeUndefined()
+
+      await app.setup.mockMouse.release(scrollbarEdgeX, dragEndY)
+      await app.waitFor(() => getSelectionOverrideText() === undefined)
+    } finally {
+      app.destroy()
+    }
+  })
+
+  test("finishes table selection when mouse is released outside the table", async () => {
+    const app = await mountInTui(
+      () => (
+        <box flexDirection="row">
+          <box width={48}>
+            <ResultsPanel viewModel={createViewModel(createResultsJob(20))} />
+          </box>
+          <box width={12}>
+            <text>outside</text>
+          </box>
+        </box>
+      ),
+      { width: 60, height: 8 },
+    )
+
+    try {
+      const scrollbox = getResultsScrollbox(app)
+      const dragX = scrollbox.viewport.x + 2
+      const dragStartY = scrollbox.viewport.y + 1
+      const dragEndY = scrollbox.viewport.y + 3
+      const outsideX = scrollbox.x + scrollbox.width + 4
+
+      await app.setup.mockMouse.pressDown(dragX, dragStartY)
+      await app.setup.mockMouse.moveTo(dragX, dragEndY)
+      await app.waitFor(() => getSelectionOverrideText() !== undefined)
+      await app.setup.mockMouse.release(outsideX, dragEndY)
+      await app.waitFor(() => !app.setup.renderer.getSelection()?.isDragging)
+      await app.waitFor(() => getSelectionOverrideText() === undefined)
+    } finally {
+      app.destroy()
+    }
+  })
+
   test("keeps visible rows internally consistent during upward drag autoscroll", async () => {
     const app = await mountInTui(
       () => createComponent(ResultsPanel, { viewModel: createViewModel(createResultsJob(80)) }),

@@ -179,7 +179,15 @@ export function createOriTableVM(options: CreateOriTableVMOptions) {
   }
 
   const processNativeSelection = (native: OpenTuiSelection | null) => {
-    if (!native?.isActive) return
+    if (!native?.isActive) {
+      if (!selection()) return
+      // Inactive may happen mid-drag over scrollbars; defer until mouseup/copy handling finishes.
+      queueMicrotask(() => {
+        if (scrollbox?.ctx.getSelection()?.isDragging) return
+        clearSelection()
+      })
+      return
+    }
     if (native.isStart) {
       extendSelection(null)
       return
