@@ -1,6 +1,3 @@
-import type { KeyEvent, MouseEvent, Selection as OpenTuiSelection, ScrollBoxRenderable } from "@opentui/core"
-import { getViewportRect } from "@ui/components/ori-scrollbox"
-import type { KeyBinding } from "@ui/services/key-scopes"
 import { type Accessor, batch, createEffect, createMemo, createSignal, untrack } from "solid-js"
 import {
   type CellRef,
@@ -20,7 +17,6 @@ import {
 import { type CellSelection, cellSelectionRange, isCellSelected, isSeparatorSelected } from "./ori-table-selection"
 
 const DEFAULT_OVERSCAN = 4
-const HORIZONTAL_SCROLL_STEP = 6
 
 export type OriTableColumn = {
   name: string
@@ -35,14 +31,14 @@ type CreateOriTableVMOptions = {
   columns: Accessor<OriTableColumn[]>
   rows: Accessor<unknown[][]>
   isFocused: Accessor<boolean>
-  focusSelf: () => void
   overscan?: number
 }
 
 export type OriTableVM = ReturnType<typeof createOriTableVM>
 
 export function createOriTableVM(options: CreateOriTableVMOptions) {
-  let scrollbox: ScrollBoxRenderable | undefined
+  let viewportX = 0
+  let viewportY = 0
   const overscan = options.overscan ?? DEFAULT_OVERSCAN
   const [cursorRow, setCursorRow] = createSignal(0)
   const [cursorCol, setCursorCol] = createSignal(0)
@@ -68,39 +64,31 @@ export function createOriTableVM(options: CreateOriTableVMOptions) {
     return visibleRowsForScrollWindow(options.rows().length, scrollTop(), height(), overscan)
   })
 
-  const syncScrollboxState = () => {
-    if (!scrollbox) return
-
-    const viewport = getViewportRect(scrollbox)
-    const left = tableX(scrollbox.scrollLeft ?? 0)
-    const top = visualRow(scrollbox.scrollTop ?? 0)
+  const setViewport = (viewport: {
+    x: number
+    y: number
+    width: number
+    height: number
+    scrollLeft: number
+    scrollTop: number
+  }) => {
+    viewportX = viewport.x
+    viewportY = viewport.y
+    const left = tableX(viewport.scrollLeft)
+    const top = visualRow(viewport.scrollTop)
+    const nextHeight = visualRowHeight(Math.max(1, viewport.height))
     batch(() => {
       if (untrack(scrollLeft) !== left) setScrollLeft(left)
       if (untrack(scrollTop) !== top) setScrollTop(top)
       if (untrack(width) !== viewport.width) setWidth(viewport.width)
-      if (untrack(height) !== viewport.height) setHeight(visualRowHeight(Math.max(1, viewport.height)))
+      if (untrack(height) !== nextHeight) setHeight(nextHeight)
     })
   }
 
-  const attachScrollbox = (node: ScrollBoxRenderable | undefined) => {
-    scrollbox = node
-    if (!scrollbox) return
-    syncScrollboxState()
-  }
-
-  const resetScroll = () => {
-    setScrollLeft(tableX(0))
-    setScrollTop(visualRow(0))
-    scrollbox?.scrollTo({ x: 0, y: 0 })
-  }
-
-  const cellAtDragSelectionPoint = (point: { x: number; y: number }): CellRef | null => {
+  const cellAtMouseDragPoint = (point: { x: number; y: number }): CellRef | null => {
     const layout = geometry()
-    if (!scrollbox) return null
-
-    const viewport = getViewportRect(scrollbox)
-    const x = tableX(point.x - viewport.x + scrollLeft())
-    if (point.y < viewport.y) {
+    const x = tableX(point.x - viewportX + scrollLeft())
+    if (point.y < viewportY) {
       if (selection()?.start.kind === "header") {
         return layout.headerCellAt(x)
       }
@@ -108,51 +96,8 @@ export function createOriTableVM(options: CreateOriTableVMOptions) {
       return layout.bodyCellAt(x, scrollTop())
     }
 
-    const y = Math.min(point.y - viewport.y, Math.max(0, viewport.height - 1))
+    const y = Math.min(point.y - viewportY, Math.max(0, Number(height()) - 1))
     return layout.bodyCellAt(x, visualRow(y + scrollTop()))
-  }
-
-  const scrollCellIntoView = (cell: CellRef) => {
-    const layout = geometry()
-    if (!scrollbox) return
-
-    const currentTop = scrollbox.scrollTop ?? 0
-    const currentLeft = scrollbox.scrollLeft ?? 0
-    const viewportHeight = Math.max(1, getViewportRect(scrollbox).height)
-    const viewportWidth = Math.max(1, getViewportRect(scrollbox).width)
-    let nextTop = currentTop
-    let nextLeft = currentLeft
-
-    if (cell.kind === "body") {
-      const row = layout.rowVisualRange(cell.row)
-      if (row.top < currentTop) {
-        nextTop = row.top
-      }
-      if (row.top + row.height > currentTop + viewportHeight) {
-        nextTop = row.top + row.height - viewportHeight
-      }
-    }
-
-    const col = layout.columnRanges[cell.col]
-    if (col) {
-      if (col.end > currentLeft + viewportWidth) {
-        nextLeft = col.end - viewportWidth
-      }
-      if (col.start < currentLeft) {
-        nextLeft = col.start
-      }
-    }
-
-    if (nextTop !== currentTop || nextLeft !== currentLeft) {
-      scrollbox.scrollTo({ x: nextLeft, y: nextTop })
-      syncScrollboxState()
-    }
-  }
-
-  const nudgeHorizontal = (direction: "left" | "right") => {
-    const delta = direction === "left" ? -HORIZONTAL_SCROLL_STEP : HORIZONTAL_SCROLL_STEP
-    scrollbox?.scrollBy({ x: delta, y: 0 })
-    syncScrollboxState()
   }
 
   const sameCell = (left: CellRef | null, right: CellRef | null) => {
@@ -164,6 +109,10 @@ export function createOriTableVM(options: CreateOriTableVMOptions) {
 
   const beginSelection = (cell: CellRef) => {
     setSelection({ start: cell, end: null })
+    if (cell.kind === "body") {
+      setCursorRow(cell.row)
+      setCursorCol(cell.col)
+    }
   }
 
   const extendSelection = (cell: CellRef | null) => {
@@ -174,48 +123,22 @@ export function createOriTableVM(options: CreateOriTableVMOptions) {
     })
   }
 
-  const stopSelectionWork = () => {
-    scrollbox?.stopAutoScroll()
-  }
-
   const clearSelection = () => {
-    stopSelectionWork()
     setSelection(null)
-  }
-
-  const processSelection = (currentSelection: OpenTuiSelection | null) => {
-    if (!currentSelection?.isActive) {
-      if (!selection()) return
-      // Inactive may happen mid-drag over scrollbars; defer until mouseup/copy handling finishes.
-      queueMicrotask(() => {
-        if (scrollbox?.ctx.getSelection()?.isDragging) return
-        clearSelection()
-      })
-      return
-    }
-    if (currentSelection.isStart) {
-      extendSelection(null)
-      return
-    }
-    extendSelection(cellAtDragSelectionPoint(currentSelection.focus))
   }
 
   const reset = () => {
     setCursorRow(0)
     setCursorCol(0)
     clearSelection()
-    resetScroll()
+    setScrollLeft(tableX(0))
+    setScrollTop(visualRow(0))
   }
 
-  const moveCursor = (rowDelta: number, colDelta: number, event?: KeyEvent) => {
+  const moveCursor = (rowDelta: number, colDelta: number): { x: number; y: number } | undefined => {
     const rowCount = options.rows().length
     const colCount = options.columns().length
     if (rowCount === 0 || colCount === 0) return
-
-    event?.preventDefault()
-    if (!options.isFocused()) {
-      options.focusSelf()
-    }
 
     const nextRow = Math.min(rowCount - 1, Math.max(0, cursorRow() + rowDelta))
     const nextCol = Math.min(colCount - 1, Math.max(0, cursorCol() + colDelta))
@@ -223,56 +146,34 @@ export function createOriTableVM(options: CreateOriTableVMOptions) {
     setCursorRow(nextRow)
     setCursorCol(nextCol)
     clearSelection()
-    scrollCellIntoView(next)
-  }
+    const layout = geometry()
+    const currentTop = Number(scrollTop())
+    const currentLeft = Number(scrollLeft())
+    const viewportHeight = Math.max(1, Number(height()))
+    const viewportWidth = Math.max(1, width())
+    let nextTop = currentTop
+    let nextLeft = currentLeft
 
-  const handleHorizontalScrollShortcut = (direction: "left" | "right") => {
-    if (options.columns().length === 0) return
-    nudgeHorizontal(direction)
-  }
-
-  const handleViewportChange = () => {
-    syncScrollboxState()
-    if (selection()) {
-      processSelection(scrollbox?.ctx.getSelection() ?? null)
+    const row = layout.rowVisualRange(next.row)
+    if (row.top < currentTop) {
+      nextTop = row.top
     }
-  }
-
-  const handleMouseDrag = (event: MouseEvent) => {
-    if (!selection() || !scrollbox?.ctx.getSelection()?.isDragging) return
-    scrollbox.updateAutoScroll(event.x, event.y)
-  }
-
-  const handleMouseMove = () => {
-    if (!selection() || !scrollbox?.ctx.getSelection()?.isDragging) return
-    scrollbox.stopAutoScroll()
-  }
-
-  const isSelecting = () => Boolean(scrollbox?.ctx.getSelection()?.isDragging)
-
-  const handleCellMouseDown = (cell: CellRef, event: MouseEvent) => {
-    options.focusSelf()
-    event.preventDefault()
-    beginSelection(cell)
-    if (cell.kind === "body") {
-      setCursorRow(cell.row)
-      setCursorCol(cell.col)
+    if (row.top + row.height > currentTop + viewportHeight) {
+      nextTop = row.top + row.height - viewportHeight
     }
-  }
 
-  const keyBindings = (): KeyBinding[] => [
-    { pattern: "up", handler: (event) => moveCursor(-1, 0, event), preventDefault: true },
-    { pattern: "k", handler: (event) => moveCursor(-1, 0, event), preventDefault: true },
-    { pattern: "down", handler: (event) => moveCursor(1, 0, event), preventDefault: true },
-    { pattern: "j", handler: (event) => moveCursor(1, 0, event), preventDefault: true },
-    { pattern: "left", handler: (event) => moveCursor(0, -1, event), preventDefault: true },
-    { pattern: "h", handler: (event) => moveCursor(0, -1, event), preventDefault: true },
-    { pattern: ["ctrl+h", "backspace"], handler: () => handleHorizontalScrollShortcut("left"), preventDefault: true },
-    { pattern: "right", handler: (event) => moveCursor(0, 1, event), preventDefault: true },
-    { pattern: "l", handler: (event) => moveCursor(0, 1, event), preventDefault: true },
-    { pattern: "ctrl+l", handler: () => handleHorizontalScrollShortcut("right"), preventDefault: true },
-    { pattern: "escape", handler: clearSelection, preventDefault: true },
-  ]
+    const col = layout.columnRanges[next.col]
+    if (col) {
+      if (col.end > currentLeft + viewportWidth) {
+        nextLeft = col.end - viewportWidth
+      }
+      if (col.start < currentLeft) {
+        nextLeft = col.start
+      }
+    }
+
+    return nextTop !== currentTop || nextLeft !== currentLeft ? { x: nextLeft, y: nextTop } : undefined
+  }
 
   const contentWidth = createMemo(() => Math.max(width(), geometry().totalWidth))
   const contentHeight = createMemo(() => Math.max(height(), geometry().totalVisualRows))
@@ -296,7 +197,6 @@ export function createOriTableVM(options: CreateOriTableVMOptions) {
   })
 
   return {
-    keyBindings,
     rowNumberCellWidth,
     cursorRow,
     scrollLeft,
@@ -304,16 +204,14 @@ export function createOriTableVM(options: CreateOriTableVMOptions) {
     contentWidth,
     contentHeight,
     visibleRows,
-    attachScrollbox,
-    handleViewportChange,
-    handleMouseDrag,
-    handleMouseMove,
-    handleCellMouseDown,
-    stopSelectionWork,
+    setViewport,
+    moveCursor,
+    beginSelection,
+    extendSelection,
     clearSelection,
     readSelected: selectionText,
-    isSelecting,
-    handleSelectionUpdate: processSelection,
+    hasSelection: () => selection() !== null,
+    cellAtMouseDragPoint,
     headerSegments: () => geometry().headerSegments(),
     rowSegments: (row: TableRow) => geometry().rowSegments(row),
     rowVisualRange: (row: TableRow) => geometry().rowVisualRange(row),

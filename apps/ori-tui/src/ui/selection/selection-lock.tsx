@@ -24,6 +24,7 @@ type SelectionLockContextValue = {
   tryAcquire: (owner: string, callbacks: SelectionOwnerCallbacks) => boolean
   canAcquire: (owner: string) => boolean
   handleSelectionChange: (owner: string) => void
+  clear: (owner: string) => void
   active: () => ActiveSelectionOwner | undefined
 }
 
@@ -67,8 +68,18 @@ export function SelectionLockProvider(props: { children: JSX.Element }) {
     })
   }
 
+  const clear = (owner: string) => {
+    const current = active()
+    if (current?.owner !== owner) {
+      return
+    }
+
+    current.callbacks.onClear?.()
+    current.release()
+  }
+
   return (
-    <SelectionLockContext.Provider value={{ tryAcquire, canAcquire, handleSelectionChange, active }}>
+    <SelectionLockContext.Provider value={{ tryAcquire, canAcquire, handleSelectionChange, clear, active }}>
       {props.children}
     </SelectionLockContext.Provider>
   )
@@ -98,6 +109,7 @@ export function useSelectionLock() {
     tryAcquire: (callbacks: SelectionOwnerCallbacks) => lock.tryAcquire(owner, callbacks),
     canAcquire: () => lock.canAcquire(owner),
     handleSelectionChange: () => lock.handleSelectionChange(owner),
+    clear: () => lock.clear(owner),
   }
 }
 

@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test"
 import type { QueryResultView } from "@adapters/ori/client"
 import { ScrollBoxRenderable } from "@opentui/core"
+import { Buffer } from "@ui/components/buffer/buffer"
+import { getBufferTextarea } from "@ui/components/buffer/buffer.test-tools"
 import type { QueryJob } from "@usecase/query/usecase"
 import { createComponent } from "solid-js"
 import { type MountedTuiApp, mountInTui } from "../../../test/opentui-harness"
@@ -222,6 +224,57 @@ describe("results panel integration", () => {
       await app.waitFor(() => Boolean(app.setup.renderer.getSelection()?.isDragging))
       await app.setup.mockMouse.release(outsideX, dragEndY)
       await app.waitFor(() => !app.setup.renderer.getSelection()?.isDragging)
+    } finally {
+      app.destroy()
+    }
+  })
+
+  test("does not start editor selection while dragging from a scrolled table", async () => {
+    const app = await mountInTui(
+      () => (
+        <SelectionControllerTestRoot>
+          <box
+            flexDirection="column"
+            width={48}
+          >
+            <box height={3}>
+              <Buffer
+                initialText="select 1;"
+                isFocused={() => true}
+                onTextChange={() => {}}
+                focusSelf={() => {}}
+              />
+            </box>
+            <ResultsPanel viewModel={createViewModel(createResultsJob(80))} />
+          </box>
+        </SelectionControllerTestRoot>
+      ),
+      { width: 48, height: 10 },
+    )
+
+    try {
+      const textarea = getBufferTextarea(app)
+      const scrollbox = findRequiredNode(
+        app,
+        (node): node is ScrollBoxRenderable =>
+          node instanceof ScrollBoxRenderable && node.viewport.y > textarea.y + textarea.height,
+        "Results scrollbox was not rendered below the editor",
+      )
+      const dragX = scrollbox.viewport.x + 2
+      const dragStartY = scrollbox.viewport.y + 1
+
+      scrollbox.scrollTo({ x: 0, y: 20 })
+      await app.waitFor(() => (scrollbox.scrollTop ?? 0) === 20)
+      await app.setup.mockMouse.pressDown(dragX, dragStartY)
+      await app.setup.mockMouse.moveTo(dragX, textarea.y)
+      scrollbox.startAutoScroll(dragX, textarea.y)
+      await app.waitFor(() => (scrollbox.scrollTop ?? 0) <= 10)
+      await app.setup.mockMouse.moveTo(dragX, textarea.y)
+      await app.renderOnce()
+
+      expect(textarea.live).toBe(false)
+
+      await app.setup.mockMouse.release(dragX, textarea.y)
     } finally {
       app.destroy()
     }

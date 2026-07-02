@@ -1,9 +1,14 @@
-import { type MouseEvent, type Selection as OpenTuiSelection, TextAttributes } from "@opentui/core"
+import {
+  type MouseEvent,
+  type Selection as OpenTuiSelection,
+  type ScrollBoxRenderable,
+  TextAttributes,
+} from "@opentui/core"
 import { OriScrollbox } from "@ui/components/ori-scrollbox"
 import { useSelectionLock } from "@ui/selection/selection-lock"
-import { KeyScope } from "@ui/services/key-scopes"
+import { type KeyBinding, KeyScope } from "@ui/services/key-scopes"
 import type { Accessor } from "solid-js"
-import { For, Index } from "solid-js"
+import { createEffect, For, Index, on } from "solid-js"
 import { createOriTableVM, type OriTableColumn } from "./ori-table-vm"
 import "./table-cell"
 
@@ -34,43 +39,125 @@ const scrollSpeed = {
   vertical: 2,
 }
 
+const HORIZONTAL_SCROLL_STEP = 6
+
 export function OriTable(props: OriTableProps) {
   const selectionLock = useSelectionLock()
   const table = createOriTableVM({
     columns: () => props.columns,
     rows: () => props.rows,
     isFocused: props.isFocused,
-    focusSelf: props.focusSelf,
   })
+  let scrollbox: ScrollBoxRenderable | undefined
 
-  const handleCellMouseDown = (cell: Parameters<typeof table.handleCellMouseDown>[0], event: MouseEvent) => {
+  const isDraggingSelection = () => Boolean(scrollbox?.ctx.getSelection()?.isDragging)
+
+  const moveCursor = (rowDelta: number, colDelta: number) => {
+    props.focusSelf()
+    const target = table.moveCursor(rowDelta, colDelta)
+    if (!target || !scrollbox) return
+    scrollbox.scrollTo(target)
+  }
+
+  const keyBindings: KeyBinding[] = [
+    { pattern: "up", handler: () => moveCursor(-1, 0), preventDefault: true },
+    { pattern: "k", handler: () => moveCursor(-1, 0), preventDefault: true },
+    { pattern: "down", handler: () => moveCursor(1, 0), preventDefault: true },
+    { pattern: "j", handler: () => moveCursor(1, 0), preventDefault: true },
+    { pattern: "left", handler: () => moveCursor(0, -1), preventDefault: true },
+    { pattern: "h", handler: () => moveCursor(0, -1), preventDefault: true },
+    {
+      pattern: ["ctrl+h", "backspace"],
+      handler: () => {
+        scrollbox?.scrollBy({ x: -HORIZONTAL_SCROLL_STEP, y: 0 })
+      },
+      preventDefault: true,
+    },
+    { pattern: "right", handler: () => moveCursor(0, 1), preventDefault: true },
+    { pattern: "l", handler: () => moveCursor(0, 1), preventDefault: true },
+    {
+      pattern: "ctrl+l",
+      handler: () => {
+        scrollbox?.scrollBy({ x: HORIZONTAL_SCROLL_STEP, y: 0 })
+      },
+      preventDefault: true,
+    },
+    { pattern: "escape", handler: selectionLock.clear, preventDefault: true },
+  ]
+
+  const updateMouseDragSelection = (selection: OpenTuiSelection | null) => {
+    if (!selection?.isActive) {
+      if (!table.hasSelection()) return
+      // Inactive may happen mid-drag over scrollbars; defer until mouseup/copy handling finishes.
+      queueMicrotask(() => {
+        if (isDraggingSelection()) return
+        selectionLock.clear()
+      })
+      return
+    }
+    if (selection.isStart) {
+      table.extendSelection(null)
+      return
+    }
+    table.extendSelection(table.cellAtMouseDragPoint(selection.focus))
+  }
+
+  const handleViewportChange = (viewport: Parameters<typeof table.setViewport>[0]) => {
+    table.setViewport(viewport)
+    if (table.hasSelection()) {
+      updateMouseDragSelection(scrollbox?.ctx.getSelection() ?? null)
+    }
+  }
+
+  createEffect(
+    on(
+      () => [props.columns, props.rows],
+      () => {
+        if (!scrollbox) return
+        scrollbox.scrollTo({ x: 0, y: 0 })
+      },
+    ),
+  )
+
+  const handleCellMouseDown = (cell: Parameters<typeof table.beginSelection>[0], event: MouseEvent) => {
     if (!selectionLock.canAcquire()) {
       return
     }
     if (
       !selectionLock.tryAcquire({
-        isSelecting: table.isSelecting,
-        onSettle: table.stopSelectionWork,
-        onClear: table.clearSelection,
+        isSelecting: isDraggingSelection,
+        onSettle: () => scrollbox?.stopAutoScroll(),
+        onClear: () => {
+          scrollbox?.stopAutoScroll()
+          table.clearSelection()
+        },
         readSelected: table.readSelected,
       })
     ) {
       return
     }
-    table.handleCellMouseDown(cell, event)
+    props.focusSelf()
+    event.preventDefault()
+    table.beginSelection(cell)
   }
 
-  const handleSelectionUpdate = (selection: OpenTuiSelection | null) => {
-    table.handleSelectionUpdate(selection)
+  const handleCellMouseSelectionUpdate = (selection: OpenTuiSelection | null) => {
+    updateMouseDragSelection(selection)
     selectionLock.handleSelectionChange()
   }
 
   const handleMouseDrag = (event: MouseEvent) => {
     if (!selectionLock.canAcquire()) {
-      table.stopSelectionWork()
+      scrollbox?.stopAutoScroll()
       return
     }
-    table.handleMouseDrag(event)
+    if (!table.hasSelection() || !isDraggingSelection()) return
+    scrollbox?.updateAutoScroll(event.x, event.y)
+  }
+
+  const handleMouseMove = () => {
+    if (!table.hasSelection() || !isDraggingSelection()) return
+    scrollbox?.stopAutoScroll()
   }
 
   const SeparatorCell = (cellProps: { selected?: boolean; bg?: string; fg?: string }) => (
@@ -91,7 +178,7 @@ export function OriTable(props: OriTableProps) {
 
   return (
     <KeyScope
-      bindings={table.keyBindings()}
+      bindings={keyBindings}
       enabled={props.isFocused}
     >
       {/* biome-ignore lint/a11y/noStaticElementInteractions: table focuses itself on mouse down */}
@@ -100,7 +187,7 @@ export function OriTable(props: OriTableProps) {
         justifyContent="flex-start"
         flexGrow={1}
         onMouseDown={props.focusSelf}
-        onMouseMove={table.handleMouseMove}
+        onMouseMove={handleMouseMove}
         onMouseDrag={handleMouseDrag}
         paddingRight={1}
       >
@@ -168,7 +255,7 @@ export function OriTable(props: OriTableProps) {
                       selected={table.isCellSelected(cell)}
                       selectable={selectionLock.canAcquire()}
                       onMouseDown={(event: MouseEvent) => handleCellMouseDown(cell, event)}
-                      onSelectionUpdate={handleSelectionUpdate}
+                      onSelectionUpdate={handleCellMouseSelectionUpdate}
                     />
                   )
                 }}
@@ -222,8 +309,10 @@ export function OriTable(props: OriTableProps) {
             </Index>
           </box>
           <OriScrollbox
-            onReady={table.attachScrollbox}
-            onViewportChange={table.handleViewportChange}
+            onReady={(node) => {
+              scrollbox = node
+            }}
+            onViewportChange={handleViewportChange}
             scrollSpeed={scrollSpeed}
             minHorizontalThumbWidth={5}
             minVerticalThumbHeight={2}
@@ -307,7 +396,7 @@ export function OriTable(props: OriTableProps) {
                                 fg={cursor() ? props.colors.cursorForeground : props.colors.text}
                                 defaultFg={props.colors.text}
                                 selected={table.isCellSelected(cell)}
-                                onSelectionUpdate={handleSelectionUpdate}
+                                onSelectionUpdate={handleCellMouseSelectionUpdate}
                               />
                             )
                           }}

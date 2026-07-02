@@ -74,7 +74,7 @@ export type OriScrollboxProps = ScrollboxBaseProps & {
   minHorizontalThumbWidth?: number
   minVerticalThumbHeight?: number
   scrollSpeed?: ScrollSpeedMultipliers
-  onViewportChange?: () => void
+  onViewportChange?: (viewport: OriScrollboxViewport) => void
   onUserScroll?: (context: OriScrollboxUserScrollContext) => void
 }
 
@@ -85,6 +85,11 @@ export type ViewportRect = {
   y: number
   width: number
   height: number
+}
+
+export type OriScrollboxViewport = ViewportRect & {
+  scrollLeft: number
+  scrollTop: number
 }
 
 export type ViewportBandY = {
@@ -165,6 +170,15 @@ export function OriScrollbox(props: OriScrollboxProps) {
         : originalOnMouseEvent
     let lastSyncState = readScrollSyncState(node)
 
+    const emitViewportChange = () => {
+      const state = readScrollSyncState(node)
+      local.onViewportChange?.({
+        ...getViewportRect(node),
+        scrollLeft: state.scrollLeft,
+        scrollTop: state.scrollTop,
+      })
+    }
+
     const maybeSync = () => {
       const nextState = readScrollSyncState(node)
       if (sameScrollSyncState(lastSyncState, nextState)) {
@@ -172,10 +186,10 @@ export function OriScrollbox(props: OriScrollboxProps) {
       }
 
       lastSyncState = nextState
-      local.onViewportChange?.()
+      emitViewportChange()
     }
 
-    installScrollbarUserScrollPatch(node, local.onUserScroll, local.onViewportChange)
+    installScrollbarUserScrollPatch(node, local.onUserScroll, emitViewportChange)
 
     // @ts-expect-error onUpdate is protected in typings
     node.onUpdate = (deltaTime: number) => {
@@ -216,7 +230,7 @@ export function OriScrollbox(props: OriScrollboxProps) {
 
     process.nextTick(() => {
       lastSyncState = readScrollSyncState(node)
-      local.onViewportChange?.()
+      emitViewportChange()
     })
   }
 
