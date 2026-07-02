@@ -20,12 +20,21 @@ type InternalLineNumberRenderable = LineNumberRenderable & {
     maxWidth: number | `${number}%` | null | undefined
     minHeight: number | `${number}%` | null | undefined
     maxHeight: number | `${number}%` | null | undefined
-    flexGrow: number | null | undefined
-    flexShrink: number | null | undefined
   }
 }
 
+type InternalLineNumberTarget = NonNullable<InternalLineNumberRenderable["target"]>
+
 export class BufferLineNumberRenderable extends LineNumberRenderable {
+  private syncedTarget:
+    | {
+        target: InternalLineNumberTarget
+        left: number
+        width: number
+        height: number
+      }
+    | undefined
+
   constructor(ctx: RenderContext, options: LineNumberOptions) {
     super(ctx, {
       ...options,
@@ -48,17 +57,18 @@ export class BufferLineNumberRenderable extends LineNumberRenderable {
     const gutter = node.gutter
     const target = node.target
     if (!gutter || !target || target.isDestroyed) {
+      this.syncedTarget = undefined
       return
     }
 
     const left = gutter.visible ? gutter.width : 0
     const width = Math.max(1, this.width - left - BUFFER_LINE_NUMBER_TARGET_RIGHT_GAP)
+    const height = this.height
     if (
-      target.position === "absolute" &&
-      target.left === left &&
-      target.top === 0 &&
-      target.width === width &&
-      target.height === this.height
+      this.syncedTarget?.target === target &&
+      this.syncedTarget.left === left &&
+      this.syncedTarget.width === width &&
+      this.syncedTarget.height === height
     ) {
       return
     }
@@ -71,11 +81,10 @@ export class BufferLineNumberRenderable extends LineNumberRenderable {
     target.width = width
     target.minWidth = width
     target.maxWidth = width
-    target.height = this.height
-    target.minHeight = this.height
-    target.maxHeight = this.height
-    target.flexGrow = 0
-    target.flexShrink = 0
+    target.height = height
+    target.minHeight = height
+    target.maxHeight = height
+    this.syncedTarget = { target, left, width, height }
   }
 }
 
