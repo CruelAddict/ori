@@ -1,7 +1,7 @@
 import { render, useRenderer } from "@opentui/solid"
 import { ClientProvider } from "@ui/providers/client"
 import { EventStreamProvider } from "@ui/providers/events"
-import { LoggerProvider, useLogger } from "@ui/providers/logger"
+import { LoggerProvider } from "@ui/providers/logger"
 import { NavigationProvider } from "@ui/providers/navigation"
 import { NotificationsProvider } from "@ui/providers/notifications"
 import { OverlayProvider, useOverlayManager } from "@ui/providers/overlay"
@@ -9,13 +9,14 @@ import { ResourceProvider } from "@ui/providers/resource"
 import { ThemeProvider, useTheme } from "@ui/providers/theme"
 import { RouteOutlet } from "@ui/routes/RouteOutlet"
 import { useRouteNavigation } from "@ui/routes/router"
+import { useSelectionController } from "@ui/selection/selection-controller"
+import { SelectionLockProvider } from "@ui/selection/selection-lock"
 import { KeymapProvider, KeyScope, SYSTEM_LAYER } from "@ui/services/key-scopes"
 import { CommandPaletteOverlay } from "@ui/widgets/overlay/CommandPaletteOverlay"
 import { OverlayHost } from "@ui/widgets/overlay/OverlayHost"
 import type { OverlayManager } from "@ui/widgets/overlay/overlay-store"
 import { ResourcePickerOverlay } from "@ui/widgets/overlay/ResourcePickerOverlay"
 import { ThemePickerOverlay } from "@ui/widgets/overlay/ThemePickerOverlay"
-import { copyTextToClipboard, getSelectionOverrideText } from "@utils/clipboard"
 import type { LogLevel } from "@utils/logger"
 import type { Logger } from "pino"
 import { createEffect, createSignal } from "solid-js"
@@ -42,8 +43,7 @@ function App() {
   const palette = theme
   const overlays = useOverlayManager()
   const navigation = useRouteNavigation()
-  const renderer = useRenderer()
-  const logger = useLogger()
+  const selection = useSelectionController()
 
   // opentui bug workaround: without it mouse hit grid (for scrollbox scrolling) doesn't respect viewport content clipping
   const [welcomePickerOpened, setWelcomePickerOpened] = createSignal(false)
@@ -61,33 +61,14 @@ function App() {
     openResourcePicker(overlays)
   })
 
-  const handleMouseUp = async () => {
-    const overrideText = getSelectionOverrideText()
-    const selectionText = renderer.getSelection?.()?.getSelectedText?.()
-    const text = overrideText ?? selectionText
-    if (!text || text.length === 0) {
-      return
-    }
-    try {
-      await copyTextToClipboard(text, { renderer, logger })
-    } catch (err) {
-      logger.error({ err }, "copy-on-select: failed to copy selection")
-    } finally {
-      try {
-        renderer.clearSelection?.()
-      } catch (err) {
-        logger.warn({ err }, "copy-on-select: failed to clear selection")
-      }
-    }
-  }
-
   return (
-    /* biome-ignore lint/a11y/noStaticElementInteractions: root captures mouse selection for clipboard */
+    /* biome-ignore lint/a11y/noStaticElementInteractions: app root observes global OpenTUI selection lifecycle */
     <box
       flexDirection="column"
       flexGrow={1}
       backgroundColor={palette().get("app_background")}
-      onMouseUp={handleMouseUp}
+      onMouseMove={selection.rootHandlers.onMouseMove}
+      onMouseUp={selection.rootHandlers.onMouseUp}
     >
       <GlobalHotkeys />
       <RouteOutlet />
@@ -185,7 +166,9 @@ export function startApp(options: StartAppOptions): RendererHandle {
                   <OverlayProvider>
                     <KeymapProvider>
                       <ThemeProvider defaultTheme={options.theme}>
-                        <App />
+                        <SelectionLockProvider>
+                          <App />
+                        </SelectionLockProvider>
                       </ThemeProvider>
                     </KeymapProvider>
                   </OverlayProvider>

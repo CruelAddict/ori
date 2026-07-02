@@ -2,6 +2,7 @@ import type { BoxRenderable, KeyEvent, MouseEvent, TextareaRenderable } from "@o
 import { OriScrollbox } from "@ui/components/ori-scrollbox"
 import { SelectPopup } from "@ui/components/select-popup"
 import { useTheme } from "@ui/providers/theme"
+import { useSelectionLock } from "@ui/selection/selection-lock"
 import { type KeyBinding, KeyScope } from "@ui/services/key-scopes"
 import { createDeferredCallback } from "@utils/deferred-callback"
 import { type Accessor, createEffect, createSignal, on, onCleanup, onMount } from "solid-js"
@@ -85,6 +86,7 @@ function shouldTriggerAutocompleteOnKeyDown(event: KeyEvent) {
 
 export function Buffer(props: BufferProps) {
   const { theme } = useTheme()
+  const selectionLock = useSelectionLock()
   const tabWidth = Math.max(1, props.tabWidth ?? DEFAULT_TAB_WIDTH)
   const tabText = " ".repeat(tabWidth)
   const [doc, setDoc] = createSignal(Document.create(props.initialText))
@@ -141,6 +143,7 @@ export function Buffer(props: BufferProps) {
         autocomplete.close()
       }
       viewport.handleTextareaSelectionChange(event)
+      selectionLock.handleSelectionChange()
     },
     onTextareaViewportChange: (event) => {
       viewport.handleTextareaViewportChange(event)
@@ -412,7 +415,13 @@ export function Buffer(props: BufferProps) {
 
   const handleTextareaMouseDown = (event: MouseEvent) => {
     event.stopPropagation()
+    if (!selectionLock.canAcquire()) {
+      return
+    }
     autocomplete.close()
+    if (!selectionLock.tryAcquire({ isSelecting: viewport.isSelecting, onSettle: viewport.finishSelectionDrag })) {
+      return
+    }
     props.focusSelf()
   }
 
@@ -509,7 +518,6 @@ export function Buffer(props: BufferProps) {
       bindings={bindings}
       enabled={props.isFocused}
     >
-      {/* biome-ignore lint/a11y/noStaticElementInteractions: root terminates drag selection when release lands outside textarea */}
       <box
         ref={(node: BoxRenderable | undefined) => {
           bufferRootRef = node
@@ -518,8 +526,6 @@ export function Buffer(props: BufferProps) {
         flexDirection="column"
         flexGrow={1}
         backgroundColor={background()}
-        onMouseUp={viewport.finishSelectionDrag}
-        onMouseDragEnd={viewport.finishSelectionDrag}
       >
         <OriScrollbox
           marginTop={1}
@@ -583,7 +589,7 @@ export function Buffer(props: BufferProps) {
                 focusedBackgroundColor="transparent"
                 cursorColor={theme().get("editor_cursor")}
                 wrapMode="char"
-                selectable={true}
+                selectable={selectionLock.canAcquire()}
                 keyBindings={[]}
                 onKeyDown={handleTextareaKeyDown}
                 onMouseDown={handleTextareaMouseDown}

@@ -1,10 +1,11 @@
-import { type Renderable } from "@opentui/core"
+import type { Renderable } from "@opentui/core"
 import { testRender } from "@opentui/solid"
-import pino from "pino"
-import { createComponent } from "solid-js"
 import { LoggerProvider } from "@ui/providers/logger"
 import { ThemeProvider } from "@ui/providers/theme"
+import { SelectionLockProvider } from "@ui/selection/selection-lock"
 import { KeymapProvider } from "@ui/services/key-scopes"
+import pino from "pino"
+import { createComponent } from "solid-js"
 
 type HarnessOptions = {
   width: number
@@ -46,7 +47,11 @@ function wrapWithProviders(render: () => unknown) {
             return createComponent(ThemeProvider, {
               defaultTheme: "dark",
               get children() {
-                return render()
+                return createComponent(SelectionLockProvider, {
+                  get children() {
+                    return render()
+                  },
+                })
               },
             })
           },

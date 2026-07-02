@@ -2,10 +2,10 @@ import { describe, expect, test } from "bun:test"
 import type { QueryResultView } from "@adapters/ori/client"
 import { ScrollBoxRenderable } from "@opentui/core"
 import type { QueryJob } from "@usecase/query/usecase"
-import { getSelectionOverrideText } from "@utils/clipboard"
 import { createComponent } from "solid-js"
 import { type MountedTuiApp, mountInTui } from "../../../test/opentui-harness"
 import { findRequiredNode, readFrameLines } from "../../../test/opentui-test-tools"
+import { SelectionControllerTestRoot } from "../../../test/selection-controller-test-root"
 import { ResultsPanel } from "./results-panel"
 import type { ResultsPaneViewModel } from "./view-model/create-vm"
 
@@ -165,7 +165,11 @@ async function captureDragAutoscrollFrames(
 describe("results panel integration", () => {
   test("keeps table selection while dragging over the scrollbar edge", async () => {
     const app = await mountInTui(
-      () => createComponent(ResultsPanel, { viewModel: createViewModel(createResultsJob(20)) }),
+      () => (
+        <SelectionControllerTestRoot>
+          <ResultsPanel viewModel={createViewModel(createResultsJob(20))} />
+        </SelectionControllerTestRoot>
+      ),
       { width: 48, height: 8 },
     )
 
@@ -178,15 +182,14 @@ describe("results panel integration", () => {
 
       await app.setup.mockMouse.pressDown(dragX, dragStartY)
       await app.setup.mockMouse.moveTo(dragX, dragEndY)
-      await app.waitFor(() => getSelectionOverrideText() !== undefined)
+      await app.waitFor(() => Boolean(app.setup.renderer.getSelection()?.isDragging))
       await app.setup.mockMouse.moveTo(scrollbarEdgeX, dragEndY)
       await app.renderOnce()
 
       expect(app.setup.renderer.getSelection()?.isDragging).toBe(true)
-      expect(getSelectionOverrideText()).not.toBeUndefined()
 
       await app.setup.mockMouse.release(scrollbarEdgeX, dragEndY)
-      await app.waitFor(() => getSelectionOverrideText() === undefined)
+      await app.waitFor(() => !app.setup.renderer.getSelection()?.isDragging)
     } finally {
       app.destroy()
     }
@@ -195,14 +198,14 @@ describe("results panel integration", () => {
   test("finishes table selection when mouse is released outside the table", async () => {
     const app = await mountInTui(
       () => (
-        <box flexDirection="row">
+        <SelectionControllerTestRoot>
           <box width={48}>
             <ResultsPanel viewModel={createViewModel(createResultsJob(20))} />
           </box>
           <box width={12}>
             <text>outside</text>
           </box>
-        </box>
+        </SelectionControllerTestRoot>
       ),
       { width: 60, height: 8 },
     )
@@ -216,10 +219,119 @@ describe("results panel integration", () => {
 
       await app.setup.mockMouse.pressDown(dragX, dragStartY)
       await app.setup.mockMouse.moveTo(dragX, dragEndY)
-      await app.waitFor(() => getSelectionOverrideText() !== undefined)
+      await app.waitFor(() => Boolean(app.setup.renderer.getSelection()?.isDragging))
       await app.setup.mockMouse.release(outsideX, dragEndY)
       await app.waitFor(() => !app.setup.renderer.getSelection()?.isDragging)
-      await app.waitFor(() => getSelectionOverrideText() === undefined)
+    } finally {
+      app.destroy()
+    }
+  })
+
+  test("stops stale drag autoscroll when pointer moves away from the edge", async () => {
+    const app = await mountInTui(
+      () => createComponent(ResultsPanel, { viewModel: createViewModel(createResultsJob(80)) }),
+      { width: 48, height: 8 },
+    )
+
+    try {
+      const scrollbox = getResultsScrollbox(app)
+      const dragX = scrollbox.viewport.x + 2
+      const dragStartY = scrollbox.viewport.y + 1
+      const bottomEdgeY = scrollbox.y + scrollbox.height + 1
+      const centerY = scrollbox.viewport.y + Math.floor(scrollbox.viewport.height / 2)
+      const gutterX = scrollbox.x - 1
+
+      await app.setup.mockMouse.pressDown(dragX, dragStartY)
+      await app.setup.mockMouse.moveTo(dragX, bottomEdgeY)
+      scrollbox.startAutoScroll(dragX, bottomEdgeY)
+      await app.waitFor(() => scrollbox.live)
+
+      await app.setup.mockMouse.emitMouseEvent("move", gutterX, centerY)
+      await app.waitFor(() => !scrollbox.live)
+
+      const scrollTopAfterMove = scrollbox.scrollTop ?? 0
+      await sleep(60)
+      await app.renderOnce()
+
+      expect(scrollbox.scrollTop ?? 0).toBe(scrollTopAfterMove)
+
+      await app.setup.mockMouse.release(gutterX, centerY)
+      await app.waitFor(() => !app.setup.renderer.getSelection()?.isDragging)
+    } finally {
+      app.destroy()
+    }
+  })
+
+  test("stops drag autoscroll when mouse is released while autoscroll is active", async () => {
+    const app = await mountInTui(
+      () => createComponent(ResultsPanel, { viewModel: createViewModel(createResultsJob(80)) }),
+      { width: 48, height: 8 },
+    )
+
+    try {
+      const scrollbox = getResultsScrollbox(app)
+      const dragX = scrollbox.viewport.x + 2
+      const dragStartY = scrollbox.viewport.y + 1
+      const bottomEdgeY = scrollbox.y + scrollbox.height + 1
+      const releaseY = scrollbox.viewport.y + Math.floor(scrollbox.viewport.height / 2)
+
+      await app.setup.mockMouse.pressDown(dragX, dragStartY)
+      await app.setup.mockMouse.moveTo(dragX, bottomEdgeY)
+      scrollbox.startAutoScroll(dragX, bottomEdgeY)
+      await app.waitFor(() => scrollbox.live)
+
+      await app.setup.mockMouse.release(dragX, releaseY)
+      await app.waitFor(() => !scrollbox.live)
+      await app.waitFor(() => !app.setup.renderer.getSelection()?.isDragging)
+
+      const scrollTopAfterRelease = scrollbox.scrollTop ?? 0
+      await sleep(60)
+      await app.renderOnce()
+
+      expect(scrollbox.scrollTop ?? 0).toBe(scrollTopAfterRelease)
+    } finally {
+      app.destroy()
+    }
+  })
+
+  test("root finalizer stops table autoscroll when mouse is released outside the table", async () => {
+    const app = await mountInTui(
+      () => (
+        <SelectionControllerTestRoot>
+          <box width={48}>
+            <ResultsPanel viewModel={createViewModel(createResultsJob(80))} />
+          </box>
+          <box width={12}>
+            <text>outside</text>
+          </box>
+        </SelectionControllerTestRoot>
+      ),
+      { width: 60, height: 8 },
+    )
+
+    try {
+      const scrollbox = getResultsScrollbox(app)
+      const dragX = scrollbox.viewport.x + 2
+      const dragStartY = scrollbox.viewport.y + 1
+      const bottomEdgeY = scrollbox.y + scrollbox.height + 1
+      const outsideX = scrollbox.x + scrollbox.width + 4
+      const releaseY = scrollbox.viewport.y + Math.floor(scrollbox.viewport.height / 2)
+
+      await app.setup.mockMouse.pressDown(dragX, dragStartY)
+      await app.setup.mockMouse.moveTo(dragX, bottomEdgeY)
+      scrollbox.startAutoScroll(dragX, bottomEdgeY)
+      await app.waitFor(() => scrollbox.live)
+
+      await app.setup.mockMouse.release(outsideX, releaseY)
+      await app.waitFor(() => !scrollbox.live)
+      await app.waitFor(() => !app.setup.renderer.getSelection()?.isDragging)
+
+      const scrollTopAfterRelease = scrollbox.scrollTop ?? 0
+      await sleep(60)
+      await app.renderOnce()
+
+      expect(scrollbox.scrollTop ?? 0).toBe(scrollTopAfterRelease)
+      expect(app.setup.renderer.getSelection()?.isDragging).not.toBe(true)
     } finally {
       app.destroy()
     }

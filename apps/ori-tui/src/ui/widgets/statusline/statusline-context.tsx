@@ -66,8 +66,19 @@ export function StatuslineProvider(props: StatuslineProviderProps) {
         flexDirection="row"
         maxHeight={1}
       >
-        <text fg={palette.get("success")}>• </text>
-        <text fg={palette.get("text")}>{props.resourceName}</text>
+        <text
+          fg={palette.get("success")}
+          selectable={false}
+        >
+          •
+        </text>
+        <text selectable={false}> </text>
+        <text
+          fg={palette.get("text")}
+          selectable={false}
+        >
+          {props.resourceName}
+        </text>
       </box>,
     ]
 
@@ -76,8 +87,18 @@ export function StatuslineProvider(props: StatuslineProviderProps) {
       const { dirPath, fileName } = formatFilePath(pathValue)
       left[1] = (
         <box flexDirection="row">
-          <text fg={palette.get("text_muted")}>{dirPath}</text>
-          <text fg={palette.get("text")}>{fileName}</text>
+          <text
+            fg={palette.get("text_muted")}
+            selectable={false}
+          >
+            {dirPath}
+          </text>
+          <text
+            fg={palette.get("text")}
+            selectable={false}
+          >
+            {fileName}
+          </text>
         </box>
       )
     }
@@ -87,15 +108,33 @@ export function StatuslineProvider(props: StatuslineProviderProps) {
         flexDirection="row"
         maxHeight={1}
       >
-        <text fg={palette.get("text")}>ctr+x + h/j/k/l </text>
+        <text
+          fg={palette.get("text")}
+          selectable={false}
+        >
+          ctr+x + h/j/k/l
+        </text>
+        <text selectable={false}> </text>
         <text
           fg={palette.get("text_muted")}
           marginRight={2}
+          selectable={false}
         >
           navigate panes
         </text>
-        <text fg={palette.get("text")}>ctr+p </text>
-        <text fg={palette.get("text_muted")}>commands</text>
+        <text
+          fg={palette.get("text")}
+          selectable={false}
+        >
+          ctr+p
+        </text>
+        <text selectable={false}> </text>
+        <text
+          fg={palette.get("text_muted")}
+          selectable={false}
+        >
+          commands
+        </text>
       </box>,
     ]
 
@@ -114,8 +153,19 @@ export function StatuslineProvider(props: StatuslineProviderProps) {
     if (notification) {
       right.push(
         <>
-          <text fg={colorByLevel(notification.style.level)}>• </text>
-          <text fg={palette.get("text_muted")}>{notification.message}</text>
+          <text
+            fg={colorByLevel(notification.style.level)}
+            selectable={false}
+          >
+            •
+          </text>
+          <text selectable={false}> </text>
+          <text
+            fg={palette.get("text_muted")}
+            selectable={false}
+          >
+            {notification.message}
+          </text>
         </>,
       )
     }

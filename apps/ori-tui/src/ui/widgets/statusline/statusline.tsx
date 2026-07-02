@@ -9,7 +9,7 @@ function elementsWithDelimiter(elements: JSXElement[], delimiter: string) {
       {(item, index) => (
         <>
           <Show when={index() > 0}>
-            <text>{delimiter}</text>
+            <text selectable={false}>{delimiter}</text>
           </Show>
           {item}
         </>

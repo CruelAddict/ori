@@ -1,5 +1,6 @@
 import { type MouseEvent, type Selection as OpenTuiSelection, TextAttributes } from "@opentui/core"
 import { OriScrollbox } from "@ui/components/ori-scrollbox"
+import { useSelectionLock } from "@ui/selection/selection-lock"
 import { KeyScope } from "@ui/services/key-scopes"
 import type { Accessor } from "solid-js"
 import { For, Index } from "solid-js"
@@ -34,12 +35,43 @@ const scrollSpeed = {
 }
 
 export function OriTable(props: OriTableProps) {
+  const selectionLock = useSelectionLock()
   const table = createOriTableVM({
     columns: () => props.columns,
     rows: () => props.rows,
     isFocused: props.isFocused,
     focusSelf: props.focusSelf,
   })
+
+  const handleCellMouseDown = (cell: Parameters<typeof table.handleCellMouseDown>[0], event: MouseEvent) => {
+    if (!selectionLock.canAcquire()) {
+      return
+    }
+    if (
+      !selectionLock.tryAcquire({
+        isSelecting: table.isSelecting,
+        onSettle: table.stopSelectionWork,
+        onClear: table.clearSelection,
+        readSelected: table.readSelected,
+      })
+    ) {
+      return
+    }
+    table.handleCellMouseDown(cell, event)
+  }
+
+  const handleSelectionUpdate = (selection: OpenTuiSelection | null) => {
+    table.handleSelectionUpdate(selection)
+    selectionLock.handleSelectionChange()
+  }
+
+  const handleMouseDrag = (event: MouseEvent) => {
+    if (!selectionLock.canAcquire()) {
+      table.stopSelectionWork()
+      return
+    }
+    table.handleMouseDrag(event)
+  }
 
   const SeparatorCell = (cellProps: { selected?: boolean; bg?: string; fg?: string }) => (
     <table_cell
@@ -68,8 +100,8 @@ export function OriTable(props: OriTableProps) {
         justifyContent="flex-start"
         flexGrow={1}
         onMouseDown={props.focusSelf}
-        onMouseUp={table.handleMouseUp}
-        onMouseDragEnd={table.handleMouseUp}
+        onMouseMove={table.handleMouseMove}
+        onMouseDrag={handleMouseDrag}
         paddingRight={1}
       >
         <box
@@ -134,10 +166,9 @@ export function OriTable(props: OriTableProps) {
                       selectionBg={props.colors.selectionBackground}
                       value={table.headerText(cell.col)}
                       selected={table.isCellSelected(cell)}
-                      onMouseDown={(event: MouseEvent) => table.handleCellMouseDown(cell, event)}
-                      onSelectionUpdate={(selection: OpenTuiSelection | null) =>
-                        table.handleNativeSelectionUpdate(selection)
-                      }
+                      selectable={selectionLock.canAcquire()}
+                      onMouseDown={(event: MouseEvent) => handleCellMouseDown(cell, event)}
+                      onSelectionUpdate={handleSelectionUpdate}
                     />
                   )
                 }}
@@ -268,16 +299,15 @@ export function OriTable(props: OriTableProps) {
                                 flexDirection="row"
                                 width={segment.width}
                                 align={typeof value() === "number" ? "right" : "left"}
-                                onMouseDown={(event: MouseEvent) => table.handleCellMouseDown(cell, event)}
+                                selectable={selectionLock.canAcquire()}
+                                onMouseDown={(event: MouseEvent) => handleCellMouseDown(cell, event)}
                                 selectionBg={props.colors.selectionBackground}
                                 value={display()}
                                 display={display()}
                                 fg={cursor() ? props.colors.cursorForeground : props.colors.text}
                                 defaultFg={props.colors.text}
                                 selected={table.isCellSelected(cell)}
-                                onSelectionUpdate={(selection: OpenTuiSelection | null) =>
-                                  table.handleNativeSelectionUpdate(selection)
-                                }
+                                onSelectionUpdate={handleSelectionUpdate}
                               />
                             )
                           }}

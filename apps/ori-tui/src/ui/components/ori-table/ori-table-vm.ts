@@ -1,8 +1,7 @@
 import type { KeyEvent, MouseEvent, Selection as OpenTuiSelection, ScrollBoxRenderable } from "@opentui/core"
 import { getViewportRect } from "@ui/components/ori-scrollbox"
 import type { KeyBinding } from "@ui/services/key-scopes"
-import { setSelectionOverride } from "@utils/clipboard"
-import { type Accessor, batch, createEffect, createMemo, createSignal, onCleanup, untrack } from "solid-js"
+import { type Accessor, batch, createEffect, createMemo, createSignal, untrack } from "solid-js"
 import {
   type CellRef,
   createOriTableGeometry,
@@ -95,7 +94,7 @@ export function createOriTableVM(options: CreateOriTableVMOptions) {
     scrollbox?.scrollTo({ x: 0, y: 0 })
   }
 
-  const cellAtScreenPoint = (point: { x: number; y: number }): CellRef | null => {
+  const cellAtDragSelectionPoint = (point: { x: number; y: number }): CellRef | null => {
     const layout = geometry()
     if (!scrollbox) return null
 
@@ -109,7 +108,8 @@ export function createOriTableVM(options: CreateOriTableVMOptions) {
       return layout.bodyCellAt(x, scrollTop())
     }
 
-    return layout.bodyCellAt(x, visualRow(point.y - viewport.y + scrollTop()))
+    const y = Math.min(point.y - viewport.y, Math.max(0, viewport.height - 1))
+    return layout.bodyCellAt(x, visualRow(y + scrollTop()))
   }
 
   const scrollCellIntoView = (cell: CellRef) => {
@@ -174,12 +174,17 @@ export function createOriTableVM(options: CreateOriTableVMOptions) {
     })
   }
 
+  const stopSelectionWork = () => {
+    scrollbox?.stopAutoScroll()
+  }
+
   const clearSelection = () => {
+    stopSelectionWork()
     setSelection(null)
   }
 
-  const processNativeSelection = (native: OpenTuiSelection | null) => {
-    if (!native?.isActive) {
+  const processSelection = (currentSelection: OpenTuiSelection | null) => {
+    if (!currentSelection?.isActive) {
       if (!selection()) return
       // Inactive may happen mid-drag over scrollbars; defer until mouseup/copy handling finishes.
       queueMicrotask(() => {
@@ -188,11 +193,11 @@ export function createOriTableVM(options: CreateOriTableVMOptions) {
       })
       return
     }
-    if (native.isStart) {
+    if (currentSelection.isStart) {
       extendSelection(null)
       return
     }
-    extendSelection(cellAtScreenPoint(native.focus))
+    extendSelection(cellAtDragSelectionPoint(currentSelection.focus))
   }
 
   const reset = () => {
@@ -229,9 +234,21 @@ export function createOriTableVM(options: CreateOriTableVMOptions) {
   const handleViewportChange = () => {
     syncScrollboxState()
     if (selection()) {
-      processNativeSelection(scrollbox?.ctx.getSelection() ?? null)
+      processSelection(scrollbox?.ctx.getSelection() ?? null)
     }
   }
+
+  const handleMouseDrag = (event: MouseEvent) => {
+    if (!selection() || !scrollbox?.ctx.getSelection()?.isDragging) return
+    scrollbox.updateAutoScroll(event.x, event.y)
+  }
+
+  const handleMouseMove = () => {
+    if (!selection() || !scrollbox?.ctx.getSelection()?.isDragging) return
+    scrollbox.stopAutoScroll()
+  }
+
+  const isSelecting = () => Boolean(scrollbox?.ctx.getSelection()?.isDragging)
 
   const handleCellMouseDown = (cell: CellRef, event: MouseEvent) => {
     options.focusSelf()
@@ -271,10 +288,6 @@ export function createOriTableVM(options: CreateOriTableVMOptions) {
   }
 
   const selectionText = () => buildSelectionText(selectedRange(), options.columns(), options.rows())
-  setSelectionOverride(selectionText)
-  onCleanup(() => {
-    setSelectionOverride()
-  })
 
   createEffect(() => {
     options.columns()
@@ -293,9 +306,14 @@ export function createOriTableVM(options: CreateOriTableVMOptions) {
     visibleRows,
     attachScrollbox,
     handleViewportChange,
+    handleMouseDrag,
+    handleMouseMove,
     handleCellMouseDown,
-    handleMouseUp: () => queueMicrotask(clearSelection),
-    handleNativeSelectionUpdate: processNativeSelection,
+    stopSelectionWork,
+    clearSelection,
+    readSelected: selectionText,
+    isSelecting,
+    handleSelectionUpdate: processSelection,
     headerSegments: () => geometry().headerSegments(),
     rowSegments: (row: TableRow) => geometry().rowSegments(row),
     rowVisualRange: (row: TableRow) => geometry().rowVisualRange(row),
