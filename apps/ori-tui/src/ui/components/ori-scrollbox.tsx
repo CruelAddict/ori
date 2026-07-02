@@ -278,15 +278,6 @@ export function getViewportRect(node: ScrollBoxRenderable): ViewportRect {
   }
 }
 
-export function hasDraggingSelectionInScrollbox(node: ScrollBoxRenderable | undefined): boolean {
-  const selection = node?.ctx.getSelection()
-  if (!selection?.isDragging) {
-    return false
-  }
-
-  return selection.touchedRenderables.some((renderable) => isDescendantOf(renderable, node))
-}
-
 function computeVerticalInset(viewport: ViewportRect): number {
   const maxY = Math.max(0, viewport.height - 1)
   return Math.min(DEFAULT_SCROLL_INSET_Y, Math.floor(maxY / 2))
@@ -302,18 +293,6 @@ export function getViewportBandY(viewport: Pick<ViewportRect, "height">): Viewpo
     start: inset,
     end: Math.max(inset, viewport.height - 1 - inset),
   }
-}
-
-function isDescendantOf(renderable: Renderable, parent: Renderable | undefined): boolean {
-  let current: Renderable | null = renderable
-  while (current) {
-    if (current === parent) {
-      return true
-    }
-    current = current.parent
-  }
-
-  return false
 }
 
 export function computeScrollIntoViewDelta(
