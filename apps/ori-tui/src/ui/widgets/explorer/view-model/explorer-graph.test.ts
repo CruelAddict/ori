@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { type Node, type NodeEdge, NodeType } from "@adapters/ori/client"
 import { createExplorerGraph } from "./explorer-graph"
 import type { ExplorerNode } from "./explorer-node"
-import { convertToExplorerNodes } from "./explorer-node"
+import { convertToExplorerNodes, isBrowsableExplorerNode } from "./explorer-node"
 
 type NodeOverrides = {
   id: string
@@ -22,6 +22,16 @@ const makeNode = (overrides: NodeOverrides): Node => {
       type: kind,
       name,
       attributes: Object.assign({ resource: "test", engine: "sqlite" }, overrides.attributes ?? {}),
+      edges: overrides.edges ?? {},
+    } as Node
+  }
+
+  if (kind === NodeType.SCHEMA) {
+    return {
+      id: overrides.id,
+      type: kind,
+      name,
+      attributes: Object.assign({ resource: "test", engine: "postgres", isDefault: true }, overrides.attributes ?? {}),
       edges: overrides.edges ?? {},
     } as Node
   }
@@ -322,5 +332,81 @@ describe("expandExplorerNode", () => {
     })
 
     expect(graph.rootIds).toEqual([main.id, alpha.id, zoo.id])
+  })
+
+  test("adds browse capability to table nodes", () => {
+    const schema = makeNode({
+      id: "schema:public",
+      type: NodeType.SCHEMA,
+      name: 'pub"lic',
+      edges: { tables: makeEdge(["table:public.authors"]) },
+    })
+    const table = makeNode({
+      id: "table:public.authors",
+      type: NodeType.TABLE,
+      name: "authors",
+      attributes: { table: 'au"thors' },
+    })
+
+    const graph = createExplorerGraph({
+      nodesById: {
+        [schema.id]: schema,
+        [table.id]: table,
+      },
+      rootIds: [schema.id],
+    })
+
+    const node = graph.nodesById[table.id]
+    expect(isBrowsableExplorerNode(node)).toBe(true)
+    if (!isBrowsableExplorerNode(node)) throw new Error("table node should be browsable")
+    expect(node.getQualifiedName()).toBe('"pub""lic"."au""thors"')
+  })
+
+  test("adds browse capability to view nodes", () => {
+    const db = makeNode({
+      id: "db",
+      type: NodeType.DATABASE,
+      name: "main",
+      edges: { views: makeEdge(["view:active_users"]) },
+    })
+    const view = makeNode({
+      id: "view:active_users",
+      type: NodeType.VIEW,
+      name: "active_users",
+    })
+
+    const graph = createExplorerGraph({
+      nodesById: {
+        [db.id]: db,
+        [view.id]: view,
+      },
+      rootIds: [db.id],
+    })
+
+    const node = graph.nodesById[view.id]
+    expect(isBrowsableExplorerNode(node)).toBe(true)
+    if (!isBrowsableExplorerNode(node)) throw new Error("view node should be browsable")
+    expect(node.getQualifiedName()).toBe('"main"."active_users"')
+  })
+
+  test("does not add browse capability to non-relation explorer nodes", () => {
+    const schema = makeNode({
+      id: "schema:public",
+      type: NodeType.SCHEMA,
+      name: "public",
+      edges: { tables: makeEdge(["table:public.authors"]) },
+    })
+    const table = makeNode({ id: "table:public.authors", type: NodeType.TABLE, name: "authors" })
+
+    const graph = createExplorerGraph({
+      nodesById: {
+        [schema.id]: schema,
+        [table.id]: table,
+      },
+      rootIds: [schema.id],
+    })
+
+    expect(isBrowsableExplorerNode(graph.nodesById[schema.id])).toBe(false)
+    expect(isBrowsableExplorerNode(graph.nodesById[edgeId(schema.id, "tables")])).toBe(false)
   })
 })

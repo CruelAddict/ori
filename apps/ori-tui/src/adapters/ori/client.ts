@@ -2,6 +2,7 @@ import { createSSEStream, type SSEMessage } from "@adapters/ori/sse-client"
 import { decodeServerEvent, type ServerEvent } from "@model/events"
 import type { Resource } from "@model/resource"
 import {
+  type QueryExecOptions as ContractQueryExecOptions,
   cancelQuery,
   connectResource,
   type ErrorPayload,
@@ -26,6 +27,8 @@ export type ResourceConnectResult = {
 }
 
 export type { Node, NodeEdge } from "contract"
+
+export type QueryExecOptions = ContractQueryExecOptions
 
 export const NodeType = {
   DATABASE: "database",
@@ -66,6 +69,7 @@ export type OriClient = {
     jobId: string,
     query: string,
     params?: Record<string, unknown>,
+    options?: QueryExecOptions,
   ): Promise<QueryExecResult>
   queryGetResult(jobId: string, limit?: number, offset?: number): Promise<QueryResultView>
   queryCancel(jobId: string): Promise<void>
@@ -140,12 +144,13 @@ export class RestOriClient implements OriClient {
     jobId: string,
     query: string,
     params?: Record<string, unknown>,
+    options?: QueryExecOptions,
   ): Promise<QueryExecResult> {
     const request: QueryExecRequest = {
       resourceName,
       jobId,
       query,
-      options: { maxRows: QUERY_MAX_ROWS },
+      options: { maxRows: options?.maxRows ?? QUERY_MAX_ROWS },
     }
     if (params !== undefined) {
       request.params = params

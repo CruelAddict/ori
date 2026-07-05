@@ -1,13 +1,17 @@
+import { buildBrowseQuery } from "@usecase/browse-query/usecase"
 import type { ResourceIntrospectionUsecase } from "@usecase/introspection/usecase"
+import type { QueryUsecase } from "@usecase/query/usecase"
 import type { Accessor } from "solid-js"
 import { batch, createComputed, createMemo, createSignal, onCleanup } from "solid-js"
 import { createBufferedRows } from "./buffered-rows"
 import { createExplorerGraph } from "./explorer-graph"
+import { isBrowsableExplorerNode } from "./explorer-node"
 import { createExplorerRows, getFirstVisibleRowId, moveVisibleRowId } from "./explorer-rows"
 import type { UIMode } from "./explorer-types"
 
 type CreateVMOptions = {
   introspection: Introspection
+  query: Pick<QueryUsecase, "executeQuery">
   isFocused: Accessor<boolean>
   focusSelf: () => void
 }
@@ -165,6 +169,15 @@ export function createVM(options: CreateVMOptions) {
     })
   }
 
+  const browseSelected = async () => {
+    const id = selectedId()
+    if (!id) return
+    const node = graph().nodesById[id]
+    if (!isBrowsableExplorerNode(node)) return
+    const plan = buildBrowseQuery(node)
+    await options.query.executeQuery(plan.query, { maxRows: plan.maxRows })
+  }
+
   const refreshGraph = async () => {
     await options.introspection.refresh()
   }
@@ -190,6 +203,7 @@ export function createVM(options: CreateVMOptions) {
     handleMoveIn,
     handleMoveOut,
     handleSearchEnter,
+    browseSelected,
     toggleExpanded,
   }
 }

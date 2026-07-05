@@ -1,4 +1,4 @@
-import type { OriClient, QueryExecResult, QueryResultView } from "@adapters/ori/client"
+import type { OriClient, QueryExecOptions, QueryExecResult, QueryResultView } from "@adapters/ori/client"
 import { QUERY_JOB_COMPLETED_EVENT, type QueryJobCompletedEvent, type ServerEvent } from "@model/events"
 import type { Logger } from "pino"
 
@@ -39,7 +39,7 @@ export type QueryUsecase = {
   getState(): QueryState
   subscribe(listener: Listener): () => void
   setQueryText(text: string): void
-  executeQuery(query: string): Promise<void>
+  executeQuery(query: string, options?: QueryExecOptions): Promise<void>
   failQuery(query: string, error: string): void
   cancelQuery(): Promise<void>
   clearQuery(): void
@@ -86,7 +86,7 @@ export function createQueryUC(deps: QueryUsecaseDeps): QueryUsecase {
     }))
   }
 
-  const executeQuery = async (query: string) => {
+  const executeQuery = async (query: string, options?: QueryExecOptions) => {
     const currentJob = state.job
     if (currentJob && currentJob.status === "running") {
       deps.logger.warn(
@@ -108,7 +108,7 @@ export function createQueryUC(deps: QueryUsecaseDeps): QueryUsecase {
     }))
 
     try {
-      const execResult = await executeQueryRequest(deps.client, deps.logger, deps.resourceName, query, jobId)
+      const execResult = await executeQueryRequest(deps.client, deps.logger, deps.resourceName, query, jobId, options)
       if (execResult.status === "failed") {
         setState((current) => ({
           ...current,
@@ -286,9 +286,10 @@ async function executeQueryRequest(
   resourceName: string,
   query: string,
   jobId: string,
+  options?: QueryExecOptions,
 ): Promise<QueryExecResult> {
   try {
-    return await client.queryExec(resourceName, jobId, query)
+    return await client.queryExec(resourceName, jobId, query, undefined, options)
   } catch (err) {
     logger.error({ err, resourceName, jobId }, "failed to execute query")
     throw err

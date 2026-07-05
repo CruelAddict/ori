@@ -187,6 +187,7 @@ export function ResourceViewPage(props: ResourceViewPageProps) {
               second={
                 <SplitScreen
                   orientation="horizontal"
+                  firstVisible={vm.isPaneVisible("editor") || !vm.isPaneVisible("results")}
                   secondVisible={vm.isPaneVisible("results")}
                   initialPosition={{ mode: "ratio", ratio: 0.5 }}
                   flexGrow={1}

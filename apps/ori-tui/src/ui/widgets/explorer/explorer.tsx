@@ -80,6 +80,14 @@ export function Explorer(props: ExplorerProps) {
       { pattern: "up", handler: () => explorer.moveSelection(-1), preventDefault: true },
       { pattern: "right", handler: () => handleMoveIn(), preventDefault: true },
       { pattern: "left", handler: () => explorer.handleMoveOut(), preventDefault: true },
+      {
+        pattern: "enter",
+        mode: "leader",
+        handler: () => {
+          void explorer.browseSelected()
+        },
+        preventDefault: true,
+      },
       { pattern: "ctrl+l", handler: () => handleManualHorizontalScroll("right"), preventDefault: true },
       {
         pattern: ["ctrl+w", "ctrl+backspace", "meta+backspace"],

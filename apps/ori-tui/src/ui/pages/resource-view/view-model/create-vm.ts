@@ -92,6 +92,7 @@ export function createVM(options: CreateVMOptions) {
 
   const explorer = createExplorerVM({
     introspection: options.introspection,
+    query: options.query,
     ...paneFocusFuncs("explorer"),
   })
 

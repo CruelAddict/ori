@@ -2,21 +2,21 @@ import { type Node, type NodeEdge, NodeType } from "@adapters/ori/client"
 
 export type ExplorerOrigin =
   | {
-    type: "node"
-    nodeId: string
-    nodeType: Node["type"]
-  }
+      type: "node"
+      nodeId: string
+      nodeType: Node["type"]
+    }
   | {
-    type: "edge"
-    sourceNodeId: string
-    edgeKey: string
-  }
+      type: "edge"
+      sourceNodeId: string
+      edgeKey: string
+    }
   | {
-    type: "attribute"
-    ownerNodeId: string
-    attributeKey: string
-    index?: number
-  }
+      type: "attribute"
+      ownerNodeId: string
+      attributeKey: string
+      index?: number
+    }
 
 export type ExplorerNode = {
   id: string
@@ -28,6 +28,10 @@ export type ExplorerNode = {
   hasChildren: boolean
   origin: ExplorerOrigin
   isDefault?: boolean
+}
+
+export type BrowsableExplorerNode = ExplorerNode & {
+  getQualifiedName(): string
 }
 
 type ConstraintNode = Extract<Node, { type: typeof NodeType.CONSTRAINT }>
@@ -84,8 +88,9 @@ export function convertToExplorerNodes(node: Node): ExplorerNode[] {
     .filter(([, edge]) => edge.items.length > 0)
     .map(([name, edge]) => createEdgeExplorerNode(node, name, edge))
 
-  const syntheticEdgeNodes = collectExpandableAttributes(node)
-    .flatMap(([name, values]) => expandAttribute(node, name, values))
+  const syntheticEdgeNodes = collectExpandableAttributes(node).flatMap(([name, values]) =>
+    expandAttribute(node, name, values),
+  )
 
   const children = [...naturalEdgeNodes, ...syntheticEdgeNodes]
   children.forEach((n) => {
@@ -98,6 +103,12 @@ export function convertToExplorerNodes(node: Node): ExplorerNode[] {
   })
 
   return nodes
+}
+
+export function isBrowsableExplorerNode(node: ExplorerNode | null | undefined): node is BrowsableExplorerNode {
+  if (!node) return false
+  const candidate = node as ExplorerNode & { getQualifiedName?: unknown }
+  return typeof candidate.getQualifiedName === "function"
 }
 
 function expandAttribute(node: Node, attributeName: string, values: string[]): ExplorerNode[] {
@@ -119,10 +130,7 @@ function collectExpandableAttributes(node: Node): Array<[string, string[]]> {
   const attributes: Array<[string, string[]]> = []
 
   if (node.type === NodeType.INDEX) {
-    attributes.push(
-      ["columns", node.attributes.columns ?? []],
-      ["include", node.attributes.includeColumns ?? []],
-    )
+    attributes.push(["columns", node.attributes.columns ?? []], ["include", node.attributes.includeColumns ?? []])
   }
 
   if (node.type === NodeType.CONSTRAINT) {
