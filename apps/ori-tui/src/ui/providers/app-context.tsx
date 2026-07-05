@@ -3,7 +3,7 @@ import { type Accessor, createContext, createMemo, createSignal, type JSX, useCo
 
 export type AppPane = "explorer" | "editor" | "results"
 
-export type AppResourceViewState = {
+export type AppResourceView = {
   resourceName: Accessor<string>
   title: Accessor<string>
   isActive: Accessor<boolean>
@@ -30,19 +30,19 @@ export type AppResourceViewState = {
   }
 }
 
-export type AppStateContextValue = {
-  resourceViews: Accessor<Record<string, AppResourceViewState>>
-  activeResourceView: Accessor<AppResourceViewState | undefined>
-  registerResourceView(state: AppResourceViewState): () => void
+export type AppContextValue = {
+  resourceViews: Accessor<Record<string, AppResourceView>>
+  activeResourceView: Accessor<AppResourceView | undefined>
+  registerResourceView(state: AppResourceView): () => void
 }
 
-const AppStateContext = createContext<AppStateContextValue>()
+const AppContext = createContext<AppContextValue>()
 
-export function AppStateProvider(props: { children: JSX.Element }) {
-  const [resourceViews, setResourceViews] = createSignal<Record<string, AppResourceViewState>>({})
+export function AppContextProvider(props: { children: JSX.Element }) {
+  const [resourceViews, setResourceViews] = createSignal<Record<string, AppResourceView>>({})
   const activeResourceView = createMemo(() => Object.values(resourceViews()).find((state) => state.isActive()))
 
-  const registerResourceView = (state: AppResourceViewState) => {
+  const registerResourceView = (state: AppResourceView) => {
     const name = state.resourceName()
     setResourceViews((current) => ({
       ...current,
@@ -61,19 +61,19 @@ export function AppStateProvider(props: { children: JSX.Element }) {
     }
   }
 
-  const value: AppStateContextValue = {
+  const value: AppContextValue = {
     resourceViews,
     activeResourceView,
     registerResourceView,
   }
 
-  return <AppStateContext.Provider value={value}>{props.children}</AppStateContext.Provider>
+  return <AppContext.Provider value={value}>{props.children}</AppContext.Provider>
 }
 
-export function useAppState(): AppStateContextValue {
-  const ctx = useContext(AppStateContext)
+export function useAppContext(): AppContextValue {
+  const ctx = useContext(AppContext)
   if (!ctx) {
-    throw new Error("AppStateProvider is missing in component tree")
+    throw new Error("AppContextProvider is missing in component tree")
   }
   return ctx
 }

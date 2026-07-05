@@ -1,6 +1,6 @@
 import { SplitScreen } from "@ui/components/split-screen"
 import { createVM as createResourcePageVM } from "@ui/pages/resource-view/view-model/create-vm"
-import { useAppState } from "@ui/providers/app-state"
+import { useAppContext } from "@ui/providers/app-context"
 import { useOriClient } from "@ui/providers/client"
 import { useEventStream } from "@ui/providers/events"
 import { useLogger } from "@ui/providers/logger"
@@ -25,7 +25,7 @@ export function ResourceViewPage(props: ResourceViewPageProps) {
   const client = useOriClient()
   const logger = useLogger()
   const eventStream = useEventStream()
-  const appState = useAppState()
+  const app = useAppContext()
   const resource = useResourceByName(() => props.resourceName)
   const scopeEnabled = () => props.isActive ?? true
   const query = createQueryUC({
@@ -54,7 +54,7 @@ export function ResourceViewPage(props: ResourceViewPageProps) {
   const { theme } = useTheme()
   const palette = theme
 
-  const unregisterAppState = appState.registerResourceView({
+  const unregisterResourceView = app.registerResourceView({
     resourceName: () => props.resourceName,
     title: vm.title,
     isActive: scopeEnabled,
@@ -81,7 +81,7 @@ export function ResourceViewPage(props: ResourceViewPageProps) {
     },
   })
 
-  onCleanup(unregisterAppState)
+  onCleanup(unregisterResourceView)
 
   createEffect(
     on(scopeEnabled, (active) => {
