@@ -2,8 +2,7 @@ import { Buffer, type BufferState } from "@ui/components/buffer"
 import { useLogger } from "@ui/providers/logger"
 import { useTheme } from "@ui/providers/theme"
 import { type KeyBinding, KeyScope } from "@ui/services/key-scopes"
-import { useStatusline } from "@ui/widgets/statusline/statusline-context"
-import { createSignal, onCleanup, onMount } from "solid-js"
+import { createSignal, onCleanup } from "solid-js"
 import { createSqlSupport } from "./sql-support"
 import type { EditorPaneViewModel } from "./view-model/create-vm"
 
@@ -14,7 +13,6 @@ export type EditorPanelProps = {
 export function EditorPanel(props: EditorPanelProps) {
   const pane = props.viewModel
   const logger = useLogger()
-  const statusline = useStatusline()
   const { theme } = useTheme()
   const [bufferState, setBufferState] = createSignal<BufferState>()
   const support = createSqlSupport({
@@ -26,10 +24,6 @@ export function EditorPanel(props: EditorPanelProps) {
 
   onCleanup(() => {
     support.dispose()
-  })
-
-  onMount(() => {
-    statusline.fileOpenedInBuffer(pane.filePath())
   })
 
   const handleStateChange = (state: BufferState) => {

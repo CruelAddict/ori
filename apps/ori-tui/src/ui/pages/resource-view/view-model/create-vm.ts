@@ -31,6 +31,16 @@ export function createVM(options: CreateVMOptions) {
   })
 
   const isPaneVisible = (pane: Pane) => visiblePanes()[pane]
+  const activeFocusedPane = createMemo(() => {
+    if (!isActive()) {
+      return null
+    }
+    const pane = focusedPane()
+    if (!pane || !isPaneVisible(pane)) {
+      return null
+    }
+    return pane
+  })
   const setPaneVisible = (pane: Pane, next: boolean) => {
     setVisiblePanes((current) => {
       if (current[pane] === next) {
@@ -172,6 +182,8 @@ export function createVM(options: CreateVMOptions) {
     explorer,
     editorPane,
     resultsPane,
+    focusedPane: activeFocusedPane,
+    visiblePanes,
     isPaneVisible,
     actions: {
       toggleExplorerVisible,

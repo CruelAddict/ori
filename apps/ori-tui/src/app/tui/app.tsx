@@ -1,9 +1,9 @@
 import { render, useRenderer } from "@opentui/solid"
+import { AppStateProvider } from "@ui/providers/app-state"
 import { ClientProvider } from "@ui/providers/client"
 import { EventStreamProvider } from "@ui/providers/events"
 import { LoggerProvider } from "@ui/providers/logger"
 import { NavigationProvider } from "@ui/providers/navigation"
-import { NotificationsProvider } from "@ui/providers/notifications"
 import { OverlayProvider, useOverlayManager } from "@ui/providers/overlay"
 import { ResourceProvider } from "@ui/providers/resource"
 import { ThemeProvider, useTheme } from "@ui/providers/theme"
@@ -160,9 +160,9 @@ export function startApp(options: StartAppOptions): RendererHandle {
       <LoggerProvider logger={options.logger}>
         <ClientProvider options={clientOptions}>
           <EventStreamProvider>
-            <NotificationsProvider>
-              <ResourceProvider>
-                <NavigationProvider>
+            <ResourceProvider>
+              <NavigationProvider>
+                <AppStateProvider>
                   <OverlayProvider>
                     <KeymapProvider>
                       <ThemeProvider defaultTheme={options.theme}>
@@ -172,9 +172,9 @@ export function startApp(options: StartAppOptions): RendererHandle {
                       </ThemeProvider>
                     </KeymapProvider>
                   </OverlayProvider>
-                </NavigationProvider>
-              </ResourceProvider>
-            </NotificationsProvider>
+                </AppStateProvider>
+              </NavigationProvider>
+            </ResourceProvider>
           </EventStreamProvider>
         </ClientProvider>
       </LoggerProvider>

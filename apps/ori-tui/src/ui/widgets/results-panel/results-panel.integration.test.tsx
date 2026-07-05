@@ -59,6 +59,8 @@ function createResultsJob(rowCount: number): QueryJob {
     resourceName: "test",
     query: "select * from repro",
     status: "success",
+    startedAt: 1000,
+    finishedAt: 1010,
     result,
   }
 }

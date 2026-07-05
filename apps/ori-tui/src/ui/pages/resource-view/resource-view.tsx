@@ -1,16 +1,16 @@
 import { SplitScreen } from "@ui/components/split-screen"
 import { createVM as createResourcePageVM } from "@ui/pages/resource-view/view-model/create-vm"
+import { useAppState } from "@ui/providers/app-state"
 import { useOriClient } from "@ui/providers/client"
 import { useEventStream } from "@ui/providers/events"
 import { useLogger } from "@ui/providers/logger"
-import { useNotifications } from "@ui/providers/notifications"
 import { useResourceByName } from "@ui/providers/resource"
 import { useTheme } from "@ui/providers/theme"
 import { type KeyBinding, KeyScope } from "@ui/services/key-scopes"
 import { EditorPanel } from "@ui/widgets/editor-panel/editor-panel"
 import { Explorer } from "@ui/widgets/explorer/explorer"
 import { ResultsPanel } from "@ui/widgets/results-panel/results-panel"
-import { Statusline, StatuslineProvider } from "@ui/widgets/statusline/statusline"
+import { Statusline } from "@ui/widgets/statusline/statusline"
 import { WelcomePane } from "@ui/widgets/welcome-pane/welcome-pane"
 import { createResourceIntrospectionUC } from "@usecase/introspection/usecase"
 import { createQueryUC } from "@usecase/query/usecase"
@@ -25,13 +25,13 @@ export function ResourceViewPage(props: ResourceViewPageProps) {
   const client = useOriClient()
   const logger = useLogger()
   const eventStream = useEventStream()
-  const notifications = useNotifications()
+  const appState = useAppState()
   const resource = useResourceByName(() => props.resourceName)
+  const scopeEnabled = () => props.isActive ?? true
   const query = createQueryUC({
     resourceName: props.resourceName,
     client,
     logger,
-    notifications,
     subscribeEvents: eventStream.subscribe,
   })
   const introspection = createResourceIntrospectionUC({
@@ -53,7 +53,35 @@ export function ResourceViewPage(props: ResourceViewPageProps) {
   })
   const { theme } = useTheme()
   const palette = theme
-  const scopeEnabled = () => props.isActive ?? true
+
+  const unregisterAppState = appState.registerResourceView({
+    resourceName: () => props.resourceName,
+    title: vm.title,
+    isActive: scopeEnabled,
+    focusedPane: vm.focusedPane,
+    visiblePanes: vm.visiblePanes,
+    explorer: {
+      isFocused: vm.explorer.isFocused,
+      loading: vm.explorer.loading,
+      error: vm.explorer.error,
+      mode: vm.explorer.mode,
+      filter: vm.explorer.filter,
+      selectedId: vm.explorer.selectedId,
+    },
+    editor: {
+      isFocused: vm.editorPane.isFocused,
+      filePath: vm.editorPane.filePath,
+      queryText: vm.editorPane.queryText,
+      currentJob: vm.editorPane.currentJob,
+      isExecuting: vm.editorPane.isExecuting,
+    },
+    results: {
+      isFocused: vm.resultsPane.isFocused,
+      job: vm.resultsPane.job,
+    },
+  })
+
+  onCleanup(unregisterAppState)
 
   createEffect(
     on(scopeEnabled, (active) => {
@@ -158,59 +186,57 @@ export function ResourceViewPage(props: ResourceViewPageProps) {
   ]
 
   return (
-    <StatuslineProvider resourceName={props.resourceName}>
-      <KeyScope
-        bindings={screenKeyBindings}
-        enabled={scopeEnabled}
+    <KeyScope
+      bindings={screenKeyBindings}
+      enabled={scopeEnabled}
+    >
+      <box
+        flexDirection="column"
+        justifyContent="flex-end"
+        minHeight={"100%"}
       >
         <box
-          flexDirection="column"
-          justifyContent="flex-end"
-          minHeight={"100%"}
+          flexDirection="row"
+          backgroundColor={palette().get("panel_background")}
+          marginTop={1}
+          marginLeft={2}
+          marginBottom={1}
+          minHeight={0}
         >
-          <box
-            flexDirection="row"
-            backgroundColor={palette().get("panel_background")}
-            marginTop={1}
-            marginLeft={2}
-            marginBottom={1}
-            minHeight={0}
-          >
-            <SplitScreen
-              orientation="vertical"
-              firstVisible={vm.isPaneVisible("explorer")}
-              initialPosition={{ mode: "ratio", ratio: 0.33 }}
-              flexGrow={1}
-              minHeight={"100%"}
-              minSecondSize={38}
-              first={<Explorer viewModel={vm.explorer} />}
-              second={
-                <SplitScreen
-                  orientation="horizontal"
-                  firstVisible={vm.isPaneVisible("editor") || !vm.isPaneVisible("results")}
-                  secondVisible={vm.isPaneVisible("results")}
-                  initialPosition={{ mode: "ratio", ratio: 0.5 }}
-                  flexGrow={1}
-                  justifyContent="space-between"
-                  showSeparator={false}
-                  minFirstSize={3}
-                  minSecondSize={3}
-                  first={
-                    <Show
-                      when={vm.isPaneVisible("editor")}
-                      fallback={<WelcomePane />}
-                    >
-                      <EditorPanel viewModel={vm.editorPane} />
-                    </Show>
-                  }
-                  second={<ResultsPanel viewModel={vm.resultsPane} />}
-                />
-              }
-            />
-          </box>
-          <Statusline />
+          <SplitScreen
+            orientation="vertical"
+            firstVisible={vm.isPaneVisible("explorer")}
+            initialPosition={{ mode: "ratio", ratio: 0.33 }}
+            flexGrow={1}
+            minHeight={"100%"}
+            minSecondSize={38}
+            first={<Explorer viewModel={vm.explorer} />}
+            second={
+              <SplitScreen
+                orientation="horizontal"
+                firstVisible={vm.isPaneVisible("editor") || !vm.isPaneVisible("results")}
+                secondVisible={vm.isPaneVisible("results")}
+                initialPosition={{ mode: "ratio", ratio: 0.5 }}
+                flexGrow={1}
+                justifyContent="space-between"
+                showSeparator={false}
+                minFirstSize={3}
+                minSecondSize={3}
+                first={
+                  <Show
+                    when={vm.isPaneVisible("editor")}
+                    fallback={<WelcomePane />}
+                  >
+                    <EditorPanel viewModel={vm.editorPane} />
+                  </Show>
+                }
+                second={<ResultsPanel viewModel={vm.resultsPane} />}
+              />
+            }
+          />
         </box>
-      </KeyScope>
-    </StatuslineProvider>
+        <Statusline />
+      </box>
+    </KeyScope>
   )
 }

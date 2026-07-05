@@ -2,8 +2,6 @@ import { describe, expect, test } from "bun:test"
 import { type Node, NodeType } from "@adapters/ori/client"
 import { LineNumberRenderable, type TextareaRenderable } from "@opentui/core"
 import { getBufferTextarea, moveCursor } from "@ui/components/buffer/buffer.test-tools"
-import { NotificationsProvider } from "@ui/providers/notifications"
-import { StatuslineProvider } from "@ui/widgets/statusline/statusline"
 import { createComponent } from "solid-js"
 import { mountInTui } from "../../../test/opentui-harness"
 import { findRequiredNode } from "../../../test/opentui-test-tools"
@@ -79,13 +77,13 @@ function createViewModel(text: string): EditorPaneViewModel {
     filePath: () => "/tmp/query.sql",
     getSchemaState: () => schemaState,
     subscribeSchemaState: () => () => {},
-    onQueryChange: () => { },
-    executeQuery: async () => { },
-    cancelQuery: async () => { },
+    onQueryChange: () => {},
+    executeQuery: async () => {},
+    cancelQuery: async () => {},
     saveQuery: () => true,
     isFocused: () => true,
-    focusSelf: () => { },
-    unfocus: () => { },
+    focusSelf: () => {},
+    unfocus: () => {},
   }
 }
 
@@ -170,9 +168,12 @@ function createInsertHighlightLines(includeSemicolons: boolean) {
   ]
 
   return [
-    ...firstBlock.map(([id, label]) => `Insert Into GroupRows Values (${id},'${label}')${includeSemicolons ? ";" : ""}`),
-    ...secondBlock.map(([id, label, groupId], index) =>
-      `Insert Into ItemRows Values ('${id}','${label}',${groupId})${includeSemicolons && index < 5 ? ";" : ""}`,
+    ...firstBlock.map(
+      ([id, label]) => `Insert Into GroupRows Values (${id},'${label}')${includeSemicolons ? ";" : ""}`,
+    ),
+    ...secondBlock.map(
+      ([id, label, groupId], index) =>
+        `Insert Into ItemRows Values ('${id}','${label}',${groupId})${includeSemicolons && index < 5 ? ";" : ""}`,
     ),
   ]
 }
@@ -198,9 +199,12 @@ function expectedInsertSnippetHighlightCounts() {
 }
 
 function expectRenderedInsertKeywordHighlight(app: Awaited<ReturnType<typeof mountInTui>>) {
-  const renderedLine = app.setup
-    .captureSpans()
-    .lines.find((line) => line.spans.map((span) => span.text).join("").includes("'00007'"))
+  const renderedLine = app.setup.captureSpans().lines.find((line) =>
+    line.spans
+      .map((span) => span.text)
+      .join("")
+      .includes("'00007'"),
+  )
 
   expect(renderedLine).toBeDefined()
 
@@ -219,20 +223,7 @@ describe("editor panel integration", () => {
     const expectedText = `${initialText}${insertedText}`
     const visibleStatementLines = [0, 1, 2]
     const viewModel = createViewModel(initialText)
-    const app = await mountInTui(
-      () =>
-        createComponent(NotificationsProvider, {
-          get children() {
-            return createComponent(StatuslineProvider, {
-              resourceName: "test",
-              get children() {
-                return createComponent(EditorPanel, { viewModel })
-              },
-            })
-          },
-        }),
-      { width: 100, height: 12 },
-    )
+    const app = await mountInTui(() => createComponent(EditorPanel, { viewModel }), { width: 100, height: 12 })
 
     try {
       const textarea = getBufferTextarea(app)
@@ -260,20 +251,7 @@ describe("editor panel integration", () => {
   test("shows question mark gutter marker only on the ambiguous cursor line", async () => {
     const text = "SELECT 1; SELECT 2;\nSELECT 3;"
     const viewModel = createViewModel(text)
-    const app = await mountInTui(
-      () =>
-        createComponent(NotificationsProvider, {
-          get children() {
-            return createComponent(StatuslineProvider, {
-              resourceName: "test",
-              get children() {
-                return createComponent(EditorPanel, { viewModel })
-              },
-            })
-          },
-        }),
-      { width: 100, height: 12 },
-    )
+    const app = await mountInTui(() => createComponent(EditorPanel, { viewModel }), { width: 100, height: 12 })
 
     try {
       const textarea = getBufferTextarea(app)
@@ -310,20 +288,7 @@ ADD FOREIGN KEY (
   group_id
 )`
     const viewModel = createViewModel("")
-    const app = await mountInTui(
-      () =>
-        createComponent(NotificationsProvider, {
-          get children() {
-            return createComponent(StatuslineProvider, {
-              resourceName: "test",
-              get children() {
-                return createComponent(EditorPanel, { viewModel })
-              },
-            })
-          },
-        }),
-      { width: 100, height: 20 },
-    )
+    const app = await mountInTui(() => createComponent(EditorPanel, { viewModel }), { width: 100, height: 20 })
 
     try {
       const textarea = getBufferTextarea(app)
@@ -350,20 +315,11 @@ ADD FOREIGN KEY (
     const middleStatementStartLine = fixture.tailStatementStartLines[1] ?? -1
     const firstStatementStartLine = fixture.tailStatementStartLines[0] ?? -1
     const viewModel = createViewModel("")
-    const app = await mountInTui(
-      () =>
-        createComponent(NotificationsProvider, {
-          get children() {
-            return createComponent(StatuslineProvider, {
-              resourceName: "test",
-              get children() {
-                return createComponent(EditorPanel, { viewModel })
-              },
-            })
-          },
-        }),
-      { width: 100, height: 20, targetFps: 240 },
-    )
+    const app = await mountInTui(() => createComponent(EditorPanel, { viewModel }), {
+      width: 100,
+      height: 20,
+      targetFps: 240,
+    })
 
     try {
       const textarea = getBufferTextarea(app)
@@ -398,20 +354,11 @@ ADD FOREIGN KEY (
     const firstItemLine = fixture.fillerCount + 4
     const lastItemLine = fixture.fillerCount + fixture.insertLines.length - 1
     const viewModel = createViewModel("")
-    const app = await mountInTui(
-      () =>
-        createComponent(NotificationsProvider, {
-          get children() {
-            return createComponent(StatuslineProvider, {
-              resourceName: "test",
-              get children() {
-                return createComponent(EditorPanel, { viewModel })
-              },
-            })
-          },
-        }),
-      { width: 100, height: 20, targetFps: 240 },
-    )
+    const app = await mountInTui(() => createComponent(EditorPanel, { viewModel }), {
+      width: 100,
+      height: 20,
+      targetFps: 240,
+    })
 
     try {
       const textarea = getBufferTextarea(app)
@@ -439,20 +386,11 @@ ADD FOREIGN KEY (
   test("highlights all pasted insert lines in empty buffer (lf)", async () => {
     const insertedText = createInsertPasteSnippet("lf")
     const viewModel = createViewModel("")
-    const app = await mountInTui(
-      () =>
-        createComponent(NotificationsProvider, {
-          get children() {
-            return createComponent(StatuslineProvider, {
-              resourceName: "test",
-              get children() {
-                return createComponent(EditorPanel, { viewModel })
-              },
-            })
-          },
-        }),
-      { width: 120, height: 30, targetFps: 240 },
-    )
+    const app = await mountInTui(() => createComponent(EditorPanel, { viewModel }), {
+      width: 120,
+      height: 30,
+      targetFps: 240,
+    })
 
     try {
       const textarea = getBufferTextarea(app)
@@ -474,20 +412,11 @@ ADD FOREIGN KEY (
   test("highlights all pasted insert lines in empty buffer (crlf)", async () => {
     const insertedText = createInsertPasteSnippet("crlf")
     const viewModel = createViewModel("")
-    const app = await mountInTui(
-      () =>
-        createComponent(NotificationsProvider, {
-          get children() {
-            return createComponent(StatuslineProvider, {
-              resourceName: "test",
-              get children() {
-                return createComponent(EditorPanel, { viewModel })
-              },
-            })
-          },
-        }),
-      { width: 120, height: 30, targetFps: 240 },
-    )
+    const app = await mountInTui(() => createComponent(EditorPanel, { viewModel }), {
+      width: 120,
+      height: 30,
+      targetFps: 240,
+    })
 
     try {
       const textarea = getBufferTextarea(app)
@@ -525,20 +454,11 @@ ADD FOREIGN KEY (
   test("keeps three multiline inserts as separate gutter statements without semicolons", async () => {
     const insertedText = createMultilineInsertSnippet()
     const viewModel = createViewModel("")
-    const app = await mountInTui(
-      () =>
-        createComponent(NotificationsProvider, {
-          get children() {
-            return createComponent(StatuslineProvider, {
-              resourceName: "test",
-              get children() {
-                return createComponent(EditorPanel, { viewModel })
-              },
-            })
-          },
-        }),
-      { width: 120, height: 40, targetFps: 240 },
-    )
+    const app = await mountInTui(() => createComponent(EditorPanel, { viewModel }), {
+      width: 120,
+      height: 40,
+      targetFps: 240,
+    })
 
     try {
       const textarea = getBufferTextarea(app)
@@ -558,5 +478,4 @@ ADD FOREIGN KEY (
       app.destroy()
     }
   }, 30_000)
-
 })
