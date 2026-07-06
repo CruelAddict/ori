@@ -16,13 +16,24 @@ This will:
 - Create launcher at `~/.ori/bin/ori`
 - Prune old releases automatically if they are no longer in use
 - Add `~/.ori/bin` to your shell PATH (unless `--no-modify-path` is used)
-- Create example config file at `~/.config/ori/resources.example.json`
+- Create example config file at `$XDG_CONFIG_HOME/ori/resources.example.json` (or `~/.config/ori/resources.example.json`)
 
 ## Usage
 
 ```bash
 ori --config <path-to-resources.json>
 ```
+
+### Linux keychain
+
+On Linux, the `keychain` password provider auto-detects Secret Service first, then `pass`.
+
+```bash
+secret-tool store --label="ori.db kc_pg_user" service ori.db account kc_pg_user
+pass insert ori.db/kc_pg_user
+```
+
+Use `ORI_KEYCHAIN_PROVIDER=secret-service`, `pass`, or `none` to force a provider.
 
 
 ## Uninstall
@@ -33,6 +44,15 @@ make uninstall
 
 
 ## Development
+
+### Prerequisites
+
+- Go 1.24+
+- Bun
+- GNU Make
+- Docker Compose is optional and only needed for `make postgres-up`
+
+The build does not install toolchains automatically. Make targets fail early with an install hint when Bun is missing.
 
 ### Strict Contract Check
 

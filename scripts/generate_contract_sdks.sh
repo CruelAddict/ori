@@ -38,7 +38,7 @@ echo -e "${YELLOW}Generating TypeScript SDK...${NC}"
 rm -rf "$TS_DIR"
 mkdir -p "$TS_DIR"
 
-npx --yes @hey-api/openapi-ts@0.92.3 \
+bun x --bun @hey-api/openapi-ts@0.92.3 \
     --input "$SPEC_FILE" \
     --output "$TS_DIR" \
     --client @hey-api/client-fetch

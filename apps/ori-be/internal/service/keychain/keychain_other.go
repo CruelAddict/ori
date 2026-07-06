@@ -1,15 +1,18 @@
-//go:build !darwin
+//go:build !darwin && !linux
 
 package keychain
 
-import "fmt"
+import (
+	"fmt"
+	"runtime"
+)
 
 type keychainOther struct{}
 
-func newSystemClient() Keychain {
+func newKeychain() Keychain {
 	return &keychainOther{}
 }
 
 func (kc *keychainOther) GetPassword(key string) (string, error) {
-	return "", fmt.Errorf("macOS keychain passwords are only supported on darwin")
+	return "", fmt.Errorf("keychain passwords are not supported on %s", runtime.GOOS)
 }

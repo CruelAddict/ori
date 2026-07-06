@@ -29,7 +29,8 @@ const buildConfig: BunBuildConfig = {
   plugins: [solidPlugin],
   compile: {
     target,
-    outfile: "bin/ori",
+    outfile: "./bin/ori",
+    autoloadBunfig: false,
   },
   entrypoints: [
     "./src/index.tsx",

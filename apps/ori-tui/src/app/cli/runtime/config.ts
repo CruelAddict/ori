@@ -33,7 +33,8 @@ export async function resolveResourcesPath(explicit?: string): Promise<string> {
     throw new Error("failed to determine home directory for config search")
   }
 
-  const configDir = path.join(home, ".config", "ori")
+  const configRoot = process.env.XDG_CONFIG_HOME || path.join(home, ".config")
+  const configDir = path.join(configRoot, "ori")
   await fs.mkdir(configDir, { recursive: true, mode: 0o755 })
 
   const userConfig = path.join(configDir, "resources.json")

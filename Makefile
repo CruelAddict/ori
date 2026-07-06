@@ -1,6 +1,6 @@
-.PHONY: build clean install uninstall test demo postgres-up postgres-down postgres-clean contract-ts-install contract-check
+.PHONY: build clean install uninstall test demo postgres-up postgres-down postgres-clean contract-ts-install contract-check check-bun
 
-build:
+build: check-bun
 	@echo "Building all components..."
 	@$(MAKE) -C apps/ori-be build
 	@$(MAKE) contract-ts-install
@@ -19,7 +19,10 @@ install: build
 uninstall:
 	@./scripts/uninstall.sh
 
-contract-ts-install:
+check-bun:
+	@command -v bun >/dev/null || { echo "bun is required. Install it from https://bun.sh/docs/installation"; exit 1; }
+
+contract-ts-install: check-bun
 	@echo "Installing contract TypeScript dependencies..."
 	@(cd libs/contract/typescript && bun install)
 
@@ -28,7 +31,7 @@ test:
 	@$(MAKE) -C apps/ori-be test
 	@echo "Tests complete!"
 
-contract-check:
+contract-check: check-bun
 	@./scripts/contract_check_strict.sh
 
 # Build everything and run the CLI with the test config

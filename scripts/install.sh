@@ -80,6 +80,8 @@ INSTALL_ROOT=$HOME/.ori
 INSTALL_DIR=$INSTALL_ROOT/bin
 RELEASES_DIR=$INSTALL_ROOT/releases
 CURRENT_LINK=$INSTALL_ROOT/current
+XDG_CONFIG_HOME=${XDG_CONFIG_HOME:-$HOME/.config}
+CONFIG_DIR=$XDG_CONFIG_HOME/ori
 
 print_message info "Installing ${APP}..."
 print_message info ""
@@ -159,10 +161,10 @@ while IFS= read -r path; do
 done < <(ls -1dt "$RELEASES_DIR"/* 2>/dev/null || true)
 
 # Create config directory
-mkdir -p ~/.config/ori
-if [ ! -f ~/.config/ori/resources.json ]; then
-    cp testdata/resources.json ~/.config/ori/resources.example.json
-    echo "Example config copied to ~/.config/ori/resources.example.json"
+mkdir -p "$CONFIG_DIR"
+if [ ! -f "$CONFIG_DIR/resources.json" ]; then
+    cp testdata/resources.json "$CONFIG_DIR/resources.example.json"
+    echo "Example config copied to $CONFIG_DIR/resources.example.json"
 fi
 
 add_to_path() {
@@ -182,8 +184,6 @@ add_to_path() {
         print_message info "  $command"
     fi
 }
-
-XDG_CONFIG_HOME=${XDG_CONFIG_HOME:-$HOME/.config}
 
 current_shell=$(basename "$SHELL")
 case $current_shell in
