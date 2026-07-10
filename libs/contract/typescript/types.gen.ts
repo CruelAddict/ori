@@ -41,6 +41,10 @@ export type Resource = {
     port?: number | null;
     database: string;
     username?: string | null;
+    /**
+     * Default SELECT auto-limit page size; null disables auto-limit
+     */
+    autoLimitRows?: number | null;
     password?: PasswordConfig;
     tls?: TlsConfig;
 };

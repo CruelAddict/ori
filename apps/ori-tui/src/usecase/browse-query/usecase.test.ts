@@ -7,23 +7,6 @@ describe("buildBrowseQuery", () => {
       getQualifiedName: () => '"public"."authors"',
     })
 
-    expect(result).toEqual({
-      query: 'SELECT * FROM "public"."authors" LIMIT 501 OFFSET 0',
-      maxRows: 500,
-    })
-  })
-
-  test("applies window options", () => {
-    const result = buildBrowseQuery(
-      {
-        getQualifiedName: () => '"main"."books"',
-      },
-      { limit: 20, offset: 40 },
-    )
-
-    expect(result).toEqual({
-      query: 'SELECT * FROM "main"."books" LIMIT 21 OFFSET 40',
-      maxRows: 20,
-    })
+    expect(result).toBe('SELECT * FROM "public"."authors"')
   })
 })

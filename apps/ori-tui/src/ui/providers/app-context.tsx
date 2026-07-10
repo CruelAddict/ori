@@ -1,4 +1,5 @@
 import type { QueryJob } from "@usecase/query/usecase"
+import type { ResultSourcePage } from "@usecase/result-source/usecase"
 import { type Accessor, createContext, createMemo, createSignal, type JSX, useContext } from "solid-js"
 
 export type AppPane = "explorer" | "editor" | "results"
@@ -21,12 +22,11 @@ export type AppResourceView = {
     isFocused: Accessor<boolean>
     filePath: Accessor<string>
     queryText: Accessor<string>
-    currentJob: Accessor<QueryJob | undefined>
-    isExecuting: Accessor<boolean>
   }
   results: {
     isFocused: Accessor<boolean>
     job: Accessor<QueryJob | undefined>
+    pagination: Accessor<ResultSourcePage | undefined>
   }
 }
 

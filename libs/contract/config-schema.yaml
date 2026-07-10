@@ -8,6 +8,7 @@ resources:
     port: integer             # Database port number
     database: string          # Database name
     username: string          # Database username
+    autoLimitRows: integer|null # Default SELECT auto-limit page size; null disables auto-limit
     password:                 # Password retrieval settings
       type: string            # Password provider type (plain_text, shell, keychain)
       key: string             # Provider-specific value (password text, shell command, or keychain account)

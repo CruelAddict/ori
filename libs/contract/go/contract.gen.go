@@ -278,14 +278,16 @@ type QueryResultResponse struct {
 
 // Resource defines model for Resource.
 type Resource struct {
-	Database string          `json:"database"`
-	Host     *string         `json:"host"`
-	Name     string          `json:"name"`
-	Password *PasswordConfig `json:"password,omitempty"`
-	Port     *int            `json:"port"`
-	Tls      *TlsConfig      `json:"tls,omitempty"`
-	Type     string          `json:"type"`
-	Username *string         `json:"username"`
+	// AutoLimitRows Default SELECT auto-limit page size; null disables auto-limit
+	AutoLimitRows *int            `json:"autoLimitRows"`
+	Database      string          `json:"database"`
+	Host          *string         `json:"host"`
+	Name          string          `json:"name"`
+	Password      *PasswordConfig `json:"password,omitempty"`
+	Port          *int            `json:"port"`
+	Tls           *TlsConfig      `json:"tls,omitempty"`
+	Type          string          `json:"type"`
+	Username      *string         `json:"username"`
 }
 
 // ResourceConnectRequest defines model for ResourceConnectRequest.

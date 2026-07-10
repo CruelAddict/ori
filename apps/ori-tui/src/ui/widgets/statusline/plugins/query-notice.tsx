@@ -11,12 +11,12 @@ type QueryNotice = {
 }
 
 export const queryNoticePlugin: StatuslinePlugin = {
-  visible: (ctx) => buildQueryNotice(ctx.app.activeResourceView()?.editor.currentJob(), ctx.now()) !== undefined,
+  visible: (ctx) => buildQueryNotice(ctx.app.activeResourceView()?.results.job(), ctx.now()) !== undefined,
   render: (ctx) => <QueryNoticeView ctx={ctx} />,
 }
 
 function QueryNoticeView(props: { ctx: StatuslineContext }) {
-  const notice = () => buildQueryNotice(props.ctx.app.activeResourceView()?.editor.currentJob(), props.ctx.now())
+  const notice = () => buildQueryNotice(props.ctx.app.activeResourceView()?.results.job(), props.ctx.now())
 
   return (
     <Show when={notice()}>

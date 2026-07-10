@@ -24,7 +24,6 @@ export type ResourceIntrospectionUsecase = {
   refresh(): Promise<GraphSnapshot | null>
   load(): Promise<GraphSnapshot | null>
   ensureNodes(nodeIds: string[]): Promise<void>
-  dispose(): void
 }
 
 export function createResourceIntrospectionUC(deps: ResourceIntrospectionUsecaseDeps): ResourceIntrospectionUsecase {
@@ -220,9 +219,5 @@ export function createResourceIntrospectionUC(deps: ResourceIntrospectionUsecase
     refresh,
     load,
     ensureNodes,
-    dispose: () => {
-      listeners.clear()
-      hydrateQueue.clear()
-    },
   }
 }

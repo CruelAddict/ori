@@ -1,5 +1,5 @@
 import { type DocCharOffset, docCharOffset } from "@ui/components/buffer/coords"
-import type { QueryJob, QueryUsecase } from "@usecase/query/usecase"
+import type { QueryUsecase } from "@usecase/query/usecase"
 import { getScriptFilePath, readScript, writeScript } from "@usecase/script/storage"
 import { buildLineStarts } from "@utils/line-offsets"
 import type { Accessor } from "solid-js"
@@ -10,19 +10,16 @@ import { resolveSqlQueryAtOffset as resolveSqlQueryAtOffsetFallback } from "../s
 
 type Query = Pick<
   QueryUsecase,
-  "subscribe" | "getState" | "setQueryText" | "executeQuery" | "failQuery" | "cancelQuery"
+  "subscribe" | "getState" | "setQueryText"
 >
 
 export type EditorPaneViewModel = {
   queryText: Accessor<string>
-  currentJob: Accessor<QueryJob | undefined>
-  isExecuting: Accessor<boolean>
   filePath: Accessor<string>
   getSchemaState: () => SqlEditorSchemaState
   subscribeSchemaState: (listener: () => void) => () => void
   onQueryChange: (text: string) => void
   executeQuery: (cursorOffset?: DocCharOffset, snapshot?: SqlAnalysisSnapshot) => Promise<void>
-  cancelQuery: () => Promise<void>
   saveQuery: () => boolean
   isFocused: Accessor<boolean>
   focusSelf: () => void
@@ -31,6 +28,8 @@ export type EditorPaneViewModel = {
 
 type CreateVMOptions = {
   query: Query
+  executeQuery: (query: string) => string
+  failQuery: (query: string, error: string) => string
   resourceName: Accessor<string>
   getSchemaState: () => SqlEditorSchemaState
   subscribeSchemaState: (listener: () => void) => () => void
@@ -41,11 +40,9 @@ type CreateVMOptions = {
 
 export function createVM(options: CreateVMOptions): EditorPaneViewModel {
   const [queryTextState, setQueryTextState] = createSignal(options.query.getState().queryText)
-  const [jobState, setJobState] = createSignal(options.query.getState().job)
 
   const unsubscribe = options.query.subscribe(() => {
     setQueryTextState(options.query.getState().queryText)
-    setJobState(options.query.getState().job)
   })
 
   onCleanup(() => {
@@ -53,8 +50,6 @@ export function createVM(options: CreateVMOptions): EditorPaneViewModel {
   })
 
   const queryText = createMemo(() => queryTextState())
-  const currentJob = createMemo(() => jobState())
-  const isExecuting = createMemo(() => currentJob()?.status === "running")
 
   const onQueryChange = (text: string) => {
     options.query.setQueryText(text)
@@ -67,7 +62,7 @@ export function createVM(options: CreateVMOptions): EditorPaneViewModel {
     }
 
     if (cursorOffset === undefined) {
-      await options.query.executeQuery(text)
+      options.executeQuery(text)
       return
     }
 
@@ -77,7 +72,7 @@ export function createVM(options: CreateVMOptions): EditorPaneViewModel {
         ? resolveSqlQueryAtOffsetFallback(text, lineStarts, cursorOffset)
         : resolveSqlQueryAtOffset(snapshot, lineStarts, text, cursorOffset)
     if (resolution.kind === "ambiguous") {
-      options.query.failQuery(text, "cannot execute query when multiple queries share the cursor line")
+      options.failQuery(text, "cannot execute query when multiple queries share the cursor line")
       return
     }
     if (resolution.kind === "none") {
@@ -89,11 +84,7 @@ export function createVM(options: CreateVMOptions): EditorPaneViewModel {
       return
     }
 
-    await options.query.executeQuery(query)
-  }
-
-  const cancelQuery = async () => {
-    await options.query.cancelQuery()
+    options.executeQuery(query)
   }
 
   const saveQuery = (): boolean => {
@@ -117,14 +108,11 @@ export function createVM(options: CreateVMOptions): EditorPaneViewModel {
 
   return {
     queryText,
-    currentJob,
-    isExecuting,
     filePath,
     getSchemaState: options.getSchemaState,
     subscribeSchemaState: options.subscribeSchemaState,
     onQueryChange,
     executeQuery,
-    cancelQuery,
     saveQuery,
     isFocused: options.isFocused,
     focusSelf: options.focusSelf,

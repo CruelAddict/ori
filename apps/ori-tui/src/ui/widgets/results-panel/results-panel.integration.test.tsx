@@ -70,6 +70,11 @@ function createViewModel(job: QueryJob): ResultsPaneViewModel {
     isFocused: () => true,
     focusSelf: () => {},
     job: () => job,
+    pagination: () => undefined,
+    loadFirstPage: () => undefined,
+    loadPreviousPage: () => undefined,
+    loadNextPage: () => undefined,
+    loadLastPage: async () => undefined,
   }
 }
 

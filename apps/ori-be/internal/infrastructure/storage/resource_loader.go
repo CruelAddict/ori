@@ -59,6 +59,9 @@ func (cl *ResourceLoader) validate(config *model.Config) error {
 		if conn.Database == "" {
 			return fmt.Errorf("resource '%s': database is required", conn.Name)
 		}
+		if conn.AutoLimitRows != nil && *conn.AutoLimitRows <= 0 {
+			return fmt.Errorf("resource '%s': autoLimitRows must be positive or null", conn.Name)
+		}
 
 		// Driver-specific validation
 		switch conn.Type {

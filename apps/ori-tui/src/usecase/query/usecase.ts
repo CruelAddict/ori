@@ -16,11 +16,15 @@ export type QueryJob = {
 }
 
 export type QueryState = {
-  job?: QueryJob
   queryText: string
+  jobsById: Record<string, QueryJob>
 }
 
 type Listener = () => void
+type ResultWaiter = {
+  resolve: (result: QueryResultView) => void
+  reject: (err: Error) => void
+}
 
 export type QueryUsecaseDeps = {
   resourceName: string
@@ -33,9 +37,11 @@ export type QueryUsecase = {
   getState(): QueryState
   subscribe(listener: Listener): () => void
   setQueryText(text: string): void
-  executeQuery(query: string, options?: QueryExecOptions): Promise<void>
-  failQuery(query: string, error: string): void
-  cancelQuery(): Promise<void>
+  executeQuery(query: string, options?: QueryExecOptions): string
+  failQuery(query: string, error: string): string
+  getJob(jobId: string): QueryJob | undefined
+  waitForResult(jobId: string): Promise<QueryResultView>
+  cancelQuery(jobId: string): Promise<void>
   clearQuery(): void
   dispose(): void
 }
@@ -43,8 +49,10 @@ export type QueryUsecase = {
 export function createQueryUC(deps: QueryUsecaseDeps): QueryUsecase {
   let state: QueryState = {
     queryText: "",
+    jobsById: {},
   }
   const listeners = new Set<Listener>()
+  const resultWaiters = new Map<string, ResultWaiter[]>()
 
   const emit = () => {
     for (const listener of listeners) {
@@ -57,6 +65,30 @@ export function createQueryUC(deps: QueryUsecaseDeps): QueryUsecase {
     emit()
   }
 
+  const setJob = (jobId: string, recipe: (current: QueryJob | undefined) => QueryJob) => {
+    setState((current) => ({
+      ...current,
+      jobsById: {
+        ...current.jobsById,
+        [jobId]: recipe(current.jobsById[jobId]),
+      },
+    }))
+  }
+
+  const resolveWaiters = (jobId: string, result: QueryResultView) => {
+    settleWaiters(resultWaiters, jobId, (waiter) => waiter.resolve(result))
+  }
+
+  const rejectWaiters = (jobId: string, err: Error) => {
+    settleWaiters(resultWaiters, jobId, (waiter) => waiter.reject(err))
+  }
+
+  const rejectAllWaiters = (err: Error) => {
+    for (const jobId of Array.from(resultWaiters.keys())) {
+      rejectWaiters(jobId, err)
+    }
+  }
+
   const setQueryText = (text: string) => {
     setState((current) => ({
       ...current,
@@ -65,107 +97,104 @@ export function createQueryUC(deps: QueryUsecaseDeps): QueryUsecase {
   }
 
   const clearQuery = () => {
+    rejectAllWaiters(new Error("query state cleared"))
     setState(() => ({
       queryText: "",
-      job: undefined,
+      jobsById: {},
     }))
   }
 
-  const executeQuery = async (query: string, options?: QueryExecOptions) => {
-    const currentJob = state.job
-    if (currentJob && currentJob.status === "running") {
-      deps.logger.warn(
-        { resourceName: deps.resourceName, jobId: currentJob.jobId },
-        "query already running for resource; ignoring new execute request",
-      )
-      return
-    }
-
+  const executeQuery = (query: string, options?: QueryExecOptions) => {
     const jobId = generateJobId()
     const startedAt = Date.now()
-    setState((current) => ({
-      ...current,
-      job: {
-        jobId,
-        resourceName: deps.resourceName,
-        query,
-        status: "running",
-        startedAt,
-      },
+    setJob(jobId, () => ({
+      jobId,
+      resourceName: deps.resourceName,
+      query,
+      status: "running",
+      startedAt,
     }))
 
-    try {
-      const execResult = await executeQueryRequest(deps.client, deps.logger, deps.resourceName, query, jobId, options)
-      if (execResult.status === "failed") {
-        setState((current) => ({
-          ...current,
-          job: {
-            jobId,
-            resourceName: deps.resourceName,
-            query,
-            status: "failed",
-            startedAt,
-            finishedAt: Date.now(),
-            error: execResult.message,
-          },
-        }))
-        deps.logger.error({ jobId, message: execResult.message }, "query execution failed immediately")
-      }
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : String(err)
-      setState((current) => ({
-        ...current,
-        job: {
+    void executeQueryRequest(deps.client, deps.logger, deps.resourceName, query, jobId, options)
+      .then((execResult) => {
+        if (execResult.status !== "failed") {
+          return
+        }
+        const error = execResult.message || "query failed"
+        setJob(jobId, () => ({
           jobId,
           resourceName: deps.resourceName,
           query,
           status: "failed",
           startedAt,
           finishedAt: Date.now(),
-          error: errorMessage,
-        },
-      }))
-      deps.logger.error({ jobId, resourceName: deps.resourceName, err }, "query execution threw")
-    }
+          error,
+        }))
+        rejectWaiters(jobId, new Error(error))
+        deps.logger.error({ jobId, message: execResult.message }, "query execution failed immediately")
+      })
+      .catch((err) => {
+        const error = err instanceof Error ? err.message : String(err)
+        setJob(jobId, () => ({
+          jobId,
+          resourceName: deps.resourceName,
+          query,
+          status: "failed",
+          startedAt,
+          finishedAt: Date.now(),
+          error,
+        }))
+        rejectWaiters(jobId, new Error(error))
+        deps.logger.error({ jobId, resourceName: deps.resourceName, err }, "query execution threw")
+      })
+
+    return jobId
   }
 
   const failQuery = (query: string, error: string) => {
-    const currentJob = state.job
-    if (currentJob && currentJob.status === "running") {
-      deps.logger.warn(
-        { resourceName: deps.resourceName, jobId: currentJob.jobId },
-        "query already running for resource; ignoring local failure",
-      )
-      return
-    }
-
     const jobId = generateJobId()
     const finishedAt = Date.now()
-    setState((current) => ({
-      ...current,
-      job: {
-        jobId,
-        resourceName: deps.resourceName,
-        query,
-        status: "failed",
-        startedAt: finishedAt,
-        finishedAt,
-        error,
-      },
+    setJob(jobId, () => ({
+      jobId,
+      resourceName: deps.resourceName,
+      query,
+      status: "failed",
+      startedAt: finishedAt,
+      finishedAt,
+      error,
     }))
     deps.logger.warn({ jobId, resourceName: deps.resourceName, error }, "query execution rejected locally")
+    return jobId
   }
 
-  const cancelQuery = async () => {
-    const currentJob = state.job
-    if (!currentJob || currentJob.status !== "running") {
+  const getJob = (jobId: string) => state.jobsById[jobId]
+
+  const waitForResult = (jobId: string) => {
+    const settled = getSettledResult(state.jobsById[jobId])
+    if (settled.result) {
+      return Promise.resolve(settled.result)
+    }
+    if (settled.error) {
+      return Promise.reject(settled.error)
+    }
+
+    return new Promise<QueryResultView>((resolve, reject) => {
+      const waiters = resultWaiters.get(jobId) ?? []
+      waiters.push({ resolve, reject })
+      resultWaiters.set(jobId, waiters)
+    })
+  }
+
+  const cancelQuery = async (jobId: string) => {
+    const job = state.jobsById[jobId]
+    if (!job || job.status !== "running") {
       return
     }
 
     try {
-      await cancelQueryRequest(deps.client, deps.logger, currentJob.jobId)
+      await cancelQueryRequest(deps.client, deps.logger, jobId)
     } catch (err) {
-      deps.logger.error({ err, resourceName: deps.resourceName, jobId: currentJob.jobId }, "cancel query failed")
+      deps.logger.error({ err, resourceName: deps.resourceName, jobId }, "cancel query failed")
     }
   }
 
@@ -184,56 +213,47 @@ export function createQueryUC(deps: QueryUsecaseDeps): QueryUsecase {
       return
     }
 
-    const currentJob = state.job
-    if (!currentJob || currentJob.jobId !== jobId) {
-      deps.logger.debug(
-        { jobId, resourceName, currentJobId: currentJob?.jobId },
-        "query execution: ignoring event - job mismatch or no current job",
-      )
+    const currentJob = state.jobsById[jobId]
+    if (!currentJob) {
+      deps.logger.debug({ jobId, resourceName }, "query execution: ignoring event - unknown job")
       return
     }
 
     if (status === "success" && stored) {
       try {
         const result = await fetchQueryResultRequest(deps.client, deps.logger, jobId)
-        setState((current) => ({
-          ...current,
-          job: {
-            ...currentJob,
-            status: "success",
-            result,
-            durationMs,
-            finishedAt,
-          },
+        setJob(jobId, () => ({
+          ...currentJob,
+          status: "success",
+          result,
+          durationMs,
+          finishedAt,
         }))
+        resolveWaiters(jobId, result)
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : String(err)
-        setState((current) => ({
-          ...current,
-          job: {
-            ...currentJob,
-            status: "failed",
-            error: errorMessage,
-            durationMs,
-            finishedAt,
-          },
+        setJob(jobId, () => ({
+          ...currentJob,
+          status: "failed",
+          error: errorMessage,
+          durationMs,
+          finishedAt,
         }))
+        rejectWaiters(jobId, new Error(errorMessage))
         deps.logger.error({ jobId, resourceName, err }, "query execution: failed to fetch query result")
       }
       return
     }
 
     const nextStatus = resolveCompletedStatus(status)
-    setState((current) => ({
-      ...current,
-      job: {
-        ...currentJob,
-        status: nextStatus,
-        error: error || message,
-        durationMs,
-        finishedAt,
-      },
+    setJob(jobId, () => ({
+      ...currentJob,
+      status: nextStatus,
+      error: error || message,
+      durationMs,
+      finishedAt,
     }))
+    rejectWaiters(jobId, new Error(error || message || `query ${nextStatus}`))
   }
 
   const unsubscribeEvents = deps.subscribeEvents((event) => {
@@ -254,12 +274,46 @@ export function createQueryUC(deps: QueryUsecaseDeps): QueryUsecase {
     setQueryText,
     executeQuery,
     failQuery,
+    getJob,
+    waitForResult,
     cancelQuery,
     clearQuery,
     dispose: () => {
       unsubscribeEvents()
+      rejectAllWaiters(new Error("query usecase disposed"))
       listeners.clear()
     },
+  }
+}
+
+function getSettledResult(job: QueryJob | undefined): { result?: QueryResultView; error?: Error } {
+  if (!job) {
+    return { error: new Error("query job not found") }
+  }
+  if (job.status === "success" && job.result) {
+    return { result: job.result }
+  }
+  if (job.status === "success") {
+    return { error: new Error("query result is not stored") }
+  }
+  if (job.status === "failed" || job.status === "canceled") {
+    return { error: new Error(job.error || job.message || `query ${job.status}`) }
+  }
+  return {}
+}
+
+function settleWaiters(
+  waiters: Map<string, ResultWaiter[]>,
+  jobId: string,
+  settle: (waiter: ResultWaiter) => void,
+) {
+  const pending = waiters.get(jobId)
+  if (!pending) {
+    return
+  }
+  waiters.delete(jobId)
+  for (const waiter of pending) {
+    settle(waiter)
   }
 }
 

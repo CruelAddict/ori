@@ -1,11 +1,14 @@
 package model
 
 import (
+	"encoding/json"
 	"path/filepath"
 
 	"github.com/crueladdict/ori/apps/ori-server/internal/pkg/cloneutil"
 	dto "github.com/crueladdict/ori/libs/contract/go"
 )
+
+const DefaultAutoLimitRows = 500
 
 type PasswordConfig struct {
 	Type string `json:"type"`          // Password provider type (plain_text, shell, keychain)
@@ -20,14 +23,26 @@ type TLSConfig struct {
 }
 
 type Resource struct {
-	Name     string          `json:"name"`
-	Type     string          `json:"type"`
-	Host     *string         `json:"host,omitempty"`
-	Port     *int            `json:"port,omitempty"`
-	Database string          `json:"database"`
-	Username *string         `json:"username,omitempty"`
-	Password *PasswordConfig `json:"password,omitempty"`
-	TLS      *TLSConfig      `json:"tls,omitempty"`
+	Name          string          `json:"name"`
+	Type          string          `json:"type"`
+	Host          *string         `json:"host,omitempty"`
+	Port          *int            `json:"port,omitempty"`
+	Database      string          `json:"database"`
+	Username      *string         `json:"username,omitempty"`
+	AutoLimitRows *int            `json:"autoLimitRows"`
+	Password      *PasswordConfig `json:"password,omitempty"`
+	TLS           *TLSConfig      `json:"tls,omitempty"`
+}
+
+func (r *Resource) UnmarshalJSON(data []byte) error {
+	type resource Resource
+	autoLimitRows := DefaultAutoLimitRows
+	next := resource{AutoLimitRows: &autoLimitRows}
+	if err := json.Unmarshal(data, &next); err != nil {
+		return err
+	}
+	*r = Resource(next)
+	return nil
 }
 
 type Config struct {
@@ -63,14 +78,15 @@ func ConvertResourcesToDTO(configs []Resource) *dto.ResourcesResponse {
 		}
 
 		dtoConfigs[i] = dto.Resource{
-			Name:     cfg.Name,
-			Type:     cfg.Type,
-			Database: cfg.Database,
-			Host:     cloneutil.Ptr(cfg.Host),
-			Port:     cloneutil.Ptr(cfg.Port),
-			Username: cloneutil.Ptr(cfg.Username),
-			Password: password,
-			Tls:      tls,
+			Name:          cfg.Name,
+			Type:          cfg.Type,
+			Database:      cfg.Database,
+			Host:          cloneutil.Ptr(cfg.Host),
+			Port:          cloneutil.Ptr(cfg.Port),
+			Username:      cloneutil.Ptr(cfg.Username),
+			AutoLimitRows: cloneutil.Ptr(cfg.AutoLimitRows),
+			Password:      password,
+			Tls:           tls,
 		}
 	}
 	return &dto.ResourcesResponse{Resources: dtoConfigs}

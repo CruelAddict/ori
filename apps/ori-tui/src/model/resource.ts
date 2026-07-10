@@ -5,6 +5,7 @@ export type Resource = {
   port: number
   database: string
   username: string
+  autoLimitRows?: number | null
   tls?: {
     mode?: string | null
     caCertPath?: string | null

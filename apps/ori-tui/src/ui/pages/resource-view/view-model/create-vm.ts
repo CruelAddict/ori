@@ -2,16 +2,18 @@ import type { Resource } from "@model/resource"
 import { createVM as createEditorVM } from "@ui/widgets/editor-panel/view-model/create-vm"
 import { createVM as createExplorerVM } from "@ui/widgets/explorer/view-model/create-vm"
 import { createVM as createResultsVM } from "@ui/widgets/results-panel/view-model/create-vm"
+import { buildBrowseQuery } from "@usecase/browse-query/usecase"
 import type { ResourceIntrospectionUsecase } from "@usecase/introspection/usecase"
+import type { QueryUsecase } from "@usecase/query/usecase"
+import type { ResultSourceUsecase } from "@usecase/result-source/usecase"
 import type { Accessor } from "solid-js"
-import { createEffect, createMemo, createSignal } from "solid-js"
-
-type EditorDeps = Parameters<typeof createEditorVM>[0]
+import { createEffect, createMemo, createSignal, onCleanup } from "solid-js"
 
 type CreateVMOptions = {
   resourceName: Accessor<string>
   resource: Accessor<Resource | undefined>
-  query: EditorDeps["query"]
+  query: QueryUsecase
+  resultSource: ResultSourceUsecase
   introspection: Pick<ResourceIntrospectionUsecase, "subscribe" | "getState" | "load" | "refresh" | "ensureNodes">
 }
 
@@ -28,6 +30,28 @@ export function createVM(options: CreateVMOptions) {
     explorer: true,
     editor: false,
     results: false,
+  })
+  const [querySnapshot, setQuerySnapshot] = createSignal(options.query.getState())
+  const [resultSourceSnapshot, setResultSourceSnapshot] = createSignal(options.resultSource.getState())
+
+  const unsubscribeQuery = options.query.subscribe(() => {
+    setQuerySnapshot(options.query.getState())
+  })
+  const unsubscribeResultSource = options.resultSource.subscribe(() => {
+    setResultSourceSnapshot(options.resultSource.getState())
+  })
+
+  onCleanup(() => {
+    unsubscribeQuery()
+    unsubscribeResultSource()
+  })
+
+  const activeResultJob = createMemo(() => {
+    const jobId = resultSourceSnapshot().current?.jobId
+    if (!jobId) {
+      return undefined
+    }
+    return querySnapshot().jobsById[jobId]
   })
 
   const isPaneVisible = (pane: Pane) => visiblePanes()[pane]
@@ -100,14 +124,23 @@ export function createVM(options: CreateVMOptions) {
     focusSelf: () => tryFocusPane(pane),
   })
 
+  const browseNode = async (node: Parameters<typeof buildBrowseQuery>[0]) => {
+    if (activeResultJob()?.status === "running") {
+      return
+    }
+    options.resultSource.executeQuery(buildBrowseQuery(node))
+  }
+
   const explorer = createExplorerVM({
     introspection: options.introspection,
-    query: options.query,
+    browseNode,
     ...paneFocusFuncs("explorer"),
   })
 
   const editorPane = createEditorVM({
     query: options.query,
+    executeQuery: options.resultSource.executeQuery,
+    failQuery: options.resultSource.failQuery,
     resourceName: options.resourceName,
     getSchemaState: options.introspection.getState,
     subscribeSchemaState: options.introspection.subscribe,
@@ -116,7 +149,8 @@ export function createVM(options: CreateVMOptions) {
   })
 
   const resultsPane = createResultsVM({
-    job: editorPane.currentJob,
+    job: activeResultJob,
+    resultSource: options.resultSource,
     ...paneFocusFuncs("results"),
   })
 
@@ -134,7 +168,7 @@ export function createVM(options: CreateVMOptions) {
   }
 
   const hasResultsPaneContent = () => {
-    const job = editorPane.currentJob()
+    const job = activeResultJob()
     if (!job) {
       return false
     }
@@ -177,6 +211,14 @@ export function createVM(options: CreateVMOptions) {
     }
   })
 
+  const cancelQuery = async () => {
+    const job = activeResultJob()
+    if (job?.status !== "running") {
+      return
+    }
+    await options.query.cancelQuery(job.jobId)
+  }
+
   return {
     title,
     explorer,
@@ -190,7 +232,7 @@ export function createVM(options: CreateVMOptions) {
       toggleResultsVisible,
       onQueryChange: editorPane.onQueryChange,
       executeQuery: editorPane.executeQuery,
-      cancelQuery: editorPane.cancelQuery,
+      cancelQuery,
       refreshGraph: explorer.refreshGraph,
       moveFocusLeft: () => {
         tryFocusPane("explorer")

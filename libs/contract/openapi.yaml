@@ -265,6 +265,11 @@ components:
         username:
           type: string
           nullable: true
+        autoLimitRows:
+          type: integer
+          nullable: true
+          minimum: 1
+          description: Default SELECT auto-limit page size; null disables auto-limit
         password:
           $ref: '#/components/schemas/PasswordConfig'
         tls:

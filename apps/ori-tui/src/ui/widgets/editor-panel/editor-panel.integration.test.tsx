@@ -72,14 +72,11 @@ function createViewModel(text: string): EditorPaneViewModel {
 
   return {
     queryText: () => text,
-    currentJob: () => undefined,
-    isExecuting: () => false,
     filePath: () => "/tmp/query.sql",
     getSchemaState: () => schemaState,
     subscribeSchemaState: () => () => {},
     onQueryChange: () => {},
     executeQuery: async () => {},
-    cancelQuery: async () => {},
     saveQuery: () => true,
     isFocused: () => true,
     focusSelf: () => {},

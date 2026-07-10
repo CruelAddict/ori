@@ -14,6 +14,7 @@ import { Statusline } from "@ui/widgets/statusline/statusline"
 import { WelcomePane } from "@ui/widgets/welcome-pane/welcome-pane"
 import { createResourceIntrospectionUC } from "@usecase/introspection/usecase"
 import { createQueryUC } from "@usecase/query/usecase"
+import { createResultSourceUC } from "@usecase/result-source/usecase"
 import { createEffect, on, onCleanup, Show } from "solid-js"
 
 export type ResourceViewPageProps = {
@@ -34,6 +35,12 @@ export function ResourceViewPage(props: ResourceViewPageProps) {
     logger,
     subscribeEvents: eventStream.subscribe,
   })
+  const resultSource = createResultSourceUC({
+    resourceName: props.resourceName,
+    logger,
+    query,
+    getAutoLimitRows: () => resource()?.autoLimitRows,
+  })
   const introspection = createResourceIntrospectionUC({
     resourceName: props.resourceName,
     client,
@@ -42,13 +49,13 @@ export function ResourceViewPage(props: ResourceViewPageProps) {
 
   onCleanup(() => {
     query.dispose()
-    introspection.dispose()
   })
 
   const vm = createResourcePageVM({
     resourceName: () => props.resourceName,
     resource,
     query,
+    resultSource,
     introspection,
   })
   const { theme } = useTheme()
@@ -72,12 +79,11 @@ export function ResourceViewPage(props: ResourceViewPageProps) {
       isFocused: vm.editorPane.isFocused,
       filePath: vm.editorPane.filePath,
       queryText: vm.editorPane.queryText,
-      currentJob: vm.editorPane.currentJob,
-      isExecuting: vm.editorPane.isExecuting,
     },
     results: {
       isFocused: vm.resultsPane.isFocused,
       job: vm.resultsPane.job,
+      pagination: vm.resultsPane.pagination,
     },
   })
 
@@ -136,7 +142,7 @@ export function ResourceViewPage(props: ResourceViewPageProps) {
       handler: () => {
         void vm.actions.cancelQuery()
       },
-      enabled: () => vm.editorPane.isExecuting(),
+      enabled: () => vm.resultsPane.job()?.status === "running",
       preventDefault: true,
       commandPaletteSection: "Query",
     },
