@@ -86,6 +86,14 @@ export function ResourceViewPage(props: ResourceViewPageProps) {
       job: vm.resultsPane.job,
       pagination: vm.resultsPane.pagination,
       isNavigating: vm.resultsPane.isNavigating,
+      canLoadFirstPage: vm.resultsPane.canLoadFirstPage,
+      canLoadPreviousPage: vm.resultsPane.canLoadPreviousPage,
+      canLoadNextPage: vm.resultsPane.canLoadNextPage,
+      canLoadLastPage: vm.resultsPane.canLoadLastPage,
+      loadFirstPage: vm.resultsPane.loadFirstPage,
+      loadPreviousPage: vm.resultsPane.loadPreviousPage,
+      loadNextPage: vm.resultsPane.loadNextPage,
+      loadLastPage: vm.resultsPane.loadLastPage,
     },
   })
 

@@ -28,6 +28,14 @@ export type AppResourceView = {
     job: Accessor<QueryJob | undefined>
     pagination: Accessor<ResultSourcePage | undefined>
     isNavigating: Accessor<boolean>
+    canLoadFirstPage: Accessor<boolean>
+    canLoadPreviousPage: Accessor<boolean>
+    canLoadNextPage: Accessor<boolean>
+    canLoadLastPage: Accessor<boolean>
+    loadFirstPage: () => void
+    loadPreviousPage: () => void
+    loadNextPage: () => void
+    loadLastPage: () => void
   }
 }
 
