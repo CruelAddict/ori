@@ -8,7 +8,9 @@ import (
 	dto "github.com/crueladdict/ori/libs/contract/go"
 )
 
-const DefaultAutoLimitRows = 500
+const (
+	DefaultAutoLimitRows = 500
+)
 
 type PasswordConfig struct {
 	Type string `json:"type"`          // Password provider type (plain_text, shell, keychain)

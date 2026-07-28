@@ -67,6 +67,7 @@ func (s *Server) buildMux() *http.ServeMux {
 	mux.HandleFunc("GET /resources/{resourceName}/nodes", s.handler.getResourceNodes)
 	mux.HandleFunc("POST /resources/connect", s.handler.connectResource)
 	mux.HandleFunc("POST /queries", s.handler.execQuery)
+	mux.HandleFunc("GET /queries/{jobId}", s.handler.getQueryStatus)
 	mux.HandleFunc("POST /queries/{jobId}/cancel", s.handler.cancelQuery)
 	mux.HandleFunc("GET /queries/{jobId}/result", s.handler.getQueryResult)
 	return mux

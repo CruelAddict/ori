@@ -64,6 +64,8 @@ func (h *Handler) execQuery(w http.ResponseWriter, r *http.Request) {
 			respondError(w, http.StatusConflict, "connection_not_ready", err.Error(), nil)
 		case errors.Is(err, service.ErrJobAlreadyExists):
 			respondError(w, http.StatusConflict, "job_already_exists", err.Error(), nil)
+		case errors.Is(err, service.ErrMaxRowsExceeded):
+			respondError(w, http.StatusBadRequest, "max_rows_exceeded", err.Error(), nil)
 		default:
 			respondError(w, http.StatusInternalServerError, "query_exec_failed", err.Error(), nil)
 		}
@@ -72,7 +74,7 @@ func (h *Handler) execQuery(w http.ResponseWriter, r *http.Request) {
 
 	respondJSON(w, http.StatusAccepted, dto.QueryExecResponse{
 		JobId:  job.ID,
-		Status: dto.Running,
+		Status: dto.QueryExecResponseStatusRunning,
 	})
 }
 
@@ -83,7 +85,7 @@ func (h *Handler) cancelQuery(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	job, err := h.queries.Cancel(jobID)
+	err = h.queries.Cancel(jobID)
 	if err != nil {
 		switch {
 		case errors.Is(err, service.ErrJobNotFound):
@@ -94,5 +96,36 @@ func (h *Handler) cancelQuery(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	respondJSON(w, http.StatusAccepted, map[string]string{"status": string(job.Status)})
+	respondJSON(w, http.StatusAccepted, map[string]string{"status": "accepted"})
+}
+
+func (h *Handler) getQueryStatus(w http.ResponseWriter, r *http.Request) {
+	jobID, err := decodePathParam(r, "jobId")
+	if err != nil {
+		respondError(w, http.StatusBadRequest, "invalid_job", err.Error(), nil)
+		return
+	}
+
+	status, err := h.queries.GetStatus(jobID)
+	if err != nil {
+		if errors.Is(err, service.ErrJobNotFound) {
+			respondError(w, http.StatusNotFound, "job_not_found", err.Error(), nil)
+			return
+		}
+		respondError(w, http.StatusInternalServerError, "query_status_failed", err.Error(), nil)
+		return
+	}
+
+	response := dto.QueryJobStatusResponse{
+		JobId:        status.JobID,
+		ResourceName: status.ResourceName,
+		Status:       dto.QueryJobStatusResponseStatus(status.Status),
+		Stored:       status.Stored,
+		FinishedAt:   status.FinishedAt,
+		DurationMs:   status.DurationMs,
+	}
+	if status.Error != "" {
+		response.Error = &status.Error
+	}
+	respondJSON(w, http.StatusOK, response)
 }

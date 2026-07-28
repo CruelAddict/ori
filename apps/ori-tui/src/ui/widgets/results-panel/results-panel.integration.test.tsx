@@ -4,6 +4,7 @@ import { ScrollBoxRenderable } from "@opentui/core"
 import { Buffer } from "@ui/components/buffer/buffer"
 import { getBufferTextarea } from "@ui/components/buffer/buffer.test-tools"
 import type { QueryJob } from "@usecase/query/usecase"
+import type { ResultSourcePage } from "@usecase/result-source/usecase"
 import { createComponent } from "solid-js"
 import { type MountedTuiApp, mountInTui } from "../../../test/opentui-harness"
 import { findRequiredNode, readFrameLines } from "../../../test/opentui-test-tools"
@@ -65,12 +66,17 @@ function createResultsJob(rowCount: number): QueryJob {
   }
 }
 
-function createViewModel(job: QueryJob): ResultsPaneViewModel {
+function createViewModel(job: QueryJob, pagination?: ResultSourcePage): ResultsPaneViewModel {
   return {
     isFocused: () => true,
     focusSelf: () => {},
     job: () => job,
-    pagination: () => undefined,
+    pagination: () => pagination,
+    isNavigating: () => false,
+    canLoadFirstPage: () => false,
+    canLoadPreviousPage: () => false,
+    canLoadNextPage: () => false,
+    canLoadLastPage: () => false,
     loadFirstPage: () => undefined,
     loadPreviousPage: () => undefined,
     loadNextPage: () => undefined,
@@ -172,6 +178,31 @@ async function captureDragAutoscrollFrames(
 }
 
 describe("results panel integration", () => {
+  test("numbers rows using the page offset", async () => {
+    const app = await mountInTui(
+      () => (
+        <SelectionControllerTestRoot>
+          <ResultsPanel
+            viewModel={createViewModel(createResultsJob(1), {
+              pageSize: 500,
+              offset: 500,
+              totalRows: 501,
+              isTotalRowsExact: true,
+            })}
+          />
+        </SelectionControllerTestRoot>
+      ),
+      { width: 48, height: 8 },
+    )
+
+    try {
+      await app.renderOnce()
+      expect(readFrameLines(app).some((line) => parseVisibleRow(line)?.rowNumber === 501)).toBe(true)
+    } finally {
+      app.destroy()
+    }
+  })
+
   test("keeps table selection while dragging over the scrollbar edge", async () => {
     const app = await mountInTui(
       () => (

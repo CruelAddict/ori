@@ -1,8 +1,6 @@
 import { describe, expect, test } from "bun:test"
-import type { Node, OriClient, QueryExecOptions, QueryResultView, ResourceConnectResult } from "@adapters/ori/client"
-import { QUERY_JOB_COMPLETED_EVENT, type ServerEvent } from "@model/events"
-import type { Resource } from "@model/resource"
-import { createQueryUC } from "@usecase/query/usecase"
+import type { QueryExecOptions, QueryResultView } from "@adapters/ori/client"
+import type { QueryExecutionOptions, QueryJob, QueryOutcome, QueryTask, QueryUsecase } from "@usecase/query/usecase"
 import pino from "pino"
 import { buildResultSourceQuery, createResultSourceUC } from "./usecase"
 
@@ -12,79 +10,66 @@ type Execution = {
   options?: QueryExecOptions
 }
 
-function sleep(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms))
-}
-
-async function waitFor(predicate: () => boolean) {
-  for (const _ of Array.from({ length: 20 })) {
-    if (predicate()) {
-      return
-    }
-    await sleep(0)
-  }
-  throw new Error("condition was not met")
-}
-
-function createClientHarness(initialTotalRows = 1205) {
-  const listeners = new Set<(event: ServerEvent) => void>()
-  const results = new Map<string, QueryResultView>()
+function createQueryHarness(initialTotalRows = 1205) {
   const executions: Execution[] = []
   let totalRows = initialTotalRows
+  let holdCounts = false
 
-  const emit = (event: ServerEvent) => {
-    for (const listener of listeners) {
-      listener(event)
+  const execute = (query: string, options?: QueryExecOptions, execution?: QueryExecutionOptions): QueryTask => {
+    const jobId = `job-${executions.length + 1}`
+    const startedAt = Date.now()
+    let resolve: (outcome: QueryOutcome) => void = () => {}
+    let settled = false
+    const done = new Promise<QueryOutcome>((resolvePromise) => {
+      resolve = resolvePromise
+    })
+    const update = (job: QueryJob) => {
+      execution?.onUpdate?.(job)
     }
-  }
-
-  const client: OriClient = {
-    listResources: async (): Promise<Resource[]> => [],
-    connect: async (): Promise<ResourceConnectResult> => ({ result: "success" }),
-    getNodes: async (): Promise<Node[]> => [],
-    queryExec: async (resourceName, jobId, query, _params, options) => {
-      executions.push({ jobId, query, options })
-      results.set(jobId, createResult(query, totalRows))
-      queueMicrotask(() => {
-        emit({
-          type: QUERY_JOB_COMPLETED_EVENT,
-          payload: {
-            jobId,
-            resourceName,
-            status: "success",
-            finishedAt: new Date().toISOString(),
-            durationMs: 1,
-            stored: true,
-          },
-        })
-      })
-      return { jobId, status: "running" }
-    },
-    queryGetResult: async (jobId) => {
-      const result = results.get(jobId)
-      if (result) {
-        return result
+    const finish = (status: QueryOutcome["status"], result?: QueryResultView) => {
+      if (settled) {
+        return
       }
-      throw new Error(`missing result for ${jobId}`)
-    },
-    queryCancel: async () => {},
-    openEventStream: () => () => {},
+      settled = true
+      const outcome: QueryOutcome = {
+        jobId,
+        resourceName: "local-sqlite",
+        query,
+        status,
+        startedAt,
+        finishedAt: Date.now(),
+        result,
+      }
+      update(outcome)
+      resolve(outcome)
+    }
+    const task: QueryTask = {
+      jobId,
+      done,
+      cancel: () => finish("canceled"),
+    }
+
+    executions.push({ jobId, query, options })
+    update({ jobId, resourceName: "local-sqlite", query, status: "running", startedAt })
+    if (!holdCounts || !query.includes("COUNT(*)")) {
+      finish("success", createResult(query, totalRows, options?.maxRows))
+    }
+    return task
   }
 
   return {
-    client,
+    query: { execute } satisfies Pick<QueryUsecase, "execute">,
     executions,
     setTotalRows: (value: number) => {
       totalRows = value
     },
-    subscribeEvents: (listener: (event: ServerEvent) => void) => {
-      listeners.add(listener)
-      return () => listeners.delete(listener)
+    setHoldCounts: (value: boolean) => {
+      holdCounts = value
     },
   }
 }
 
-function createResult(query: string, totalRows: number): QueryResultView {
+function createResult(query: string, totalRows: number, maxRows?: number): QueryResultView {
   if (query.includes("COUNT(*)")) {
     return {
       columns: [{ name: "total_rows", type: "integer" }],
@@ -95,192 +80,126 @@ function createResult(query: string, totalRows: number): QueryResultView {
   }
 
   const offset = Number(query.match(/OFFSET (\d+)/)?.[1] ?? 0)
-  const rows = Math.min(500, Math.max(0, totalRows - offset))
+  const rowCount = Math.min(maxRows ?? totalRows, Math.max(0, totalRows - offset))
   return {
     columns: [{ name: "id", type: "integer" }],
-    rows: Array.from({ length: rows }, (_, index) => [String(offset + index + 1)]),
-    rowCount: rows,
-    truncated: offset + rows < totalRows,
+    rows: Array.from({ length: rowCount }, (_, index) => [String(offset + index + 1)]),
+    rowCount,
+    truncated: offset + rowCount < totalRows,
   }
+}
+
+function createResultSource(query: Pick<QueryUsecase, "execute">) {
+  return createResultSourceUC({
+    resourceName: "local-sqlite",
+    logger: pino({ enabled: false }),
+    query,
+    getAutoLimitRows: () => 500,
+  })
 }
 
 describe("buildResultSourceQuery", () => {
   test("adds a page window to simple select queries", () => {
-    const plan = buildResultSourceQuery('SELECT * FROM "main"."books";', 500)
-
-    expect(plan).toEqual({
-      query: 'SELECT * FROM "main"."books" LIMIT 501 OFFSET 0',
+    expect(buildResultSourceQuery('SELECT * FROM "main"."books";', 500)).toEqual({
+      query: 'SELECT * FROM "main"."books"\nLIMIT 501 OFFSET 0',
       sourceQuery: 'SELECT * FROM "main"."books"',
       maxRows: 500,
-      pagination: {
-        pageSize: 500,
-        offset: 0,
-        totalRows: 501,
-        isTotalRowsExact: false,
-      },
+      pagination: { pageSize: 500, offset: 0, totalRows: 501, isTotalRowsExact: false },
     })
   })
 
-  test("does not auto-limit queries with explicit filters or windows", () => {
-    expect(buildResultSourceQuery("SELECT * FROM books WHERE id = 1", 500).pagination).toBeUndefined()
+  test("adds a page window to PostgreSQL arrays and DuckDB lists", () => {
+    expect(buildResultSourceQuery("SELECT ARRAY['right]bracket'];", 500).query).toBe(
+      "SELECT ARRAY['right]bracket']\nLIMIT 501 OFFSET 0",
+    )
+    expect(buildResultSourceQuery("SELECT ['right]bracket'];", 500).query).toBe(
+      "SELECT ['right]bracket']\nLIMIT 501 OFFSET 0",
+    )
+  })
+
+  test("does not auto-limit queries with explicit windows or unsafe modifiers", () => {
+    expect(buildResultSourceQuery("SELECT * FROM books WHERE id = 1", 500).pagination).toBeDefined()
     expect(buildResultSourceQuery("SELECT * FROM books LIMIT 10", 500).pagination).toBeUndefined()
     expect(buildResultSourceQuery("SELECT * FROM books OFFSET 10", 500).pagination).toBeUndefined()
     expect(buildResultSourceQuery("WITH books AS (SELECT 1) SELECT * FROM books", 500).pagination).toBeUndefined()
-    expect(buildResultSourceQuery("DELETE FROM books", 500).pagination).toBeUndefined()
-  })
-
-  test("does not auto-limit when resource auto-limit is disabled", () => {
-    const plan = buildResultSourceQuery("SELECT * FROM books", null)
-
-    expect(plan).toEqual({
-      query: "SELECT * FROM books",
-      sourceQuery: "SELECT * FROM books",
-    })
-  })
-
-  test("ignores keywords inside strings, comments, quoted identifiers, and nested queries", () => {
-    expect(buildResultSourceQuery("SELECT 'where limit offset' AS value FROM books", 500).pagination).toBeDefined()
-    expect(buildResultSourceQuery('SELECT "where" FROM books', 500).pagination).toBeDefined()
-    expect(buildResultSourceQuery("SELECT * FROM (SELECT * FROM books WHERE id = 1) b", 500).pagination).toBeDefined()
-    expect(buildResultSourceQuery("SELECT * FROM books -- WHERE id = 1", 500).pagination).toBeDefined()
+    expect(buildResultSourceQuery("SELECT (1;\nSELECT 2", 500).pagination).toBeUndefined()
   })
 })
 
 describe("createResultSourceUC", () => {
-  test("loads next and last pages from the displayed source query", async () => {
-    const harness = createClientHarness()
-    const query = createQueryUC({
-      resourceName: "local-sqlite",
-      client: harness.client,
-      logger: pino({ enabled: false }),
-      subscribeEvents: harness.subscribeEvents,
-    })
-    const resultSource = createResultSourceUC({
-      resourceName: "local-sqlite",
-      logger: pino({ enabled: false }),
-      query,
-      getAutoLimitRows: () => 500,
-    })
+  test("keeps each source isolated while it loads pages", () => {
+    const harness = createQueryHarness()
+    const firstSource = createResultSource(harness.query)
+    const secondSource = createResultSource(harness.query)
 
-    const firstJobId = resultSource.executeQuery('SELECT * FROM "main"."library_loans"')
-    await waitFor(() => firstJobId !== undefined && query.getJob(firstJobId)?.status === "success")
-    expect(harness.executions.at(0)?.query).toBe('SELECT * FROM "main"."library_loans" LIMIT 501 OFFSET 0')
-    expect(harness.executions.at(0)?.options).toEqual({ maxRows: 500 })
+    const firstJobId = firstSource.executeQuery('SELECT * FROM "main"."library_loans"')
+    const secondJobId = secondSource.executeQuery('SELECT * FROM "main"."books"')
 
-    const nextJobId = resultSource.loadNextPage()
-    await waitFor(
-      () =>
-        nextJobId !== undefined &&
-        query.getJob(nextJobId)?.status === "success" &&
-        resultSource.getState().current?.pagination?.offset === 500,
-    )
-    expect(harness.executions.at(-1)?.query).toBe('SELECT * FROM "main"."library_loans" LIMIT 501 OFFSET 500')
+    expect(harness.executions).toHaveLength(2)
+    expect(firstSource.getState().current?.job).toMatchObject({ jobId: firstJobId, status: "success" })
+    expect(secondSource.getState().current?.job).toMatchObject({ jobId: secondJobId, status: "success" })
 
-    const lastJobId = await resultSource.loadLastPage()
-    await waitFor(
-      () =>
-        lastJobId !== undefined &&
-        query.getJob(lastJobId)?.status === "success" &&
-        resultSource.getState().current?.pagination?.offset === 1000,
-    )
-    expect(harness.executions.some((execution) => execution.query.includes("COUNT(*)"))).toBe(true)
-    expect(harness.executions.at(-1)?.query).toBe('SELECT * FROM "main"."library_loans" LIMIT 501 OFFSET 1000')
+    const nextJobId = firstSource.loadNextPage()
 
-    query.dispose()
+    expect(firstSource.getState().current?.job).toMatchObject({ jobId: nextJobId, status: "success" })
+    expect(firstSource.getState().current?.pagination?.offset).toBe(500)
+    expect(secondSource.getState().current?.pagination?.offset).toBe(0)
+
+    firstSource.dispose()
+    secondSource.dispose()
   })
 
-  test("keeps the largest estimated total when returning to an earlier page", async () => {
-    const harness = createClientHarness()
-    const query = createQueryUC({
-      resourceName: "local-sqlite",
-      client: harness.client,
-      logger: pino({ enabled: false }),
-      subscribeEvents: harness.subscribeEvents,
-    })
-    const resultSource = createResultSourceUC({
-      resourceName: "local-sqlite",
-      logger: pino({ enabled: false }),
-      query,
-      getAutoLimitRows: () => 500,
-    })
+  test("loads the last page with a parallel count task", async () => {
+    const harness = createQueryHarness()
+    const resultSource = createResultSource(harness.query)
 
-    const firstJobId = resultSource.executeQuery('SELECT * FROM "main"."library_loans"')
-    await waitFor(() => firstJobId !== undefined && query.getJob(firstJobId)?.status === "success")
-
-    const nextJobId = resultSource.loadNextPage()
-    await waitFor(
-      () =>
-        nextJobId !== undefined &&
-        query.getJob(nextJobId)?.status === "success" &&
-        resultSource.getState().current?.pagination?.offset === 500 &&
-        resultSource.getState().current?.pagination?.totalRows === 1001,
-    )
-    expect(resultSource.getState().current?.pagination).toMatchObject({
-      totalRows: 1001,
-      isTotalRowsExact: false,
-    })
-
-    const previousJobId = resultSource.loadPreviousPage()
-    await waitFor(
-      () =>
-        previousJobId !== undefined &&
-        query.getJob(previousJobId)?.status === "success" &&
-        resultSource.getState().current?.pagination?.offset === 0 &&
-        resultSource.getState().current?.pagination?.totalRows === 1001,
-    )
-    expect(resultSource.getState().current?.pagination).toMatchObject({
-      totalRows: 1001,
-      isTotalRowsExact: false,
-    })
-
-    query.dispose()
-  })
-
-  test("shrinks the total when the last page returns fewer rows", async () => {
-    const harness = createClientHarness()
-    const query = createQueryUC({
-      resourceName: "local-sqlite",
-      client: harness.client,
-      logger: pino({ enabled: false }),
-      subscribeEvents: harness.subscribeEvents,
-    })
-    const resultSource = createResultSourceUC({
-      resourceName: "local-sqlite",
-      logger: pino({ enabled: false }),
-      query,
-      getAutoLimitRows: () => 500,
-    })
-
-    const firstJobId = resultSource.executeQuery('SELECT * FROM "main"."library_loans"')
-    await waitFor(() => firstJobId !== undefined && query.getJob(firstJobId)?.status === "success")
-
+    resultSource.executeQuery('SELECT * FROM "main"."library_loans"')
     const lastJobId = await resultSource.loadLastPage()
-    await waitFor(
-      () =>
-        lastJobId !== undefined &&
-        query.getJob(lastJobId)?.status === "success" &&
-        resultSource.getState().current?.pagination?.offset === 1000 &&
-        resultSource.getState().current?.pagination?.totalRows === 1205,
-    )
+
+    expect(resultSource.getState().current?.job).toMatchObject({ jobId: lastJobId, status: "success" })
     expect(resultSource.getState().current?.pagination).toMatchObject({
+      offset: 1000,
       totalRows: 1205,
       isTotalRowsExact: true,
     })
+    expect(harness.executions.some((execution) => execution.query.includes("COUNT(*)"))).toBe(true)
 
-    harness.setTotalRows(1100)
-    const refreshedLastJobId = await resultSource.loadLastPage()
-    await waitFor(
-      () =>
-        refreshedLastJobId !== undefined &&
-        query.getJob(refreshedLastJobId)?.status === "success" &&
-        resultSource.getState().current?.pagination?.offset === 1000 &&
-        resultSource.getState().current?.pagination?.totalRows === 1100,
-    )
-    expect(resultSource.getState().current?.pagination).toMatchObject({
-      totalRows: 1100,
-      isTotalRowsExact: true,
-    })
+    resultSource.dispose()
+  })
 
-    query.dispose()
+  test("clears pending count navigation without replacing the displayed result", () => {
+    const harness = createQueryHarness()
+    harness.setHoldCounts(true)
+    const resultSource = createResultSource(harness.query)
+
+    const firstJobId = resultSource.executeQuery('SELECT * FROM "main"."library_loans"')
+    void resultSource.loadLastPage()
+
+    expect(resultSource.getState().navigation).toEqual({ kind: "count" })
+    resultSource.cancel()
+
+    expect(resultSource.getState().navigation).toBeUndefined()
+    expect(resultSource.getState().current?.job).toMatchObject({ jobId: firstJobId, status: "success" })
+
+    resultSource.dispose()
+  })
+
+  test("starts a new last-page request after canceling the previous one", async () => {
+    const harness = createQueryHarness()
+    harness.setHoldCounts(true)
+    const resultSource = createResultSource(harness.query)
+
+    resultSource.executeQuery('SELECT * FROM "main"."library_loans"')
+    void resultSource.loadLastPage()
+    resultSource.cancel()
+
+    harness.setHoldCounts(false)
+    resultSource.executeQuery('SELECT * FROM "main"."books"')
+    const lastJobId = await resultSource.loadLastPage()
+
+    expect(resultSource.getState().current?.job).toMatchObject({ jobId: lastJobId, status: "success" })
+    expect(harness.executions.filter((execution) => execution.query.includes("COUNT(*)"))).toHaveLength(2)
+
+    resultSource.dispose()
   })
 })

@@ -98,7 +98,7 @@ func (a *Adapter) executeSelect(ctx context.Context, query string, params any, o
 		rowCount++
 
 		// Check if we've hit the row limit
-		if rowCount >= options.MaxRows {
+		if options.MaxRows > 0 && rowCount >= options.MaxRows {
 			// Check if there are more rows
 			if rows.Next() {
 				truncated = true

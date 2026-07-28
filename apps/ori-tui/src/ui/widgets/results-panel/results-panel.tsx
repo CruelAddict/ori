@@ -20,6 +20,7 @@ export function ResultsPanel(props: ResultsPanelProps) {
       handler: () => {
         void pane.loadFirstPage()
       },
+      enabled: pane.canLoadFirstPage,
       preventDefault: true,
       commandPaletteSection: "Query",
     },
@@ -29,6 +30,7 @@ export function ResultsPanel(props: ResultsPanelProps) {
       handler: () => {
         void pane.loadPreviousPage()
       },
+      enabled: pane.canLoadPreviousPage,
       preventDefault: true,
       commandPaletteSection: "Query",
     },
@@ -38,6 +40,7 @@ export function ResultsPanel(props: ResultsPanelProps) {
       handler: () => {
         void pane.loadNextPage()
       },
+      enabled: pane.canLoadNextPage,
       preventDefault: true,
       commandPaletteSection: "Query",
     },
@@ -47,6 +50,7 @@ export function ResultsPanel(props: ResultsPanelProps) {
       handler: () => {
         void pane.loadLastPage()
       },
+      enabled: pane.canLoadLastPage,
       preventDefault: true,
       commandPaletteSection: "Query",
     },
@@ -82,7 +86,11 @@ export function ResultsPanel(props: ResultsPanelProps) {
         </Show>
 
         <Show when={pane.job()?.status === "running"}>
-          <text fg={theme().get("text")}>Query is running... (Ctrl+G to cancel)</text>
+          <text fg={theme().get("text")}>
+            {pane.job()?.statusUnavailable
+              ? "Query is running; status unavailable, retrying... (Ctrl+G to cancel)"
+              : "Query is running... (Ctrl+G to cancel)"}
+          </text>
         </Show>
 
         <Show when={pane.job()?.status === "failed"}>
@@ -96,6 +104,7 @@ export function ResultsPanel(props: ResultsPanelProps) {
           <OriTable
             columns={resultColumns()}
             rows={resultRows()}
+            rowNumberOffset={pane.pagination()?.offset ?? 0}
             colors={{
               background: theme().get("panel_background"),
               alternateRowBackground: theme().get("results_row_alt_background"),

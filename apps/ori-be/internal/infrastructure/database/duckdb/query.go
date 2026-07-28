@@ -97,7 +97,7 @@ func (a *Adapter) executeSelect(ctx context.Context, stmt *sqlx.Stmt, query stri
 		allRows = append(allRows, rowCopy)
 		rowCount++
 
-		if rowCount >= options.MaxRows {
+		if options.MaxRows > 0 && rowCount >= options.MaxRows {
 			if rows.Next() {
 				truncated = true
 			}

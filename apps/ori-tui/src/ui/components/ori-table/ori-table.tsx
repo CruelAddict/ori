@@ -29,6 +29,7 @@ export type OriTableColors = {
 export type OriTableProps = {
   columns: OriTableColumn[]
   rows: unknown[][]
+  rowNumberOffset?: number
   colors: OriTableColors
   isFocused: Accessor<boolean>
   focusSelf: () => void
@@ -46,6 +47,7 @@ export function OriTable(props: OriTableProps) {
   const table = createOriTableVM({
     columns: () => props.columns,
     rows: () => props.rows,
+    rowNumberOffset: () => props.rowNumberOffset ?? 0,
     isFocused: props.isFocused,
   })
   let scrollbox: ScrollBoxRenderable | undefined
@@ -295,7 +297,7 @@ export function OriTable(props: OriTableProps) {
                   >
                     <table_cell
                       width={table.rowNumberCellWidth()}
-                      display={String(currentRow() + 1)}
+                      display={String((props.rowNumberOffset ?? 0) + currentRow() + 1)}
                       align="right"
                       backgroundColor={props.colors.background}
                       fg={rowNumberColor()}

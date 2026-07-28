@@ -55,7 +55,7 @@ func TestListResourcesAndConnectSQLiteOverUDS(t *testing.T) {
 	connectionService := service.NewResourceSessionService(configService, eventHub)
 	connectionService.RegisterAdapter("sqlite", sqliteadapter.NewAdapter)
 	nodeService := service.NewNodeService(configService, connectionService)
-	queryService := service.NewQueryService(connectionService, eventHub, ctx)
+	queryService := service.NewQueryService(connectionService, eventHub, ctx, service.DefaultMaxMaterializedRows)
 	handler := httpapi.NewHandler(configService, connectionService, nodeService, queryService)
 
 	sockPath := unixSocketPath("ori-be")
@@ -192,7 +192,7 @@ func TestQueryExecAndGetResult(t *testing.T) {
 	connectionService := service.NewResourceSessionService(configService, eventHub)
 	connectionService.RegisterAdapter("sqlite", sqliteadapter.NewAdapter)
 	nodeService := service.NewNodeService(configService, connectionService)
-	queryService := service.NewQueryService(connectionService, eventHub, ctx)
+	queryService := service.NewQueryService(connectionService, eventHub, ctx, service.DefaultMaxMaterializedRows)
 	handler := httpapi.NewHandler(configService, connectionService, nodeService, queryService)
 
 	sockPath := unixSocketPath("ori-be-query")
@@ -307,7 +307,7 @@ func TestDuckDBIntrospectionAndCSVQuery(t *testing.T) {
 	connectionService := service.NewResourceSessionService(configService, eventHub)
 	connectionService.RegisterAdapter("duckdb", duckdbadapter.NewAdapter)
 	nodeService := service.NewNodeService(configService, connectionService)
-	queryService := service.NewQueryService(connectionService, eventHub, ctx)
+	queryService := service.NewQueryService(connectionService, eventHub, ctx, service.DefaultMaxMaterializedRows)
 	handler := httpapi.NewHandler(configService, connectionService, nodeService, queryService)
 
 	sockPath := unixSocketPath("ori-be-duckdb")

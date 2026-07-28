@@ -2,7 +2,7 @@
 
 import type { Client, Options as Options2, TDataShape } from './client';
 import { client } from './client.gen';
-import type { CancelQueryData, CancelQueryErrors, CancelQueryResponses, ConnectResourceData, ConnectResourceErrors, ConnectResourceResponses, ExecQueryData, ExecQueryErrors, ExecQueryResponses, GetHealthData, GetHealthErrors, GetHealthResponses, GetNodesData, GetNodesErrors, GetNodesResponses, GetQueryResultData, GetQueryResultErrors, GetQueryResultResponses, ListResourcesData, ListResourcesErrors, ListResourcesResponses, StreamEventsData, StreamEventsErrors, StreamEventsResponses } from './types.gen';
+import type { CancelQueryData, CancelQueryErrors, CancelQueryResponses, ConnectResourceData, ConnectResourceErrors, ConnectResourceResponses, ExecQueryData, ExecQueryErrors, ExecQueryResponses, GetHealthData, GetHealthErrors, GetHealthResponses, GetNodesData, GetNodesErrors, GetNodesResponses, GetQueryResultData, GetQueryResultErrors, GetQueryResultResponses, GetQueryStatusData, GetQueryStatusErrors, GetQueryStatusResponses, ListResourcesData, ListResourcesErrors, ListResourcesResponses, StreamEventsData, StreamEventsErrors, StreamEventsResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean> = Options2<TData, ThrowOnError> & {
     /**
@@ -61,6 +61,11 @@ export const execQuery = <ThrowOnError extends boolean = false>(options: Options
  * Cancel a running query job
  */
 export const cancelQuery = <ThrowOnError extends boolean = false>(options: Options<CancelQueryData, ThrowOnError>) => (options.client ?? client).post<CancelQueryResponses, CancelQueryErrors, ThrowOnError>({ url: '/queries/{jobId}/cancel', ...options });
+
+/**
+ * Retrieve the current or terminal status of a query job
+ */
+export const getQueryStatus = <ThrowOnError extends boolean = false>(options: Options<GetQueryStatusData, ThrowOnError>) => (options.client ?? client).get<GetQueryStatusResponses, GetQueryStatusErrors, ThrowOnError>({ url: '/queries/{jobId}', ...options });
 
 /**
  * Retrieve a previously stored query result view

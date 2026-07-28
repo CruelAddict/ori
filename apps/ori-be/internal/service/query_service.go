@@ -15,10 +15,14 @@ import (
 )
 
 var (
-	ErrNotFound         = errors.New("query result not found")
-	ErrJobAlreadyExists = errors.New("query job already exists")
-	ErrJobNotFound      = errors.New("query job not found")
+	ErrNotFound          = errors.New("query result not found")
+	ErrResultUnavailable = errors.New("query result is not available")
+	ErrJobAlreadyExists  = errors.New("query job already exists")
+	ErrJobNotFound       = errors.New("query job not found")
+	ErrMaxRowsExceeded   = errors.New("query max rows exceeds the current materialization limit")
 )
+
+const DefaultMaxMaterializedRows = 100000
 
 // QueryResultView represents a paginated view of query results
 type QueryResultView struct {
@@ -29,24 +33,36 @@ type QueryResultView struct {
 	RowsAffected *int64        `json:"rowsAffected,omitempty"`
 }
 
+type QueryJobStatus struct {
+	JobID        string
+	ResourceName string
+	Status       JobStatus
+	FinishedAt   *time.Time
+	DurationMs   *int64
+	Error        string
+	Stored       bool
+}
+
 // QueryService manages query job execution
 type QueryService struct {
-	connectionService *ResourceSessionService
-	eventHub          *events.Hub
-	resultStore       *ResultStore
-	mu                sync.RWMutex
-	activeJobs        map[string]*QueryJob
-	rootCtx           context.Context
+	connectionService   *ResourceSessionService
+	eventHub            *events.Hub
+	resultStore         *ResultStore
+	mu                  sync.RWMutex
+	activeJobs          map[string]*QueryJob
+	rootCtx             context.Context
+	maxMaterializedRows int
 }
 
 // NewQueryService creates a new query service
-func NewQueryService(connectionService *ResourceSessionService, eventHub *events.Hub, rootCtx context.Context) *QueryService {
+func NewQueryService(connectionService *ResourceSessionService, eventHub *events.Hub, rootCtx context.Context, maxMaterializedRows int) *QueryService {
 	return &QueryService{
-		connectionService: connectionService,
-		eventHub:          eventHub,
-		resultStore:       NewResultStore(),
-		activeJobs:        make(map[string]*QueryJob),
-		rootCtx:           rootCtx,
+		connectionService:   connectionService,
+		eventHub:            eventHub,
+		resultStore:         NewResultStore(maxMaterializedRows),
+		activeJobs:          make(map[string]*QueryJob),
+		rootCtx:             rootCtx,
+		maxMaterializedRows: maxMaterializedRows,
 	}
 }
 
@@ -73,14 +89,14 @@ func (qs *QueryService) Exec(ctx context.Context, resourceName, jobID, query str
 
 	// Set default options
 	if options == nil {
-		options = &QueryExecOptions{MaxRows: DefaultMaxRows}
+		options = &QueryExecOptions{}
 	}
 	if options.MaxRows <= 0 {
-		options.MaxRows = DefaultMaxRows
+		options.MaxRows = qs.maxMaterializedRows
 	}
 
-	if options.MaxRows > HardMaxRows {
-		options.MaxRows = HardMaxRows
+	if options.MaxRows > qs.maxMaterializedRows {
+		return nil, fmt.Errorf("%w: requested %d, maximum %d", ErrMaxRowsExceeded, options.MaxRows, qs.maxMaterializedRows)
 	}
 
 	// Check if connection is available
@@ -120,13 +136,41 @@ func (qs *QueryService) Exec(ctx context.Context, resourceName, jobID, query str
 	return job, nil
 }
 
-// GetActiveJob retrieves a job by ID
-func (qs *QueryService) GetActiveJob(jobID string) (*QueryJob, bool) {
+func (qs *QueryService) GetStatus(jobID string) (*QueryJobStatus, error) {
 	qs.mu.RLock()
-	defer qs.mu.RUnlock()
-
 	job, ok := qs.activeJobs[jobID]
-	return job, ok
+	if ok {
+		status := &QueryJobStatus{
+			JobID:        job.ID,
+			ResourceName: job.ResourceName,
+			Status:       job.Status,
+			FinishedAt:   job.FinishedAt,
+			Error:        job.Error,
+		}
+		if job.FinishedAt != nil {
+			duration := job.DurationMs
+			status.DurationMs = &duration
+		}
+		qs.mu.RUnlock()
+		return status, nil
+	}
+	qs.mu.RUnlock()
+
+	result, ok := qs.resultStore.Get(jobID)
+	if !ok {
+		return nil, ErrJobNotFound
+	}
+	duration := result.DurationMs
+	finishedAt := result.FinishedAt
+	return &QueryJobStatus{
+		JobID:        result.JobID,
+		ResourceName: result.ResourceName,
+		Status:       result.Status,
+		FinishedAt:   &finishedAt,
+		DurationMs:   &duration,
+		Error:        result.Error,
+		Stored:       result.Status == JobStatusSuccess,
+	}, nil
 }
 
 // BuildResultView builds a paginated view of a stored query result
@@ -134,6 +178,9 @@ func (qs *QueryService) BuildResultView(ctx context.Context, jobID string, limit
 	result, exists := qs.resultStore.Get(jobID)
 	if !exists {
 		return nil, ErrNotFound
+	}
+	if result.Status != JobStatusSuccess {
+		return nil, ErrResultUnavailable
 	}
 
 	if offset != nil && *offset < 0 {
@@ -184,23 +231,22 @@ func (qs *QueryService) BuildResultView(ctx context.Context, jobID string, limit
 }
 
 // Cancel cancels a running job.
-func (qs *QueryService) Cancel(jobID string) (*QueryJob, error) {
+func (qs *QueryService) Cancel(jobID string) error {
 	qs.mu.Lock()
 	job, ok := qs.activeJobs[jobID]
 	if !ok {
 		qs.mu.Unlock()
-		return nil, ErrJobNotFound
+		return ErrJobNotFound
 	}
 	if job.Status != JobStatusRunning {
 		qs.mu.Unlock()
-		return job, nil
+		return nil
 	}
-	job.Status = JobStatusCanceled
 	cancel := job.Cancel
 	qs.mu.Unlock()
 
 	cancel()
-	return job, nil
+	return nil
 }
 
 // Stop cancels all running jobs
@@ -211,14 +257,6 @@ func (qs *QueryService) Stop() {
 	for _, job := range qs.activeJobs {
 		if job.Status == JobStatusRunning {
 			job.Cancel()
-			job.Status = JobStatusCanceled
-			job.FinishedAt = &[]time.Time{time.Now()}[0]
-			if job.StartedAt != nil {
-				job.DurationMs = job.FinishedAt.Sub(*job.StartedAt).Milliseconds()
-			}
-
-			// Emit completion event for canceled job
-			qs.emitJobCompletion(job)
 		}
 	}
 }
@@ -226,54 +264,44 @@ func (qs *QueryService) Stop() {
 // runJob executes a query job
 func (qs *QueryService) runJob(ctx context.Context, job *QueryJob, handle *ResourceHandle) {
 	startTime := time.Now()
+	qs.mu.Lock()
 	job.StartedAt = &startTime
+	qs.mu.Unlock()
 
-	defer func() {
-		finishTime := time.Now()
-		job.FinishedAt = &finishTime
-		if job.StartedAt != nil {
-			job.DurationMs = finishTime.Sub(*job.StartedAt).Milliseconds()
-		}
-
-		// Remove from active jobs
-		qs.mu.Lock()
-		delete(qs.activeJobs, job.ID)
-		qs.mu.Unlock()
-
-		// Emit completion event
-		qs.emitJobCompletion(job)
-	}()
-
-	// Execute the query using the connection adapter
 	result, err := handle.Adapter.ExecuteQuery(ctx, job.Query, job.Params, job.Options)
+	finishTime := time.Now()
+	status := JobStatusSuccess
+	errorMessage := ""
 	if err != nil {
-		job.Status = JobStatusFailed
-		job.Error = err.Error()
-
-		// Store failed result (FinishedAt will be set by defer)
-		finishTime := time.Now()
-		failedResult := &QueryResult{
-			JobID:        job.ID,
-			ResourceName: job.ResourceName,
-			Status:       JobStatusFailed,
-			Error:        err.Error(),
-			FinishedAt:   finishTime,
-			DurationMs:   finishTime.Sub(*job.StartedAt).Milliseconds(),
+		if ctx.Err() != nil {
+			status = JobStatusCanceled
+			errorMessage = ctx.Err().Error()
+		} else {
+			status = JobStatusFailed
+			errorMessage = err.Error()
 		}
-		qs.resultStore.Add(failedResult)
-		return
 	}
 
-	// Fill in job metadata for the result
-	finishTime := time.Now()
+	duration := finishTime.Sub(startTime).Milliseconds()
+	if result == nil {
+		result = &QueryResult{}
+	}
 	result.JobID = job.ID
 	result.ResourceName = job.ResourceName
+	result.Status = status
+	result.Error = errorMessage
 	result.FinishedAt = finishTime
-	result.DurationMs = finishTime.Sub(*job.StartedAt).Milliseconds()
-
-	// Store successful result
+	result.DurationMs = duration
 	qs.resultStore.Add(result)
-	job.Status = JobStatusSuccess
+
+	qs.mu.Lock()
+	job.Status = status
+	job.Error = errorMessage
+	job.FinishedAt = &finishTime
+	job.DurationMs = duration
+	delete(qs.activeJobs, job.ID)
+	qs.mu.Unlock()
+	qs.emitJobCompletion(job)
 }
 
 // emitJobCompletion emits a job completion event via SSE
@@ -294,9 +322,10 @@ func (qs *QueryService) emitJobCompletion(job *QueryJob) {
 		payload.Error = job.Error
 	}
 
-	// Check if result is stored
-	if _, stored := qs.resultStore.Get(job.ID); stored {
-		payload.Stored = true
+	if job.Status == JobStatusSuccess {
+		if _, stored := qs.resultStore.Get(job.ID); stored {
+			payload.Stored = true
+		}
 	}
 
 	qs.eventHub.Publish(events.Event{

@@ -46,6 +46,7 @@ export function EditorPanel(props: EditorPanelProps) {
       pattern: "enter",
       mode: "leader",
       description: "Execute query",
+      enabled: () => !pane.isExecuting(),
       handler: () => {
         void pane.executeQuery(bufferState()?.cursor?.offset, support.snapshot())
       },

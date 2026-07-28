@@ -9,6 +9,7 @@ import {
   execQuery,
   getNodes,
   getQueryResult,
+  getQueryStatus,
   listResources,
   type Node,
   type QueryExecRequest,
@@ -18,8 +19,6 @@ import type { Logger } from "pino"
 
 type BunRequest = Request & { timeout?: boolean }
 type BunRequestInit = RequestInit & { unix?: string }
-
-const QUERY_MAX_ROWS = 100000
 
 export type ResourceConnectResult = {
   result: "success" | "fail" | "connecting"
@@ -60,6 +59,25 @@ export type QueryResultView = {
   rowsAffected?: number | null
 }
 
+export type QueryJobStatusView = {
+  jobId: string
+  resourceName: string
+  status: "running" | "success" | "failed" | "canceled"
+  finishedAt?: number
+  durationMs?: number
+  error?: string
+  stored: boolean
+}
+
+export class OriRequestError extends Error {
+  constructor(
+    message: string,
+    readonly code?: string,
+  ) {
+    super(message)
+  }
+}
+
 export type OriClient = {
   listResources(): Promise<Resource[]>
   connect(resourceName: string): Promise<ResourceConnectResult>
@@ -70,9 +88,11 @@ export type OriClient = {
     query: string,
     params?: Record<string, unknown>,
     options?: QueryExecOptions,
+    signal?: AbortSignal,
   ): Promise<QueryExecResult>
-  queryGetResult(jobId: string, limit?: number, offset?: number): Promise<QueryResultView>
-  queryCancel(jobId: string): Promise<void>
+  queryGetResult(jobId: string, limit?: number, offset?: number, signal?: AbortSignal): Promise<QueryResultView>
+  queryGetStatus(jobId: string, signal?: AbortSignal): Promise<QueryJobStatusView>
+  queryCancel(jobId: string, signal?: AbortSignal): Promise<void>
   openEventStream(onEvent: (event: ServerEvent) => void): () => void
 }
 
@@ -111,6 +131,7 @@ export class RestOriClient implements OriClient {
       port: conn.port ?? 0,
       database: conn.database,
       username: conn.username ?? "",
+      autoLimitRows: conn.autoLimitRows,
       tls: conn.tls ?? undefined,
     }))
   }
@@ -145,12 +166,15 @@ export class RestOriClient implements OriClient {
     query: string,
     params?: Record<string, unknown>,
     options?: QueryExecOptions,
+    signal?: AbortSignal,
   ): Promise<QueryExecResult> {
     const request: QueryExecRequest = {
       resourceName,
       jobId,
       query,
-      options: { maxRows: options?.maxRows ?? QUERY_MAX_ROWS },
+    }
+    if (options !== undefined) {
+      request.options = options
     }
     if (params !== undefined) {
       request.params = params
@@ -158,6 +182,7 @@ export class RestOriClient implements OriClient {
     const response = await execQuery({
       body: request,
       client: this.httpClient,
+      signal,
       throwOnError: true,
     }).catch(throwNormalizedError)
     const payload = response.data
@@ -168,11 +193,12 @@ export class RestOriClient implements OriClient {
     }
   }
 
-  async queryGetResult(jobId: string, limit?: number, offset?: number): Promise<QueryResultView> {
+  async queryGetResult(jobId: string, limit?: number, offset?: number, signal?: AbortSignal): Promise<QueryResultView> {
     const response = await getQueryResult({
       client: this.httpClient,
       path: { jobId },
       query: { limit, offset },
+      signal,
       throwOnError: true,
     }).catch(throwNormalizedError)
     const payload = response.data
@@ -188,10 +214,31 @@ export class RestOriClient implements OriClient {
     }
   }
 
-  async queryCancel(jobId: string): Promise<void> {
+  async queryGetStatus(jobId: string, signal?: AbortSignal): Promise<QueryJobStatusView> {
+    const response = await getQueryStatus({
+      client: this.httpClient,
+      path: { jobId },
+      signal,
+      throwOnError: true,
+    }).catch(throwNormalizedError)
+    const payload = response.data
+    const finishedAt = payload.finishedAt === undefined ? undefined : Date.parse(payload.finishedAt)
+    return {
+      jobId: payload.jobId,
+      resourceName: payload.resourceName,
+      status: payload.status,
+      finishedAt: Number.isFinite(finishedAt) ? finishedAt : undefined,
+      durationMs: payload.durationMs,
+      error: payload.error,
+      stored: payload.stored,
+    }
+  }
+
+  async queryCancel(jobId: string, signal?: AbortSignal): Promise<void> {
     await cancelQuery({
       client: this.httpClient,
       path: { jobId },
+      signal,
       throwOnError: true,
     }).catch(throwNormalizedError)
   }
@@ -262,7 +309,7 @@ function throwNormalizedError(err: unknown): never {
     throw err
   }
   if (isErrorPayload(err)) {
-    throw new Error(err.message ?? "request failed")
+    throw new OriRequestError(err.message ?? "request failed", err.code)
   }
   throw new Error(String(err))
 }

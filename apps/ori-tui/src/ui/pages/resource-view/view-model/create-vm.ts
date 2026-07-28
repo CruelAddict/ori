@@ -4,7 +4,6 @@ import { createVM as createExplorerVM } from "@ui/widgets/explorer/view-model/cr
 import { createVM as createResultsVM } from "@ui/widgets/results-panel/view-model/create-vm"
 import { buildBrowseQuery } from "@usecase/browse-query/usecase"
 import type { ResourceIntrospectionUsecase } from "@usecase/introspection/usecase"
-import type { QueryUsecase } from "@usecase/query/usecase"
 import type { ResultSourceUsecase } from "@usecase/result-source/usecase"
 import type { Accessor } from "solid-js"
 import { createEffect, createMemo, createSignal, onCleanup } from "solid-js"
@@ -12,7 +11,6 @@ import { createEffect, createMemo, createSignal, onCleanup } from "solid-js"
 type CreateVMOptions = {
   resourceName: Accessor<string>
   resource: Accessor<Resource | undefined>
-  query: QueryUsecase
   resultSource: ResultSourceUsecase
   introspection: Pick<ResourceIntrospectionUsecase, "subscribe" | "getState" | "load" | "refresh" | "ensureNodes">
 }
@@ -31,28 +29,19 @@ export function createVM(options: CreateVMOptions) {
     editor: false,
     results: false,
   })
-  const [querySnapshot, setQuerySnapshot] = createSignal(options.query.getState())
   const [resultSourceSnapshot, setResultSourceSnapshot] = createSignal(options.resultSource.getState())
 
-  const unsubscribeQuery = options.query.subscribe(() => {
-    setQuerySnapshot(options.query.getState())
-  })
   const unsubscribeResultSource = options.resultSource.subscribe(() => {
     setResultSourceSnapshot(options.resultSource.getState())
   })
 
   onCleanup(() => {
-    unsubscribeQuery()
     unsubscribeResultSource()
   })
 
-  const activeResultJob = createMemo(() => {
-    const jobId = resultSourceSnapshot().current?.jobId
-    if (!jobId) {
-      return undefined
-    }
-    return querySnapshot().jobsById[jobId]
-  })
+  const activeResultJob = createMemo(() => resultSourceSnapshot().current?.job)
+  const pagination = createMemo(() => resultSourceSnapshot().current?.pagination)
+  const isNavigating = createMemo(() => resultSourceSnapshot().navigation !== undefined)
 
   const isPaneVisible = (pane: Pane) => visiblePanes()[pane]
   const activeFocusedPane = createMemo(() => {
@@ -138,9 +127,9 @@ export function createVM(options: CreateVMOptions) {
   })
 
   const editorPane = createEditorVM({
-    query: options.query,
     executeQuery: options.resultSource.executeQuery,
     failQuery: options.resultSource.failQuery,
+    isExecuting: () => activeResultJob()?.status === "running",
     resourceName: options.resourceName,
     getSchemaState: options.introspection.getState,
     subscribeSchemaState: options.introspection.subscribe,
@@ -150,6 +139,8 @@ export function createVM(options: CreateVMOptions) {
 
   const resultsPane = createResultsVM({
     job: activeResultJob,
+    pagination,
+    isNavigating,
     resultSource: options.resultSource,
     ...paneFocusFuncs("results"),
   })
@@ -212,11 +203,7 @@ export function createVM(options: CreateVMOptions) {
   })
 
   const cancelQuery = async () => {
-    const job = activeResultJob()
-    if (job?.status !== "running") {
-      return
-    }
-    await options.query.cancelQuery(job.jobId)
+    await options.resultSource.cancel()
   }
 
   return {

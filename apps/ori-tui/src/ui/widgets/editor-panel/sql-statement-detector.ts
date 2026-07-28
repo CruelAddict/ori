@@ -1,4 +1,5 @@
 import { type DocCharOffset, docCharOffset, type LineIndex, lineIndex } from "@ui/components/buffer/coords"
+import { type SqlToken, scanSql } from "@utils/sql-scanner"
 import { offsetToLine } from "../../../utils/line-offsets"
 
 export type SqlStatement = {
@@ -19,14 +20,9 @@ export type SqlDocumentAnalysis = {
 }
 
 type Span = { start: number; end: number }
-
-type ParseState =
-  | { kind: "normal" }
-  | { kind: "line-comment" }
-  | { kind: "block-comment" }
-  | { kind: "single-quote" }
-  | { kind: "double-quote" }
-  | { kind: "dollar-quote"; tag: string }
+type LeadingToken = { tokenStart: number; token?: string }
+type StatementSpan = { logical: Span; leading?: LeadingToken }
+type NextStatement = { nextStart: number; token: string }
 
 type StatementRoot = "none" | "query" | "insert" | "create" | "other"
 
@@ -88,75 +84,11 @@ function isGoBatchLine(line: string) {
   return /^go(?:\s*--.*)?$/i.test(line)
 }
 
-function startsDollarTag(text: string, index: number): string | undefined {
-  if (text[index] !== "$") {
-    return undefined
+function getLeadingToken(token: SqlToken): LeadingToken {
+  if (token.kind === "word" && token.value) {
+    return { tokenStart: token.start, token: token.value }
   }
-  let j = index + 1
-  while (j < text.length && /[A-Za-z0-9_]/.test(text[j])) {
-    j++
-  }
-  if (text[j] !== "$") {
-    return undefined
-  }
-  return text.slice(index, j + 1)
-}
-
-function findStatementTokenStart(text: string, span: Span): number | undefined {
-  let i = span.start
-
-  while (i < span.end) {
-    while (i < span.end && WHITESPACE_RE.test(text[i]!)) {
-      i++
-    }
-
-    if (text.startsWith("--", i)) {
-      i += 2
-      while (i < span.end && text[i] !== "\n") {
-        i++
-      }
-      continue
-    }
-
-    if (text.startsWith("/*", i)) {
-      const end = text.indexOf("*/", i + 2)
-      if (end === -1 || end + 2 > span.end) {
-        return undefined
-      }
-      i = end + 2
-      continue
-    }
-
-    if (text[i] === ";") {
-      i++
-      continue
-    }
-
-    break
-  }
-
-  return i < span.end ? i : undefined
-}
-
-function getLeadingToken(text: string, span: Span): { tokenStart: number; token: string } | undefined {
-  const tokenStart = findStatementTokenStart(text, span)
-  if (tokenStart === undefined) {
-    return undefined
-  }
-  const tokenMatch = /^[A-Za-z_][A-Za-z0-9_$]*/.exec(text.slice(tokenStart, span.end))
-  if (!tokenMatch) {
-    return undefined
-  }
-  return { tokenStart, token: tokenMatch[0]!.toLowerCase() }
-}
-
-function hasNonWhitespace(text: string, start: number, end: number): boolean {
-  for (let i = start; i < end; i++) {
-    if (!WHITESPACE_RE.test(text[i]!)) {
-      return true
-    }
-  }
-  return false
+  return { tokenStart: token.start }
 }
 
 function buildQueryIndicesByLine(queries: SqlStatement[], lineCount: number) {
@@ -372,279 +304,139 @@ function shouldConsumeNestedQueryStart(state: StatementScanState) {
   return state.continuation?.kind === "query-root" || state.continuation?.kind === "create-as-query"
 }
 
-function readWordToken(text: string, start: number) {
-  const first = text[start]
-  if (!first || !/[A-Za-z_]/.test(first)) {
-    return undefined
+function buildNextStatements(text: string, lineStarts: readonly number[], tokens: readonly SqlToken[]) {
+  const firstTokens: (SqlToken | undefined)[] = []
+  let line = 0
+  for (const token of tokens) {
+    while (line + 1 < lineStarts.length && token.start >= (lineStarts[line + 1] ?? Number.POSITIVE_INFINITY)) {
+      line += 1
+    }
+    if (token.kind !== "newline" && firstTokens[line] === undefined) {
+      firstTokens[line] = token
+    }
   }
 
-  let end = start + 1
-  while (end < text.length && /[A-Za-z0-9_$]/.test(text[end]!)) {
-    end += 1
-  }
-
-  return {
-    token: text.slice(start, end).toLowerCase(),
-    end,
-  }
-}
-
-function findLikelyKeywordAfterNewline(text: string, start: number, end: number) {
-  let i = start
-
-  for (;;) {
-    const lineStart = i
-    while (i < end && text[i] !== "\n" && text[i] !== " " && text[i] !== "\t" && text[i] !== "\r") {
-      i += 1
+  const nextByLine: (NextStatement | undefined)[] = []
+  const goTokenStarts = new Set<number>()
+  let next: NextStatement | undefined
+  for (let index = lineStarts.length - 1; index >= 0; index -= 1) {
+    const start = lineStarts[index] ?? 0
+    const end = index + 1 < lineStarts.length ? (lineStarts[index + 1] ?? text.length) - 1 : text.length
+    let first = start
+    while (first < end && WHITESPACE_RE.test(text[first]!)) {
+      first += 1
+    }
+    const firstToken = firstTokens[index]
+    const token = first === start && firstToken?.start === start ? firstToken : undefined
+    const isGoLine = isStandaloneGoToken(text, firstToken, start, end)
+    if (isGoLine && firstToken) {
+      goTokenStarts.add(firstToken.start)
     }
 
-    let tokenStart = lineStart
-    while (tokenStart < end && (text[tokenStart] === " " || text[tokenStart] === "\t" || text[tokenStart] === "\r")) {
-      tokenStart += 1
-    }
-    if (tokenStart >= end) {
-      return undefined
-    }
-    if (text[tokenStart] === "\n") {
-      i = tokenStart + 1
+    if (first === end || (text[first] === "-" && text[first + 1] === "-") || isGoLine) {
+      nextByLine[index] = next
       continue
     }
 
-    const lineBreak = text.indexOf("\n", tokenStart)
-    const lineEnd = lineBreak === -1 || lineBreak > end ? end : lineBreak
-    const line = text.slice(tokenStart, lineEnd).trim()
-    if (!line) {
-      if (lineBreak === -1 || lineBreak >= end) {
-        return undefined
-      }
-      i = lineBreak + 1
-      continue
-    }
-    if (isGoBatchLine(line) || line.startsWith("--")) {
-      if (lineBreak === -1 || lineBreak >= end) {
-        return undefined
-      }
-      i = lineBreak + 1
-      continue
-    }
-    if (tokenStart !== lineStart) {
-      return undefined
-    }
-
-    const tokenMatch = /^[A-Za-z_][A-Za-z0-9_$]*/.exec(text.slice(tokenStart, end))
-    if (!tokenMatch) {
-      return undefined
-    }
-
-    const token = tokenMatch[0]?.toLowerCase()
-    if (!token || !SQL_START_KEYWORDS.has(token)) {
-      return undefined
-    }
-
-    return {
-      gapStart: start,
-      nextStart: tokenStart,
-      token,
-    }
+    next =
+      token?.kind === "word" && token.depth === 0 && token.value && SQL_START_KEYWORDS.has(token.value)
+        ? { nextStart: start, token: token.value }
+        : undefined
+    nextByLine[index] = next
   }
+
+  return { goTokenStarts, nextByLine }
 }
 
-function findStandaloneGoLineEnd(text: string, start: number, end: number) {
-  if (start > 0 && text[start - 1] !== "\n") {
-    return undefined
+function isStandaloneGoToken(text: string, token: SqlToken | undefined, lineStart: number, lineEnd: number) {
+  if (token?.kind !== "word" || token.depth !== 0 || token.value !== "go") {
+    return false
   }
-
-  let lineEnd = start
-  while (lineEnd < end && text[lineEnd] !== "\n") {
-    lineEnd += 1
+  for (let index = lineStart; index < token.start; index += 1) {
+    if (!WHITESPACE_RE.test(text[index]!)) {
+      return false
+    }
   }
-
-  if (!isGoBatchLine(text.slice(start, lineEnd).trim())) {
-    return undefined
+  let index = token.end
+  while (index < lineEnd && WHITESPACE_RE.test(text[index]!)) {
+    index += 1
   }
-
-  if (lineEnd >= end) {
-    return lineEnd
-  }
-
-  return lineEnd + 1
+  return index === lineEnd || (text[index] === "-" && text[index + 1] === "-")
 }
 
-function collectStatementSpans(text: string): Span[] {
-  const segments: Span[] = []
-  const spanEnd = text.length
+function collectStatementSpans(
+  text: string,
+  lineStarts: readonly number[],
+  tokens: readonly SqlToken[],
+): StatementSpan[] {
+  const segments: StatementSpan[] = []
+  const { goTokenStarts, nextByLine } = buildNextStatements(text, lineStarts, tokens)
   let segmentStart = 0
-  let state: ParseState = { kind: "normal" }
-  let leadingToken = getLeadingToken(text, { start: segmentStart, end: spanEnd })
+  let leadingToken: LeadingToken | undefined
   let statementState = createStatementScanState()
-  let depth = 0
+  let line = 0
 
-  let i = 0
-  while (i < spanEnd) {
-    const ch = text[i]
-    const next = text[i + 1]
-
-    if (state.kind === "normal") {
-      if (depth === 0) {
-        const goLineEnd = findStandaloneGoLineEnd(text, i, spanEnd)
-        if (goLineEnd !== undefined) {
-          const trimmed = trimSpan(text, { start: segmentStart, end: i })
-          if (trimmed) {
-            segments.push(trimmed)
-          }
-          segmentStart = goLineEnd
-          leadingToken = getLeadingToken(text, { start: segmentStart, end: spanEnd })
-          statementState = createStatementScanState()
-          i = goLineEnd
-          continue
-        }
-      }
-
-      if (ch === "-" && next === "-") {
-        state = { kind: "line-comment" }
-        i += 2
-        continue
-      }
-      if (ch === "/" && next === "*") {
-        state = { kind: "block-comment" }
-        i += 2
-        continue
-      }
-      if (ch === "'" || ((ch === "E" || ch === "e") && next === "'")) {
-        state = { kind: "single-quote" }
-        i += ch === "'" ? 1 : 2
-        continue
-      }
-      if (ch === '"') {
-        state = { kind: "double-quote" }
-        i++
-        continue
-      }
-      const tag = startsDollarTag(text, i)
-      if (tag) {
-        state = { kind: "dollar-quote", tag }
-        i += tag.length
-        continue
-      }
-      if (ch === ";") {
-        const trimmed = trimSpan(text, { start: segmentStart, end: i + 1 })
-        if (trimmed) {
-          segments.push(trimmed)
-        }
-        segmentStart = i + 1
-        leadingToken = getLeadingToken(text, { start: segmentStart, end: spanEnd })
-        statementState = createStatementScanState()
-        depth = 0
-        i++
-        continue
-      }
-      if (ch === "(") {
-        depth += 1
-        i++
-        continue
-      }
-      if (ch === ")") {
-        depth = Math.max(0, depth - 1)
-        i++
-        continue
-      }
-      const word = readWordToken(text, i)
-      if (word) {
-        if (depth === 0 || shouldConsumeNestedQueryStart(statementState)) {
-          updateStatementScanState(statementState, word.token)
-        }
-        i = word.end
-        continue
-      }
-      if (ch === "\n" && depth === 0) {
-        const next = findLikelyKeywordAfterNewline(text, i + 1, spanEnd)
-        const canSplitAtNewline =
-          next !== undefined &&
-          hasNonWhitespace(text, segmentStart, next.gapStart) &&
-          leadingToken !== undefined &&
-          leadingToken.tokenStart < next.gapStart &&
-          SQL_START_KEYWORDS.has(leadingToken.token) &&
-          !shouldKeepStatementContinuation(statementState, next.token)
-        if (canSplitAtNewline && next) {
-          const trimmed = trimSpan(text, { start: segmentStart, end: next.gapStart })
-          if (trimmed) {
-            segments.push(trimmed)
-          }
-          segmentStart = next.nextStart
-          leadingToken = getLeadingToken(text, { start: segmentStart, end: spanEnd })
-          statementState = createStatementScanState()
-          i = next.nextStart
-          continue
-        }
-      }
-      i++
-      continue
+  const push = (end: number) => {
+    const logical = trimSpan(text, { start: segmentStart, end })
+    if (logical) {
+      segments.push({ logical, leading: leadingToken })
     }
-
-    if (state.kind === "line-comment") {
-      if (ch === "\n") {
-        state = { kind: "normal" }
-      }
-      i++
-      continue
-    }
-
-    if (state.kind === "block-comment") {
-      if (ch === "*" && next === "/") {
-        state = { kind: "normal" }
-        i += 2
-        continue
-      }
-      i++
-      continue
-    }
-
-    if (state.kind === "single-quote") {
-      if (ch === "'" && next === "'") {
-        i += 2
-        continue
-      }
-      if (ch === "\\") {
-        i += 2
-        continue
-      }
-      if (ch === "'") {
-        state = { kind: "normal" }
-        i++
-        continue
-      }
-      i++
-      continue
-    }
-
-    if (state.kind === "double-quote") {
-      if (ch === '"' && next === '"') {
-        i += 2
-        continue
-      }
-      if (ch === '"') {
-        state = { kind: "normal" }
-        i++
-        continue
-      }
-      i++
-      continue
-    }
-
-    if (text.startsWith(state.tag, i)) {
-      const tag = state.tag
-      state = { kind: "normal" }
-      i += tag.length
-      continue
-    }
-    i++
   }
 
-  const tail = trimSpan(text, { start: segmentStart, end: spanEnd })
-  if (tail) {
-    segments.push(tail)
+  for (const token of tokens) {
+    while (line + 1 < lineStarts.length && token.start >= (lineStarts[line + 1] ?? Number.POSITIVE_INFINITY)) {
+      line += 1
+    }
+    const lineStart = lineStarts[line] ?? 0
+    if (goTokenStarts.has(token.start)) {
+      push(lineStart)
+      const goLineEnd = line + 1 < lineStarts.length ? (lineStarts[line + 1] ?? text.length) : text.length
+      segmentStart = goLineEnd
+      leadingToken = undefined
+      statementState = createStatementScanState()
+      continue
+    }
+
+    if (token.kind === "semicolon") {
+      push(token.end)
+      segmentStart = token.end
+      leadingToken = undefined
+      statementState = createStatementScanState()
+      continue
+    }
+
+    if (token.kind !== "newline" && leadingToken === undefined) {
+      leadingToken = getLeadingToken(token)
+    }
+
+    if (token.kind === "word" && token.value) {
+      if (token.depth === 0 || shouldConsumeNestedQueryStart(statementState)) {
+        updateStatementScanState(statementState, token.value)
+      }
+      continue
+    }
+
+    if (token.kind !== "newline" || token.depth !== 0) {
+      continue
+    }
+
+    const next = nextByLine[line + 1]
+    const canSplitAtNewline =
+      next !== undefined &&
+      leadingToken?.token !== undefined &&
+      leadingToken.tokenStart < token.end &&
+      SQL_START_KEYWORDS.has(leadingToken.token) &&
+      !shouldKeepStatementContinuation(statementState, next.token)
+    if (!canSplitAtNewline || !next) {
+      continue
+    }
+    push(token.end)
+    segmentStart = next.nextStart
+    leadingToken = undefined
+    statementState = createStatementScanState()
   }
 
+  push(text.length)
   return segments
 }
 
@@ -743,10 +535,11 @@ function trimExecutableSpan(text: string, span: Span): Span | undefined {
   return { start, end }
 }
 
-function collectExecutableSpans(text: string) {
-  return collectStatementSpans(text)
-    .map((span) => trimExecutableSpan(text, span))
-    .filter((span): span is Span => !!span)
+function collectExecutableSpans(text: string, spans: readonly StatementSpan[]) {
+  return spans.flatMap(({ logical, leading }) => {
+    const executable = trimExecutableSpan(text, logical)
+    return executable ? [{ executable, leading }] : []
+  })
 }
 
 function toSqlStatement(span: Span, lineStarts: readonly number[]): SqlStatement {
@@ -756,6 +549,25 @@ function toSqlStatement(span: Span, lineStarts: readonly number[]): SqlStatement
     startLine: lineIndex(offsetToLine(span.start, lineStarts)),
     endLine: lineIndex(offsetToLine(span.end - 1, lineStarts)),
   }
+}
+
+function toSqlStatements(spans: readonly Span[], lineStarts: readonly number[]): SqlStatement[] {
+  let startLine = 0
+  let endLine = 0
+  return spans.map((span) => {
+    while (startLine + 1 < lineStarts.length && span.start >= (lineStarts[startLine + 1] ?? Number.POSITIVE_INFINITY)) {
+      startLine += 1
+    }
+    while (endLine + 1 < lineStarts.length && span.end - 1 >= (lineStarts[endLine + 1] ?? Number.POSITIVE_INFINITY)) {
+      endLine += 1
+    }
+    return {
+      start: docCharOffset(span.start),
+      end: docCharOffset(span.end),
+      startLine: lineIndex(startLine),
+      endLine: lineIndex(endLine),
+    }
+  })
 }
 
 function getCursorLine(text: string, lineStarts: readonly number[], offset: number) {
@@ -802,9 +614,14 @@ export function collectSqlQueries(text: string, lineStarts: readonly number[]): 
     return []
   }
 
-  return collectExecutableSpans(text)
-    .filter((span) => getLeadingToken(text, span))
-    .map((span) => toSqlStatement(span, lineStarts))
+  const tokens = scanSql(text).tokens
+  const spans = collectStatementSpans(text, lineStarts, tokens)
+  return toSqlStatements(
+    collectExecutableSpans(text, spans)
+      .filter((span) => span.leading?.token !== undefined)
+      .map((span) => span.executable),
+    lineStarts,
+  )
 }
 
 export function analyzeSqlDocument(text: string, lineStarts: readonly number[]): SqlDocumentAnalysis {
@@ -816,23 +633,13 @@ export function analyzeSqlDocument(text: string, lineStarts: readonly number[]):
 }
 
 export function collectSqlStatements(text: string, lineStarts: readonly number[]): SqlStatement[] {
-  const result: SqlStatement[] = []
-
-  for (const logical of collectStatementSpans(text)) {
-    const leadingToken = getLeadingToken(text, logical)
-    if (!leadingToken || !SQL_START_KEYWORDS.has(leadingToken.token)) {
-      continue
-    }
-
-    result.push({
-      start: docCharOffset(logical.start),
-      end: docCharOffset(logical.end),
-      startLine: lineIndex(offsetToLine(logical.start, lineStarts)),
-      endLine: lineIndex(offsetToLine(logical.end - 1, lineStarts)),
-    })
-  }
-
-  return result
+  const tokens = scanSql(text).tokens
+  return toSqlStatements(
+    collectStatementSpans(text, lineStarts, tokens)
+      .filter((span) => span.leading?.token !== undefined && SQL_START_KEYWORDS.has(span.leading.token))
+      .map((span) => span.logical),
+    lineStarts,
+  )
 }
 
 export function resolveSqlQueryAtOffset(
@@ -864,7 +671,12 @@ export function getSqlStatementAtOffset(
   lineStarts: readonly number[],
   offset: number,
 ): SqlStatement | undefined {
-  const span = findSpanAtOffset(text, collectStatementSpans(text), offset)
+  const tokens = scanSql(text).tokens
+  const span = findSpanAtOffset(
+    text,
+    collectStatementSpans(text, lineStarts, tokens).map((statement) => statement.logical),
+    offset,
+  )
   if (!span) {
     return undefined
   }

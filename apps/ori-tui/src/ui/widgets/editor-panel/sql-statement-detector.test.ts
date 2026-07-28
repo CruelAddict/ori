@@ -341,4 +341,14 @@ UNION
 
     expect(parsed[0]?.startLine).toBe(lineIndex(0))
   })
+
+  test("collects ten thousand semicolon-delimited statements", () => {
+    const sql = Array.from({ length: 10000 }, (_, index) => `SELECT ${index};`).join("\n")
+    const queries = collectSqlQueries(sql, buildLineStarts(sql))
+
+    expect(queries).toHaveLength(10000)
+    const last = queries.at(-1)
+    expect(last).toBeDefined()
+    expect(sql.slice(last?.start, last?.end)).toBe("SELECT 9999;")
+  })
 })

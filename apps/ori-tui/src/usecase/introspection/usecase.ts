@@ -24,6 +24,7 @@ export type ResourceIntrospectionUsecase = {
   refresh(): Promise<GraphSnapshot | null>
   load(): Promise<GraphSnapshot | null>
   ensureNodes(nodeIds: string[]): Promise<void>
+  dispose(): void
 }
 
 export function createResourceIntrospectionUC(deps: ResourceIntrospectionUsecaseDeps): ResourceIntrospectionUsecase {
@@ -197,10 +198,7 @@ export function createResourceIntrospectionUC(deps: ResourceIntrospectionUsecase
       await runHydrateQueue()
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
-      deps.logger.error(
-        { err, resource: deps.resourceName, nodeIds },
-        "resource introspection lazy hydration failed",
-      )
+      deps.logger.error({ err, resource: deps.resourceName, nodeIds }, "resource introspection lazy hydration failed")
       setState((current) => ({
         ...current,
         error: message,
@@ -219,5 +217,10 @@ export function createResourceIntrospectionUC(deps: ResourceIntrospectionUsecase
     refresh,
     load,
     ensureNodes,
+    dispose: () => {
+      version += 1
+      hydrateQueue.clear()
+      listeners.clear()
+    },
   }
 }

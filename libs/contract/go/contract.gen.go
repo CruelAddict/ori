@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/oapi-codegen/runtime"
 	openapi_types "github.com/oapi-codegen/runtime/types"
@@ -47,8 +48,16 @@ const (
 
 // Defines values for QueryExecResponseStatus.
 const (
-	Failed  QueryExecResponseStatus = "failed"
-	Running QueryExecResponseStatus = "running"
+	QueryExecResponseStatusFailed  QueryExecResponseStatus = "failed"
+	QueryExecResponseStatusRunning QueryExecResponseStatus = "running"
+)
+
+// Defines values for QueryJobStatusResponseStatus.
+const (
+	QueryJobStatusResponseStatusCanceled QueryJobStatusResponseStatus = "canceled"
+	QueryJobStatusResponseStatusFailed   QueryJobStatusResponseStatus = "failed"
+	QueryJobStatusResponseStatusRunning  QueryJobStatusResponseStatus = "running"
+	QueryJobStatusResponseStatusSuccess  QueryJobStatusResponseStatus = "success"
 )
 
 // Defines values for ResourceConnectResultResult.
@@ -228,6 +237,7 @@ type PasswordConfigType string
 
 // QueryExecOptions defines model for QueryExecOptions.
 type QueryExecOptions struct {
+	// MaxRows Requested result materialization limit, bounded by the server's ORI_MAX_MATERIALIZED_ROWS policy
 	MaxRows *int `json:"maxRows,omitempty"`
 }
 
@@ -260,6 +270,20 @@ type QueryExecResponse struct {
 
 // QueryExecResponseStatus defines model for QueryExecResponse.Status.
 type QueryExecResponseStatus string
+
+// QueryJobStatusResponse defines model for QueryJobStatusResponse.
+type QueryJobStatusResponse struct {
+	DurationMs   *int64                       `json:"durationMs,omitempty"`
+	Error        *string                      `json:"error,omitempty"`
+	FinishedAt   *time.Time                   `json:"finishedAt,omitempty"`
+	JobId        string                       `json:"jobId"`
+	ResourceName string                       `json:"resourceName"`
+	Status       QueryJobStatusResponseStatus `json:"status"`
+	Stored       bool                         `json:"stored"`
+}
+
+// QueryJobStatusResponseStatus defines model for QueryJobStatusResponse.Status.
+type QueryJobStatusResponseStatus string
 
 // QueryResultColumn defines model for QueryResultColumn.
 type QueryResultColumn struct {
@@ -845,6 +869,9 @@ type ClientInterface interface {
 
 	ExecQuery(ctx context.Context, body ExecQueryJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// GetQueryStatus request
+	GetQueryStatus(ctx context.Context, jobId string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// CancelQuery request
 	CancelQuery(ctx context.Context, jobId string, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -901,6 +928,18 @@ func (c *Client) ExecQueryWithBody(ctx context.Context, contentType string, body
 
 func (c *Client) ExecQuery(ctx context.Context, body ExecQueryJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewExecQueryRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetQueryStatus(ctx context.Context, jobId string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetQueryStatusRequest(c.Server, jobId)
 	if err != nil {
 		return nil, err
 	}
@@ -1073,6 +1112,40 @@ func NewExecQueryRequestWithBody(server string, contentType string, body io.Read
 	}
 
 	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewGetQueryStatusRequest generates requests for GetQueryStatus
+func NewGetQueryStatusRequest(server string, jobId string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "jobId", runtime.ParamLocationPath, jobId)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/queries/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
 
 	return req, nil
 }
@@ -1360,6 +1433,9 @@ type ClientWithResponsesInterface interface {
 
 	ExecQueryWithResponse(ctx context.Context, body ExecQueryJSONRequestBody, reqEditors ...RequestEditorFn) (*ExecQueryResponse, error)
 
+	// GetQueryStatusWithResponse request
+	GetQueryStatusWithResponse(ctx context.Context, jobId string, reqEditors ...RequestEditorFn) (*GetQueryStatusResponse, error)
+
 	// CancelQueryWithResponse request
 	CancelQueryWithResponse(ctx context.Context, jobId string, reqEditors ...RequestEditorFn) (*CancelQueryResponse, error)
 
@@ -1440,6 +1516,30 @@ func (r ExecQueryResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r ExecQueryResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetQueryStatusResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *QueryJobStatusResponse
+	JSON404      *ErrorPayload
+	JSONDefault  *ErrorResponse
+}
+
+// Status returns HTTPResponse.Status
+func (r GetQueryStatusResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetQueryStatusResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -1603,6 +1703,15 @@ func (c *ClientWithResponses) ExecQueryWithResponse(ctx context.Context, body Ex
 	return ParseExecQueryResponse(rsp)
 }
 
+// GetQueryStatusWithResponse request returning *GetQueryStatusResponse
+func (c *ClientWithResponses) GetQueryStatusWithResponse(ctx context.Context, jobId string, reqEditors ...RequestEditorFn) (*GetQueryStatusResponse, error) {
+	rsp, err := c.GetQueryStatus(ctx, jobId, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetQueryStatusResponse(rsp)
+}
+
 // CancelQueryWithResponse request returning *CancelQueryResponse
 func (c *ClientWithResponses) CancelQueryWithResponse(ctx context.Context, jobId string, reqEditors ...RequestEditorFn) (*CancelQueryResponse, error) {
 	rsp, err := c.CancelQuery(ctx, jobId, reqEditors...)
@@ -1728,6 +1837,46 @@ func ParseExecQueryResponse(rsp *http.Response) (*ExecQueryResponse, error) {
 			return nil, err
 		}
 		response.JSON202 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest ErrorPayload
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetQueryStatusResponse parses an HTTP response from a GetQueryStatusWithResponse call
+func ParseGetQueryStatusResponse(rsp *http.Response) (*GetQueryStatusResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetQueryStatusResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest QueryJobStatusResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
 		var dest ErrorPayload

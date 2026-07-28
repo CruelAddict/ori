@@ -24,6 +24,12 @@ This will:
 ori --config <path-to-resources.json>
 ```
 
+`ORI_MAX_MATERIALIZED_ROWS` limits the number of rows the backend materializes for a query and retains across its result cache. It defaults to `100000` and must be a positive integer.
+
+```bash
+ORI_MAX_MATERIALIZED_ROWS=5000 ori --config <path-to-resources.json>
+```
+
 
 ## Uninstall
 

@@ -377,6 +377,10 @@ function cases() {
   ] satisfies BenchCase[]
 }
 
+function detectorCases() {
+  return [1000, 5000, 10000, 20000]
+}
+
 async function measureAsync<T>(fn: () => Promise<T>) {
   for (let i = 0; i < WARM_UP_RUNS; i += 1) {
     await fn()
@@ -411,6 +415,7 @@ async function main() {
   console.log("")
   const editRows: string[][] = []
   const mapRows: string[][] = []
+  const detectorRows: string[][] = []
   for (const benchCase of cases()) {
     const beforeSnapshot = await currentSqlHighlights(benchCase.beforeText)
     const fullRefresh = await measureAsync(() => currentSqlHighlights(benchCase.afterText))
@@ -437,6 +442,19 @@ async function main() {
       `${(currentMap.median / streamingMap.median).toFixed(1)}x`,
     ])
   }
+  for (const count of detectorCases()) {
+    const text = manyStatements(count, -1, "before")
+    const lineStarts = buildLineStarts(text)
+    const detection = measureSync(() => collectSqlQueries(text, lineStarts))
+    detectorRows.push([
+      String(count),
+      String(text.length),
+      String(lineStarts.length),
+      formatMs(detection.median),
+      formatMs(detection.p95),
+      `${(detection.median / count).toFixed(4)} ms`,
+    ])
+  }
   console.log("Statement-local edit highlight")
   printTable(
     ["case", "chars", "lines", "statements", "spans", "full refresh", "incremental", "speedup"],
@@ -445,6 +463,9 @@ async function main() {
   console.log("")
   console.log("Span to line mapping")
   printTable(["case", "spans", "current binary", "streaming", "speedup"], mapRows)
+  console.log("")
+  console.log("Statement detection")
+  printTable(["statements", "chars", "lines", "median", "p95", "per statement"], detectorRows)
 }
 
 await main()

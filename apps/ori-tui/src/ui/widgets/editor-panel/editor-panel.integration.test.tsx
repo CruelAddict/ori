@@ -72,6 +72,7 @@ function createViewModel(text: string): EditorPaneViewModel {
 
   return {
     queryText: () => text,
+    isExecuting: () => false,
     filePath: () => "/tmp/query.sql",
     getSchemaState: () => schemaState,
     subscribeSchemaState: () => () => {},

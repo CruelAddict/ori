@@ -27,6 +27,7 @@ export type AppResourceView = {
     isFocused: Accessor<boolean>
     job: Accessor<QueryJob | undefined>
     pagination: Accessor<ResultSourcePage | undefined>
+    isNavigating: Accessor<boolean>
   }
 }
 

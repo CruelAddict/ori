@@ -225,6 +225,9 @@ export type NodesResponse = {
 };
 
 export type QueryExecOptions = {
+    /**
+     * Requested result materialization limit, bounded by the server's ORI_MAX_MATERIALIZED_ROWS policy
+     */
     maxRows?: number;
 };
 
@@ -242,6 +245,16 @@ export type QueryExecResponse = {
     jobId: string;
     status: 'running' | 'failed';
     message?: string | null;
+};
+
+export type QueryJobStatusResponse = {
+    jobId: string;
+    resourceName: string;
+    status: 'running' | 'success' | 'failed' | 'canceled';
+    finishedAt?: string;
+    durationMs?: number;
+    error?: string;
+    stored: boolean;
 };
 
 export type QueryResultColumn = {
@@ -448,6 +461,37 @@ export type CancelQueryResponses = {
 };
 
 export type CancelQueryResponse = CancelQueryResponses[keyof CancelQueryResponses];
+
+export type GetQueryStatusData = {
+    body?: never;
+    path: {
+        jobId: string;
+    };
+    query?: never;
+    url: '/queries/{jobId}';
+};
+
+export type GetQueryStatusErrors = {
+    /**
+     * Job not found or expired
+     */
+    404: ErrorPayload;
+    /**
+     * Generic error payload
+     */
+    default: ErrorPayload;
+};
+
+export type GetQueryStatusError = GetQueryStatusErrors[keyof GetQueryStatusErrors];
+
+export type GetQueryStatusResponses = {
+    /**
+     * Query job status
+     */
+    200: QueryJobStatusResponse;
+};
+
+export type GetQueryStatusResponse = GetQueryStatusResponses[keyof GetQueryStatusResponses];
 
 export type GetQueryResultData = {
     body?: never;

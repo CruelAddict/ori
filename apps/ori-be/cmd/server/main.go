@@ -9,6 +9,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"syscall"
 
 	"github.com/crueladdict/ori/apps/ori-server/internal/events"
@@ -21,8 +22,9 @@ import (
 )
 
 const (
-	DefaultResourcesPath = "./resources.json"
-	DefaultPort          = 8080
+	DefaultResourcesPath   = "./resources.json"
+	DefaultPort            = 8080
+	maxMaterializedRowsEnv = "ORI_MAX_MATERIALIZED_ROWS"
 )
 
 var (
@@ -65,6 +67,11 @@ func run() int {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+	maxMaterializedRows, limitErr := maxMaterializedRowsFromEnv()
+	if limitErr != nil {
+		slog.ErrorContext(ctx, "invalid query materialization limit", slog.Any("err", limitErr))
+		return 1
+	}
 
 	var parentDone <-chan struct{}
 	if !*standalone {
@@ -92,7 +99,7 @@ func run() int {
 	connectionService.RegisterAdapter("postgres", postgresadapter.NewAdapter)
 
 	nodeService := service.NewNodeService(configService, connectionService)
-	queryService := service.NewQueryService(connectionService, eventHub, ctx)
+	queryService := service.NewQueryService(connectionService, eventHub, ctx, maxMaterializedRows)
 
 	handler := httpapi.NewHandler(configService, connectionService, nodeService, queryService)
 
@@ -140,6 +147,19 @@ func run() int {
 
 	slog.InfoContext(ctx, "server stopped")
 	return 0
+}
+
+func maxMaterializedRowsFromEnv() (int, error) {
+	value, ok := os.LookupEnv(maxMaterializedRowsEnv)
+	if !ok {
+		return service.DefaultMaxMaterializedRows, nil
+	}
+
+	maxRows, err := strconv.Atoi(value)
+	if err != nil || maxRows <= 0 {
+		return 0, fmt.Errorf("%s must be a positive integer, got %q", maxMaterializedRowsEnv, value)
+	}
+	return maxRows, nil
 }
 
 // monitorParentAlive monitors if the parent process is still alive

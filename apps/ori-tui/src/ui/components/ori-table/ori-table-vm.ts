@@ -30,6 +30,7 @@ type TableSelectionState = {
 type CreateOriTableVMOptions = {
   columns: Accessor<OriTableColumn[]>
   rows: Accessor<unknown[][]>
+  rowNumberOffset: Accessor<number>
   isFocused: Accessor<boolean>
   overscan?: number
 }
@@ -52,7 +53,7 @@ export function createOriTableVM(options: CreateOriTableVMOptions) {
   const geometry = createMemo(() =>
     createOriTableGeometry({ columnWidths: columnWidths(), rowCount: options.rows().length }),
   )
-  const rowNumberWidth = createMemo(() => String(options.rows().length).length)
+  const rowNumberWidth = createMemo(() => String(options.rowNumberOffset() + options.rows().length).length)
   const rowNumberCellWidth = createMemo(() => rowNumberWidth() + 2)
   const selectedRange = createMemo<CellSelection | null>(() => {
     const current = selection()

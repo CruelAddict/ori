@@ -1,20 +1,15 @@
 import { type DocCharOffset, docCharOffset } from "@ui/components/buffer/coords"
-import type { QueryUsecase } from "@usecase/query/usecase"
 import { getScriptFilePath, readScript, writeScript } from "@usecase/script/storage"
 import { buildLineStarts } from "@utils/line-offsets"
 import type { Accessor } from "solid-js"
-import { createMemo, createSignal, onCleanup, onMount } from "solid-js"
+import { createMemo, createSignal, onMount } from "solid-js"
 import { resolveSqlQueryAtOffset, type SqlAnalysisSnapshot } from "../sql-analysis"
 import type { SqlEditorSchemaState } from "../sql-editor-protocol"
 import { resolveSqlQueryAtOffset as resolveSqlQueryAtOffsetFallback } from "../sql-statement-detector"
 
-type Query = Pick<
-  QueryUsecase,
-  "subscribe" | "getState" | "setQueryText"
->
-
 export type EditorPaneViewModel = {
   queryText: Accessor<string>
+  isExecuting: Accessor<boolean>
   filePath: Accessor<string>
   getSchemaState: () => SqlEditorSchemaState
   subscribeSchemaState: (listener: () => void) => () => void
@@ -27,9 +22,9 @@ export type EditorPaneViewModel = {
 }
 
 type CreateVMOptions = {
-  query: Query
   executeQuery: (query: string) => string
   failQuery: (query: string, error: string) => string
+  isExecuting: Accessor<boolean>
   resourceName: Accessor<string>
   getSchemaState: () => SqlEditorSchemaState
   subscribeSchemaState: (listener: () => void) => () => void
@@ -39,20 +34,12 @@ type CreateVMOptions = {
 }
 
 export function createVM(options: CreateVMOptions): EditorPaneViewModel {
-  const [queryTextState, setQueryTextState] = createSignal(options.query.getState().queryText)
-
-  const unsubscribe = options.query.subscribe(() => {
-    setQueryTextState(options.query.getState().queryText)
-  })
-
-  onCleanup(() => {
-    unsubscribe()
-  })
+  const [queryTextState, setQueryTextState] = createSignal("")
 
   const queryText = createMemo(() => queryTextState())
 
   const onQueryChange = (text: string) => {
-    options.query.setQueryText(text)
+    setQueryTextState(text)
   }
 
   const executeQuery = async (cursorOffset?: DocCharOffset, snapshot?: SqlAnalysisSnapshot) => {
@@ -94,13 +81,9 @@ export function createVM(options: CreateVMOptions): EditorPaneViewModel {
 
   onMount(() => {
     const name = options.resourceName()
-    const existing = options.query.getState().queryText
-    if (existing) {
-      return
-    }
     const saved = readScript(name)
     if (saved) {
-      options.query.setQueryText(saved)
+      setQueryTextState(saved)
     }
   })
 
@@ -108,6 +91,7 @@ export function createVM(options: CreateVMOptions): EditorPaneViewModel {
 
   return {
     queryText,
+    isExecuting: options.isExecuting,
     filePath,
     getSchemaState: options.getSchemaState,
     subscribeSchemaState: options.subscribeSchemaState,

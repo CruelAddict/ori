@@ -156,6 +156,31 @@ paths:
                 $ref: '#/components/schemas/ErrorPayload'
         default:
           $ref: '#/components/responses/ErrorResponse'
+  /queries/{jobId}:
+    get:
+      summary: Retrieve the current or terminal status of a query job
+      operationId: getQueryStatus
+      parameters:
+        - name: jobId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Query job status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QueryJobStatusResponse'
+        '404':
+          description: Job not found or expired
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorPayload'
+        default:
+          $ref: '#/components/responses/ErrorResponse'
   /queries/{jobId}/result:
     get:
       summary: Retrieve a previously stored query result view
@@ -684,6 +709,7 @@ components:
         maxRows:
           type: integer
           minimum: 1
+          description: Requested result materialization limit, bounded by the server's ORI_MAX_MATERIALIZED_ROWS policy
       additionalProperties: false
     QueryExecRequest:
       type: object
@@ -721,6 +747,31 @@ components:
       required:
         - jobId
         - status
+    QueryJobStatusResponse:
+      type: object
+      properties:
+        jobId:
+          type: string
+        resourceName:
+          type: string
+        status:
+          type: string
+          enum: [running, success, failed, canceled]
+        finishedAt:
+          type: string
+          format: date-time
+        durationMs:
+          type: integer
+          format: int64
+        error:
+          type: string
+        stored:
+          type: boolean
+      required:
+        - jobId
+        - resourceName
+        - status
+        - stored
     QueryResultColumn:
       type: object
       properties:

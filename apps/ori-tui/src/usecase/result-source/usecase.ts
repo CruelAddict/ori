@@ -1,5 +1,6 @@
 import type { QueryResultView } from "@adapters/ori/client"
-import type { QueryUsecase } from "@usecase/query/usecase"
+import type { QueryJob, QueryTask, QueryUsecase } from "@usecase/query/usecase"
+import { type SqlScan, scanSql } from "@utils/sql-scanner"
 import type { Logger } from "pino"
 
 export const DEFAULT_AUTO_LIMIT_ROWS = 500
@@ -13,12 +14,13 @@ export type ResultSourcePage = {
 
 export type ResultSource = {
   query: string
-  jobId: string
+  job: QueryJob
   pagination?: ResultSourcePage
 }
 
 export type ResultSourceState = {
   current?: ResultSource
+  navigation?: { kind: "count" }
 }
 
 export type ResultSourceQueryPlan = {
@@ -28,7 +30,7 @@ export type ResultSourceQueryPlan = {
   pagination?: ResultSourcePage
 }
 
-type Query = Pick<QueryUsecase, "executeQuery" | "failQuery" | "getJob" | "subscribe" | "waitForResult">
+type Query = Pick<QueryUsecase, "execute">
 type Listener = () => void
 type PaginatedResultSource = ResultSource & { pagination: ResultSourcePage }
 
@@ -41,6 +43,10 @@ export type ResultSourceUsecaseDeps = {
 
 export function createResultSourceUC(deps: ResultSourceUsecaseDeps) {
   let state: ResultSourceState = {}
+  let currentTask: QueryTask | undefined
+  let navigationTask: QueryTask | undefined
+  let currentGeneration = 0
+  let pendingLastPageRequest: Promise<string | undefined> | undefined
   const listeners = new Set<Listener>()
 
   const emit = () => {
@@ -54,48 +60,50 @@ export function createResultSourceUC(deps: ResultSourceUsecaseDeps) {
     emit()
   }
 
-  const setCurrent = (current: ResultSource | undefined) => {
-    setState({ current })
+  const cancelNavigation = () => {
+    navigationTask?.cancel()
+    navigationTask = undefined
+    pendingLastPageRequest = undefined
+    if (state.navigation) {
+      setState({ current: state.current })
+    }
   }
 
-  const refreshCurrentPage = () => {
-    const current = state.current
-    if (!current?.pagination) {
-      return current
-    }
-    const job = deps.query.getJob(current.jobId)
-    if (job?.status !== "success" || !job.result) {
-      return current
-    }
-
-    const page = updatePageTotalRows(current.pagination, job.result)
-    if (page === current.pagination) {
-      return current
-    }
-
-    const next = { ...current, pagination: page }
-    setCurrent(next)
-    return next
-  }
-
-  const currentRunningJobId = () => {
-    const current = state.current
-    if (!current) {
-      return undefined
-    }
-    const job = deps.query.getJob(current.jobId)
-    if (job?.status === "running") {
-      return current.jobId
-    }
-    return undefined
+  const startCurrent = (
+    query: string,
+    sourceQuery: string,
+    pagination: ResultSourcePage | undefined,
+    maxRows?: number,
+  ) => {
+    cancelNavigation()
+    currentTask?.cancel()
+    const generation = ++currentGeneration
+    const task = deps.query.execute(query, maxRows === undefined ? undefined : { maxRows }, {
+      onUpdate: (job) => {
+        if (generation !== currentGeneration) {
+          return
+        }
+        const page =
+          job.status === "success" && job.result && pagination
+            ? updatePageTotalRows(pagination, job.result)
+            : pagination
+        setState({
+          current: {
+            query: sourceQuery,
+            job,
+            pagination: page,
+          },
+          navigation: state.navigation,
+        })
+      },
+    })
+    currentTask = task
+    return task.jobId
   }
 
   const currentIdleSource = () => {
-    const current = refreshCurrentPage()
-    if (!current) {
-      return undefined
-    }
-    if (currentRunningJobId()) {
+    const current = state.current
+    if (!current || state.navigation || current.job.status === "running") {
       return undefined
     }
     return current
@@ -116,38 +124,31 @@ export function createResultSourceUC(deps: ResultSourceUsecaseDeps) {
     isTotalRowsExact = current.pagination.isTotalRowsExact,
   ) => {
     const page = createPage(current.pagination.pageSize, offset, totalRows, isTotalRowsExact)
-    const jobId = deps.query.executeQuery(buildPageQuery(current.query, page), { maxRows: page.pageSize })
-    setCurrent({ ...current, jobId, pagination: page })
-    return jobId
+    return startCurrent(buildPageQuery(current.query, page), current.query, page, page.pageSize)
   }
 
   const executeQuery = (query: string) => {
-    const runningJobId = currentRunningJobId()
-    if (runningJobId) {
-      return runningJobId
-    }
-
     const plan = buildResultSourceQuery(query, resolveAutoLimitRows(deps.getAutoLimitRows()))
-    const jobId = deps.query.executeQuery(
-      plan.query,
-      plan.maxRows === undefined ? undefined : { maxRows: plan.maxRows },
-    )
-    setCurrent({
-      query: plan.sourceQuery,
-      jobId,
-      pagination: plan.pagination,
-    })
-    return jobId
+    return startCurrent(plan.query, plan.sourceQuery, plan.pagination, plan.maxRows)
   }
 
   const failQuery = (query: string, error: string) => {
-    const runningJobId = currentRunningJobId()
-    if (runningJobId) {
-      return runningJobId
+    cancelNavigation()
+    currentTask?.cancel()
+    currentTask = undefined
+    currentGeneration += 1
+    const now = Date.now()
+    const job: QueryJob = {
+      jobId: crypto.randomUUID(),
+      resourceName: deps.resourceName,
+      query,
+      status: "failed",
+      startedAt: now,
+      finishedAt: now,
+      error,
     }
-    const jobId = deps.query.failQuery(query, error)
-    setCurrent({ query, jobId })
-    return jobId
+    setState({ current: { query, job } })
+    return job.jobId
   }
 
   const loadFirstPage = () => {
@@ -163,57 +164,71 @@ export function createResultSourceUC(deps: ResultSourceUsecaseDeps) {
     if (!current || current.pagination.offset <= 0) {
       return undefined
     }
+    if (isOutOfRangePage(current.job.result, current.pagination)) {
+      void loadLastPage()
+      return undefined
+    }
     return executePage(current, Math.max(0, current.pagination.offset - current.pagination.pageSize))
   }
 
   const loadNextPage = () => {
-    const current = refreshCurrentPage()
-    if (!current?.pagination) {
+    const current = currentIdlePaginatedSource()
+    if (!current?.job.result) {
       return undefined
     }
-    const job = deps.query.getJob(current.jobId)
-    if (!job?.result) {
-      return undefined
-    }
-
     const offset = current.pagination.offset + current.pagination.pageSize
     if (current.pagination.isTotalRowsExact && offset >= current.pagination.totalRows) {
       return undefined
     }
-    if (!job.result.truncated) {
+    if (!current.job.result.truncated) {
       return undefined
     }
-
-    return executePage(current as PaginatedResultSource, offset)
+    return executePage(current, offset)
   }
 
   const loadLastPage = async () => {
+    if (pendingLastPageRequest) {
+      return await pendingLastPageRequest
+    }
     const current = currentIdlePaginatedSource()
     if (!current) {
       return undefined
     }
-
-    const totalRows = current.pagination.isTotalRowsExact
-      ? current.pagination.totalRows
-      : await loadTotalRows(deps, current)
-    if (totalRows === undefined || state.current !== current) {
-      return undefined
-    }
-
-    const lastOffset =
-      Math.floor(Math.max(0, totalRows - 1) / current.pagination.pageSize) * current.pagination.pageSize
-    return executePage(current, lastOffset, totalRows, true)
+    const task = deps.query.execute(buildCountQuery(current.query), { maxRows: 1 })
+    navigationTask = task
+    setState({ current, navigation: { kind: "count" } })
+    const request = (async () => {
+      const outcome = await task.done
+      if (navigationTask !== task || state.current !== current || outcome.status !== "success" || !outcome.result) {
+        return undefined
+      }
+      const totalRows = parseCountResult(outcome.result)
+      const lastOffset =
+        Math.floor(Math.max(0, totalRows - 1) / current.pagination.pageSize) * current.pagination.pageSize
+      return executePage(current, lastOffset, totalRows, true)
+    })()
+      .catch((err) => {
+        deps.logger.error({ err, resourceName: deps.resourceName }, "failed to count paginated rows")
+        return undefined
+      })
+      .finally(() => {
+        if (pendingLastPageRequest === request) {
+          pendingLastPageRequest = undefined
+        }
+        if (navigationTask === task) {
+          navigationTask = undefined
+          setState({ current: state.current })
+        }
+      })
+    pendingLastPageRequest = request
+    return await request
   }
-
-  deps.query.subscribe(refreshCurrentPage)
 
   return {
     getState: () => state,
     subscribe: (listener: Listener) => {
       listeners.add(listener)
-      return () => {
-        listeners.delete(listener)
-      }
+      return () => listeners.delete(listener)
     },
     executeQuery,
     failQuery,
@@ -221,6 +236,21 @@ export function createResultSourceUC(deps: ResultSourceUsecaseDeps) {
     loadPreviousPage,
     loadNextPage,
     loadLastPage,
+    cancel: () => {
+      if (navigationTask) {
+        cancelNavigation()
+        return
+      }
+      currentTask?.cancel()
+    },
+    dispose: () => {
+      currentGeneration += 1
+      currentTask?.cancel()
+      currentTask = undefined
+      cancelNavigation()
+      listeners.clear()
+      state = {}
+    },
   }
 }
 
@@ -228,14 +258,16 @@ export type ResultSourceUsecase = ReturnType<typeof createResultSourceUC>
 
 export function buildResultSourceQuery(query: string, autoLimitRows: number | null): ResultSourceQueryPlan {
   const sourceQuery = query.trim()
-  if (autoLimitRows === null || !canAutoLimit(sourceQuery)) {
+  const scan = scanSql(sourceQuery)
+  if (autoLimitRows === null || !canAutoLimit(scan)) {
     return { query, sourceQuery }
   }
 
+  const normalizedQuery = removeStatementTerminator(sourceQuery, scan.terminatorIndex)
   const page = createPage(autoLimitRows, 0, autoLimitRows + 1, false)
   return {
-    query: buildPageQuery(sourceQuery, page),
-    sourceQuery: stripTrailingStatementTerminator(sourceQuery),
+    query: buildPageQuery(normalizedQuery, page),
+    sourceQuery: normalizedQuery,
     maxRows: page.pageSize,
     pagination: page,
   }
@@ -252,6 +284,9 @@ function createPage(pageSize: number, offset: number, totalRows: number, isTotal
 
 function updatePageTotalRows(page: ResultSourcePage, result: QueryResultView): ResultSourcePage {
   if (!result.truncated) {
+    if (isOutOfRangePage(result, page)) {
+      return page
+    }
     const totalRows = page.offset + result.rows.length
     if (page.isTotalRowsExact && page.totalRows === totalRows) {
       return page
@@ -270,6 +305,10 @@ function updatePageTotalRows(page: ResultSourcePage, result: QueryResultView): R
   return createPage(page.pageSize, page.offset, estimatedTotalRows, false)
 }
 
+function isOutOfRangePage(result: QueryResultView | undefined, page: ResultSourcePage): boolean {
+  return page.offset > 0 && result?.rows.length === 0 && !result.truncated
+}
+
 function resolveAutoLimitRows(value: number | null | undefined): number | null {
   if (value === null) {
     return null
@@ -281,25 +320,11 @@ function resolveAutoLimitRows(value: number | null | undefined): number | null {
 }
 
 function buildPageQuery(query: string, page: ResultSourcePage): string {
-  return `${stripTrailingStatementTerminator(query)} LIMIT ${page.pageSize + 1} OFFSET ${page.offset}`
+  return `${query}\nLIMIT ${page.pageSize + 1} OFFSET ${page.offset}`
 }
 
 function buildCountQuery(query: string): string {
-  return `SELECT COUNT(*) AS __ori_total_rows FROM (${stripTrailingStatementTerminator(query)}) AS __ori_count`
-}
-
-async function loadTotalRows(
-  deps: Pick<ResultSourceUsecaseDeps, "logger" | "query" | "resourceName">,
-  source: PaginatedResultSource,
-): Promise<number | undefined> {
-  const jobId = deps.query.executeQuery(buildCountQuery(source.query), { maxRows: 1 })
-  return await deps.query
-    .waitForResult(jobId)
-    .then(parseCountResult)
-    .catch((err) => {
-      deps.logger.error({ err, resourceName: deps.resourceName }, "failed to count paginated rows")
-      return undefined
-    })
+  return `SELECT COUNT(*) AS __ori_total_rows FROM (\n${query}\n) AS __ori_count`
 }
 
 function parseCountResult(result: QueryResultView): number {
@@ -311,172 +336,16 @@ function parseCountResult(result: QueryResultView): number {
   throw new Error("count query returned an invalid value")
 }
 
-function canAutoLimit(query: string): boolean {
-  const scan = scanSql(query)
-  if (scan.firstKeyword !== "SELECT" || scan.hasMultipleStatements) {
+function canAutoLimit(scan: SqlScan): boolean {
+  if (scan.firstKeyword !== "select" || scan.hasMultipleStatements) {
     return false
   }
-  return (
-    !scan.topLevelKeywords.has("WHERE") && !scan.topLevelKeywords.has("LIMIT") && !scan.topLevelKeywords.has("OFFSET")
-  )
+  return !["fetch", "for", "into", "limit", "offset"].some((keyword) => scan.topLevelKeywords.has(keyword))
 }
 
-function scanSql(query: string) {
-  let index = 0
-  let depth = 0
-  let firstKeyword: string | undefined
-  let hasMultipleStatements = false
-  const topLevelKeywords = new Set<string>()
-
-  for (; index < query.length; ) {
-    const char = query[index]
-    const next = query[index + 1]
-
-    if (char === "-" && next === "-") {
-      index = skipLineComment(query, index + 2)
-      continue
-    }
-    if (char === "/" && next === "*") {
-      index = skipBlockComment(query, index + 2)
-      continue
-    }
-    if (char === "'") {
-      index = skipQuoted(query, index + 1, "'")
-      continue
-    }
-    if (char === '"') {
-      index = skipQuoted(query, index + 1, '"')
-      continue
-    }
-    if (char === "`") {
-      index = skipQuoted(query, index + 1, "`")
-      continue
-    }
-    if (char === "[") {
-      index = skipBracketQuoted(query, index + 1)
-      continue
-    }
-    if (char === "$") {
-      const nextIndex = skipDollarQuoted(query, index)
-      if (nextIndex !== index) {
-        index = nextIndex
-        continue
-      }
-    }
-    if (char === "(") {
-      depth += 1
-      index += 1
-      continue
-    }
-    if (char === ")") {
-      depth = Math.max(0, depth - 1)
-      index += 1
-      continue
-    }
-    if (depth === 0 && char === ";") {
-      if (hasNonWhitespaceAfter(query, index + 1)) {
-        hasMultipleStatements = true
-      }
-      index += 1
-      continue
-    }
-    if (depth === 0 && isKeywordStart(char)) {
-      const start = index
-      index += 1
-      for (; index < query.length && isKeywordPart(query[index]); index += 1) {}
-      const keyword = query.slice(start, index).toUpperCase()
-      firstKeyword ??= keyword
-      topLevelKeywords.add(keyword)
-      continue
-    }
-
-    index += 1
+function removeStatementTerminator(query: string, terminatorIndex: number | undefined): string {
+  if (terminatorIndex === undefined) {
+    return query
   }
-
-  return { firstKeyword, hasMultipleStatements, topLevelKeywords }
-}
-
-function stripTrailingStatementTerminator(query: string): string {
-  const trimmed = query.trim()
-  if (!trimmed.endsWith(";")) {
-    return trimmed
-  }
-  return trimmed.slice(0, -1).trimEnd()
-}
-
-function skipLineComment(query: string, index: number): number {
-  for (; index < query.length && query[index] !== "\n"; index += 1) {}
-  return index
-}
-
-function skipBlockComment(query: string, index: number): number {
-  for (; index + 1 < query.length; index += 1) {
-    if (query[index] === "*" && query[index + 1] === "/") {
-      return index + 2
-    }
-  }
-  return query.length
-}
-
-function skipQuoted(query: string, index: number, quote: string): number {
-  for (; index < query.length; index += 1) {
-    if (query[index] !== quote) {
-      continue
-    }
-    if (query[index + 1] === quote) {
-      index += 1
-      continue
-    }
-    return index + 1
-  }
-  return query.length
-}
-
-function skipBracketQuoted(query: string, index: number): number {
-  for (; index < query.length; index += 1) {
-    if (query[index] === "]") {
-      return index + 1
-    }
-  }
-  return query.length
-}
-
-function skipDollarQuoted(query: string, index: number): number {
-  const match = query.slice(index).match(/^\$[A-Za-z_][A-Za-z0-9_]*\$|^\$\$/)
-  if (!match) {
-    return index
-  }
-  const tag = match[0]
-  const end = query.indexOf(tag, index + tag.length)
-  if (end === -1) {
-    return query.length
-  }
-  return end + tag.length
-}
-
-function hasNonWhitespaceAfter(query: string, index: number): boolean {
-  for (; index < query.length; index += 1) {
-    if (!isWhitespace(query[index])) {
-      return true
-    }
-  }
-  return false
-}
-
-function isWhitespace(char: string | undefined): boolean {
-  return char === " " || char === "\t" || char === "\n" || char === "\r"
-}
-
-function isKeywordStart(char: string | undefined): boolean {
-  if (char === undefined) {
-    return false
-  }
-  return (char >= "a" && char <= "z") || (char >= "A" && char <= "Z")
-}
-
-function isKeywordPart(char: string | undefined): boolean {
-  if (char === undefined) {
-    return false
-  }
-  return isKeywordStart(char) || (char >= "0" && char <= "9") || char === "_"
+  return `${query.slice(0, terminatorIndex)}${query.slice(terminatorIndex + 1)}`.trimEnd()
 }

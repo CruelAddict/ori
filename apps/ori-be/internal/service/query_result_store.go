@@ -2,114 +2,86 @@ package service
 
 import (
 	"log/slog"
+	"sort"
 	"sync"
 	"time"
 )
 
 const (
-	DefaultMaxRows = 100000
-	HardMaxRows    = 100000
+	maxResultEntries = 128
+	resultMaxAge     = 10 * time.Minute
 )
 
-// ResultStore manages storage and cleanup of query results
+// ResultStore keeps a bounded set of terminal jobs and their result payloads.
 type ResultStore struct {
-	mu                sync.RWMutex
+	mu                sync.Mutex
 	results           map[string]*QueryResult
 	maxCumulativeRows int
-	minAge            time.Duration
+	maxEntries        int
+	maxAge            time.Duration
 }
 
-// NewResultStore creates a new result store
-func NewResultStore() *ResultStore {
+func NewResultStore(maxCumulativeRows int) *ResultStore {
 	return &ResultStore{
 		results:           make(map[string]*QueryResult),
-		maxCumulativeRows: 100000,           // Maximum cumulative rows
-		minAge:            10 * time.Minute, // Minimum age before cleanup
+		maxCumulativeRows: maxCumulativeRows,
+		maxEntries:        maxResultEntries,
+		maxAge:            resultMaxAge,
 	}
 }
 
-// Add stores a query result and runs cleanup if needed
 func (s *ResultStore) Add(result *QueryResult) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	s.results[result.JobID] = result
+	s.cleanup(time.Now())
 
 	slog.Info("Query result stored",
 		slog.String("jobId", result.JobID),
 		slog.String("resource", result.ResourceName),
 		slog.Int("rowCount", result.RowCount),
 		slog.Bool("truncated", result.Truncated))
-
-	// Run cleanup if we exceed limits
-	s.cleanup()
 }
 
-// Get retrieves a query result by job ID
 func (s *ResultStore) Get(jobID string) (*QueryResult, bool) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.cleanup(time.Now())
 
 	result, ok := s.results[jobID]
 	return result, ok
 }
 
-// cleanup removes old results while respecting the minimum age policy
-func (s *ResultStore) cleanup() {
-	// Calculate total rows
+func (s *ResultStore) cleanup(now time.Time) {
 	totalRows := 0
+	sorted := make([]*QueryResult, 0, len(s.results))
 	for _, result := range s.results {
+		if now.Sub(result.FinishedAt) >= s.maxAge {
+			delete(s.results, result.JobID)
+			continue
+		}
 		totalRows += result.RowCount
+		sorted = append(sorted, result)
 	}
 
-	// If we're under the limit, no cleanup needed
-	if totalRows <= s.maxCumulativeRows {
+	if totalRows <= s.maxCumulativeRows && len(sorted) <= s.maxEntries {
 		return
 	}
 
-	// Sort results by completion time (oldest first)
-	type resultWithTime struct {
-		result *QueryResult
-		time   time.Time
-	}
-
-	var sorted []resultWithTime
-	for _, result := range s.results {
-		sorted = append(sorted, resultWithTime{
-			result: result,
-			time:   result.FinishedAt,
-		})
-	}
-
-	// Simple bubble sort - good enough for small number of results
-	for i := 0; i < len(sorted)-1; i++ {
-		for j := 0; j < len(sorted)-i-1; j++ {
-			if sorted[j].time.After(sorted[j+1].time) {
-				sorted[j], sorted[j+1] = sorted[j+1], sorted[j]
-			}
-		}
-	}
-
-	// Remove oldest results until we're under the limit, but don't remove results younger than minAge
-	now := time.Now()
-	for _, item := range sorted {
-		if totalRows <= s.maxCumulativeRows {
+	sort.Slice(sorted, func(i, j int) bool {
+		return sorted[i].FinishedAt.Before(sorted[j].FinishedAt)
+	})
+	for _, result := range sorted {
+		if totalRows <= s.maxCumulativeRows && len(s.results) <= s.maxEntries {
 			break
 		}
-
-		// Don't remove results younger than minAge
-		if now.Sub(item.time) < s.minAge {
-			continue
-		}
-
-		// Remove this result
-		delete(s.results, item.result.JobID)
-		totalRows -= item.result.RowCount
-
+		delete(s.results, result.JobID)
+		totalRows -= result.RowCount
 		slog.Info("Query result evicted from cache",
-			slog.String("jobId", item.result.JobID),
-			slog.String("resource", item.result.ResourceName),
-			slog.Int("rowCount", item.result.RowCount),
-			slog.Duration("age", now.Sub(item.time)))
+			slog.String("jobId", result.JobID),
+			slog.String("resource", result.ResourceName),
+			slog.Int("rowCount", result.RowCount),
+			slog.Duration("age", now.Sub(result.FinishedAt)))
 	}
 }

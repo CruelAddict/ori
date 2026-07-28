@@ -1,33 +1,47 @@
 import type { QueryJob } from "@usecase/query/usecase"
-import type { ResultSourceUsecase } from "@usecase/result-source/usecase"
+import type { ResultSourcePage, ResultSourceUsecase } from "@usecase/result-source/usecase"
 import type { Accessor } from "solid-js"
-import { createMemo, createSignal, onCleanup } from "solid-js"
+import { createMemo } from "solid-js"
 
 type CreateVMOptions = {
   job: Accessor<QueryJob | undefined>
+  pagination: Accessor<ResultSourcePage | undefined>
+  isNavigating: Accessor<boolean>
   isFocused: Accessor<boolean>
   focusSelf: () => void
-  resultSource: Pick<
-    ResultSourceUsecase,
-    "getState" | "subscribe" | "loadFirstPage" | "loadPreviousPage" | "loadNextPage" | "loadLastPage"
-  >
+  resultSource: Pick<ResultSourceUsecase, "loadFirstPage" | "loadPreviousPage" | "loadNextPage" | "loadLastPage">
 }
 
 export function createVM(options: CreateVMOptions) {
-  const [resultSourceState, setResultSourceState] = createSignal(options.resultSource.getState())
-  const unsubscribe = options.resultSource.subscribe(() => {
-    setResultSourceState(options.resultSource.getState())
+  const isIdle = () => !options.isNavigating() && options.job()?.status !== "running"
+  const canMove = createMemo(() => isIdle() && (options.pagination()?.offset ?? 0) > 0)
+  const canMoveNext = createMemo(() => {
+    const job = options.job()
+    const page = options.pagination()
+    if (!isIdle() || job?.status !== "success" || !job.result || !page) {
+      return false
+    }
+    const nextOffset = page.offset + page.pageSize
+    return job.result.truncated && (!page.isTotalRowsExact || nextOffset < page.totalRows)
   })
-
-  onCleanup(() => {
-    unsubscribe()
+  const canMoveLast = createMemo(() => {
+    const page = options.pagination()
+    if (!isIdle() || !page) {
+      return false
+    }
+    return !page.isTotalRowsExact || page.offset + page.pageSize < page.totalRows
   })
 
   return {
     isFocused: options.isFocused,
     focusSelf: options.focusSelf,
     job: options.job,
-    pagination: createMemo(() => resultSourceState().current?.pagination),
+    pagination: options.pagination,
+    isNavigating: options.isNavigating,
+    canLoadFirstPage: canMove,
+    canLoadPreviousPage: canMove,
+    canLoadNextPage: canMoveNext,
+    canLoadLastPage: canMoveLast,
     loadFirstPage: options.resultSource.loadFirstPage,
     loadPreviousPage: options.resultSource.loadPreviousPage,
     loadNextPage: options.resultSource.loadNextPage,

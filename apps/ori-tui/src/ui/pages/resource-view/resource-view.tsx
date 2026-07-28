@@ -48,13 +48,14 @@ export function ResourceViewPage(props: ResourceViewPageProps) {
   })
 
   onCleanup(() => {
+    resultSource.dispose()
     query.dispose()
+    introspection.dispose()
   })
 
   const vm = createResourcePageVM({
     resourceName: () => props.resourceName,
     resource,
-    query,
     resultSource,
     introspection,
   })
@@ -84,6 +85,7 @@ export function ResourceViewPage(props: ResourceViewPageProps) {
       isFocused: vm.resultsPane.isFocused,
       job: vm.resultsPane.job,
       pagination: vm.resultsPane.pagination,
+      isNavigating: vm.resultsPane.isNavigating,
     },
   })
 
@@ -142,7 +144,7 @@ export function ResourceViewPage(props: ResourceViewPageProps) {
       handler: () => {
         void vm.actions.cancelQuery()
       },
-      enabled: () => vm.resultsPane.job()?.status === "running",
+      enabled: () => vm.resultsPane.job()?.status === "running" || vm.resultsPane.isNavigating(),
       preventDefault: true,
       commandPaletteSection: "Query",
     },
