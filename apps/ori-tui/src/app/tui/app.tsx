@@ -34,8 +34,16 @@ type StartAppOptions = {
   logger: Logger
 }
 
-function openResourcePicker(overlays: OverlayManager) {
-  overlays.show({ id: "resource-picker", render: ResourcePickerOverlay })
+function openResourcePicker(overlays: OverlayManager, canCancel = true) {
+  overlays.show({
+    id: "resource-picker",
+    render: (props) => (
+      <ResourcePickerOverlay
+        {...props}
+        canCancel={canCancel}
+      />
+    ),
+  })
 }
 
 function App() {
@@ -58,7 +66,7 @@ function App() {
       return
     }
     setWelcomePickerOpened(true)
-    openResourcePicker(overlays)
+    openResourcePicker(overlays, false)
   })
 
   return (

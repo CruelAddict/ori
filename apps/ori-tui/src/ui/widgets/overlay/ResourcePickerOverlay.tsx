@@ -14,7 +14,11 @@ const getResourcePrefix = (record?: ResourceConnectionState) => {
   return "–"
 }
 
-export function ResourcePickerOverlay(props: OverlayComponentProps) {
+type ResourcePickerOverlayProps = OverlayComponentProps & {
+  canCancel?: boolean
+}
+
+export function ResourcePickerOverlay(props: ResourcePickerOverlayProps) {
   const resourceEntity = useResourceEntity()
   const navigation = useRouteNavigation()
   const [pendingName, setPendingName] = createSignal<string | null>(null)
@@ -91,7 +95,7 @@ export function ResourcePickerOverlay(props: OverlayComponentProps) {
       options={options}
       selectedId={pendingName}
       onSelect={handleSelect}
-      onCancel={handleCancel}
+      onCancel={props.canCancel === false ? undefined : handleCancel}
     />
   )
 }

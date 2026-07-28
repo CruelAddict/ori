@@ -98,12 +98,14 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
           >
             {props.title}
           </text>
-          <text
-            fg={theme().get("text_muted")}
-            paddingTop={1}
-          >
-            esc
-          </text>
+          <Show when={props.onCancel}>
+            <text
+              fg={theme().get("text_muted")}
+              paddingTop={1}
+            >
+              esc
+            </text>
+          </Show>
         </box>
         <Show when={props.description}>
           <box
@@ -190,12 +192,17 @@ function useDialogBindings<T>(
   syncFilterFromInput: () => void,
 ) {
   return createMemo<KeyBinding[]>(() => {
+    const cancel = props.onCancel
+      ? [
+          {
+            pattern: "escape",
+            preventDefault: true,
+            handler: props.onCancel,
+          },
+        ]
+      : []
     const base: KeyBinding[] = [
-      {
-        pattern: "escape",
-        preventDefault: true,
-        handler: () => props.onCancel?.(),
-      },
+      ...cancel,
       {
         pattern: "up",
         preventDefault: true,

@@ -1,5 +1,4 @@
 import { ResourceViewPage } from "@ui/pages/resource-view/resource-view"
-import { WelcomePage } from "@ui/pages/welcome/welcome-page"
 import { type KeyBinding, KeyScope } from "@ui/services/key-scopes"
 import { createMemo, For } from "solid-js"
 import { useRouteNavigation } from "./router"
@@ -18,7 +17,6 @@ export function RouteOutlet() {
     }
     return null
   })
-  const showWelcome = createMemo(() => activeResourceName() === null)
   const previousResourceName = createMemo(() => {
     const currentName = activeResourceName()
     if (!currentName) {
@@ -57,12 +55,6 @@ export function RouteOutlet() {
         flexGrow={1}
         position="relative"
       >
-        <box
-          flexGrow={1}
-          visible={showWelcome()}
-        >
-          <WelcomePage />
-        </box>
         <For each={resources()}>
           {(route) => {
             const isActive = () => activeResourceName() === route.resourceName
