@@ -106,6 +106,12 @@ export function createVM(options: CreateVMOptions) {
     if (!id) return null
     return visibleRows().find((row) => row.id === id) ?? null
   })
+  const selectedNode = createMemo(() => {
+    const id = selectedId()
+    if (!id) return undefined
+    return graph().nodesById[id]
+  })
+  const canBrowseSelected = createMemo(() => options.isFocused() && isBrowsableExplorerNode(selectedNode()))
 
   const expandRow = (id: string) => rowsState.expandNode(id)
   const collapseRow = (id: string) => rowsState.collapseNode(id)
@@ -168,9 +174,7 @@ export function createVM(options: CreateVMOptions) {
   }
 
   const browseSelected = async () => {
-    const id = selectedId()
-    if (!id) return
-    const node = graph().nodesById[id]
+    const node = selectedNode()
     if (!isBrowsableExplorerNode(node)) return
     await options.browseNode(node)
   }
@@ -193,6 +197,7 @@ export function createVM(options: CreateVMOptions) {
     selectedId,
     select: setSelectedId,
     selectedRow,
+    canBrowseSelected,
     expandRow,
     collapseRow,
     toggleRow,

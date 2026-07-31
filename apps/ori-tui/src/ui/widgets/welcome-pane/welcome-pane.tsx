@@ -1,20 +1,19 @@
 import { TextAttributes } from "@opentui/core"
 import { useTheme } from "@ui/providers/theme"
-import { For } from "solid-js"
+import { type Accessor, Show } from "solid-js"
 
 type CommandRowProps = {
   shortcut: string
   label: string
 }
 
-export function WelcomePane() {
+type WelcomePaneProps = {
+  canBrowseSelected: Accessor<boolean>
+}
+
+export function WelcomePane(props: WelcomePaneProps) {
   const { theme } = useTheme()
   const palette = theme
-
-  const commands: CommandRowProps[] = [
-    { shortcut: "q", label: "open query console" },
-    { shortcut: "s", label: "search introspection results" },
-  ]
 
   return (
     <box
@@ -52,7 +51,23 @@ export function WelcomePane() {
         paddingBottom={1}
         width={"60%"}
       >
-        <For each={commands}>{(command) => <CommandRow {...command} />}</For>
+        <CommandRow
+          shortcut="q"
+          label="open query console"
+        />
+        <CommandRow
+          shortcut="s"
+          label="search introspection results"
+        />
+        <Show
+          when={props.canBrowseSelected()}
+          fallback={<box height={2} />}
+        >
+          <CommandRow
+            shortcut="ctrl+x enter"
+            label="view table content"
+          />
+        </Show>
       </box>
       <box height={8} />
     </box>

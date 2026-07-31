@@ -241,7 +241,7 @@ export function ResourceViewPage(props: ResourceViewPageProps) {
                 first={
                   <Show
                     when={vm.isPaneVisible("editor")}
-                    fallback={<WelcomePane />}
+                    fallback={<WelcomePane canBrowseSelected={vm.explorer.canBrowseSelected} />}
                   >
                     <EditorPanel viewModel={vm.editorPane} />
                   </Show>
