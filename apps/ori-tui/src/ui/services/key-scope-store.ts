@@ -1,5 +1,6 @@
 import type { KeyEvent } from "@opentui/core"
-import { LEADER_KEY_PATTERN } from "@ui/services/key-scopes"
+
+export const LEADER_KEY_PATTERN = "ctrl+x"
 
 export type CommandPaletteSection = "System" | "Navigation" | "Resource" | "Query"
 
@@ -23,6 +24,8 @@ export type Command = {
 }
 
 export const SYSTEM_LAYER = Number.POSITIVE_INFINITY
+export const SELECTION_LAYER = 1
+export const OVERLAY_LAYER_START = SELECTION_LAYER + 1
 
 export type RegisterScopeOptions = {
   id: string
@@ -76,11 +79,12 @@ export class KeyScopeStore {
     let primary: ScopeEntry[] = []
     if (normalEntries.length > 0) {
       const maxLayer = Math.max(...normalEntries.map((entry) => entry.layer))
-      primary = normalEntries.filter((entry) => entry.layer === maxLayer)
+      const layers = maxLayer === SELECTION_LAYER ? [SELECTION_LAYER, 0] : [maxLayer]
+      primary = layers.flatMap((layer) => this.sortEntries(normalEntries.filter((entry) => entry.layer === layer)))
     }
 
     return {
-      primary: this.sortEntries(primary),
+      primary,
       system: this.sortEntries(systemEntries),
     }
   }

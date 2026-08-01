@@ -13,6 +13,7 @@ type CreateVMOptions = {
   resource: Accessor<Resource | undefined>
   resultSource: ResultSourceUsecase
   introspection: Pick<ResourceIntrospectionUsecase, "subscribe" | "getState" | "load" | "refresh" | "ensureNodes">
+  onBeforeResultsNavigate?: () => void
 }
 
 export type Pane = "explorer" | "editor" | "results"
@@ -142,6 +143,8 @@ export function createVM(options: CreateVMOptions) {
     pagination,
     isNavigating,
     resultSource: options.resultSource,
+    isVisible: () => isPaneVisible("results"),
+    onBeforeNavigate: options.onBeforeResultsNavigate,
     ...paneFocusFuncs("results"),
   })
 

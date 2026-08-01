@@ -10,8 +10,8 @@ import { ThemeProvider, useTheme } from "@ui/providers/theme"
 import { RouteOutlet } from "@ui/routes/RouteOutlet"
 import { useRouteNavigation } from "@ui/routes/router"
 import { useSelectionController } from "@ui/selection/selection-controller"
-import { SelectionLockProvider } from "@ui/selection/selection-lock"
-import { KeymapProvider, KeyScope, SYSTEM_LAYER } from "@ui/services/key-scopes"
+import { SelectionLockProvider, useActiveSelectionOwner } from "@ui/selection/selection-lock"
+import { KeymapProvider, KeyScope, SELECTION_LAYER, SYSTEM_LAYER } from "@ui/services/key-scopes"
 import { CommandPaletteOverlay } from "@ui/widgets/overlay/CommandPaletteOverlay"
 import { OverlayHost } from "@ui/widgets/overlay/OverlayHost"
 import type { OverlayManager } from "@ui/widgets/overlay/overlay-store"
@@ -75,13 +75,43 @@ function App() {
       flexDirection="column"
       flexGrow={1}
       backgroundColor={palette().get("app_background")}
-      onMouseMove={selection.rootHandlers.onMouseMove}
       onMouseUp={selection.rootHandlers.onMouseUp}
     >
       <GlobalHotkeys />
+      <SelectionHotkeys />
       <RouteOutlet />
       <OverlayHost />
     </box>
+  )
+}
+
+function SelectionHotkeys() {
+  const selection = useActiveSelectionOwner()
+
+  return (
+    <KeyScope
+      layer={SELECTION_LAYER}
+      enabled={() => selection.selection() !== undefined}
+      bindings={() => {
+        const current = selection.selection()
+        if (!current) {
+          return []
+        }
+
+        return [
+          ...current.actions.map((action) => ({
+            pattern: action.key,
+            handler: action.run,
+            preventDefault: true,
+          })),
+          {
+            pattern: "escape",
+            handler: selection.clearRetained,
+            preventDefault: true,
+          },
+        ]
+      }}
+    />
   )
 }
 
@@ -170,17 +200,17 @@ export function startApp(options: StartAppOptions): RendererHandle {
           <EventStreamProvider>
             <ResourceProvider>
               <NavigationProvider>
-                <AppContextProvider>
-                  <OverlayProvider>
-                    <KeymapProvider>
-                      <ThemeProvider defaultTheme={options.theme}>
-                        <SelectionLockProvider>
+                <SelectionLockProvider>
+                  <AppContextProvider>
+                    <OverlayProvider>
+                      <KeymapProvider>
+                        <ThemeProvider defaultTheme={options.theme}>
                           <App />
-                        </SelectionLockProvider>
-                      </ThemeProvider>
-                    </KeymapProvider>
-                  </OverlayProvider>
-                </AppContextProvider>
+                        </ThemeProvider>
+                      </KeymapProvider>
+                    </OverlayProvider>
+                  </AppContextProvider>
+                </SelectionLockProvider>
               </NavigationProvider>
             </ResourceProvider>
           </EventStreamProvider>

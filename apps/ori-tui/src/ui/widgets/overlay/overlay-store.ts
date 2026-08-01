@@ -1,4 +1,5 @@
 import type { Renderable } from "@opentui/core"
+import { OVERLAY_LAYER_START } from "@ui/services/key-scope-store"
 import { type Accessor, type Component, createSignal } from "solid-js"
 
 export type OverlayComponentProps = {
@@ -32,7 +33,7 @@ export type OverlayManager = {
 export function createOverlayManager(): OverlayManager {
   const [overlays, setOverlays] = createSignal<OverlayEntry[]>([])
   let overlayIdCounter = 0
-  let nextLayer = 1
+  let nextLayer = OVERLAY_LAYER_START
   let renderer: Renderer | undefined
   let previousFocus: Renderable | null = null
 

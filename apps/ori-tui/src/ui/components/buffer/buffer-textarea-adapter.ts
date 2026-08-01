@@ -59,6 +59,12 @@ export type BufferTextareaCursorChangeEvent = {
   keepStickyVisualColumn?: boolean
 }
 
+export type BufferTextareaSelection = {
+  start: number
+  end: number
+  text: string
+}
+
 export type BufferTextareaVisualLayout = {
   sourceLines: readonly LineIndex[]
   lineStartColumns: readonly DisplayColumn[]
@@ -309,6 +315,51 @@ export function createBufferTextareaAdapter(options: CreateBufferTextareaAdapter
       }
     },
     readText: () => ref()?.plainText,
+    readSelection: (): BufferTextareaSelection | undefined => {
+      const node = ref()
+      const selection = node?.editorView.getSelection()
+      if (!node || !selection || selection.start === selection.end) {
+        return undefined
+      }
+
+      const start = Math.min(selection.start, selection.end)
+      const end = Math.max(selection.start, selection.end)
+      return { start, end, text: node.editorView.getSelectedText() }
+    },
+    restoreSelection: (start: number, end: number) => {
+      const node = ref()
+      if (!node || start === end) {
+        return
+      }
+
+      // Keep the retained range local: TextareaRenderable.setSelection() clears the renderer gesture.
+      node.editorView.setSelection(start, end, node.selectionBg, node.selectionFg)
+      node.requestRender()
+    },
+    clearLocalSelection: () => {
+      const node = ref()
+      if (!node) {
+        return
+      }
+
+      node.editorView.resetSelection()
+      node.editorView.resetLocalSelection()
+      node.requestRender()
+    },
+    deleteSelection: () => {
+      const node = ref()
+      if (!node?.editorView.hasSelection()) {
+        return false
+      }
+
+      resetMeasurements()
+      node.editorView.deleteSelectedText()
+      node.editorView.resetSelection()
+      node.editorView.resetLocalSelection()
+      node.requestRender()
+      return true
+    },
+    hasSelection: () => ref()?.editorView.hasSelection() ?? false,
     readVisualLayout: (): BufferTextareaVisualLayout | undefined => {
       const node = ref()
       const info = node ? lineInfo.read(node) : undefined

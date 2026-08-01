@@ -137,6 +137,9 @@ export function Buffer(props: BufferProps) {
     onTextareaCursorChanged: (options) => {
       const cursor = updateCursorStateFromTextarea(options)
       autocomplete.closeIfCursorLeftRange(cursor)
+      if (!selectionLock.isGestureActive() && selectionLock.hasRetained() && !textareaAdapter.hasSelection()) {
+        selectionLock.clearRetained()
+      }
     },
     onTextareaSelectionChange: (event) => {
       if (event.result === undefined && event.selection?.isDragging) {
@@ -256,6 +259,7 @@ export function Buffer(props: BufferProps) {
     insertText: string,
     nextCursorOffset = insertText.length,
   ) => {
+    selectionLock.clearRetained()
     const document = doc()
     const from = document.positionAtOffset(start)
     const to = document.positionAtOffset(end)
@@ -309,6 +313,7 @@ export function Buffer(props: BufferProps) {
       return
     }
 
+    selectionLock.clearRetained()
     setDoc(next)
     textareaAdapter.resetMeasurements()
     extensions.emitDocumentChange({
@@ -324,6 +329,7 @@ export function Buffer(props: BufferProps) {
   }
 
   const setText = (nextText: string) => {
+    selectionLock.clearRetained()
     const normalizedText = normalizeDocumentText(nextText)
     const hasTextarea = textareaAdapter.readText() !== undefined
     applyTextChange(normalizedText, false)
@@ -419,7 +425,35 @@ export function Buffer(props: BufferProps) {
       return
     }
     autocomplete.close()
-    if (!selectionLock.tryAcquire({ isSelecting: viewport.isSelecting, onSettle: viewport.finishSelectionDrag })) {
+    if (
+      !selectionLock.tryAcquire({
+        pane: "editor",
+        isSelecting: viewport.isSelecting,
+        onSettle: viewport.finishSelectionDrag,
+        onCancel: () => {
+          viewport.finishSelectionDrag()
+          textareaAdapter.clearLocalSelection()
+        },
+        capture: () => {
+          const range = textareaAdapter.readSelection()
+          if (!range || range.text.length === 0) {
+            return undefined
+          }
+
+          return {
+            text: range.text,
+            clearVisual: textareaAdapter.clearLocalSelection,
+            restoreVisual: () => textareaAdapter.restoreSelection(range.start, range.end),
+            cut: () => {
+              textareaAdapter.deleteSelection()
+            },
+            delete: () => {
+              textareaAdapter.deleteSelection()
+            },
+          }
+        },
+      })
+    ) {
       return
     }
     props.focusSelf()
@@ -462,6 +496,7 @@ export function Buffer(props: BufferProps) {
 
   onCleanup(() => {
     disposed = true
+    selectionLock.clear()
     queueDecorationsRender.cancel()
     viewport.dispose()
     autocomplete.close()

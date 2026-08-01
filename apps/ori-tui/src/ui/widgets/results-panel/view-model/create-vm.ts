@@ -8,7 +8,9 @@ type CreateVMOptions = {
   pagination: Accessor<ResultSourcePage | undefined>
   isNavigating: Accessor<boolean>
   isFocused: Accessor<boolean>
+  isVisible?: Accessor<boolean>
   focusSelf: () => void
+  onBeforeNavigate?: () => void
   resultSource: Pick<ResultSourceUsecase, "loadFirstPage" | "loadPreviousPage" | "loadNextPage" | "loadLastPage">
 }
 
@@ -34,6 +36,7 @@ export function createVM(options: CreateVMOptions) {
 
   return {
     isFocused: options.isFocused,
+    isVisible: options.isVisible,
     focusSelf: options.focusSelf,
     job: options.job,
     pagination: options.pagination,
@@ -42,11 +45,25 @@ export function createVM(options: CreateVMOptions) {
     canLoadPreviousPage: canMove,
     canLoadNextPage: canMoveNext,
     canLoadLastPage: canMoveLast,
-    loadFirstPage: options.resultSource.loadFirstPage,
-    loadPreviousPage: options.resultSource.loadPreviousPage,
-    loadNextPage: options.resultSource.loadNextPage,
-    loadLastPage: options.resultSource.loadLastPage,
+    loadFirstPage: () => {
+      options.onBeforeNavigate?.()
+      return options.resultSource.loadFirstPage()
+    },
+    loadPreviousPage: () => {
+      options.onBeforeNavigate?.()
+      return options.resultSource.loadPreviousPage()
+    },
+    loadNextPage: () => {
+      options.onBeforeNavigate?.()
+      return options.resultSource.loadNextPage()
+    },
+    loadLastPage: () => {
+      options.onBeforeNavigate?.()
+      return options.resultSource.loadLastPage()
+    },
   }
 }
 
-export type ResultsPaneViewModel = ReturnType<typeof createVM>
+export type ResultsPaneViewModel = Omit<ReturnType<typeof createVM>, "isVisible"> & {
+  isVisible?: Accessor<boolean>
+}

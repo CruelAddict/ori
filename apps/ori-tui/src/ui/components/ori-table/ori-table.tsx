@@ -32,6 +32,7 @@ export type OriTableProps = {
   rowNumberOffset?: number
   colors: OriTableColors
   isFocused: Accessor<boolean>
+  isVisible?: Accessor<boolean>
   focusSelf: () => void
 }
 
@@ -49,8 +50,10 @@ export function OriTable(props: OriTableProps) {
     rows: () => props.rows,
     rowNumberOffset: () => props.rowNumberOffset ?? 0,
     isFocused: props.isFocused,
+    onSelectionInvalidated: selectionLock.clearRetained,
   })
   let scrollbox: ScrollBoxRenderable | undefined
+  let selectionMoved = false
 
   const isDraggingSelection = () => Boolean(scrollbox?.ctx.getSelection()?.isDragging)
 
@@ -89,12 +92,6 @@ export function OriTable(props: OriTableProps) {
 
   const updateMouseDragSelection = (selection: OpenTuiSelection | null) => {
     if (!selection?.isActive) {
-      if (!table.hasSelection()) return
-      // Inactive may happen mid-drag over scrollbars; defer until mouseup/copy handling finishes.
-      queueMicrotask(() => {
-        if (isDraggingSelection()) return
-        selectionLock.clear()
-      })
       return
     }
     if (selection.isStart) {
@@ -121,30 +118,73 @@ export function OriTable(props: OriTableProps) {
     ),
   )
 
+  createEffect(
+    on(
+      () => props.isVisible?.(),
+      (visible) => {
+        if (visible !== false) {
+          return
+        }
+        selectionLock.clear()
+      },
+      { defer: true },
+    ),
+  )
+
   const handleCellMouseDown = (cell: Parameters<typeof table.beginSelection>[0], event: MouseEvent) => {
     if (!selectionLock.canAcquire()) {
       return
     }
     if (
       !selectionLock.tryAcquire({
+        pane: "results",
         isSelecting: isDraggingSelection,
         onSettle: () => scrollbox?.stopAutoScroll(),
-        onClear: () => {
+        onCancel: () => {
           scrollbox?.stopAutoScroll()
           table.clearSelection()
         },
-        readSelected: table.readSelected,
+        capture: () => {
+          if (!selectionMoved) {
+            return undefined
+          }
+
+          const focus = scrollbox?.ctx.getSelection()?.focus
+          const end = focus ? table.cellAtMouseDragPoint(focus) : null
+          if (end) {
+            table.extendSelection(end)
+          }
+
+          const range = table.getSelectionRange()
+          const text = table.readSelected()
+          if (!range || !text || text.length === 0) {
+            return undefined
+          }
+
+          return {
+            text,
+            clearVisual: table.clearSelection,
+            restoreVisual: () => table.restoreSelection(range),
+          }
+        },
       })
     ) {
       return
     }
     props.focusSelf()
     event.preventDefault()
+    selectionMoved = false
     table.beginSelection(cell)
   }
 
   const handleCellMouseSelectionUpdate = (selection: OpenTuiSelection | null) => {
     updateMouseDragSelection(selection)
+    if (selection?.isStart) {
+      selectionMoved = false
+    }
+    if (selection?.isActive && !selection.isStart) {
+      selectionMoved = true
+    }
     selectionLock.handleSelectionChange()
   }
 
@@ -154,6 +194,7 @@ export function OriTable(props: OriTableProps) {
       return
     }
     if (!table.hasSelection() || !isDraggingSelection()) return
+    table.extendSelection(table.cellAtMouseDragPoint(event))
     scrollbox?.updateAutoScroll(event.x, event.y)
   }
 

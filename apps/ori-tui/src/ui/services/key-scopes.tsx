@@ -1,6 +1,6 @@
 import type { KeyEvent } from "@opentui/core"
 import { useKeyboard } from "@opentui/solid"
-import { type Command, type KeyBinding, KeyScopeStore } from "@ui/services/key-scope-store"
+import { type Command, type KeyBinding, KeyScopeStore, LEADER_KEY_PATTERN } from "@ui/services/key-scope-store"
 import { Keybind, type KeyboardEventLike, type ParsedKeybind, useKeybind } from "@ui/services/keybind"
 import type { Accessor, JSX, ParentComponent } from "solid-js"
 import { createContext, createMemo, createUniqueId, onCleanup, useContext } from "solid-js"
@@ -22,8 +22,6 @@ const ParentScopeContext = createContext<ParentScopeContextValue>({ id: null, la
 export type KeymapProviderProps = {
   children: JSX.Element
 }
-
-export const LEADER_KEY_PATTERN = "ctrl+x"
 
 export const KeymapProvider: ParentComponent<KeymapProviderProps> = (props) => {
   const store = new KeyScopeStore()
@@ -162,7 +160,7 @@ function isBindingsAccessor(value: KeyBinding[] | Accessor<KeyBinding[]>): value
 }
 
 export type { Command, KeyBinding } from "@ui/services/key-scope-store"
-export { SYSTEM_LAYER } from "@ui/services/key-scope-store"
+export { LEADER_KEY_PATTERN, SELECTION_LAYER, SYSTEM_LAYER } from "@ui/services/key-scope-store"
 
 export function useActiveCommands(): Accessor<Command[]> {
   const runtime = useKeymapRuntime()

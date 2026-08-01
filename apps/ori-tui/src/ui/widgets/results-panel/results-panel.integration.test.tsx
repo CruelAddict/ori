@@ -3,9 +3,11 @@ import type { QueryResultView } from "@adapters/ori/client"
 import { ScrollBoxRenderable } from "@opentui/core"
 import { Buffer } from "@ui/components/buffer/buffer"
 import { getBufferTextarea } from "@ui/components/buffer/buffer.test-tools"
+import { TableCellRenderable } from "@ui/components/ori-table/table-cell"
+import { type AppSelection, useActiveSelectionOwner } from "@ui/selection/selection-lock"
 import type { QueryJob } from "@usecase/query/usecase"
 import type { ResultSourcePage } from "@usecase/result-source/usecase"
-import { createComponent } from "solid-js"
+import { createComponent, createEffect } from "solid-js"
 import { type MountedTuiApp, mountInTui } from "../../../test/opentui-harness"
 import { findRequiredNode, readFrameLines } from "../../../test/opentui-test-tools"
 import { SelectionControllerTestRoot } from "../../../test/selection-controller-test-root"
@@ -84,11 +86,23 @@ function createViewModel(job: QueryJob, pagination?: ResultSourcePage): ResultsP
   }
 }
 
+function SelectionState(props: { onChange: (selection: AppSelection | undefined) => void }) {
+  const selection = useActiveSelectionOwner()
+  createEffect(() => props.onChange(selection.selection()))
+  return null
+}
+
 function getResultsScrollbox(app: MountedTuiApp) {
   return findRequiredNode(
     app,
     (node): node is ScrollBoxRenderable => node instanceof ScrollBoxRenderable,
     "Results scrollbox was not rendered",
+  )
+}
+
+function hasVisibleTableSelection(app: MountedTuiApp) {
+  return Boolean(
+    app.find((node): node is TableCellRenderable => node instanceof TableCellRenderable && node.hasSelection()),
   )
 }
 
@@ -178,6 +192,41 @@ async function captureDragAutoscrollFrames(
 }
 
 describe("results panel integration", () => {
+  test("retains the logical cell range after native selection settles", async () => {
+    let retained: AppSelection | undefined
+    const app = await mountInTui(
+      () => (
+        <SelectionControllerTestRoot>
+          <SelectionState
+            onChange={(selection) => {
+              retained = selection
+            }}
+          />
+          <ResultsPanel viewModel={createViewModel(createResultsJob(2))} />
+        </SelectionControllerTestRoot>
+      ),
+      { width: 48, height: 8 },
+    )
+
+    try {
+      const scrollbox = getResultsScrollbox(app)
+      const x = scrollbox.viewport.x + 2
+      const y = scrollbox.viewport.y + 1
+      await app.setup.mockMouse.pressDown(x, y)
+      await app.setup.mockMouse.moveTo(x + 8, y + 1)
+      await app.waitFor(() => Boolean(app.setup.renderer.getSelection()?.isDragging))
+      expect(app.setup.renderer.getSelection()?.getSelectedText()).not.toBe("")
+      await app.waitFor(() => hasVisibleTableSelection(app))
+      await app.setup.mockMouse.release(x + 8, y + 1)
+
+      await app.waitFor(() => !app.setup.renderer.getSelection()?.isActive)
+      expect(retained?.actions.map((action) => action.key)).toEqual(["y"])
+      expect(hasVisibleTableSelection(app)).toBe(true)
+    } finally {
+      app.destroy()
+    }
+  })
+
   test("numbers rows using the page offset", async () => {
     const app = await mountInTui(
       () => (

@@ -1,6 +1,17 @@
+import type { AppSelection } from "@ui/selection/selection-lock"
+import { useActiveSelectionOwner } from "@ui/selection/selection-lock"
 import type { QueryJob } from "@usecase/query/usecase"
 import type { ResultSourcePage } from "@usecase/result-source/usecase"
-import { type Accessor, createContext, createMemo, createSignal, type JSX, useContext } from "solid-js"
+import {
+  type Accessor,
+  createContext,
+  createEffect,
+  createMemo,
+  createSignal,
+  type JSX,
+  on,
+  useContext,
+} from "solid-js"
 
 export type AppPane = "explorer" | "editor" | "results"
 
@@ -42,14 +53,27 @@ export type AppResourceView = {
 export type AppContextValue = {
   resourceViews: Accessor<Record<string, AppResourceView>>
   activeResourceView: Accessor<AppResourceView | undefined>
+  selection: Accessor<AppSelection | undefined>
   registerResourceView(state: AppResourceView): () => void
 }
 
 const AppContext = createContext<AppContextValue>()
 
 export function AppContextProvider(props: { children: JSX.Element }) {
+  const selection = useActiveSelectionOwner()
   const [resourceViews, setResourceViews] = createSignal<Record<string, AppResourceView>>({})
   const activeResourceView = createMemo(() => Object.values(resourceViews()).find((state) => state.isActive()))
+
+  createEffect(
+    on(
+      () => activeResourceView()?.resourceName(),
+      (name, previous) => {
+        if (previous !== undefined && name !== previous) {
+          selection.clearRetained()
+        }
+      },
+    ),
+  )
 
   const registerResourceView = (state: AppResourceView) => {
     const name = state.resourceName()
@@ -73,6 +97,7 @@ export function AppContextProvider(props: { children: JSX.Element }) {
   const value: AppContextValue = {
     resourceViews,
     activeResourceView,
+    selection: selection.selection,
     registerResourceView,
   }
 

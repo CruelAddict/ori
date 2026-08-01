@@ -21,7 +21,7 @@ type SelectionControllerOptions = {
 }
 
 export function useSelectionController(options: SelectionControllerOptions = {}) {
-  const activeSelection = useActiveSelectionOwner()
+  const selection = useActiveSelectionOwner()
   const renderer = useRenderer()
   const logger = useLogger()
   let settling = false
@@ -44,55 +44,56 @@ export function useSelectionController(options: SelectionControllerOptions = {})
     return copyTextToClipboard(value.text, { renderer, logger })
   }
 
-  const clearActiveSelection = () => {
-    const active = activeSelection.active()
-    active?.callbacks.onClear?.()
-    active?.release()
-  }
-
   const settleSelection = async (source: SelectionSource, text?: string) => {
     if (settling) {
       return
     }
 
     settling = true
-    const active = activeSelection.active()
+    const active = selection.active()
     try {
-      active?.callbacks.onSettle?.()
       const snapshot = { source, text: readSelectedText(text) }
-      const selectedText = active?.callbacks.readSelected?.(snapshot) ?? snapshot.text
-      if (selectedText && selectedText.length > 0) {
-        await Promise.resolve(handleSelected({ source, text: selectedText })).catch((err) => {
-          logger.error({ err }, "selection: failed to handle selected text")
-        })
+      if (source === "console-copy") {
+        if (snapshot.text && snapshot.text.length > 0) {
+          await Promise.resolve(handleSelected({ source, text: snapshot.text })).catch((err) => {
+            logger.error({ err }, "selection: failed to copy console selection")
+          })
+        }
+        return
       }
+      if (!active) {
+        return
+      }
+
+      active.callbacks.onSettle?.()
+      const captured = active.callbacks.capture?.(snapshot)
+      if (!captured || captured.text.length === 0) {
+        active.callbacks.onCancel?.()
+        return
+      }
+
+      selection.commit(active, captured)
     } finally {
       clearNativeSelection()
-      active?.callbacks.onClear?.()
+      selection.restore(active)
       active?.release()
       settling = false
     }
   }
 
-  const handleMouseMove = () => {
-    if (!renderer.getSelection?.()?.isDragging) {
-      return
-    }
-
-    void settleSelection("root-mouse-move")
-  }
-
   const handleMouseUp = () => {
-    if (renderer.getSelection?.()) {
+    if (renderer.getSelection?.()?.isActive) {
       return
     }
 
-    clearActiveSelection()
+    void settleSelection("root-mouse-up")
   }
 
   onMount(() => {
     const onSelection = () => {
-      void settleSelection("renderer-selection")
+      queueMicrotask(() => {
+        void settleSelection("renderer-selection")
+      })
     }
     renderer.on(CliRenderEvents.SELECTION, onSelection)
 
@@ -115,7 +116,6 @@ export function useSelectionController(options: SelectionControllerOptions = {})
 
   return {
     rootHandlers: {
-      onMouseMove: handleMouseMove,
       onMouseUp: handleMouseUp,
     },
   }

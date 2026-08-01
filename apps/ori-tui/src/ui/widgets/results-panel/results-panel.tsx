@@ -119,6 +119,7 @@ export function ResultsPanel(props: ResultsPanelProps) {
               selectionBackground: theme().get("results_selection_background"),
             }}
             isFocused={pane.isFocused}
+            isVisible={pane.isVisible}
             focusSelf={pane.focusSelf}
           />
         </Show>
