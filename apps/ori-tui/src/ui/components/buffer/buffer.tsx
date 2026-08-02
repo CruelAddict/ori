@@ -1,8 +1,8 @@
 import type { BoxRenderable, KeyEvent, MouseEvent, TextareaRenderable } from "@opentui/core"
 import { OriScrollbox } from "@ui/components/ori-scrollbox"
 import { SelectPopup } from "@ui/components/select-popup"
+import { useSelectionOwner } from "@ui/providers/selection"
 import { useTheme } from "@ui/providers/theme"
-import { useSelectionLock } from "@ui/selection/selection-lock"
 import { type KeyBinding, KeyScope } from "@ui/services/key-scopes"
 import { createDeferredCallback } from "@utils/deferred-callback"
 import { type Accessor, createEffect, createSignal, on, onCleanup, onMount } from "solid-js"
@@ -86,7 +86,7 @@ function shouldTriggerAutocompleteOnKeyDown(event: KeyEvent) {
 
 export function Buffer(props: BufferProps) {
   const { theme } = useTheme()
-  const selectionLock = useSelectionLock()
+  const selectionOwner = useSelectionOwner()
   const tabWidth = Math.max(1, props.tabWidth ?? DEFAULT_TAB_WIDTH)
   const tabText = " ".repeat(tabWidth)
   const [doc, setDoc] = createSignal(Document.create(props.initialText))
@@ -137,16 +137,12 @@ export function Buffer(props: BufferProps) {
     onTextareaCursorChanged: (options) => {
       const cursor = updateCursorStateFromTextarea(options)
       autocomplete.closeIfCursorLeftRange(cursor)
-      if (!selectionLock.isGestureActive() && selectionLock.hasRetained() && !textareaAdapter.hasSelection()) {
-        selectionLock.clearRetained()
-      }
     },
     onTextareaSelectionChange: (event) => {
       if (event.result === undefined && event.selection?.isDragging) {
         autocomplete.close()
       }
       viewport.handleTextareaSelectionChange(event)
-      selectionLock.handleSelectionChange()
     },
     onTextareaViewportChange: (event) => {
       viewport.handleTextareaViewportChange(event)
@@ -259,7 +255,7 @@ export function Buffer(props: BufferProps) {
     insertText: string,
     nextCursorOffset = insertText.length,
   ) => {
-    selectionLock.clearRetained()
+    selectionOwner.clear()
     const document = doc()
     const from = document.positionAtOffset(start)
     const to = document.positionAtOffset(end)
@@ -313,7 +309,7 @@ export function Buffer(props: BufferProps) {
       return
     }
 
-    selectionLock.clearRetained()
+    selectionOwner.clear()
     setDoc(next)
     textareaAdapter.resetMeasurements()
     extensions.emitDocumentChange({
@@ -329,7 +325,7 @@ export function Buffer(props: BufferProps) {
   }
 
   const setText = (nextText: string) => {
-    selectionLock.clearRetained()
+    selectionOwner.clear()
     const normalizedText = normalizeDocumentText(nextText)
     const hasTextarea = textareaAdapter.readText() !== undefined
     applyTextChange(normalizedText, false)
@@ -421,29 +417,27 @@ export function Buffer(props: BufferProps) {
 
   const handleTextareaMouseDown = (event: MouseEvent) => {
     event.stopPropagation()
-    if (!selectionLock.canAcquire()) {
+    if (!selectionOwner.canAcquire()) {
       return
     }
     autocomplete.close()
     if (
-      !selectionLock.tryAcquire({
+      !selectionOwner.tryAcquire({
         pane: "editor",
-        isSelecting: viewport.isSelecting,
-        onSettle: viewport.finishSelectionDrag,
-        onCancel: () => {
+        onDragEnd: viewport.finishSelectionDrag,
+        clearSelection: () => {
           viewport.finishSelectionDrag()
           textareaAdapter.clearLocalSelection()
         },
-        capture: () => {
-          const range = textareaAdapter.readSelection()
-          if (!range || range.text.length === 0) {
+        readSelection: () => {
+          cursorState()
+          const text = textareaAdapter.readSelectedText()
+          if (!text) {
             return undefined
           }
 
           return {
-            text: range.text,
-            clearVisual: textareaAdapter.clearLocalSelection,
-            restoreVisual: () => textareaAdapter.restoreSelection(range.start, range.end),
+            text,
             cut: () => {
               textareaAdapter.deleteSelection()
             },
@@ -496,7 +490,7 @@ export function Buffer(props: BufferProps) {
 
   onCleanup(() => {
     disposed = true
-    selectionLock.clear()
+    selectionOwner.clear()
     queueDecorationsRender.cancel()
     viewport.dispose()
     autocomplete.close()
@@ -624,7 +618,7 @@ export function Buffer(props: BufferProps) {
                 focusedBackgroundColor="transparent"
                 cursorColor={theme().get("editor_cursor")}
                 wrapMode="char"
-                selectable={selectionLock.canAcquire()}
+                selectable={selectionOwner.canAcquire()}
                 keyBindings={[]}
                 onKeyDown={handleTextareaKeyDown}
                 onMouseDown={handleTextareaMouseDown}

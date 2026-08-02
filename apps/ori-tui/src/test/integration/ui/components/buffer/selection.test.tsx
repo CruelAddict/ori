@@ -1,26 +1,26 @@
 import { describe, expect, test } from "bun:test"
-import { type AppSelection, useActiveSelectionOwner } from "@ui/selection/selection-lock"
+import { getBufferTextarea, moveCursor } from "@test/buffer"
+import { mountInTui } from "@test/opentui-harness"
+import { SelectionTestRoot } from "@test/selection-test-root"
+import { Buffer } from "@ui/components/buffer/buffer"
+import { type SelectionAction, useSelection } from "@ui/providers/selection"
 import { createEffect } from "solid-js"
-import { mountInTui } from "../../../test/opentui-harness"
-import { SelectionControllerTestRoot } from "../../../test/selection-controller-test-root"
-import { Buffer } from "./buffer"
-import { getBufferTextarea, moveCursor } from "./buffer.test-tools"
 
-function SelectionState(props: { onChange: (selection: AppSelection | undefined) => void }) {
-  const selection = useActiveSelectionOwner()
-  createEffect(() => props.onChange(selection.selection()))
+function SelectionState(props: { onChange: (actions: readonly SelectionAction[]) => void }) {
+  const selection = useSelection()
+  createEffect(() => props.onChange(selection.actions()))
   return null
 }
 
 describe("buffer root selection finalizer", () => {
-  test("retains the editor-local range with editor shortcuts after native selection settles", async () => {
-    let retained: AppSelection | undefined
+  test("keeps the native editor range until an editor action clears it", async () => {
+    let actions: readonly SelectionAction[] = []
     const app = await mountInTui(
       () => (
-        <SelectionControllerTestRoot>
+        <SelectionTestRoot>
           <SelectionState
-            onChange={(selection) => {
-              retained = selection
+            onChange={(value) => {
+              actions = value
             }}
           />
           <box width={40}>
@@ -31,7 +31,7 @@ describe("buffer root selection finalizer", () => {
               focusSelf={() => {}}
             />
           </box>
-        </SelectionControllerTestRoot>
+        </SelectionTestRoot>
       ),
       { width: 40, height: 6 },
     )
@@ -42,9 +42,13 @@ describe("buffer root selection finalizer", () => {
       await app.setup.mockMouse.moveTo(textarea.x + 4, textarea.y)
       await app.setup.mockMouse.release(textarea.x + 4, textarea.y)
 
-      await app.waitFor(() => textarea.hasSelection() && !app.setup.renderer.getSelection()?.isActive)
+      await app.waitFor(() => textarea.hasSelection() && !app.setup.renderer.getSelection()?.isDragging)
       expect(textarea.getSelectedText().length).toBeGreaterThan(0)
-      expect(retained?.actions.map((action) => action.key)).toEqual(["ctrl+y", "ctrl+k", "backspace"])
+      expect(app.setup.renderer.getSelection()?.isActive).toBe(true)
+      expect(actions.map((action) => action.key)).toEqual(["ctrl+y", "ctrl+k", "backspace"])
+
+      actions.find((action) => action.key === "backspace")?.run()
+      await app.waitFor(() => !textarea.hasSelection() && !app.setup.renderer.getSelection()?.isActive)
     } finally {
       app.destroy()
     }
@@ -54,7 +58,7 @@ describe("buffer root selection finalizer", () => {
     const text = `${Array.from({ length: 200 }, (_, i) => `line-${i}`).join("\n")}\n`
     const app = await mountInTui(
       () => (
-        <SelectionControllerTestRoot>
+        <SelectionTestRoot>
           <box width={40}>
             <Buffer
               initialText={text}
@@ -66,7 +70,7 @@ describe("buffer root selection finalizer", () => {
           <box width={12}>
             <text>outside</text>
           </box>
-        </SelectionControllerTestRoot>
+        </SelectionTestRoot>
       ),
       { width: 52, height: 8 },
     )

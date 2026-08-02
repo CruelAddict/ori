@@ -1,10 +1,10 @@
 import { describe, expect, test } from "bun:test"
+import { type MountedTuiApp, mountInTui } from "@test/opentui-harness"
 import { AppContextProvider, type AppResourceView, useAppContext } from "@ui/providers/app-context"
+import { Statusline } from "@ui/widgets/statusline/statusline"
 import type { QueryJob } from "@usecase/query/usecase"
 import type { ResultSourcePage } from "@usecase/result-source/usecase"
 import { createComponent, onCleanup } from "solid-js"
-import { type MountedTuiApp, mountInTui } from "../../../../test/opentui-harness"
-import { Statusline } from "../statusline"
 
 const PREVIOUS_PAGE = ""
 const NEXT_PAGE = ""

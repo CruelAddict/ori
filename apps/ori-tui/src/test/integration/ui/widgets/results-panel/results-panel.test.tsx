@@ -1,18 +1,18 @@
 import { describe, expect, test } from "bun:test"
 import type { QueryResultView } from "@adapters/ori/client"
 import { ScrollBoxRenderable } from "@opentui/core"
+import { getBufferTextarea } from "@test/buffer"
+import { type MountedTuiApp, mountInTui } from "@test/opentui-harness"
+import { findRequiredNode, readFrameLines } from "@test/opentui-test-tools"
+import { SelectionTestRoot } from "@test/selection-test-root"
 import { Buffer } from "@ui/components/buffer/buffer"
-import { getBufferTextarea } from "@ui/components/buffer/buffer.test-tools"
 import { TableCellRenderable } from "@ui/components/ori-table/table-cell"
-import { type AppSelection, useActiveSelectionOwner } from "@ui/selection/selection-lock"
+import { type SelectionAction, useSelection } from "@ui/providers/selection"
+import { ResultsPanel } from "@ui/widgets/results-panel/results-panel"
+import type { ResultsPaneViewModel } from "@ui/widgets/results-panel/view-model/create-vm"
 import type { QueryJob } from "@usecase/query/usecase"
 import type { ResultSourcePage } from "@usecase/result-source/usecase"
 import { createComponent, createEffect } from "solid-js"
-import { type MountedTuiApp, mountInTui } from "../../../test/opentui-harness"
-import { findRequiredNode, readFrameLines } from "../../../test/opentui-test-tools"
-import { SelectionControllerTestRoot } from "../../../test/selection-controller-test-root"
-import { ResultsPanel } from "./results-panel"
-import type { ResultsPaneViewModel } from "./view-model/create-vm"
 
 type ParsedVisibleRow = {
   rowNumber: number
@@ -86,9 +86,9 @@ function createViewModel(job: QueryJob, pagination?: ResultSourcePage): ResultsP
   }
 }
 
-function SelectionState(props: { onChange: (selection: AppSelection | undefined) => void }) {
-  const selection = useActiveSelectionOwner()
-  createEffect(() => props.onChange(selection.selection()))
+function SelectionState(props: { onChange: (actions: readonly SelectionAction[]) => void }) {
+  const selection = useSelection()
+  createEffect(() => props.onChange(selection.actions()))
   return null
 }
 
@@ -184,6 +184,7 @@ async function captureDragAutoscrollFrames(
       }
     } finally {
       await app.setup.mockMouse.release(dragX, options.dragHoldY)
+      scrollbox.stopAutoScroll()
       await app.waitFor(() => !app.setup.renderer.getSelection()?.isDragging)
     }
   }
@@ -192,18 +193,18 @@ async function captureDragAutoscrollFrames(
 }
 
 describe("results panel integration", () => {
-  test("retains the logical cell range after native selection settles", async () => {
-    let retained: AppSelection | undefined
+  test("keeps the native cell range after selection drag settles", async () => {
+    let actions: readonly SelectionAction[] = []
     const app = await mountInTui(
       () => (
-        <SelectionControllerTestRoot>
+        <SelectionTestRoot>
           <SelectionState
-            onChange={(selection) => {
-              retained = selection
+            onChange={(value) => {
+              actions = value
             }}
           />
           <ResultsPanel viewModel={createViewModel(createResultsJob(2))} />
-        </SelectionControllerTestRoot>
+        </SelectionTestRoot>
       ),
       { width: 48, height: 8 },
     )
@@ -219,9 +220,42 @@ describe("results panel integration", () => {
       await app.waitFor(() => hasVisibleTableSelection(app))
       await app.setup.mockMouse.release(x + 8, y + 1)
 
-      await app.waitFor(() => !app.setup.renderer.getSelection()?.isActive)
-      expect(retained?.actions.map((action) => action.key)).toEqual(["y"])
+      await app.waitFor(() => !app.setup.renderer.getSelection()?.isDragging)
+      expect(actions.map((action) => action.key)).toEqual(["y"])
+      expect(app.setup.renderer.getSelection()?.isActive).toBe(true)
       expect(hasVisibleTableSelection(app)).toBe(true)
+    } finally {
+      app.destroy()
+    }
+  })
+
+  test("clears selection actions when table navigation clears the range", async () => {
+    let actions: readonly SelectionAction[] = []
+    const app = await mountInTui(
+      () => (
+        <SelectionTestRoot>
+          <SelectionState
+            onChange={(value) => {
+              actions = value
+            }}
+          />
+          <ResultsPanel viewModel={createViewModel(createResultsJob(2))} />
+        </SelectionTestRoot>
+      ),
+      { width: 48, height: 8 },
+    )
+
+    try {
+      const scrollbox = getResultsScrollbox(app)
+      const x = scrollbox.viewport.x + 2
+      const y = scrollbox.viewport.y + 1
+      await app.setup.mockMouse.pressDown(x, y)
+      await app.setup.mockMouse.moveTo(x + 8, y + 1)
+      await app.setup.mockMouse.release(x + 8, y + 1)
+      await app.waitFor(() => actions.map((action) => action.key).join(",") === "y")
+
+      app.setup.mockInput.pressArrow("right")
+      await app.waitFor(() => actions.length === 0 && !hasVisibleTableSelection(app))
     } finally {
       app.destroy()
     }
@@ -230,7 +264,7 @@ describe("results panel integration", () => {
   test("numbers rows using the page offset", async () => {
     const app = await mountInTui(
       () => (
-        <SelectionControllerTestRoot>
+        <SelectionTestRoot>
           <ResultsPanel
             viewModel={createViewModel(createResultsJob(1), {
               pageSize: 500,
@@ -239,7 +273,7 @@ describe("results panel integration", () => {
               isTotalRowsExact: true,
             })}
           />
-        </SelectionControllerTestRoot>
+        </SelectionTestRoot>
       ),
       { width: 48, height: 8 },
     )
@@ -255,9 +289,9 @@ describe("results panel integration", () => {
   test("keeps table selection while dragging over the scrollbar edge", async () => {
     const app = await mountInTui(
       () => (
-        <SelectionControllerTestRoot>
+        <SelectionTestRoot>
           <ResultsPanel viewModel={createViewModel(createResultsJob(20))} />
-        </SelectionControllerTestRoot>
+        </SelectionTestRoot>
       ),
       { width: 48, height: 8 },
     )
@@ -287,14 +321,14 @@ describe("results panel integration", () => {
   test("finishes table selection when mouse is released outside the table", async () => {
     const app = await mountInTui(
       () => (
-        <SelectionControllerTestRoot>
+        <SelectionTestRoot>
           <box width={48}>
             <ResultsPanel viewModel={createViewModel(createResultsJob(20))} />
           </box>
           <box width={12}>
             <text>outside</text>
           </box>
-        </SelectionControllerTestRoot>
+        </SelectionTestRoot>
       ),
       { width: 60, height: 8 },
     )
@@ -319,7 +353,7 @@ describe("results panel integration", () => {
   test("does not start editor selection while dragging from a scrolled table", async () => {
     const app = await mountInTui(
       () => (
-        <SelectionControllerTestRoot>
+        <SelectionTestRoot>
           <box
             flexDirection="column"
             width={48}
@@ -334,7 +368,7 @@ describe("results panel integration", () => {
             </box>
             <ResultsPanel viewModel={createViewModel(createResultsJob(80))} />
           </box>
-        </SelectionControllerTestRoot>
+        </SelectionTestRoot>
       ),
       { width: 48, height: 10 },
     )
@@ -369,7 +403,11 @@ describe("results panel integration", () => {
 
   test("stops stale drag autoscroll when pointer moves away from the edge", async () => {
     const app = await mountInTui(
-      () => createComponent(ResultsPanel, { viewModel: createViewModel(createResultsJob(80)) }),
+      () => (
+        <SelectionTestRoot>
+          <ResultsPanel viewModel={createViewModel(createResultsJob(80))} />
+        </SelectionTestRoot>
+      ),
       { width: 48, height: 8 },
     )
 
@@ -404,7 +442,11 @@ describe("results panel integration", () => {
 
   test("stops drag autoscroll when mouse is released while autoscroll is active", async () => {
     const app = await mountInTui(
-      () => createComponent(ResultsPanel, { viewModel: createViewModel(createResultsJob(80)) }),
+      () => (
+        <SelectionTestRoot>
+          <ResultsPanel viewModel={createViewModel(createResultsJob(80))} />
+        </SelectionTestRoot>
+      ),
       { width: 48, height: 8 },
     )
 
@@ -437,14 +479,14 @@ describe("results panel integration", () => {
   test("root finalizer stops table autoscroll when mouse is released outside the table", async () => {
     const app = await mountInTui(
       () => (
-        <SelectionControllerTestRoot>
+        <SelectionTestRoot>
           <box width={48}>
             <ResultsPanel viewModel={createViewModel(createResultsJob(80))} />
           </box>
           <box width={12}>
             <text>outside</text>
           </box>
-        </SelectionControllerTestRoot>
+        </SelectionTestRoot>
       ),
       { width: 60, height: 8 },
     )

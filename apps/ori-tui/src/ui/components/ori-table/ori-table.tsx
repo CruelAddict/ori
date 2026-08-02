@@ -5,7 +5,7 @@ import {
   TextAttributes,
 } from "@opentui/core"
 import { OriScrollbox } from "@ui/components/ori-scrollbox"
-import { useSelectionLock } from "@ui/selection/selection-lock"
+import { useSelectionOwner } from "@ui/providers/selection"
 import { type KeyBinding, KeyScope } from "@ui/services/key-scopes"
 import type { Accessor } from "solid-js"
 import { createEffect, For, Index, on } from "solid-js"
@@ -44,13 +44,12 @@ const scrollSpeed = {
 const HORIZONTAL_SCROLL_STEP = 6
 
 export function OriTable(props: OriTableProps) {
-  const selectionLock = useSelectionLock()
+  const selectionOwner = useSelectionOwner()
   const table = createOriTableVM({
     columns: () => props.columns,
     rows: () => props.rows,
     rowNumberOffset: () => props.rowNumberOffset ?? 0,
     isFocused: props.isFocused,
-    onSelectionInvalidated: selectionLock.clearRetained,
   })
   let scrollbox: ScrollBoxRenderable | undefined
   let selectionMoved = false
@@ -87,7 +86,7 @@ export function OriTable(props: OriTableProps) {
       },
       preventDefault: true,
     },
-    { pattern: "escape", handler: selectionLock.clear, preventDefault: true },
+    { pattern: "escape", handler: selectionOwner.clear, preventDefault: true },
   ]
 
   const updateMouseDragSelection = (selection: OpenTuiSelection | null) => {
@@ -125,34 +124,30 @@ export function OriTable(props: OriTableProps) {
         if (visible !== false) {
           return
         }
-        selectionLock.clear()
+        selectionOwner.clear()
       },
       { defer: true },
     ),
   )
 
   const handleCellMouseDown = (cell: Parameters<typeof table.beginSelection>[0], event: MouseEvent) => {
-    if (!selectionLock.canAcquire()) {
+    if (!selectionOwner.canAcquire()) {
       return
     }
     if (
-      !selectionLock.tryAcquire({
+      !selectionOwner.tryAcquire({
         pane: "results",
-        isSelecting: isDraggingSelection,
-        onSettle: () => scrollbox?.stopAutoScroll(),
-        onCancel: () => {
+        onDragEnd: () => {
+          updateMouseDragSelection(scrollbox?.ctx.getSelection() ?? null)
+          scrollbox?.stopAutoScroll()
+        },
+        clearSelection: () => {
           scrollbox?.stopAutoScroll()
           table.clearSelection()
         },
-        capture: () => {
+        readSelection: () => {
           if (!selectionMoved) {
             return undefined
-          }
-
-          const focus = scrollbox?.ctx.getSelection()?.focus
-          const end = focus ? table.cellAtMouseDragPoint(focus) : null
-          if (end) {
-            table.extendSelection(end)
           }
 
           const range = table.getSelectionRange()
@@ -163,8 +158,6 @@ export function OriTable(props: OriTableProps) {
 
           return {
             text,
-            clearVisual: table.clearSelection,
-            restoreVisual: () => table.restoreSelection(range),
           }
         },
       })
@@ -178,18 +171,17 @@ export function OriTable(props: OriTableProps) {
   }
 
   const handleCellMouseSelectionUpdate = (selection: OpenTuiSelection | null) => {
-    updateMouseDragSelection(selection)
     if (selection?.isStart) {
       selectionMoved = false
     }
     if (selection?.isActive && !selection.isStart) {
       selectionMoved = true
     }
-    selectionLock.handleSelectionChange()
+    updateMouseDragSelection(selection)
   }
 
   const handleMouseDrag = (event: MouseEvent) => {
-    if (!selectionLock.canAcquire()) {
+    if (!selectionOwner.canAcquire()) {
       scrollbox?.stopAutoScroll()
       return
     }
@@ -296,7 +288,7 @@ export function OriTable(props: OriTableProps) {
                       selectionBg={props.colors.selectionBackground}
                       value={table.headerText(cell.col)}
                       selected={table.isCellSelected(cell)}
-                      selectable={selectionLock.canAcquire()}
+                      selectable={selectionOwner.canAcquire()}
                       onMouseDown={(event: MouseEvent) => handleCellMouseDown(cell, event)}
                       onSelectionUpdate={handleCellMouseSelectionUpdate}
                     />
@@ -431,7 +423,7 @@ export function OriTable(props: OriTableProps) {
                                 flexDirection="row"
                                 width={segment.width}
                                 align={typeof value() === "number" ? "right" : "left"}
-                                selectable={selectionLock.canAcquire()}
+                                selectable={selectionOwner.canAcquire()}
                                 onMouseDown={(event: MouseEvent) => handleCellMouseDown(cell, event)}
                                 selectionBg={props.colors.selectionBackground}
                                 value={display()}

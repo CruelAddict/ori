@@ -1,5 +1,5 @@
-import type { AppSelection } from "@ui/selection/selection-lock"
-import { useActiveSelectionOwner } from "@ui/selection/selection-lock"
+import type { SelectionAction } from "@ui/providers/selection"
+import { useSelection } from "@ui/providers/selection"
 import type { QueryJob } from "@usecase/query/usecase"
 import type { ResultSourcePage } from "@usecase/result-source/usecase"
 import {
@@ -53,14 +53,14 @@ export type AppResourceView = {
 export type AppContextValue = {
   resourceViews: Accessor<Record<string, AppResourceView>>
   activeResourceView: Accessor<AppResourceView | undefined>
-  selection: Accessor<AppSelection | undefined>
+  selectionActions: Accessor<readonly SelectionAction[]>
   registerResourceView(state: AppResourceView): () => void
 }
 
 const AppContext = createContext<AppContextValue>()
 
 export function AppContextProvider(props: { children: JSX.Element }) {
-  const selection = useActiveSelectionOwner()
+  const selection = useSelection()
   const [resourceViews, setResourceViews] = createSignal<Record<string, AppResourceView>>({})
   const activeResourceView = createMemo(() => Object.values(resourceViews()).find((state) => state.isActive()))
 
@@ -69,7 +69,7 @@ export function AppContextProvider(props: { children: JSX.Element }) {
       () => activeResourceView()?.resourceName(),
       (name, previous) => {
         if (previous !== undefined && name !== previous) {
-          selection.clearRetained()
+          selection.clear()
         }
       },
     ),
@@ -97,7 +97,7 @@ export function AppContextProvider(props: { children: JSX.Element }) {
   const value: AppContextValue = {
     resourceViews,
     activeResourceView,
-    selection: selection.selection,
+    selectionActions: selection.actions,
     registerResourceView,
   }
 

@@ -11,10 +11,12 @@
     "bench:highlight": "bun run bench/sql-highlight.ts",
     "lint": "bunx biome check --reporter summary",
     "lint:fix": "bunx biome check --write",
-    "test": "bun test",
-    "test:run": "bun test",
-    "test:watch": "bun test --watch",
-    "test:coverage": "bun test --coverage"
+    "test": "bun test --preload @opentui/solid/preload src",
+    "test:run": "bun test --preload @opentui/solid/preload src",
+    "test:unit": "bun test --preload @opentui/solid/preload src --path-ignore-patterns 'src/test/integration/**'",
+    "test:integration": "bun test --preload @opentui/solid/preload src/test/integration",
+    "test:watch": "bun test --watch --preload @opentui/solid/preload src",
+    "test:coverage": "bun test --coverage --preload @opentui/solid/preload src"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.1.5",

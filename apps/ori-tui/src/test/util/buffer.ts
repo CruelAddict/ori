@@ -1,15 +1,18 @@
 import { ScrollBoxRenderable, TextareaRenderable } from "@opentui/core"
+import { type MountedTuiApp, mountInTui } from "@test/opentui-harness"
+import { findRequiredNode, requirePresent } from "@test/opentui-test-tools"
+import type { BufferAutocompleteProvider } from "@ui/components/buffer/autocomplete/types"
+import { Buffer, type BufferApi, type BufferState } from "@ui/components/buffer/buffer"
+import type { BufferExtension } from "@ui/components/buffer/extension"
+import { type BufferStatementDetector, createStatementsExtension } from "@ui/components/buffer/extensions/statements"
+import {
+  createSyntaxHighlightsExtension,
+  type SyntaxHighlightsOptions,
+} from "@ui/components/buffer/extensions/syntax-highlights"
 import { useLogger } from "@ui/providers/logger"
 import { useTheme } from "@ui/providers/theme"
 import { createSqlAnalysis } from "@ui/widgets/editor-panel/sql-analysis"
 import { createComponent, onCleanup } from "solid-js"
-import { type MountedTuiApp, mountInTui } from "../../../test/opentui-harness"
-import { findRequiredNode, requirePresent } from "../../../test/opentui-test-tools"
-import type { BufferAutocompleteProvider } from "./autocomplete/types"
-import { Buffer, type BufferApi, type BufferState } from "./buffer"
-import type { BufferExtension } from "./extension"
-import { type BufferStatementDetector, createStatementsExtension } from "./extensions/statements"
-import { createSyntaxHighlightsExtension, type SyntaxHighlightsOptions } from "./extensions/syntax-highlights"
 
 export type BufferTestLanguage = BufferStatementDetector &
   Pick<SyntaxHighlightsOptions, "syntaxStyle" | "highlightText" | "onHighlightError">

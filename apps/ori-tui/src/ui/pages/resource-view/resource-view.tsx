@@ -5,8 +5,8 @@ import { useOriClient } from "@ui/providers/client"
 import { useEventStream } from "@ui/providers/events"
 import { useLogger } from "@ui/providers/logger"
 import { useResourceByName } from "@ui/providers/resource"
+import { useSelection } from "@ui/providers/selection"
 import { useTheme } from "@ui/providers/theme"
-import { useSelectionService } from "@ui/selection/selection-lock"
 import { type KeyBinding, KeyScope } from "@ui/services/key-scopes"
 import { EditorPanel } from "@ui/widgets/editor-panel/editor-panel"
 import { Explorer } from "@ui/widgets/explorer/explorer"
@@ -28,7 +28,7 @@ export function ResourceViewPage(props: ResourceViewPageProps) {
   const logger = useLogger()
   const eventStream = useEventStream()
   const app = useAppContext()
-  const selection = useSelectionService()
+  const selection = useSelection()
   const resource = useResourceByName(() => props.resourceName)
   const scopeEnabled = () => props.isActive ?? true
   const query = createQueryUC({

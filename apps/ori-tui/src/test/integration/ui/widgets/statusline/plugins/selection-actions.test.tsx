@@ -1,16 +1,16 @@
 import { describe, expect, test } from "bun:test"
+import { mountInTui } from "@test/opentui-harness"
+import { readFrameText } from "@test/opentui-test-tools"
 import type { AppContextValue } from "@ui/providers/app-context"
-import type { AppSelection, AppSelectionAction } from "@ui/selection/selection-lock"
+import type { SelectionAction } from "@ui/providers/selection"
+import { selectionActionsPlugin } from "@ui/widgets/statusline/plugins/selection-actions"
 import type { StatuslineContext } from "@ui/widgets/statusline/statusline-types"
-import { mountInTui } from "../../../../test/opentui-harness"
-import { readFrameText } from "../../../../test/opentui-test-tools"
-import { selectionActionsPlugin } from "./selection-actions"
 
-function SelectionActionsTestView(props: { selection: AppSelection | undefined }) {
+function SelectionActionsTestView(props: { actions: readonly SelectionAction[] }) {
   const app: AppContextValue = {
     resourceViews: () => ({}),
     activeResourceView: () => undefined,
-    selection: () => props.selection,
+    selectionActions: () => props.actions,
     registerResourceView: () => () => {},
   }
   const ctx: StatuslineContext = {
@@ -23,8 +23,8 @@ function SelectionActionsTestView(props: { selection: AppSelection | undefined }
   return <box flexDirection="row">{selectionActionsPlugin.render(ctx)}</box>
 }
 
-function action(key: AppSelectionAction["key"], label: AppSelectionAction["label"], run: () => void) {
-  return { key, label, run } satisfies AppSelectionAction
+function action(key: SelectionAction["key"], label: SelectionAction["label"], run: () => void) {
+  return { key, label, run } satisfies SelectionAction
 }
 
 describe("selection actions statusline plugin", () => {
@@ -33,10 +33,10 @@ describe("selection actions statusline plugin", () => {
     const copy = () => {
       copies += 1
     }
-    const app = await mountInTui(
-      () => <SelectionActionsTestView selection={{ actions: [action("y", "copy", copy)] }} />,
-      { width: 30, height: 2 },
-    )
+    const app = await mountInTui(() => <SelectionActionsTestView actions={[action("y", "copy", copy)]} />, {
+      width: 30,
+      height: 2,
+    })
 
     try {
       expect(readFrameText(app)).toContain("y copy")
@@ -56,13 +56,11 @@ describe("selection actions statusline plugin", () => {
     const app = await mountInTui(
       () => (
         <SelectionActionsTestView
-          selection={{
-            actions: [
-              action("backspace", "delete", () => {}),
-              action("ctrl+y", "copy", () => {}),
-              action("ctrl+k", "cut", () => {}),
-            ],
-          }}
+          actions={[
+            action("backspace", "delete", () => {}),
+            action("ctrl+y", "copy", () => {}),
+            action("ctrl+k", "cut", () => {}),
+          ]}
         />
       ),
       { width: 60, height: 2 },

@@ -1,13 +1,13 @@
 import { describe, expect, test } from "bun:test"
 import { type Node, NodeType } from "@adapters/ori/client"
 import { BoxRenderable } from "@opentui/core"
-import type { MountedTuiApp } from "../../../test/opentui-harness"
-import { readFrameText } from "../../../test/opentui-test-tools"
-import { createSqlEditorBgWorkerAdapter } from "../../widgets/editor-panel/sql-editor-bg-worker-adapter"
-import type { SqlEditorSchemaState } from "../../widgets/editor-panel/sql-editor-protocol"
-import { getBufferTextarea, mountBufferWithApi, mountText, moveCursor } from "./buffer.test-tools"
-import { type DocCharOffset, docCharOffset, docCharRange } from "./coords"
-import { Document } from "./document"
+import { getBufferTextarea, mountBufferWithApi, mountText, moveCursor } from "@test/buffer"
+import type { MountedTuiApp } from "@test/opentui-harness"
+import { readFrameText } from "@test/opentui-test-tools"
+import { type DocCharOffset, docCharOffset, docCharRange } from "@ui/components/buffer/coords"
+import { Document } from "@ui/components/buffer/document"
+import { createSqlEditorBgWorkerAdapter } from "@ui/widgets/editor-panel/sql-editor-bg-worker-adapter"
+import type { SqlEditorSchemaState } from "@ui/widgets/editor-panel/sql-editor-protocol"
 
 function popupBox(app: MountedTuiApp) {
   return app.find((node): node is BoxRenderable => node instanceof BoxRenderable && node.zIndex === 30)

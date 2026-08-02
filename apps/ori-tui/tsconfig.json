@@ -19,7 +19,8 @@
       "@model/*": ["src/model/*"],
       "@adapters/*": ["src/adapters/*"],
       "@utils/*": ["src/utils/*"],
-      "@cli/*": ["src/app/cli/*"]
+      "@cli/*": ["src/app/cli/*"],
+      "@test/*": ["src/test/util/*"]
     },
     "types": ["bun"],
     "noEmit": true,

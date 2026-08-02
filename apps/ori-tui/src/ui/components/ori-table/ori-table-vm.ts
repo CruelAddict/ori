@@ -32,7 +32,6 @@ type CreateOriTableVMOptions = {
   rows: Accessor<unknown[][]>
   rowNumberOffset: Accessor<number>
   isFocused: Accessor<boolean>
-  onSelectionInvalidated?: () => void
   overscan?: number
 }
 
@@ -126,14 +125,7 @@ export function createOriTableVM(options: CreateOriTableVMOptions) {
   }
 
   const clearSelection = () => {
-    if (untrack(selection)) {
-      options.onSelectionInvalidated?.()
-    }
     setSelection(null)
-  }
-
-  const restoreSelection = (range: CellSelection) => {
-    setSelection({ start: range.start, end: range.end })
   }
 
   const reset = () => {
@@ -219,7 +211,6 @@ export function createOriTableVM(options: CreateOriTableVMOptions) {
     extendSelection,
     clearSelection,
     getSelectionRange: selectedRange,
-    restoreSelection,
     readSelected: selectionText,
     hasSelection: () => selection() !== null,
     cellAtMouseDragPoint,

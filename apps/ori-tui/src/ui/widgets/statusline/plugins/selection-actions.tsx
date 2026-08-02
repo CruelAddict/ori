@@ -1,16 +1,16 @@
 import type { MouseEvent } from "@opentui/core"
-import type { AppSelectionAction } from "@ui/selection/selection-lock"
+import type { SelectionAction } from "@ui/providers/selection"
 import { createSignal, For, Show } from "solid-js"
 import type { StatuslineContext, StatuslinePlugin } from "../statusline-types"
 
 export const selectionActionsPlugin: StatuslinePlugin = {
-  visible: (ctx) => ctx.app.selection() !== undefined,
+  visible: (ctx) => ctx.app.selectionActions().length > 0,
   render: (ctx) => <SelectionActionsView ctx={ctx} />,
 }
 
 function SelectionActionsView(props: { ctx: StatuslineContext }) {
   const actions = () => {
-    const current = props.ctx.app.selection()?.actions ?? []
+    const current = props.ctx.app.selectionActions()
     return ["ctrl+y", "ctrl+k", "backspace", "y"].flatMap((key) => current.filter((action) => action.key === key))
   }
 
@@ -18,7 +18,7 @@ function SelectionActionsView(props: { ctx: StatuslineContext }) {
     <Show when={actions().length > 0}>
       <For each={actions()}>
         {(action) => (
-          <SelectionAction
+          <SelectionActionView
             action={action}
             ctx={props.ctx}
           />
@@ -28,7 +28,7 @@ function SelectionActionsView(props: { ctx: StatuslineContext }) {
   )
 }
 
-function SelectionAction(props: { action: AppSelectionAction; ctx: StatuslineContext }) {
+function SelectionActionView(props: { action: SelectionAction; ctx: StatuslineContext }) {
   const [hovered, setHovered] = createSignal(false)
   const handleMouseDown = (event: MouseEvent) => {
     event.preventDefault()

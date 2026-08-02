@@ -6,12 +6,12 @@ import { LoggerProvider } from "@ui/providers/logger"
 import { NavigationProvider } from "@ui/providers/navigation"
 import { OverlayProvider, useOverlayManager } from "@ui/providers/overlay"
 import { ResourceProvider } from "@ui/providers/resource"
+import { SelectionProvider, useSelection } from "@ui/providers/selection"
 import { ThemeProvider, useTheme } from "@ui/providers/theme"
 import { RouteOutlet } from "@ui/routes/RouteOutlet"
 import { useRouteNavigation } from "@ui/routes/router"
-import { useSelectionController } from "@ui/selection/selection-controller"
-import { SelectionLockProvider, useActiveSelectionOwner } from "@ui/selection/selection-lock"
-import { KeymapProvider, KeyScope, SELECTION_LAYER, SYSTEM_LAYER } from "@ui/services/key-scopes"
+import { SelectionHotkeys } from "@ui/selection/selection-hotkeys"
+import { KeymapProvider, KeyScope, SYSTEM_LAYER } from "@ui/services/key-scopes"
 import { CommandPaletteOverlay } from "@ui/widgets/overlay/CommandPaletteOverlay"
 import { OverlayHost } from "@ui/widgets/overlay/OverlayHost"
 import type { OverlayManager } from "@ui/widgets/overlay/overlay-store"
@@ -51,7 +51,7 @@ function App() {
   const palette = theme
   const overlays = useOverlayManager()
   const navigation = useRouteNavigation()
-  const selection = useSelectionController()
+  const selection = useSelection()
 
   // opentui bug workaround: without it mouse hit grid (for scrollbox scrolling) doesn't respect viewport content clipping
   const [welcomePickerOpened, setWelcomePickerOpened] = createSignal(false)
@@ -75,43 +75,13 @@ function App() {
       flexDirection="column"
       flexGrow={1}
       backgroundColor={palette().get("app_background")}
-      onMouseUp={selection.rootHandlers.onMouseUp}
+      onMouseUp={selection.handleMouseUp}
     >
       <GlobalHotkeys />
       <SelectionHotkeys />
       <RouteOutlet />
       <OverlayHost />
     </box>
-  )
-}
-
-function SelectionHotkeys() {
-  const selection = useActiveSelectionOwner()
-
-  return (
-    <KeyScope
-      layer={SELECTION_LAYER}
-      enabled={() => selection.selection() !== undefined}
-      bindings={() => {
-        const current = selection.selection()
-        if (!current) {
-          return []
-        }
-
-        return [
-          ...current.actions.map((action) => ({
-            pattern: action.key,
-            handler: action.run,
-            preventDefault: true,
-          })),
-          {
-            pattern: "escape",
-            handler: selection.clearRetained,
-            preventDefault: true,
-          },
-        ]
-      }}
-    />
   )
 }
 
@@ -200,7 +170,7 @@ export function startApp(options: StartAppOptions): RendererHandle {
           <EventStreamProvider>
             <ResourceProvider>
               <NavigationProvider>
-                <SelectionLockProvider>
+                <SelectionProvider>
                   <AppContextProvider>
                     <OverlayProvider>
                       <KeymapProvider>
@@ -210,7 +180,7 @@ export function startApp(options: StartAppOptions): RendererHandle {
                       </KeymapProvider>
                     </OverlayProvider>
                   </AppContextProvider>
-                </SelectionLockProvider>
+                </SelectionProvider>
               </NavigationProvider>
             </ResourceProvider>
           </EventStreamProvider>

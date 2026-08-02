@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test"
+import { mountInTui } from "@test/opentui-harness"
+import { readFrameText } from "@test/opentui-test-tools"
+import { WelcomePane } from "@ui/widgets/welcome-pane/welcome-pane"
 import { createComponent, createSignal } from "solid-js"
-import { mountInTui } from "../../../test/opentui-harness"
-import { readFrameText } from "../../../test/opentui-test-tools"
-import { WelcomePane } from "./welcome-pane"
 
 describe("WelcomePane", () => {
   test("shows the browse hint without moving the persistent hints", async () => {

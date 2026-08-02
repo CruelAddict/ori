@@ -1,5 +1,5 @@
-import { type Renderable } from "@opentui/core"
-import type { MountedTuiApp } from "./opentui-harness"
+import type { Renderable } from "@opentui/core"
+import type { MountedTuiApp } from "@test/opentui-harness"
 
 type Predicate<T extends Renderable> = (node: Renderable) => node is T
 
@@ -11,11 +11,7 @@ export function requirePresent<T>(value: T | undefined, message: string) {
   return value
 }
 
-export function findRequiredNode<T extends Renderable>(
-  app: MountedTuiApp,
-  predicate: Predicate<T>,
-  message: string,
-) {
+export function findRequiredNode<T extends Renderable>(app: MountedTuiApp, predicate: Predicate<T>, message: string) {
   return requirePresent(app.find(predicate), message)
 }
 

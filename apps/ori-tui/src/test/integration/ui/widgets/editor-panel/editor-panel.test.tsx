@@ -1,13 +1,13 @@
 import { describe, expect, test } from "bun:test"
 import { type Node, NodeType } from "@adapters/ori/client"
 import { LineNumberRenderable, type TextareaRenderable } from "@opentui/core"
-import { getBufferTextarea, moveCursor } from "@ui/components/buffer/buffer.test-tools"
+import { getBufferTextarea, moveCursor } from "@test/buffer"
+import { mountInTui } from "@test/opentui-harness"
+import { findRequiredNode } from "@test/opentui-test-tools"
+import { EditorPanel } from "@ui/widgets/editor-panel/editor-panel"
+import type { SqlEditorSchemaState } from "@ui/widgets/editor-panel/sql-editor-protocol"
+import type { EditorPaneViewModel } from "@ui/widgets/editor-panel/view-model/create-vm"
 import { createComponent } from "solid-js"
-import { mountInTui } from "../../../test/opentui-harness"
-import { findRequiredNode } from "../../../test/opentui-test-tools"
-import { EditorPanel } from "./editor-panel"
-import type { SqlEditorSchemaState } from "./sql-editor-protocol"
-import type { EditorPaneViewModel } from "./view-model/create-vm"
 
 function getBufferLineNumber(app: Awaited<ReturnType<typeof mountInTui>>) {
   return findRequiredNode(

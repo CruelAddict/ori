@@ -1,8 +1,8 @@
 import type { Renderable } from "@opentui/core"
 import { testRender } from "@opentui/solid"
 import { LoggerProvider } from "@ui/providers/logger"
+import { SelectionProvider } from "@ui/providers/selection"
 import { ThemeProvider } from "@ui/providers/theme"
-import { SelectionLockProvider } from "@ui/selection/selection-lock"
 import { KeymapProvider } from "@ui/services/key-scopes"
 import pino from "pino"
 import { createComponent } from "solid-js"
@@ -47,7 +47,7 @@ function wrapWithProviders(render: () => unknown) {
             return createComponent(ThemeProvider, {
               defaultTheme: "dark",
               get children() {
-                return createComponent(SelectionLockProvider, {
+                return createComponent(SelectionProvider, {
                   get children() {
                     return render()
                   },

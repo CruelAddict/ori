@@ -6,20 +6,14 @@ import {
   SyntaxStyle,
   type TextareaRenderable,
 } from "@opentui/core"
+import { type BufferTestLanguage, getBufferScrollbox, getBufferTextarea, mountBuffer, moveCursor } from "@test/buffer"
+import type { MountedTuiApp } from "@test/opentui-harness"
+import { findRequiredNode, readFrameLines, readFrameLineTokens, readFrameText } from "@test/opentui-test-tools"
+import type { BufferAutocompleteProvider } from "@ui/components/buffer/autocomplete/types"
+import type { BufferState } from "@ui/components/buffer/buffer"
+import { docCharOffset, docCharRange, lineIndex } from "@ui/components/buffer/coords"
+import type { BufferStatementRange } from "@ui/components/buffer/extensions/statements"
 import { collectSqlQueries } from "@ui/widgets/editor-panel/sql-statement-detector"
-import type { MountedTuiApp } from "../../../test/opentui-harness"
-import { findRequiredNode, readFrameLines, readFrameLineTokens, readFrameText } from "../../../test/opentui-test-tools"
-import type { BufferAutocompleteProvider } from "./autocomplete/types"
-import type { BufferState } from "./buffer"
-import {
-  type BufferTestLanguage,
-  getBufferScrollbox,
-  getBufferTextarea,
-  mountBuffer,
-  moveCursor,
-} from "./buffer.test-tools"
-import { docCharOffset, docCharRange, lineIndex } from "./coords"
-import type { BufferStatementRange } from "./extensions/statements"
 
 type HighlightState = {
   plainText: string
@@ -825,7 +819,7 @@ GO`
   test("pins textarea geometry to the gutter content area after resize and scrollbar changes", async () => {
     const line =
       'INSERT "Products"("ProductID","ProductName","SupplierID","CategoryID","QuantityPerUnit","UnitPrice","UnitsInStock","UnitsOnOrder","ReorderLevel","Discontinued") VALUES(11,\'Queso Cabrales\',5,4,\'1 kg pkg.\',21,22,30,30,0)'
-    const text = Array.from({ length: 8 }, () => line).join("\n") + "\n"
+    const text = `${Array.from({ length: 8 }, () => line).join("\n")}\n`
     const app = await mountBuffer({ text, width: 110, height: 8 })
 
     try {
