@@ -1,7 +1,7 @@
 import type { BoxRenderable, KeyEvent, MouseEvent, TextareaRenderable } from "@opentui/core"
 import { OriScrollbox } from "@ui/components/ori-scrollbox"
 import { SelectPopup } from "@ui/components/select-popup"
-import { useSelectionOwner } from "@ui/providers/selection"
+import { type SelectionOwnerOptions, useSelectionOwner } from "@ui/providers/selection"
 import { useTheme } from "@ui/providers/theme"
 import { type KeyBinding, KeyScope } from "@ui/services/key-scopes"
 import { createDeferredCallback } from "@utils/deferred-callback"
@@ -86,7 +86,6 @@ function shouldTriggerAutocompleteOnKeyDown(event: KeyEvent) {
 
 export function Buffer(props: BufferProps) {
   const { theme } = useTheme()
-  const selectionOwner = useSelectionOwner()
   const tabWidth = Math.max(1, props.tabWidth ?? DEFAULT_TAB_WIDTH)
   const tabText = " ".repeat(tabWidth)
   const [doc, setDoc] = createSignal(Document.create(props.initialText))
@@ -143,6 +142,9 @@ export function Buffer(props: BufferProps) {
         autocomplete.close()
       }
       viewport.handleTextareaSelectionChange(event)
+      if (event.result && !event.selection?.isDragging) {
+        selectionOwner.register()
+      }
     },
     onTextareaViewportChange: (event) => {
       viewport.handleTextareaViewportChange(event)
@@ -175,6 +177,32 @@ export function Buffer(props: BufferProps) {
     cursorLine: () => cursorState()?.line,
     requestRender: queueDecorationsRender,
   })
+  const selectionOptions = {
+    pane: "editor",
+    onDragEnd: viewport.finishSelectionDrag,
+    clearSelection: () => {
+      viewport.finishSelectionDrag()
+      textareaAdapter.clearLocalSelection()
+    },
+    readSelection: () => {
+      cursorState()
+      const text = textareaAdapter.readSelectedText()
+      if (!text) {
+        return undefined
+      }
+
+      return {
+        text,
+        cut: () => {
+          textareaAdapter.deleteSelection()
+        },
+        delete: () => {
+          textareaAdapter.deleteSelection()
+        },
+      }
+    },
+  } satisfies SelectionOwnerOptions
+  const selectionOwner = useSelectionOwner(selectionOptions)
 
   function updateCursorStateFromTextarea(options?: CursorStateSyncOptions) {
     if (viewport.isSelecting()) {
@@ -421,33 +449,7 @@ export function Buffer(props: BufferProps) {
       return
     }
     autocomplete.close()
-    if (
-      !selectionOwner.tryAcquire({
-        pane: "editor",
-        onDragEnd: viewport.finishSelectionDrag,
-        clearSelection: () => {
-          viewport.finishSelectionDrag()
-          textareaAdapter.clearLocalSelection()
-        },
-        readSelection: () => {
-          cursorState()
-          const text = textareaAdapter.readSelectedText()
-          if (!text) {
-            return undefined
-          }
-
-          return {
-            text,
-            cut: () => {
-              textareaAdapter.deleteSelection()
-            },
-            delete: () => {
-              textareaAdapter.deleteSelection()
-            },
-          }
-        },
-      })
-    ) {
+    if (!selectionOwner.tryAcquire()) {
       return
     }
     props.focusSelf()

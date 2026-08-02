@@ -3,6 +3,7 @@ import { useLogger } from "@ui/providers/logger"
 import { copyTextToClipboard } from "@utils/clipboard"
 import {
   type Accessor,
+  batch,
   createContext,
   createEffect,
   createMemo,
@@ -32,11 +33,8 @@ export type SelectionOwnerOptions = {
   onDragEnd?: () => void
 }
 
-type SelectionPhase = "dragging" | "selected"
-
 type SelectionOwner = {
   owner: string
-  phase: SelectionPhase
   options: SelectionOwnerOptions
 }
 
@@ -53,6 +51,7 @@ type RendererWithConsoleSelection = {
 
 type SelectionContextValue = {
   tryAcquire: (owner: string, options: SelectionOwnerOptions) => boolean
+  register: (owner: string, options: SelectionOwnerOptions) => boolean
   canAcquire: (owner: string) => boolean
   clearOwner: (owner: string) => void
   clear: () => void
@@ -70,6 +69,7 @@ export function SelectionProvider(props: { children: JSX.Element }) {
   const renderer = useRenderer()
   const logger = useLogger()
   const [activeOwner, setActiveOwner] = createSignal<SelectionOwner | undefined>()
+  const [dragging, setDragging] = createSignal(false)
   const [pending, setPending] = createSignal<PendingAction | undefined>()
   let settling = false
 
@@ -90,8 +90,11 @@ export function SelectionProvider(props: { children: JSX.Element }) {
       return false
     }
 
-    setActiveOwner(undefined)
-    setPending(undefined)
+    batch(() => {
+      setActiveOwner(undefined)
+      setDragging(false)
+      setPending(undefined)
+    })
     if (clearNative) {
       clearNativeSelection()
     }
@@ -119,7 +122,7 @@ export function SelectionProvider(props: { children: JSX.Element }) {
 
   const currentSelection = createMemo(() => {
     const current = activeOwner()
-    if (!current || current.phase !== "selected") {
+    if (!current) {
       return undefined
     }
 
@@ -226,7 +229,7 @@ export function SelectionProvider(props: { children: JSX.Element }) {
   const actions = createMemo<readonly SelectionAction[]>(() => {
     const owner = activeOwner()
     const selection = currentSelection()
-    if (!owner || owner.phase !== "selected" || !selection) {
+    if (!owner || dragging() || !selection) {
       return []
     }
 
@@ -244,7 +247,7 @@ export function SelectionProvider(props: { children: JSX.Element }) {
 
   const canAcquire = (owner: string) => {
     const current = activeOwner()
-    return current === undefined || current.owner === owner || current.phase !== "dragging"
+    return !dragging() || current?.owner === owner
   }
 
   const tryAcquire = (owner: string, options: SelectionOwnerOptions) => {
@@ -253,7 +256,27 @@ export function SelectionProvider(props: { children: JSX.Element }) {
     }
 
     clearActiveOwner(undefined, false)
-    setActiveOwner({ owner, phase: "dragging", options })
+    batch(() => {
+      setActiveOwner({ owner, options })
+      setDragging(true)
+    })
+    return true
+  }
+
+  const register = (owner: string, options: SelectionOwnerOptions) => {
+    const current = activeOwner()
+    if (!options.readSelection()) {
+      return false
+    }
+    if (current?.owner === owner) {
+      return true
+    }
+    if (!canAcquire(owner)) {
+      return false
+    }
+
+    clearActiveOwner(undefined, false)
+    setActiveOwner({ owner, options })
     return true
   }
 
@@ -263,7 +286,7 @@ export function SelectionProvider(props: { children: JSX.Element }) {
     }
 
     const current = activeOwner()
-    if (!current || current !== expected || current.phase !== "dragging") {
+    if (!current || current !== expected || !dragging()) {
       return
     }
 
@@ -271,7 +294,7 @@ export function SelectionProvider(props: { children: JSX.Element }) {
     try {
       current.options.onDragEnd?.()
       if (current.options.readSelection()) {
-        setActiveOwner({ ...current, phase: "selected" })
+        setDragging(false)
         return
       }
 
@@ -286,7 +309,7 @@ export function SelectionProvider(props: { children: JSX.Element }) {
 
   const handleMouseUp = () => {
     const current = activeOwner()
-    if (!current || current.phase !== "dragging") {
+    if (!current || !dragging()) {
       return
     }
 
@@ -300,7 +323,7 @@ export function SelectionProvider(props: { children: JSX.Element }) {
 
   createEffect(() => {
     const current = activeOwner()
-    if (!current || current.phase !== "selected" || currentSelection()) {
+    if (!current || dragging() || currentSelection()) {
       return
     }
 
@@ -356,16 +379,14 @@ export function SelectionProvider(props: { children: JSX.Element }) {
     <SelectionContext.Provider
       value={{
         tryAcquire,
+        register,
         canAcquire,
         clearOwner,
         clear,
         clearPane,
         handleMouseUp,
         subscribeNativeEvents,
-        isActive: () => {
-          const current = activeOwner()
-          return current?.phase === "dragging" || Boolean(currentSelection())
-        },
+        isActive: () => dragging() || Boolean(currentSelection()),
         isDragging: () => Boolean(renderer.getSelection?.()?.isDragging),
         actions,
       }}
@@ -384,14 +405,15 @@ function useSelectionContext() {
   return context
 }
 
-export function useSelectionOwner() {
+export function useSelectionOwner(options: SelectionOwnerOptions) {
   const selection = useSelectionContext()
   const owner = createUniqueId()
 
   onCleanup(() => selection.clearOwner(owner))
 
   return {
-    tryAcquire: (options: SelectionOwnerOptions) => selection.tryAcquire(owner, options),
+    tryAcquire: () => selection.tryAcquire(owner, options),
+    register: () => selection.register(owner, options),
     canAcquire: () => selection.canAcquire(owner),
     clear: () => selection.clearOwner(owner),
   }

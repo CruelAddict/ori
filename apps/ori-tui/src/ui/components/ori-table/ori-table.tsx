@@ -5,7 +5,7 @@ import {
   TextAttributes,
 } from "@opentui/core"
 import { OriScrollbox } from "@ui/components/ori-scrollbox"
-import { useSelectionOwner } from "@ui/providers/selection"
+import { type SelectionOwnerOptions, useSelectionOwner } from "@ui/providers/selection"
 import { type KeyBinding, KeyScope } from "@ui/services/key-scopes"
 import type { Accessor } from "solid-js"
 import { createEffect, For, Index, on } from "solid-js"
@@ -44,7 +44,6 @@ const scrollSpeed = {
 const HORIZONTAL_SCROLL_STEP = 6
 
 export function OriTable(props: OriTableProps) {
-  const selectionOwner = useSelectionOwner()
   const table = createOriTableVM({
     columns: () => props.columns,
     rows: () => props.rows,
@@ -53,6 +52,31 @@ export function OriTable(props: OriTableProps) {
   })
   let scrollbox: ScrollBoxRenderable | undefined
   let selectionMoved = false
+  const selectionOptions = {
+    pane: "results",
+    onDragEnd: () => {
+      updateMouseDragSelection(scrollbox?.ctx.getSelection() ?? null)
+      scrollbox?.stopAutoScroll()
+    },
+    clearSelection: () => {
+      scrollbox?.stopAutoScroll()
+      table.clearSelection()
+    },
+    readSelection: () => {
+      const range = table.getSelectionRange()
+      if (!selectionMoved) {
+        return undefined
+      }
+
+      const text = table.readSelected()
+      if (!range || !text || text.length === 0) {
+        return undefined
+      }
+
+      return { text }
+    },
+  } satisfies SelectionOwnerOptions
+  const selectionOwner = useSelectionOwner(selectionOptions)
 
   const isDraggingSelection = () => Boolean(scrollbox?.ctx.getSelection()?.isDragging)
 
@@ -134,34 +158,7 @@ export function OriTable(props: OriTableProps) {
     if (!selectionOwner.canAcquire()) {
       return
     }
-    if (
-      !selectionOwner.tryAcquire({
-        pane: "results",
-        onDragEnd: () => {
-          updateMouseDragSelection(scrollbox?.ctx.getSelection() ?? null)
-          scrollbox?.stopAutoScroll()
-        },
-        clearSelection: () => {
-          scrollbox?.stopAutoScroll()
-          table.clearSelection()
-        },
-        readSelection: () => {
-          if (!selectionMoved) {
-            return undefined
-          }
-
-          const range = table.getSelectionRange()
-          const text = table.readSelected()
-          if (!range || !text || text.length === 0) {
-            return undefined
-          }
-
-          return {
-            text,
-          }
-        },
-      })
-    ) {
+    if (!selectionOwner.tryAcquire()) {
       return
     }
     props.focusSelf()

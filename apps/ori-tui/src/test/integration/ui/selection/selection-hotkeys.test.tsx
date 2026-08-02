@@ -14,6 +14,46 @@ function SelectionState(props: { onChange: (actions: readonly SelectionAction[])
 }
 
 describe("selection escape hotkey", () => {
+  test("registers a keyboard editor range with selection actions", async () => {
+    let actions: readonly SelectionAction[] = []
+    const app = await mountInTui(
+      () => (
+        <SelectionTestRoot>
+          <SelectionHotkeys />
+          <SelectionState
+            onChange={(value) => {
+              actions = value
+            }}
+          />
+          <box width={40}>
+            <Buffer
+              initialText="select 1"
+              isFocused={() => true}
+              onTextChange={() => {}}
+              focusSelf={() => {}}
+            />
+          </box>
+        </SelectionTestRoot>
+      ),
+      { width: 40, height: 6 },
+    )
+
+    try {
+      const textarea = getBufferTextarea(app)
+
+      app.setup.mockInput.pressArrow("right", { shift: true })
+      await app.waitFor(() => textarea.hasSelection() && actions.length > 0)
+
+      expect(textarea.getSelectedText()).toBe("s")
+      expect(actions.map((action) => action.key)).toEqual(["ctrl+y", "ctrl+k", "backspace"])
+
+      app.setup.mockInput.pressArrow("right")
+      await app.waitFor(() => actions.length === 0 && !textarea.hasSelection())
+    } finally {
+      app.destroy()
+    }
+  })
+
   test("deletes the current editor range before mouseup", async () => {
     const initialText = "abcdefghij"
     const app = await mountInTui(
