@@ -128,7 +128,7 @@ export function OriTable(props: OriTableProps) {
 
   const handleViewportChange = (viewport: Parameters<typeof table.setViewport>[0]) => {
     table.setViewport(viewport)
-    if (table.hasSelection()) {
+    if (selectionDragging()) {
       updateMouseDragSelection(scrollbox?.ctx.getSelection() ?? null)
     }
   }

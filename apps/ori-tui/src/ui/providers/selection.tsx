@@ -57,6 +57,7 @@ type SelectionContextValue = {
   clearOwner: (owner: string) => void
   clear: () => void
   clearPane: (pane: SelectionOwnerOptions["pane"]) => void
+  handleMouseMove: () => void
   handleMouseUp: () => void
   subscribeNativeEvents: () => () => void
   isActive: () => boolean
@@ -316,6 +317,25 @@ export function SelectionProvider(props: { children: JSX.Element }) {
     queueMicrotask(() => settleSelection(current))
   }
 
+  const handleMouseMove = () => {
+    const native = renderer.getSelection()
+    if (!native?.isDragging) {
+      return
+    }
+
+    // A regular move while the native selection is still dragging means the drag state is stale.
+    // Finish it without changing its last drag focus.
+    const current = activeOwner()
+    const focus = native.focus
+    const target = native.selectedRenderables.find((node) => !node.isDestroyed)
+    renderer.updateSelection(target, focus.x, focus.y, { finishDragging: true })
+    if (!current) {
+      return
+    }
+
+    queueMicrotask(() => settleSelection(current))
+  }
+
   createEffect(() => {
     const current = activeOwner()
     if (settling || !current || pendingDrag() || current.options.isDragging() || currentSelection()) {
@@ -379,6 +399,7 @@ export function SelectionProvider(props: { children: JSX.Element }) {
         clearOwner,
         clear,
         clearPane,
+        handleMouseMove,
         handleMouseUp,
         subscribeNativeEvents,
         isActive: () => pendingDrag() || Boolean(activeOwner()?.options.isDragging()) || Boolean(currentSelection()),
@@ -419,6 +440,7 @@ export function useSelection() {
   onCleanup(selection.subscribeNativeEvents())
 
   return {
+    handleMouseMove: selection.handleMouseMove,
     handleMouseUp: selection.handleMouseUp,
     isActive: selection.isActive,
     actions: selection.actions,

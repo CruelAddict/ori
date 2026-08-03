@@ -75,6 +75,7 @@ function App() {
       flexDirection="column"
       flexGrow={1}
       backgroundColor={palette().get("app_background")}
+      onMouseMove={selection.handleMouseMove}
       onMouseUp={selection.handleMouseUp}
     >
       <GlobalHotkeys />

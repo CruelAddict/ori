@@ -8,6 +8,7 @@ export function SelectionTestRoot(props: { children: JSX.Element }) {
     /* biome-ignore lint/a11y/noStaticElementInteractions: test root mirrors app-level OpenTUI selection handlers */
     <box
       flexDirection="row"
+      onMouseMove={selection.handleMouseMove}
       onMouseUp={selection.handleMouseUp}
     >
       {props.children}

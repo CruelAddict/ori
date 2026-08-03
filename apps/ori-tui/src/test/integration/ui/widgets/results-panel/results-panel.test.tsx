@@ -478,6 +478,42 @@ describe("results panel integration", () => {
     }
   })
 
+  test("keeps a settled table range stable while scrolling", async () => {
+    let actions: readonly SelectionAction[] = []
+    const app = await mountInTui(
+      () => (
+        <SelectionTestRoot>
+          <SelectionState
+            onChange={(value) => {
+              actions = value
+            }}
+          />
+          <ResultsPanel viewModel={createViewModel(createResultsJob(80))} />
+        </SelectionTestRoot>
+      ),
+      { width: 48, height: 8 },
+    )
+
+    try {
+      const scrollbox = getResultsScrollbox(app)
+      const dragX = scrollbox.viewport.x + 2
+      const dragStartY = scrollbox.viewport.y + 1
+
+      scrollbox.scrollTo({ x: 0, y: 20 })
+      await app.waitFor(() => (scrollbox.scrollTop ?? 0) === 20)
+      await app.setup.mockMouse.pressDown(dragX, dragStartY)
+      await app.setup.mockMouse.moveTo(dragX + 8, dragStartY + 2)
+      await app.setup.mockMouse.release(dragX + 8, dragStartY + 2)
+      await app.waitFor(() => actions.map((action) => action.key).join(",") === "y")
+
+      scrollbox.scrollTo({ x: 0, y: 0 })
+      await app.waitFor(() => (scrollbox.scrollTop ?? 0) === 0)
+      expect(hasVisibleTableSelection(app)).toBe(false)
+    } finally {
+      app.destroy()
+    }
+  })
+
   test("stops drag autoscroll when mouse is released while autoscroll is active", async () => {
     const app = await mountInTui(
       () => (
