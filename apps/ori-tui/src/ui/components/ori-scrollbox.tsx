@@ -74,6 +74,7 @@ export type OriScrollboxProps = ScrollboxBaseProps & {
   minHorizontalThumbWidth?: number
   minVerticalThumbHeight?: number
   scrollSpeed?: ScrollSpeedMultipliers
+  dragAutoScroll?: boolean
   onViewportChange?: (viewport: OriScrollboxViewport) => void
   onUserScroll?: (context: OriScrollboxUserScrollContext) => void
 }
@@ -113,6 +114,7 @@ export function OriScrollbox(props: OriScrollboxProps) {
     "minHorizontalThumbWidth",
     "minVerticalThumbHeight",
     "scrollSpeed",
+    "dragAutoScroll",
     "onViewportChange",
     "onUserScroll",
     "children",
@@ -154,7 +156,10 @@ export function OriScrollbox(props: OriScrollboxProps) {
     }
 
     const needsEventSyncPatch =
-      Boolean(local.scrollSpeed) || Boolean(local.onViewportChange) || Boolean(local.onUserScroll)
+      Boolean(local.scrollSpeed) ||
+      local.dragAutoScroll === false ||
+      Boolean(local.onViewportChange) ||
+      Boolean(local.onUserScroll)
 
     if (!needsEventSyncPatch) {
       return
@@ -202,7 +207,9 @@ export function OriScrollbox(props: OriScrollboxProps) {
       const prevLeft = node.scrollLeft ?? 0
       const prevTop = node.scrollTop ?? 0
       let skippedNoopScrollSync = false
-      handleMouseEvent?.(event)
+      if (local.dragAutoScroll !== false || event.type !== "drag") {
+        handleMouseEvent?.(event)
+      }
       if (event.type === "scroll") {
         const newLeft = node.scrollLeft ?? 0
         const newTop = node.scrollTop ?? 0

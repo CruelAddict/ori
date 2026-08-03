@@ -94,6 +94,7 @@ export function Buffer(props: BufferProps) {
     line: lineIndex(0),
     offset: docCharOffset(0),
   })
+  const [selectionDragging, setSelectionDragging] = createSignal(false)
 
   let bufferRootRef: BoxRenderable | undefined
   let disposed = false
@@ -138,12 +139,17 @@ export function Buffer(props: BufferProps) {
       autocomplete.closeIfCursorLeftRange(cursor)
     },
     onTextareaSelectionChange: (event) => {
+      if (event.selection?.isDragging) {
+        setSelectionDragging(true)
+      } else if (event.result !== undefined) {
+        queueMicrotask(() => setSelectionDragging(false))
+      }
       if (event.result === undefined && event.selection?.isDragging) {
         autocomplete.close()
       }
       viewport.handleTextareaSelectionChange(event)
-      if (event.result && !event.selection?.isDragging) {
-        selectionOwner.register()
+      if (event.result && !event.selection?.isDragging && props.isFocused()) {
+        queueMicrotask(selectionOwner.register)
       }
     },
     onTextareaViewportChange: (event) => {
@@ -179,13 +185,21 @@ export function Buffer(props: BufferProps) {
   })
   const selectionOptions = {
     pane: "editor",
-    onDragEnd: viewport.finishSelectionDrag,
+    isDragging: selectionDragging,
+    onDragEnd: () => {
+      viewport.finishSelectionDrag()
+      setSelectionDragging(false)
+    },
     clearSelection: () => {
       viewport.finishSelectionDrag()
+      setSelectionDragging(false)
       textareaAdapter.clearLocalSelection()
     },
     readSelection: () => {
       cursorState()
+      if (selectionDragging()) {
+        return undefined
+      }
       const text = textareaAdapter.readSelectedText()
       if (!text) {
         return undefined
@@ -446,10 +460,12 @@ export function Buffer(props: BufferProps) {
   const handleTextareaMouseDown = (event: MouseEvent) => {
     event.stopPropagation()
     if (!selectionOwner.canAcquire()) {
+      event.preventDefault()
       return
     }
     autocomplete.close()
     if (!selectionOwner.tryAcquire()) {
+      event.preventDefault()
       return
     }
     props.focusSelf()
@@ -562,6 +578,7 @@ export function Buffer(props: BufferProps) {
           marginTop={1}
           stickyScroll={false}
           scrollX={false}
+          dragAutoScroll={false}
           onReady={attachScrollbox}
           onViewportChange={handleScrollboxStateChange}
           onUserScroll={handleScrollboxUserScroll}

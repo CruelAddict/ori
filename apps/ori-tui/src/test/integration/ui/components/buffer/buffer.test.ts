@@ -993,14 +993,7 @@ GO`
       expect(textarea.logicalCursor.row).toBeGreaterThan(0)
       expect(textarea.scrollY).toBeGreaterThan(0)
       expect(textarea.scrollY).toBe(scrollbox.scrollTop)
-      const scrollTopAfterRelease = scrollbox.scrollTop ?? 0
-
-      scrollbox.startAutoScroll(scrollbox.x + 1, scrollbox.y - 1)
-      expect(scrollbox.live).toBe(true)
-      await app.waitFor(() => scrollbox.live === false, 500)
-
       expect(scrollbox.content.translateY).toBe(0)
-      expect(scrollbox.scrollTop ?? 0).toBe(scrollTopAfterRelease)
       expect(readVisibleLines(app).length).toBeGreaterThan(0)
     } finally {
       app.destroy()

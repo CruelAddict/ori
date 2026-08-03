@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { getBufferTextarea, moveCursor } from "@test/buffer"
+import { getBufferScrollbox, getBufferTextarea, mountBuffer, moveCursor } from "@test/buffer"
 import { mountInTui } from "@test/opentui-harness"
 import { SelectionTestRoot } from "@test/selection-test-root"
 import { Buffer } from "@ui/components/buffer/buffer"
@@ -91,6 +91,54 @@ describe("buffer root selection finalizer", () => {
       await app.waitFor(() => !app.setup.renderer.getSelection()?.isDragging)
 
       expect(textarea.showCursor).toBe(true)
+    } finally {
+      app.destroy()
+    }
+  })
+
+  test("keeps the document anchor when drag autoscroll leaves the terminal", async () => {
+    const text = Array.from({ length: 200 }, (_, index) => `line-${index.toString().padStart(3, "0")}`).join("\n")
+    const app = await mountBuffer({ text, width: 40, height: 8 })
+
+    try {
+      const textarea = getBufferTextarea(app)
+      const scrollbox = getBufferScrollbox(app)
+
+      await moveCursor(app, textarea, 120, 0)
+      await app.waitFor(() => textarea.scrollY > 4)
+      const topBeforeDrag = textarea.scrollY
+      const x = textarea.x + 4
+
+      await app.setup.mockMouse.pressDown(x, textarea.y + 5)
+      await app.setup.mockMouse.moveTo(x, textarea.y + 4)
+      await app.waitFor(() => textarea.editorView.getSelection() !== null)
+      const initial = textarea.editorView.getSelection()
+      if (!initial) {
+        throw new Error("Initial editor selection was not created")
+      }
+
+      await app.setup.mockMouse.moveTo(x, textarea.y)
+      await app.setup.mockMouse.moveTo(x, -1)
+      await app.waitFor(() => textarea.scrollY <= topBeforeDrag - 4)
+
+      const scrolled = textarea.editorView.getSelection()
+      if (!scrolled) {
+        throw new Error("Editor selection was lost during drag autoscroll")
+      }
+      expect(scrollbox.live).toBe(false)
+      expect(textarea.live).toBe(true)
+      expect(scrolled.end).toBe(initial.end)
+      expect(textarea.getSelectedText()).toBe(text.slice(scrolled.start, scrolled.end))
+
+      await app.setup.mockMouse.release(x, textarea.y)
+      await app.waitFor(() => app.setup.renderer.getSelection()?.isDragging === false)
+      const settled = textarea.editorView.getSelection()
+      const topAfterDrag = textarea.scrollY
+
+      await app.setup.mockMouse.scroll(x, textarea.y + 1, "down")
+      await app.waitFor(() => textarea.scrollY > topAfterDrag)
+
+      expect(textarea.editorView.getSelection()).toEqual(settled)
     } finally {
       app.destroy()
     }

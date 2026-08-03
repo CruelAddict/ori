@@ -8,7 +8,7 @@ import { OriScrollbox } from "@ui/components/ori-scrollbox"
 import { type SelectionOwnerOptions, useSelectionOwner } from "@ui/providers/selection"
 import { type KeyBinding, KeyScope } from "@ui/services/key-scopes"
 import type { Accessor } from "solid-js"
-import { createEffect, For, Index, on } from "solid-js"
+import { createEffect, createSignal, For, Index, on } from "solid-js"
 import { createOriTableVM, type OriTableColumn } from "./ori-table-vm"
 import "./table-cell"
 
@@ -52,19 +52,23 @@ export function OriTable(props: OriTableProps) {
   })
   let scrollbox: ScrollBoxRenderable | undefined
   let selectionMoved = false
+  const [selectionDragging, setSelectionDragging] = createSignal(false)
   const selectionOptions = {
     pane: "results",
+    isDragging: selectionDragging,
     onDragEnd: () => {
       updateMouseDragSelection(scrollbox?.ctx.getSelection() ?? null)
       scrollbox?.stopAutoScroll()
+      setSelectionDragging(false)
     },
     clearSelection: () => {
       scrollbox?.stopAutoScroll()
       table.clearSelection()
+      setSelectionDragging(false)
     },
     readSelection: () => {
       const range = table.getSelectionRange()
-      if (!selectionMoved) {
+      if (!selectionMoved || selectionDragging()) {
         return undefined
       }
 
@@ -77,8 +81,6 @@ export function OriTable(props: OriTableProps) {
     },
   } satisfies SelectionOwnerOptions
   const selectionOwner = useSelectionOwner(selectionOptions)
-
-  const isDraggingSelection = () => Boolean(scrollbox?.ctx.getSelection()?.isDragging)
 
   const moveCursor = (rowDelta: number, colDelta: number) => {
     props.focusSelf()
@@ -156,9 +158,13 @@ export function OriTable(props: OriTableProps) {
 
   const handleCellMouseDown = (cell: Parameters<typeof table.beginSelection>[0], event: MouseEvent) => {
     if (!selectionOwner.canAcquire()) {
+      event.preventDefault()
+      event.stopPropagation()
       return
     }
     if (!selectionOwner.tryAcquire()) {
+      event.preventDefault()
+      event.stopPropagation()
       return
     }
     props.focusSelf()
@@ -168,6 +174,11 @@ export function OriTable(props: OriTableProps) {
   }
 
   const handleCellMouseSelectionUpdate = (selection: OpenTuiSelection | null) => {
+    if (selection?.isDragging) {
+      setSelectionDragging(true)
+    } else if (selection) {
+      queueMicrotask(() => setSelectionDragging(false))
+    }
     if (selection?.isStart) {
       selectionMoved = false
     }
@@ -182,13 +193,13 @@ export function OriTable(props: OriTableProps) {
       scrollbox?.stopAutoScroll()
       return
     }
-    if (!table.hasSelection() || !isDraggingSelection()) return
+    if (!table.hasSelection() || !selectionDragging()) return
     table.extendSelection(table.cellAtMouseDragPoint(event))
     scrollbox?.updateAutoScroll(event.x, event.y)
   }
 
   const handleMouseMove = () => {
-    if (!table.hasSelection() || !isDraggingSelection()) return
+    if (!table.hasSelection() || !selectionDragging()) return
     scrollbox?.stopAutoScroll()
   }
 

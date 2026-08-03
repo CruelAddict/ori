@@ -229,6 +229,44 @@ describe("results panel integration", () => {
     }
   })
 
+  test("tracks a ctrl drag as the existing table owner's drag", async () => {
+    let actions: readonly SelectionAction[] = []
+    const app = await mountInTui(
+      () => (
+        <SelectionTestRoot>
+          <SelectionState
+            onChange={(value) => {
+              actions = value
+            }}
+          />
+          <ResultsPanel viewModel={createViewModel(createResultsJob(2))} />
+        </SelectionTestRoot>
+      ),
+      { width: 48, height: 8 },
+    )
+
+    try {
+      const scrollbox = getResultsScrollbox(app)
+      const x = scrollbox.viewport.x + 2
+      const y = scrollbox.viewport.y + 1
+      await app.setup.mockMouse.pressDown(x, y)
+      await app.setup.mockMouse.moveTo(x + 8, y + 1)
+      await app.setup.mockMouse.release(x + 8, y + 1)
+      await app.waitFor(() => actions.map((action) => action.key).join(",") === "y")
+
+      await app.setup.mockMouse.pressDown(x + 4, y, 0, { modifiers: { ctrl: true } })
+      await app.waitFor(() => Boolean(app.setup.renderer.getSelection()?.isDragging) && actions.length === 0)
+      await app.setup.mockMouse.moveTo(x + 10, y + 1)
+      await app.setup.mockMouse.release(x + 10, y + 1)
+
+      await app.waitFor(
+        () => !app.setup.renderer.getSelection()?.isDragging && actions.map((action) => action.key).join(",") === "y",
+      )
+    } finally {
+      app.destroy()
+    }
+  })
+
   test("clears selection actions when table navigation clears the range", async () => {
     let actions: readonly SelectionAction[] = []
     const app = await mountInTui(

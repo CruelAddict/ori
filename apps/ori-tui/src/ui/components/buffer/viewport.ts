@@ -436,8 +436,7 @@ export function createViewport(options: CreateViewportOptions) {
       return false
     }
 
-    // Scrollbox can also receive drag events; textarea owns selection autoscroll here.
-    scrollboxRef.stopAutoScroll()
+    // Textarea owns rendered rows; discard ScrollBox's visual translation after input updates.
     scrollboxRef.content.translateY = 0
     updateScrollbarMetrics()
     if (pendingUserScroll) {

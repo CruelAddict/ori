@@ -28,6 +28,7 @@ export type CurrentSelection = {
 
 export type SelectionOwnerOptions = {
   pane: "editor" | "results"
+  isDragging: Accessor<boolean>
   readSelection: Accessor<CurrentSelection | undefined>
   clearSelection: () => void
   onDragEnd?: () => void
@@ -59,7 +60,6 @@ type SelectionContextValue = {
   handleMouseUp: () => void
   subscribeNativeEvents: () => () => void
   isActive: () => boolean
-  isDragging: () => boolean
   actions: () => readonly SelectionAction[]
 }
 
@@ -69,7 +69,7 @@ export function SelectionProvider(props: { children: JSX.Element }) {
   const renderer = useRenderer()
   const logger = useLogger()
   const [activeOwner, setActiveOwner] = createSignal<SelectionOwner | undefined>()
-  const [dragging, setDragging] = createSignal(false)
+  const [pendingDrag, setPendingDrag] = createSignal(false)
   const [pending, setPending] = createSignal<PendingAction | undefined>()
   let settling = false
 
@@ -92,7 +92,7 @@ export function SelectionProvider(props: { children: JSX.Element }) {
 
     batch(() => {
       setActiveOwner(undefined)
-      setDragging(false)
+      setPendingDrag(false)
       setPending(undefined)
     })
     if (clearNative) {
@@ -229,7 +229,7 @@ export function SelectionProvider(props: { children: JSX.Element }) {
   const actions = createMemo<readonly SelectionAction[]>(() => {
     const owner = activeOwner()
     const selection = currentSelection()
-    if (!owner || dragging() || !selection) {
+    if (!owner || pendingDrag() || owner.options.isDragging() || !selection) {
       return []
     }
 
@@ -247,7 +247,7 @@ export function SelectionProvider(props: { children: JSX.Element }) {
 
   const canAcquire = (owner: string) => {
     const current = activeOwner()
-    return !dragging() || current?.owner === owner
+    return !current || current.owner === owner || !current.options.isDragging()
   }
 
   const tryAcquire = (owner: string, options: SelectionOwnerOptions) => {
@@ -258,7 +258,7 @@ export function SelectionProvider(props: { children: JSX.Element }) {
     clearActiveOwner(undefined, false)
     batch(() => {
       setActiveOwner({ owner, options })
-      setDragging(true)
+      setPendingDrag(true)
     })
     return true
   }
@@ -286,7 +286,7 @@ export function SelectionProvider(props: { children: JSX.Element }) {
     }
 
     const current = activeOwner()
-    if (!current || current !== expected || !dragging()) {
+    if (!current || current !== expected || (!pendingDrag() && !current.options.isDragging())) {
       return
     }
 
@@ -294,7 +294,7 @@ export function SelectionProvider(props: { children: JSX.Element }) {
     try {
       current.options.onDragEnd?.()
       if (current.options.readSelection()) {
-        setDragging(false)
+        setPendingDrag(false)
         return
       }
 
@@ -309,12 +309,7 @@ export function SelectionProvider(props: { children: JSX.Element }) {
 
   const handleMouseUp = () => {
     const current = activeOwner()
-    if (!current || !dragging()) {
-      return
-    }
-
-    if (!renderer.getSelection?.()?.isDragging) {
-      settleSelection(current)
+    if (!current || (!pendingDrag() && !current.options.isDragging())) {
       return
     }
 
@@ -323,7 +318,7 @@ export function SelectionProvider(props: { children: JSX.Element }) {
 
   createEffect(() => {
     const current = activeOwner()
-    if (!current || dragging() || currentSelection()) {
+    if (settling || !current || pendingDrag() || current.options.isDragging() || currentSelection()) {
       return
     }
 
@@ -386,8 +381,7 @@ export function SelectionProvider(props: { children: JSX.Element }) {
         clearPane,
         handleMouseUp,
         subscribeNativeEvents,
-        isActive: () => dragging() || Boolean(currentSelection()),
-        isDragging: () => Boolean(renderer.getSelection?.()?.isDragging),
+        isActive: () => pendingDrag() || Boolean(activeOwner()?.options.isDragging()) || Boolean(currentSelection()),
         actions,
       }}
     >
@@ -427,7 +421,6 @@ export function useSelection() {
   return {
     handleMouseUp: selection.handleMouseUp,
     isActive: selection.isActive,
-    isDragging: selection.isDragging,
     actions: selection.actions,
     clear: selection.clear,
     clearPane: selection.clearPane,
