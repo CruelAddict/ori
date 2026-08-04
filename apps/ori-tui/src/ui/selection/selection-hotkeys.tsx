@@ -14,7 +14,7 @@ export function SelectionHotkeys() {
         return [
           ...actions.map((action) => ({
             pattern: action.key,
-            handler: action.run,
+            handler: () => action.run({ clearSelection: false }),
             preventDefault: true,
           })),
           {

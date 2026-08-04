@@ -33,7 +33,7 @@ function SelectionActionView(props: { action: SelectionAction; ctx: StatuslineCo
   const handleMouseDown = (event: MouseEvent) => {
     event.preventDefault()
     event.stopPropagation()
-    props.action.run()
+    props.action.run({ clearSelection: true })
   }
 
   return (

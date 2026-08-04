@@ -17,7 +17,7 @@ import {
 export type SelectionAction = {
   key: "y" | "ctrl+y" | "ctrl+k" | "backspace"
   label: "copy" | "cut" | "delete"
-  run: () => void
+  run: (options?: { clearSelection?: boolean }) => void
 }
 
 export type CurrentSelection = {
@@ -153,7 +153,7 @@ export function SelectionProvider(props: { children: JSX.Element }) {
     return activeOwner() === owner && currentSelection() === action.selection
   }
 
-  const copy = async (owner: SelectionOwner) => {
+  const copy = async (owner: SelectionOwner, clearSelection = true) => {
     const current = beginAction(owner)
     if (!current) {
       return
@@ -165,7 +165,7 @@ export function SelectionProvider(props: { children: JSX.Element }) {
         logger.warn("selection: clipboard copy was rejected")
         return
       }
-      if (isUnchanged(owner, current)) {
+      if (clearSelection && isUnchanged(owner, current)) {
         clearActiveOwner(owner)
       }
     } catch (err) {
@@ -235,7 +235,11 @@ export function SelectionProvider(props: { children: JSX.Element }) {
     }
 
     const available: SelectionAction[] = [
-      { key: owner.options.pane === "editor" ? "ctrl+y" : "y", label: "copy", run: () => void copy(owner) },
+      {
+        key: owner.options.pane === "editor" ? "ctrl+y" : "y",
+        label: "copy",
+        run: (options) => void copy(owner, options?.clearSelection),
+      },
     ]
     if (selection.cut) {
       available.push({ key: "ctrl+k", label: "cut", run: () => void cut(owner) })

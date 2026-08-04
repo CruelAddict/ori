@@ -23,15 +23,17 @@ function SelectionActionsTestView(props: { actions: readonly SelectionAction[] }
   return <box flexDirection="row">{selectionActionsPlugin.render(ctx)}</box>
 }
 
-function action(key: SelectionAction["key"], label: SelectionAction["label"], run: () => void) {
+function action(key: SelectionAction["key"], label: SelectionAction["label"], run: SelectionAction["run"]) {
   return { key, label, run } satisfies SelectionAction
 }
 
 describe("selection actions statusline plugin", () => {
   test("shows only the supported results action and runs it on mouse down", async () => {
     let copies = 0
-    const copy = () => {
+    let clearSelection: boolean | undefined
+    const copy: SelectionAction["run"] = (options) => {
       copies += 1
+      clearSelection = options?.clearSelection
     }
     const app = await mountInTui(() => <SelectionActionsTestView actions={[action("y", "copy", copy)]} />, {
       width: 30,
@@ -47,6 +49,7 @@ describe("selection actions statusline plugin", () => {
       }
       await app.setup.mockMouse.click(control.screenX, control.screenY)
       expect(copies).toBe(1)
+      expect(clearSelection).toBe(true)
     } finally {
       app.destroy()
     }

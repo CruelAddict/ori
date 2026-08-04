@@ -47,6 +47,13 @@ describe("selection escape hotkey", () => {
       expect(textarea.getSelectedText()).toBe("s")
       expect(actions.map((action) => action.key)).toEqual(["ctrl+y", "ctrl+k", "backspace"])
 
+      app.setup.mockInput.pressKey("y", { ctrl: true })
+      await new Promise((resolve) => setTimeout(resolve, 100))
+      await app.renderOnce()
+
+      expect(textarea.getSelectedText()).toBe("s")
+      expect(actions.map((action) => action.key)).toEqual(["ctrl+y", "ctrl+k", "backspace"])
+
       app.setup.mockInput.pressArrow("right")
       await app.waitFor(() => actions.length === 0 && !textarea.hasSelection())
     } finally {
