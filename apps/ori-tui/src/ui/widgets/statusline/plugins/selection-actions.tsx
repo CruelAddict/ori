@@ -40,16 +40,18 @@ function SelectionActionView(props: { action: SelectionAction; ctx: StatuslineCo
     /* biome-ignore lint/a11y/noStaticElementInteractions: OpenTUI uses box as the pointer target. */
     /* biome-ignore lint/a11y/useKeyWithMouseEvents: SelectionHotkeys registers equivalent keyboard shortcuts. */
     <box
+      backgroundColor={hovered() ? props.ctx.color("primary") : undefined}
       flexDirection="row"
       id={`selection-action-${props.action.key}`}
-      marginRight={2}
+      paddingLeft={1}
+      paddingRight={1}
       onMouseDown={handleMouseDown}
       onMouseOver={() => setHovered(true)}
       onMouseOut={() => setHovered(false)}
     >
-      <props.ctx.Text color={hovered() ? "primary" : "text"}>{props.action.key}</props.ctx.Text>
+      <props.ctx.Text color={hovered() ? "background" : "text"}>{props.action.key}</props.ctx.Text>
       <props.ctx.Text> </props.ctx.Text>
-      <props.ctx.Text color={hovered() ? "primary" : "text_muted"}>{props.action.label}</props.ctx.Text>
+      <props.ctx.Text color={hovered() ? "background" : "text_muted"}>{props.action.label}</props.ctx.Text>
     </box>
   )
 }
