@@ -1,0 +1,25 @@
+---
+name: "Setup Docker"
+
+inputs:
+  os:
+    required: true
+
+runs:
+  using: "composite"
+  steps:
+    - name: Setup Docker
+      if: inputs.os != 'macos-latest'
+      uses: docker/setup-docker-action@v5
+    - name: Setup Docker (Macos)
+      if: inputs.os == 'macos-latest'
+      run: |
+        brew install colima docker
+        colima start \
+          --cpu 2 \
+          --memory 4 \
+          --disk 20 \
+          --vm-type=vz \
+          --vz-rosetta \
+          --network-address \
+      shell: bash

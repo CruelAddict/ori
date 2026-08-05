@@ -1,0 +1,27 @@
+---
+name: "CI: Docker + DB (Multi Platform)"
+
+on: [push]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  install_docker:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+      - name: Setup Docker
+        uses: ./.github/actions/setup-docker
+        with:
+          os: ${{ matrix.os }}
+      - name: Start Postgresql Container
+        id: postgres
+        uses: ./.github/actions/start-postgresql
